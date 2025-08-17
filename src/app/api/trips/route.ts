@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma'
 import { AuthService } from '@/lib/auth'
 import { createTripSchema } from '@/lib/validation'
 import { ApiResponse, TripResponse } from '@/types/api'
+import { TextUtils } from '@/lib/text-utils'
 
 // Create a new trip
 export async function POST(request: NextRequest) {
@@ -47,13 +48,21 @@ export async function POST(request: NextRequest) {
       }, { status: 409 })
     }
 
+    // Format text data before creating trip
+    const formattedData = {
+      ...validatedData,
+      title: TextUtils.formatTripTitle(validatedData.title),
+      description: validatedData.description ? TextUtils.formatContent(validatedData.description) : validatedData.description,
+      destinations: TextUtils.formatDestinations(validatedData.destinations),
+    };
+
     // Create trip
     const trip = await prisma.trip.create({
       data: {
-        ...validatedData,
+        ...formattedData,
         userId,
-        startDate: validatedData.startDate ? new Date(validatedData.startDate) : null,
-        endDate: validatedData.endDate ? new Date(validatedData.endDate) : null,
+        startDate: formattedData.startDate ? new Date(formattedData.startDate) : null,
+        endDate: formattedData.endDate ? new Date(formattedData.endDate) : null,
         status: 'ONGOING'
       },
       include: {

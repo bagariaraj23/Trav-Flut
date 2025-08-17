@@ -28,12 +28,18 @@ class ApiResponse<T> {
 
 @JsonSerializable(genericArgumentFactories: true)
 class PaginatedResponse<T> {
-  final List<T> data;
-  final PaginationInfo pagination;
+  final List<T> items;
+  final int page;
+  final int limit;
+  final int total;
+  final bool hasNext;
 
   const PaginatedResponse({
-    required this.data,
-    required this.pagination,
+    required this.items,
+    required this.page,
+    required this.limit,
+    required this.total,
+    required this.hasNext,
   });
 
   factory PaginatedResponse.fromJson(

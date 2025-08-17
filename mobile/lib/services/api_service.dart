@@ -280,6 +280,111 @@ class ApiService {
     }
   }
 
+  // Follow request endpoints
+  Future<ApiResponse<PaginatedResponse<FollowRequest>>> getFollowRequests({
+    String type = 'received', // 'received' or 'sent'
+    int page = 1,
+    int limit = 20,
+  }) async {
+    try {
+      final response = await _dio.get('/follow-requests', queryParameters: {
+        'type': type,
+        'page': page,
+        'limit': limit,
+      });
+
+      final paginatedResponse = PaginatedResponse<FollowRequest>(
+        items: (response.data['data']['items'] as List)
+            .map((json) => FollowRequest.fromJson(json))
+            .toList(),
+        page: response.data['data']['page'],
+        limit: response.data['data']['limit'],
+        total: response.data['data']['total'],
+        hasNext: response.data['data']['hasNext'],
+      );
+
+      return ApiResponse<PaginatedResponse<FollowRequest>>(
+        success: response.data['success'],
+        data: paginatedResponse,
+      );
+    } on DioException catch (e) {
+      return ApiResponse<PaginatedResponse<FollowRequest>>(
+        success: false,
+        error: e.response?.data['error'] ?? 'Network error occurred',
+      );
+    }
+  }
+
+  Future<ApiResponse<void>> respondToFollowRequest(
+    String requestId,
+    String action, // 'accept' or 'reject'
+  ) async {
+    try {
+      final response = await _dio.patch('/follow-requests/$requestId', data: {
+        'action': action,
+      });
+
+      return ApiResponse<void>(
+        success: response.data['success'],
+        message: response.data['message'],
+      );
+    } on DioException catch (e) {
+      return ApiResponse<void>(
+        success: false,
+        error: e.response?.data['error'] ?? 'Network error occurred',
+      );
+    }
+  }
+
+  Future<ApiResponse<void>> cancelFollowRequest(String requestId) async {
+    try {
+      final response = await _dio.delete('/follow-requests/$requestId');
+
+      return ApiResponse<void>(
+        success: response.data['success'],
+        message: response.data['message'],
+      );
+    } on DioException catch (e) {
+      return ApiResponse<void>(
+        success: false,
+        error: e.response?.data['error'] ?? 'Network error occurred',
+      );
+    }
+  }
+
+  // Feed endpoints
+  Future<ApiResponse<PaginatedResponse<Trip>>> getFeed({
+    int page = 1,
+    int limit = 20,
+  }) async {
+    try {
+      final response = await _dio.get('/feed', queryParameters: {
+        'page': page,
+        'limit': limit,
+      });
+
+      final paginatedResponse = PaginatedResponse<Trip>(
+        items: (response.data['data']['items'] as List)
+            .map((json) => Trip.fromJson(json))
+            .toList(),
+        page: response.data['data']['page'],
+        limit: response.data['data']['limit'],
+        total: response.data['data']['total'],
+        hasNext: response.data['data']['hasNext'],
+      );
+
+      return ApiResponse<PaginatedResponse<Trip>>(
+        success: response.data['success'],
+        data: paginatedResponse,
+      );
+    } on DioException catch (e) {
+      return ApiResponse<PaginatedResponse<Trip>>(
+        success: false,
+        error: e.response?.data['error'] ?? 'Network error occurred',
+      );
+    }
+  }
+
   Future<ApiResponse<List<User>>> getFollowers(String userId,
       {int page = 1, int limit = 20}) async {
     try {

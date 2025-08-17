@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
 import 'package:tripthread/providers/auth_provider.dart';
 import 'package:tripthread/providers/trip_provider.dart';
+import 'package:tripthread/providers/feed_provider.dart';
 import 'package:tripthread/models/trip.dart';
 import 'package:tripthread/providers/user_provider.dart';
 import 'package:tripthread/screens/discover/discover_tab.dart';
@@ -72,8 +73,42 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 }
 
-class FeedTab extends StatelessWidget {
+class FeedTab extends StatefulWidget {
   const FeedTab({Key? key}) : super(key: key);
+
+  @override
+  State<FeedTab> createState() => _FeedTabState();
+}
+
+class _FeedTabState extends State<FeedTab> {
+  final ScrollController _scrollController = ScrollController();
+
+  @override
+  void initState() {
+    super.initState();
+    _scrollController.addListener(_onScroll);
+    
+    // Load initial feed
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      context.read<FeedProvider>().loadFeed(refresh: true);
+    });
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  void _onScroll() {
+    if (_scrollController.position.pixels >=
+        _scrollController.position.maxScrollExtent - 200) {
+      final feedProvider = context.read<FeedProvider>();
+      if (feedProvider.hasMore && !feedProvider.isLoadingMore) {
+        feedProvider.loadFeed();
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -95,36 +130,326 @@ class FeedTab extends StatelessWidget {
           ),
         ],
       ),
-      body: const Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              Icons.feed_outlined,
-              size: 64,
-              color: Colors.grey,
-            ),
-            SizedBox(height: 16),
-            Text(
-              'Feed Coming Soon',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.w600,
-                color: Colors.grey,
+      body: Consumer<FeedProvider>(
+        builder: (context, feedProvider, child) {
+          if (feedProvider.feedTrips.isEmpty && feedProvider.isLoading) {
+            return const Center(child: CircularProgressIndicator());
+          }
+
+          if (feedProvider.feedTrips.isEmpty && feedProvider.error == null) {
+            return const Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    Icons.feed_outlined,
+                    size: 64,
+                    color: Colors.grey,
+                  ),
+                  SizedBox(height: 16),
+                  Text(
+                    'No posts yet',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.grey,
+                    ),
+                  ),
+                  SizedBox(height: 8),
+                  Text(
+                    'Follow users or wait for them to share their travel stories',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: Colors.grey,
+                    ),
+                  ),
+                ],
               ),
-            ),
-            SizedBox(height: 8),
-            Text(
-              'Discover amazing travel stories from the community',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                color: Colors.grey,
+            );
+          }
+
+          if (feedProvider.error != null) {
+            return Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    Icons.error_outline,
+                    size: 64,
+                    color: Colors.red[300],
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    'Error loading feed',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.red[300],
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    feedProvider.error!,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(color: Colors.grey),
+                  ),
+                  const SizedBox(height: 16),
+                  ElevatedButton(
+                    onPressed: () {
+                      feedProvider.clearError();
+                      feedProvider.loadFeed(refresh: true);
+                    },
+                    child: const Text('Retry'),
+                  ),
+                ],
               ),
+            );
+          }
+
+          return RefreshIndicator(
+            onRefresh: () async {
+              await feedProvider.loadFeed(refresh: true);
+            },
+            child: ListView.builder(
+              controller: _scrollController,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              itemCount: feedProvider.feedTrips.length + 1,
+              itemBuilder: (context, index) {
+                if (index == feedProvider.feedTrips.length) {
+                  // Loading indicator at the bottom
+                  if (feedProvider.isLoadingMore && feedProvider.hasMore) {
+                    return const Padding(
+                      padding: EdgeInsets.all(16),
+                      child: Center(child: CircularProgressIndicator()),
+                    );
+                  }
+                  return const SizedBox.shrink();
+                }
+
+                final trip = feedProvider.feedTrips[index];
+                return _buildFeedCard(context, trip);
+              },
             ),
-          ],
-        ),
+          );
+        },
       ),
     );
+  }
+
+  Widget _buildFeedCard(BuildContext context, Trip trip) {
+    return Card(
+      margin: const EdgeInsets.only(bottom: 16),
+      elevation: 2,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // User header
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Row(
+              children: [
+                Container(
+                  width: 40,
+                  height: 40,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: Colors.grey[200],
+                  ),
+                  child: trip.user?.avatarUrl != null
+                      ? ClipOval(
+                          child: Image.network(
+                            trip.user!.avatarUrl!,
+                            fit: BoxFit.cover,
+                            errorBuilder: (context, error, stackTrace) {
+                              return Icon(
+                                Icons.person,
+                                size: 20,
+                                color: Colors.grey[600],
+                              );
+                            },
+                          ),
+                        )
+                      : Icon(
+                          Icons.person,
+                          size: 20,
+                          color: Colors.grey[600],
+                        ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        trip.user?.name ?? 'Unknown User',
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w600,
+                          fontSize: 14,
+                        ),
+                      ),
+                      Text(
+                        trip.destinations.join(', '),
+                        style: TextStyle(
+                          color: Colors.grey[600],
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Text(
+                  _getTimeAgo(DateTime.parse(trip.finalPost?.createdAt ?? trip.createdAt)),
+                  style: TextStyle(
+                    color: Colors.grey[600],
+                    fontSize: 12,
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          // Cover image
+          if (trip.coverMediaUrl != null)
+            ClipRRect(
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(0)),
+              child: Image.network(
+                trip.coverMediaUrl!,
+                width: double.infinity,
+                height: 200,
+                fit: BoxFit.cover,
+                errorBuilder: (context, error, stackTrace) {
+                  return Container(
+                    width: double.infinity,
+                    height: 200,
+                    color: Colors.grey[200],
+                    child: Icon(
+                      Icons.image_not_supported,
+                      size: 48,
+                      color: Colors.grey[600],
+                    ),
+                  );
+                },
+              ),
+            ),
+
+          // Trip details
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  trip.title,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 18,
+                  ),
+                ),
+                if (trip.finalPost?.caption != null) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    trip.finalPost!.caption!,
+                    style: TextStyle(
+                      color: Colors.grey[700],
+                      fontSize: 14,
+                    ),
+                  ),
+                ],
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Icon(
+                      Icons.calendar_today,
+                      size: 16,
+                      color: Colors.grey[600],
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      _formatDateRange(trip.startDate, trip.endDate),
+                      style: TextStyle(
+                        color: Colors.grey[600],
+                        fontSize: 12,
+                      ),
+                    ),
+                    const Spacer(),
+                    if (trip.mood != null) ...[
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: _getMoodColor(trip.mood!),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Text(
+                          trip.mood!,
+                          style: const TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w500,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _getTimeAgo(DateTime dateTime) {
+    final now = DateTime.now();
+    final difference = now.difference(dateTime);
+
+    if (difference.inDays > 7) {
+      return '${difference.inDays ~/ 7}w ago';
+    } else if (difference.inDays > 0) {
+      return '${difference.inDays}d ago';
+    } else if (difference.inHours > 0) {
+      return '${difference.inHours}h ago';
+    } else if (difference.inMinutes > 0) {
+      return '${difference.inMinutes}m ago';
+    } else {
+      return 'Just now';
+    }
+  }
+
+  String _formatDateRange(String? startDate, String? endDate) {
+    if (startDate == null) return 'Date not set';
+    
+    final start = DateTime.parse(startDate);
+    final startFormatted = '${start.day}/${start.month}/${start.year}';
+    
+    if (endDate == null) return startFormatted;
+    
+    final end = DateTime.parse(endDate);
+    final endFormatted = '${end.day}/${end.month}/${end.year}';
+    
+    return '$startFormatted - $endFormatted';
+  }
+
+  Color _getMoodColor(String mood) {
+    switch (mood.toLowerCase()) {
+      case 'relaxed':
+        return Colors.blue;
+      case 'adventure':
+        return Colors.orange;
+      case 'spiritual':
+        return Colors.purple;
+      case 'cultural':
+        return Colors.green;
+      case 'party':
+        return Colors.pink;
+      case 'mixed':
+        return Colors.grey;
+      default:
+        return Colors.grey;
+    }
   }
 }
 

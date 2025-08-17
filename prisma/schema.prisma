@@ -28,6 +28,10 @@ model User {
   oauthAccounts  OAuthAccount[]
   refreshTokens  JWTRefreshToken[]
   
+  // Follow request relations
+  sentRequests     FollowRequest[] @relation("RequestSender")
+  receivedRequests FollowRequest[] @relation("RequestReceiver")
+  
   // Trip relations
   trips          Trip[]
   tripParticipants TripParticipant[]
@@ -67,6 +71,27 @@ model Follow {
 
   @@unique([followerId, followeeId])
   @@map("follows")
+}
+
+enum FollowRequestStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+}
+
+model FollowRequest {
+  id         String              @id @default(uuid())
+  senderId   String
+  receiverId String
+  status     FollowRequestStatus @default(PENDING)
+  createdAt  DateTime            @default(now())
+  updatedAt  DateTime            @updatedAt
+
+  sender   User @relation("RequestSender", fields: [senderId], references: [id], onDelete: Cascade)
+  receiver User @relation("RequestReceiver", fields: [receiverId], references: [id], onDelete: Cascade)
+
+  @@unique([senderId, receiverId])
+  @@map("follow_requests")
 }
 
 model JWTRefreshToken {

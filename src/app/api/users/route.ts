@@ -1,26 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { AuthService } from "@/lib/auth";
-import { ApiResponse } from "@/types/api";
-
-export interface DiscoverUserDto {
-  id: string;
-  username?: string;
-  name?: string;
-  avatarUrl?: string;
-  bio?: string;
-  isPrivate: boolean;
-  isFollowing: boolean;
-  isFollowedBy: boolean;
-}
-
-export interface PaginatedResponse<T> {
-  items: T[];
-  page: number;
-  limit: number;
-  total: number;
-  hasNext: boolean;
-}
+import { ApiResponse, DiscoverUserDto, PaginatedResponse } from "@/types/api";
 
 export async function GET(request: NextRequest) {
   try {
@@ -95,7 +76,20 @@ export async function GET(request: NextRequest) {
       id: { not: currentUserId }, // Exclude current user
     };
 
-    if (search) {
+    // If no search term, only show public users or users already followed
+    if (!search) {
+      whereClause.OR = [
+        { isPrivate: false }, // Public users
+        // Private users that current user already follows
+        {
+          AND: [
+            { isPrivate: true },
+            { followers: { some: { followerId: currentUserId } } }
+          ]
+        }
+      ];
+    } else {
+      // If searching, show all matching users (search should find private users too)
       whereClause.OR = [
         { username: { contains: search, mode: "insensitive" } },
         { name: { contains: search, mode: "insensitive" } },
@@ -105,7 +99,7 @@ export async function GET(request: NextRequest) {
     // Get total count
     const total = await prisma.user.count({ where: whereClause });
 
-    // Get users with follow status
+    // Get users with follow status and follow request status
     const users = await prisma.user.findMany({
       where: whereClause,
       select: {
@@ -126,6 +120,22 @@ export async function GET(request: NextRequest) {
           where: { followeeId: currentUserId },
           select: { id: true },
         },
+        // Check for pending follow requests sent by current user
+        receivedRequests: {
+          where: { 
+            senderId: currentUserId,
+            status: "PENDING"
+          },
+          select: { id: true, status: true },
+        },
+        // Check for pending follow requests sent by this user to current user
+        sentRequests: {
+          where: { 
+            receiverId: currentUserId,
+            status: "PENDING"
+          },
+          select: { id: true, status: true },
+        },
       },
       orderBy: { createdAt: "desc" },
       skip: offset,
@@ -133,16 +143,26 @@ export async function GET(request: NextRequest) {
     });
 
     // Transform to DTO
-    const discoverUsers: DiscoverUserDto[] = users.map((user) => ({
-      id: user.id,
-      username: user.username || undefined,
-      name: user.name || undefined,
-      avatarUrl: user.avatarUrl || undefined,
-      bio: user.bio || undefined,
-      isPrivate: user.isPrivate,
-      isFollowing: user.followers.length > 0,
-      isFollowedBy: user.following.length > 0,
-    }));
+    const discoverUsers: DiscoverUserDto[] = users.map((user) => {
+      const isFollowing = user.followers.length > 0;
+      const isFollowedBy = user.following.length > 0;
+      const hasRequestedToFollow = user.receivedRequests.length > 0;
+      const hasPendingRequestFrom = user.sentRequests.length > 0;
+
+      return {
+        id: user.id,
+        username: user.username || undefined,
+        name: user.name || undefined,
+        avatarUrl: user.avatarUrl || undefined,
+        bio: user.bio || undefined,
+        isPrivate: user.isPrivate,
+        isFollowing,
+        isFollowedBy,
+        followRequestStatus: hasRequestedToFollow ? "PENDING" : null,
+        hasRequestedToFollow,
+        hasPendingRequestFrom,
+      };
+    });
 
     const hasNext = offset + limit < total;
 

@@ -36,6 +36,17 @@ export interface FollowResponse {
   createdAt: string;
 }
 
+export interface FollowRequestResponse {
+  id: string;
+  senderId: string;
+  receiverId: string;
+  status: "PENDING" | "ACCEPTED" | "REJECTED";
+  createdAt: string;
+  updatedAt: string;
+  sender?: UserProfile;
+  receiver?: UserProfile;
+}
+
 export interface DiscoverUserDto {
   id: string;
   username?: string;
@@ -45,6 +56,9 @@ export interface DiscoverUserDto {
   isPrivate: boolean;
   isFollowing: boolean;
   isFollowedBy: boolean;
+  followRequestStatus?: "PENDING" | "ACCEPTED" | "REJECTED" | null; // null means no request sent
+  hasRequestedToFollow?: boolean; // true if current user sent a request
+  hasPendingRequestFrom?: boolean; // true if this user sent a request to current user
 }
 
 export interface PaginatedResponse<T> {

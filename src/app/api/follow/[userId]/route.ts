@@ -47,11 +47,26 @@ export async function GET(
       },
     });
 
-    const isFollowing = !!existingFollow;
+    // Check for pending follow request
+    const pendingRequest = await prisma.followRequest.findUnique({
+      where: {
+        senderId_receiverId: {
+          senderId: followerId,
+          receiverId: followeeId,
+        },
+        status: "PENDING",
+      },
+    });
 
-    return NextResponse.json<ApiResponse<{ isFollowing: boolean }>>({
+    const isFollowing = !!existingFollow;
+    const hasPendingRequest = !!pendingRequest;
+
+    return NextResponse.json<ApiResponse<{ 
+      isFollowing: boolean; 
+      hasPendingRequest: boolean;
+    }>>({
       success: true,
-      data: { isFollowing },
+      data: { isFollowing, hasPendingRequest },
     });
   } catch (error: any) {
     console.error("Check follow status error:", error);
@@ -66,7 +81,7 @@ export async function GET(
   }
 }
 
-// Follow a user
+// Follow a user or send follow request
 export async function POST(
   request: NextRequest,
   { params }: { params: { userId: string } }
@@ -112,9 +127,10 @@ export async function POST(
       );
     }
 
-    // Check if followee exists
+    // Check if followee exists and get privacy status
     const followee = await prisma.user.findUnique({
       where: { id: followeeId },
+      select: { id: true, isPrivate: true },
     });
 
     if (!followee) {
@@ -138,7 +154,6 @@ export async function POST(
     });
 
     if (existingFollow) {
-      // Idempotent success - already following
       return NextResponse.json<ApiResponse>(
         {
           success: true,
@@ -148,7 +163,66 @@ export async function POST(
       );
     }
 
-    // Create follow relationship
+    // Check if there's already a pending request
+    const existingRequest = await prisma.followRequest.findUnique({
+      where: {
+        senderId_receiverId: {
+          senderId: followerId,
+          receiverId: followeeId,
+        },
+      },
+    });
+
+    if (existingRequest) {
+      if (existingRequest.status === "PENDING") {
+        return NextResponse.json<ApiResponse>(
+          {
+            success: true,
+            message: "Follow request already sent",
+          },
+          { status: 200 }
+        );
+      } else if (existingRequest.status === "REJECTED") {
+        // Update rejected request to pending
+        await prisma.followRequest.update({
+          where: { id: existingRequest.id },
+          data: { 
+            status: "PENDING",
+            updatedAt: new Date(),
+          },
+        });
+
+        return NextResponse.json<ApiResponse>(
+          {
+            success: true,
+            message: "Follow request sent",
+          },
+          { status: 200 }
+        );
+      }
+    }
+
+    // If user is private, create follow request
+    if (followee.isPrivate) {
+      const followRequest = await prisma.followRequest.create({
+        data: {
+          senderId: followerId,
+          receiverId: followeeId,
+          status: "PENDING",
+        },
+      });
+
+      return NextResponse.json<ApiResponse>(
+        {
+          success: true,
+          message: "Follow request sent",
+          data: { requestId: followRequest.id },
+        },
+        { status: 201 }
+      );
+    }
+
+    // If user is public, follow immediately
     const follow = await prisma.follow.create({
       data: {
         followerId,
@@ -167,6 +241,7 @@ export async function POST(
       {
         success: true,
         data: followResponse,
+        message: "Successfully followed user",
       },
       { status: 201 }
     );
@@ -183,7 +258,7 @@ export async function POST(
   }
 }
 
-// Unfollow a user
+// Unfollow a user or cancel follow request
 export async function DELETE(
   request: NextRequest,
   { params }: { params: { userId: string } }
@@ -218,7 +293,7 @@ export async function DELETE(
 
     const followerId = payload.userId;
 
-    // Delete follow relationship
+    // Try to delete follow relationship first
     const deletedFollow = await prisma.follow.deleteMany({
       where: {
         followerId,
@@ -226,15 +301,30 @@ export async function DELETE(
       },
     });
 
+    // If no follow relationship existed, try to cancel follow request
     if (deletedFollow.count === 0) {
-      // Idempotent success - already not following
-      return NextResponse.json<ApiResponse>(
-        {
-          success: true,
-          message: "Already not following this user",
+      const deletedRequest = await prisma.followRequest.deleteMany({
+        where: {
+          senderId: followerId,
+          receiverId: followeeId,
+          status: "PENDING",
         },
-        { status: 200 }
-      );
+      });
+
+      if (deletedRequest.count === 0) {
+        return NextResponse.json<ApiResponse>(
+          {
+            success: true,
+            message: "No follow relationship or pending request found",
+          },
+          { status: 200 }
+        );
+      }
+
+      return NextResponse.json<ApiResponse>({
+        success: true,
+        message: "Follow request cancelled",
+      });
     }
 
     return NextResponse.json<ApiResponse>({

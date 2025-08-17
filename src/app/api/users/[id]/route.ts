@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma'
 import { AuthService } from '@/lib/auth'
 import { updateProfileSchema } from '@/lib/validation'
 import { ApiResponse, UserProfile, UserStats } from '@/types/api'
+import { TextUtils } from '@/lib/text-utils'
 
 // Get user profile
 export async function GET(
@@ -152,11 +153,19 @@ export async function PUT(
       }
     }
 
+    // Format text data before updating
+    const formattedData = {
+      ...validatedData,
+      name: validatedData.name ? TextUtils.formatName(validatedData.name) : validatedData.name,
+      bio: validatedData.bio ? TextUtils.formatBio(validatedData.bio) : validatedData.bio,
+      username: validatedData.username ? TextUtils.formatUsername(validatedData.username) : validatedData.username,
+    };
+
     // Update user
     const updatedUser = await prisma.user.update({
       where: { id: userId },
       data: {
-        ...validatedData,
+        ...formattedData,
         updatedAt: new Date()
       },
       select: {

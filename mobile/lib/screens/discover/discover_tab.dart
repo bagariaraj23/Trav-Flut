@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:tripthread/providers/user_provider.dart';
 import 'package:tripthread/providers/auth_provider.dart';
+import 'package:tripthread/models/user.dart';
 
 class DiscoverTab extends StatefulWidget {
   const DiscoverTab({super.key});
@@ -71,20 +72,32 @@ class _DiscoverTabState extends State<DiscoverTab> {
     }
   }
 
-  Future<void> _toggleFollow(String userId, bool isCurrentlyFollowing) async {
+  Future<void> _toggleFollow(String userId, bool isCurrentlyFollowing, {bool isPrivate = false, String? followRequestStatus}) async {
     final userProvider = context.read<UserProvider>();
     final authProvider = context.read<AuthProvider>();
     final currentUserId = authProvider.currentUser?.id;
 
     try {
       if (isCurrentlyFollowing) {
+        // Unfollow user
         await userProvider.unfollowUser(userId, currentUserId: currentUserId);
+      } else if (followRequestStatus == 'PENDING') {
+        // Cancel pending follow request
+        final user = userProvider.discoverUsers.firstWhere((u) => u.id == userId);
+        // Note: We'd need the request ID to cancel, for now just show message
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Follow request already sent'),
+              backgroundColor: Colors.orange,
+            ),
+          );
+        }
+        return;
       } else {
+        // Follow user or send follow request
         await userProvider.followUser(userId, currentUserId: currentUserId);
       }
-
-      // Update local state optimistically
-      userProvider.updateFollowStatus(userId, !isCurrentlyFollowing);
 
       // Refresh the discover list to get updated follow statuses
       userProvider.searchUsers(
@@ -92,8 +105,6 @@ class _DiscoverTabState extends State<DiscoverTab> {
         refresh: true,
       );
     } catch (e) {
-      // Revert optimistic update on error
-      userProvider.updateFollowStatus(userId, isCurrentlyFollowing);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -248,11 +259,8 @@ class _DiscoverTabState extends State<DiscoverTab> {
                       }
 
                       final user = userProvider.discoverUsers[index];
-                      final isFollowing = user['isFollowing'] ?? false;
-                      final isFollowedBy = user['isFollowedBy'] ?? false;
 
-                      return _buildUserCard(
-                          context, user, isFollowing, isFollowedBy);
+                      return _buildUserCard(context, user);
                     },
                   ),
                 );
@@ -266,15 +274,16 @@ class _DiscoverTabState extends State<DiscoverTab> {
 
   Widget _buildUserCard(
     BuildContext context,
-    Map<String, dynamic> user,
-    bool isFollowing,
-    bool isFollowedBy,
+    DiscoverUser user,
   ) {
-    final username = user['username'] ?? 'No username';
-    final name = user['name'] ?? 'No name';
-    final bio = user['bio'];
-    final avatarUrl = user['avatarUrl'];
-    final isPrivate = user['isPrivate'] ?? false;
+    final username = user.username ?? 'No username';
+    final name = user.name ?? 'No name';
+    final bio = user.bio;
+    final avatarUrl = user.avatarUrl;
+    final isPrivate = user.isPrivate;
+    final isFollowing = user.isFollowing;
+    final isFollowedBy = user.isFollowedBy;
+    final followRequestStatus = user.followRequestStatus;
 
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
@@ -391,13 +400,15 @@ class _DiscoverTabState extends State<DiscoverTab> {
             SizedBox(
               width: 100,
               child: ElevatedButton(
-                onPressed: () => _toggleFollow(user['id'], isFollowing),
+                onPressed: () => _toggleFollow(
+                  user.id, 
+                  isFollowing,
+                  isPrivate: isPrivate,
+                  followRequestStatus: followRequestStatus,
+                ),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: isFollowing
-                      ? Colors.grey[200]
-                      : Theme.of(context).colorScheme.primary,
-                  foregroundColor:
-                      isFollowing ? Colors.grey[700] : Colors.white,
+                  backgroundColor: _getButtonColor(isFollowing, followRequestStatus),
+                  foregroundColor: _getButtonTextColor(isFollowing, followRequestStatus),
                   elevation: 0,
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(20),
@@ -405,7 +416,7 @@ class _DiscoverTabState extends State<DiscoverTab> {
                   padding: const EdgeInsets.symmetric(vertical: 8),
                 ),
                 child: Text(
-                  isFollowing ? 'Following' : 'Follow',
+                  _getButtonText(isFollowing, followRequestStatus),
                   style: const TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.w600,
@@ -417,5 +428,35 @@ class _DiscoverTabState extends State<DiscoverTab> {
         ),
       ),
     );
+  }
+
+  Color _getButtonColor(bool isFollowing, String? followRequestStatus) {
+    if (isFollowing) {
+      return Colors.grey[200]!;
+    } else if (followRequestStatus == 'PENDING') {
+      return Colors.orange[100]!;
+    } else {
+      return Theme.of(context).colorScheme.primary;
+    }
+  }
+
+  Color _getButtonTextColor(bool isFollowing, String? followRequestStatus) {
+    if (isFollowing) {
+      return Colors.grey[700]!;
+    } else if (followRequestStatus == 'PENDING') {
+      return Colors.orange[700]!;
+    } else {
+      return Colors.white;
+    }
+  }
+
+  String _getButtonText(bool isFollowing, String? followRequestStatus) {
+    if (isFollowing) {
+      return 'Following';
+    } else if (followRequestStatus == 'PENDING') {
+      return 'Requested';
+    } else {
+      return 'Follow';
+    }
   }
 }

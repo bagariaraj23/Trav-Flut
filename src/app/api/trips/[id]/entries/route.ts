@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma'
 import { AuthService } from '@/lib/auth'
 import { createThreadEntrySchema } from '@/lib/validation'
 import { ApiResponse, TripThreadEntryResponse } from '@/types/api'
+import { TextUtils } from '@/lib/text-utils'
 
 // Create a new thread entry
 export async function POST(
@@ -70,16 +71,23 @@ export async function POST(
       }, { status: 400 })
     }
 
+    // Format text data before creating thread entry
+    const formattedData = {
+      ...validatedData,
+      contentText: validatedData.contentText ? TextUtils.formatContent(validatedData.contentText) : validatedData.contentText,
+      locationName: validatedData.locationName ? TextUtils.formatLocation(validatedData.locationName) : validatedData.locationName,
+    };
+
     // Create thread entry
     const threadEntry = await prisma.tripThreadEntry.create({
       data: {
         tripId,
         authorId: userId,
-        type: validatedData.type,
-        contentText: validatedData.contentText,
-        mediaUrl: validatedData.mediaUrl,
-        locationName: validatedData.locationName,
-        gpsCoordinates: validatedData.gpsCoordinates
+        type: formattedData.type,
+        contentText: formattedData.contentText,
+        mediaUrl: formattedData.mediaUrl,
+        locationName: formattedData.locationName,
+        gpsCoordinates: formattedData.gpsCoordinates
       },
       include: {
         author: {
