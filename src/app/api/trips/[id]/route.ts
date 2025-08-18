@@ -127,6 +127,7 @@ export async function GET(
     if (!isOwner && !isParticipant) {
       // Check if trip owner's profile is public or if current user follows them
       if (trip.user?.isPrivate) {
+        // Check for accepted follow relationship
         const followRelation = await prisma.follow.findUnique({
           where: {
             followerId_followeeId: {
@@ -139,7 +140,7 @@ export async function GET(
         if (!followRelation) {
           return NextResponse.json<ApiResponse>({
             success: false,
-            error: 'Access denied to this private trip'
+            error: 'Access denied. You need to follow this user to view their private trips.'
           }, { status: 403 })
         }
       }
