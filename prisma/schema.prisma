@@ -187,7 +187,8 @@ model TripThreadEntry {
   contentText     String?
   mediaUrl        String?
   locationName    String?
-  gpsCoordinates  Json?              // { lat: ..., lng: ... }
+  gpsLat        Float?
+  gpsLng        Float?
   createdAt       DateTime           @default(now())
 
   trip            Trip               @relation(fields: [tripId], references: [id], onDelete: Cascade)

@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:tripthread/providers/auth_provider.dart';
 import 'package:tripthread/providers/user_provider.dart';
 import 'package:tripthread/providers/trip_provider.dart';
+import 'package:tripthread/providers/feed_provider.dart';
 import 'package:tripthread/services/api_service.dart';
 import 'package:tripthread/services/storage_service.dart';
 import 'package:tripthread/services/trip_service.dart';
@@ -60,6 +61,9 @@ void main() async {
               tripService.setStorageService(storageService);
               return provider;
             },
+          ),
+          ChangeNotifierProvider<FeedProvider>(
+            create: (context) => FeedProvider(apiService: apiService),
           ),
         ],
         child: TripThreadAppRouter(),
