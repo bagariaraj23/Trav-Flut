@@ -31,7 +31,7 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
   Future<void> _loadTrip() async {
     final tripProvider = context.read<TripProvider>();
     final trip = await tripProvider.getTrip(widget.tripId);
-    
+
     if (mounted) {
       setState(() {
         _trip = trip;
@@ -45,7 +45,8 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('End Trip'),
-        content: const Text('Are you sure you want to end this trip? This will generate your final post.'),
+        content: const Text(
+            'Are you sure you want to end this trip? This will generate your final post.'),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
@@ -62,7 +63,7 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
     if (confirmed == true && mounted) {
       final tripProvider = context.read<TripProvider>();
       final success = await tripProvider.endTrip();
-      
+
       if (success && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Trip ended successfully! 🎉')),
@@ -99,6 +100,17 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
           SliverAppBar(
             expandedHeight: 250,
             pinned: true,
+            leading: IconButton(
+              icon: const Icon(Icons.arrow_back, color: Colors.white),
+              onPressed: () {
+                // Get the 'from' parameter or default to trips tab
+                final extra = GoRouterState.of(context).extra;
+                final from = (extra is Map && extra['from'] != null)
+                    ? extra['from'] as String
+                    : '/trips';
+                context.go(from);
+              },
+            ),
             flexibleSpace: FlexibleSpaceBar(
               title: Text(
                 _trip!.title,
@@ -146,12 +158,13 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
                 IconButton(
                   icon: const Icon(Icons.add),
                   onPressed: () {
-                    context.go('/trip/${widget.tripId}/thread');
+                    context.go('/trip/${widget.tripId}/thread',
+                        extra: {'from': '/trip/${widget.tripId}'});
                   },
                 ),
             ],
           ),
-          
+
           // Trip Content
           SliverToBoxAdapter(
             child: Padding(
@@ -161,14 +174,14 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
                 children: [
                   // Trip Info Card
                   _buildTripInfoCard(),
-                  
+
                   const SizedBox(height: 16),
-                  
+
                   // Status and Actions
                   if (isOwner) _buildOwnerActions(),
-                  
+
                   const SizedBox(height: 16),
-                  
+
                   // Thread Entries
                   _buildThreadSection(),
                 ],
@@ -217,9 +230,9 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
                 if (_trip!.mood != null) _buildMoodChip(_trip!.mood!),
               ],
             ),
-            
+
             const SizedBox(height: 12),
-            
+
             // Destinations
             Row(
               children: [
@@ -229,13 +242,13 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
                   child: Text(
                     _trip!.destinations.join(', '),
                     style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                      fontWeight: FontWeight.w500,
-                    ),
+                          fontWeight: FontWeight.w500,
+                        ),
                   ),
                 ),
               ],
             ),
-            
+
             if (_trip!.description != null) ...[
               const SizedBox(height: 12),
               Text(
@@ -243,9 +256,9 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
                 style: Theme.of(context).textTheme.bodyMedium,
               ),
             ],
-            
+
             const SizedBox(height: 12),
-            
+
             // Dates
             if (_trip!.startDate != null || _trip!.endDate != null)
               Row(
@@ -258,9 +271,9 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
                   ),
                 ],
               ),
-            
+
             const SizedBox(height: 12),
-            
+
             // Stats
             Row(
               children: [
@@ -301,23 +314,20 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
             Text(
               'Trip Actions',
               style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.w600,
-              ),
+                    fontWeight: FontWeight.w600,
+                  ),
             ),
-            
             const SizedBox(height: 12),
-            
             if (_trip!.status == TripStatus.ongoing) ...[
               ElevatedButton.icon(
                 onPressed: () {
-                  context.go('/trip/${widget.tripId}/thread');
+                  context.go('/trip/${widget.tripId}/thread',
+                      extra: {'from': '/trip/${widget.tripId}'});
                 },
                 icon: const Icon(Icons.add),
                 label: const Text('Add Entry'),
               ),
-              
               const SizedBox(height: 8),
-              
               Consumer<TripProvider>(
                 builder: (context, tripProvider, child) {
                   return LoadingButton(
@@ -330,12 +340,14 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
                   );
                 },
               ),
-            ] else if (_trip!.status == TripStatus.ended && _trip!.finalPost != null) ...[
+            ] else if (_trip!.status == TripStatus.ended &&
+                _trip!.finalPost != null) ...[
               ElevatedButton.icon(
                 onPressed: () {
                   // TODO: Navigate to final post screen
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Final post feature coming soon!')),
+                    const SnackBar(
+                        content: Text('Final post feature coming soon!')),
                   );
                 },
                 icon: const Icon(Icons.auto_awesome),
@@ -350,7 +362,7 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
 
   Widget _buildThreadSection() {
     final entries = _trip!.threadEntries ?? [];
-    
+
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -362,22 +374,21 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
                 Text(
                   'Trip Thread',
                   style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.w600,
-                  ),
+                        fontWeight: FontWeight.w600,
+                      ),
                 ),
                 const Spacer(),
                 if (entries.isNotEmpty)
                   TextButton(
                     onPressed: () {
-                      context.go('/trip/${widget.tripId}/thread');
+                      context.go('/trip/${widget.tripId}/thread',
+                          extra: {'from': '/trip/${widget.tripId}'});
                     },
                     child: const Text('View All'),
                   ),
               ],
             ),
-            
             const SizedBox(height: 12),
-            
             if (entries.isEmpty)
               Center(
                 child: Column(
@@ -446,15 +457,15 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
                   Text(
                     '📍 ${entry.locationName}',
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: Theme.of(context).colorScheme.primary,
-                    ),
+                          color: Theme.of(context).colorScheme.primary,
+                        ),
                   ),
                 const SizedBox(height: 4),
                 Text(
                   _formatDateTime(entry.createdAt),
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: Colors.grey[600],
-                  ),
+                        color: Colors.grey[600],
+                      ),
                 ),
               ],
             ),
@@ -467,7 +478,7 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
   Widget _buildEntryTypeIcon(ThreadEntryType type) {
     IconData icon;
     Color color;
-    
+
     switch (type) {
       case ThreadEntryType.text:
         icon = Icons.text_fields;
@@ -486,7 +497,7 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
         color = Colors.orange;
         break;
     }
-    
+
     return Container(
       padding: const EdgeInsets.all(8),
       decoration: BoxDecoration(
@@ -500,7 +511,7 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
   Widget _buildStatusBadge(TripStatus status) {
     Color color;
     String label;
-    
+
     switch (status) {
       case TripStatus.upcoming:
         color = Colors.orange;
@@ -515,7 +526,7 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
         label = 'Completed';
         break;
     }
-    
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       decoration: BoxDecoration(
@@ -564,15 +575,15 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
             Text(
               value,
               style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                fontWeight: FontWeight.w600,
-              ),
+                    fontWeight: FontWeight.w600,
+                  ),
             ),
             Text(
               label,
               style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                color: Colors.grey[600],
-                fontSize: 10,
-              ),
+                    color: Colors.grey[600],
+                    fontSize: 10,
+                  ),
             ),
           ],
         ),
@@ -594,7 +605,7 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
   String _formatDateTime(DateTime dateTime) {
     final now = DateTime.now();
     final difference = now.difference(dateTime);
-    
+
     if (difference.inDays > 0) {
       return '${difference.inDays}d ago';
     } else if (difference.inHours > 0) {

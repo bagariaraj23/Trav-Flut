@@ -50,23 +50,33 @@ class _CreateTripScreenState extends State<CreateTripScreen> {
   }
 
   Future<void> _selectDate(BuildContext context, bool isStartDate) async {
+    final DateTime now = DateTime.now();
+    final DateTime today =
+        DateTime(now.year, now.month, now.day); // Start of today
+
     final DateTime? picked = await showDatePicker(
       context: context,
-      initialDate: DateTime.now(),
-      firstDate: DateTime.now().subtract(const Duration(days: 30)),
-      lastDate: DateTime.now().add(const Duration(days: 365)),
+      initialDate: isStartDate ? today : (today.add(const Duration(days: 1))),
+      firstDate: isStartDate ? today : today, // Start date can't be in the past
+      lastDate: now.add(const Duration(days: 365)),
     );
 
     if (picked != null) {
       setState(() {
         if (isStartDate) {
           _startDate = picked;
+          print('[DEBUG] Start date selected: $picked');
+          print('[DEBUG] Start date ISO: ${picked.toIso8601String()}');
+
           // Reset end date if it's before start date
           if (_endDate != null && _endDate!.isBefore(picked)) {
             _endDate = null;
+            print('[DEBUG] End date reset because it was before start date');
           }
         } else {
           _endDate = picked;
+          print('[DEBUG] End date selected: $picked');
+          print('[DEBUG] End date ISO: ${picked.toIso8601String()}');
         }
       });
     }
@@ -82,6 +92,49 @@ class _CreateTripScreenState extends State<CreateTripScreen> {
       return;
     }
 
+    // Add debugging logs
+    print('[DEBUG] Creating trip with dates:');
+    print('[DEBUG] _startDate: $_startDate');
+    print('[DEBUG] _endDate: $_endDate');
+
+    if (_startDate != null) {
+      print(
+          '[DEBUG] startDate.toIso8601String(): ${_startDate!.toIso8601String()}');
+      print(
+          '[DEBUG] startDate.millisecondsSinceEpoch: ${_startDate!.millisecondsSinceEpoch}');
+      print('[DEBUG] startDate timezone offset: ${_startDate!.timeZoneOffset}');
+    }
+
+    if (_endDate != null) {
+      print(
+          '[DEBUG] endDate.toIso8601String(): ${_endDate!.toIso8601String()}');
+      print(
+          '[DEBUG] endDate.millisecondsSinceEpoch: ${_endDate!.millisecondsSinceEpoch}');
+      print('[DEBUG] endDate timezone offset: ${_endDate!.timeZoneOffset}');
+    }
+
+    // Validate dates before creating request
+    if (_startDate != null) {
+      final now = DateTime.now();
+      final today = DateTime(now.year, now.month, now.day);
+
+      if (_startDate!.isBefore(today)) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Start date cannot be in the past')),
+        );
+        return;
+      }
+    }
+
+    if (_startDate != null && _endDate != null) {
+      if (_endDate!.isBefore(_startDate!)) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('End date must be after start date')),
+        );
+        return;
+      }
+    }
+
     final request = CreateTripRequest(
       title: _titleController.text.trim(),
       description: _descriptionController.text.trim().isEmpty
@@ -93,6 +146,9 @@ class _CreateTripScreenState extends State<CreateTripScreen> {
       mood: _selectedMood,
       type: _selectedType,
     );
+
+    print('[DEBUG] CreateTripRequest created:');
+    print('[DEBUG] request.toJson(): ${request.toJson()}');
 
     final tripProvider = context.read<TripProvider>();
     final success = await tripProvider.createTrip(request);
@@ -117,9 +173,7 @@ class _CreateTripScreenState extends State<CreateTripScreen> {
         title: const Text('Start New Trip'),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
-          onPressed: () {
-            context.go(from);
-          },
+          onPressed: () => Navigator.of(context).pop(),
         ),
       ),
       body: Form(

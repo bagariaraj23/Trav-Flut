@@ -114,8 +114,37 @@ class DiscoverUser {
     this.hasPendingRequestFrom,
   });
 
-  factory DiscoverUser.fromJson(Map<String, dynamic> json) => _$DiscoverUserFromJson(json);
-  Map<String, dynamic> toJson() => _$DiscoverUserToJson(this);
+  factory DiscoverUser.fromJson(Map<String, dynamic> json) {
+    return DiscoverUser(
+      id: json['id'] as String,
+      username: json['username'] as String?,
+      name: json['name'] as String?,
+      avatarUrl: json['avatarUrl'] as String?,
+      bio: json['bio'] as String?,
+      isPrivate: json['isPrivate'] as bool,
+      isFollowing: json['isFollowing'] as bool,
+      isFollowedBy: json['isFollowedBy'] as bool,
+      followRequestStatus: json['followRequestStatus'] as String?,
+      hasRequestedToFollow: json['hasRequestedToFollow'] as bool?,
+      hasPendingRequestFrom: json['hasPendingRequestFrom'] as bool?,
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'username': username,
+      'name': name,
+      'avatarUrl': avatarUrl,
+      'bio': bio,
+      'isPrivate': isPrivate,
+      'isFollowing': isFollowing,
+      'isFollowedBy': isFollowedBy,
+      'followRequestStatus': followRequestStatus,
+      'hasRequestedToFollow': hasRequestedToFollow,
+      'hasPendingRequestFrom': hasPendingRequestFrom,
+    };
+  }
 
   DiscoverUser copyWith({
     String? id,
@@ -168,6 +197,29 @@ class FollowRequest {
     this.receiver,
   });
 
-  factory FollowRequest.fromJson(Map<String, dynamic> json) => _$FollowRequestFromJson(json);
-  Map<String, dynamic> toJson() => _$FollowRequestToJson(this);
+  factory FollowRequest.fromJson(Map<String, dynamic> json) {
+    return FollowRequest(
+      id: json['id'] as String,
+      senderId: json['senderId'] as String,
+      receiverId: json['receiverId'] as String,
+      status: json['status'] as String,
+      createdAt: DateTime.parse(json['createdAt'] as String),
+      updatedAt: DateTime.parse(json['updatedAt'] as String),
+      sender: json['sender'] != null ? User.fromJson(json['sender'] as Map<String, dynamic>) : null,
+      receiver: json['receiver'] != null ? User.fromJson(json['receiver'] as Map<String, dynamic>) : null,
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'senderId': senderId,
+      'receiverId': receiverId,
+      'status': status,
+      'createdAt': createdAt.toIso8601String(),
+      'updatedAt': updatedAt.toIso8601String(),
+      'sender': sender?.toJson(),
+      'receiver': receiver?.toJson(),
+    };
+  }
 }

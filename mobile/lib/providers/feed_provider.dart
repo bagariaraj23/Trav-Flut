@@ -1,6 +1,5 @@
 import 'package:flutter/foundation.dart';
 import 'package:tripthread/models/trip.dart';
-import 'package:tripthread/models/api_response.dart';
 import 'package:tripthread/services/api_service.dart';
 
 class FeedProvider extends ChangeNotifier {

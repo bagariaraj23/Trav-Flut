@@ -114,6 +114,10 @@ export async function POST(
       joinedAt: participant.joinedAt.toISOString(),
       user: {
         ...participant.user,
+        username: participant.user.username ?? undefined, 
+        name: participant.user.name ?? undefined,
+        avatarUrl: participant.user.avatarUrl ?? undefined,
+        bio: participant.user.bio ?? undefined,
         createdAt: participant.user.createdAt.toISOString(),
         updatedAt: participant.user.updatedAt.toISOString()
       }
@@ -239,6 +243,10 @@ export async function GET(
       joinedAt: participant.joinedAt.toISOString(),
       user: {
         ...participant.user,
+        username: participant.user.username ?? undefined,
+        name: participant.user.name ?? undefined,
+        avatarUrl: participant.user.avatarUrl ?? undefined,
+        bio: participant.user.bio ?? undefined,
         createdAt: participant.user.createdAt.toISOString(),
         updatedAt: participant.user.updatedAt.toISOString()
       }

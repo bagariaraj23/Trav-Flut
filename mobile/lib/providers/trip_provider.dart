@@ -38,10 +38,10 @@ class TripProvider extends ChangeNotifier {
       notifyListeners();
 
       final response = await _tripService.getCurrentTrip();
-      
+
       if (response.success) {
         _currentTrip = response.data;
-        
+
         // Load entries if there's a current trip
         if (_currentTrip != null) {
           await loadCurrentTripEntries();
@@ -61,8 +61,8 @@ class TripProvider extends ChangeNotifier {
   // Load all user trips
   Future<void> loadTrips({TripStatus? status}) async {
     try {
-      final response = await _tripService.getTrips(status: status?.name.toUpperCase());
-      
+      final response = await _tripService.getTrips(status: status);
+
       if (response.success && response.data != null) {
         _trips = response.data!;
         notifyListeners();
@@ -80,19 +80,27 @@ class TripProvider extends ChangeNotifier {
   // Create new trip
   Future<bool> createTrip(CreateTripRequest request) async {
     try {
+      print('[DEBUG] TripProvider.createTrip called');
+      print('[DEBUG] Request data: ${request.toJson()}');
+
       _isLoading = true;
       _error = null;
       notifyListeners();
 
       final response = await _tripService.createTrip(request);
-      
+
+      print('[DEBUG] API response received:');
+      print('[DEBUG] Success: ${response.success}');
+      print('[DEBUG] Error: ${response.error}');
+      print('[DEBUG] Data: ${response.data}');
+
       if (response.success && response.data != null) {
         _currentTrip = response.data;
         _currentTripEntries = [];
-        
+
         // Refresh trips list
         await loadTrips();
-        
+
         _isLoading = false;
         notifyListeners();
         return true;
@@ -103,6 +111,7 @@ class TripProvider extends ChangeNotifier {
         return false;
       }
     } catch (e) {
+      print('[DEBUG] Exception in createTrip: $e');
       _error = 'An unexpected error occurred';
       _isLoading = false;
       notifyListeners();
@@ -121,13 +130,13 @@ class TripProvider extends ChangeNotifier {
       notifyListeners();
 
       final response = await _tripService.endTrip(_currentTrip!.id);
-      
+
       if (response.success && response.data != null) {
         _currentTrip = response.data;
-        
+
         // Refresh trips list
         await loadTrips();
-        
+
         _isLoading = false;
         notifyListeners();
         return true;
@@ -152,7 +161,7 @@ class TripProvider extends ChangeNotifier {
 
     try {
       final response = await _tripService.getThreadEntries(_currentTrip!.id);
-      
+
       if (response.success && response.data != null) {
         _currentTripEntries = response.data!;
         notifyListeners();
@@ -172,8 +181,9 @@ class TripProvider extends ChangeNotifier {
     if (_currentTrip == null) return false;
 
     try {
-      final response = await _tripService.createThreadEntry(_currentTrip!.id, request);
-      
+      final response =
+          await _tripService.createThreadEntry(_currentTrip!.id, request);
+
       if (response.success && response.data != null) {
         _currentTripEntries.add(response.data!);
         notifyListeners();
@@ -218,8 +228,8 @@ class TripProvider extends ChangeNotifier {
     return await addThreadEntry(CreateThreadEntryRequest(
       type: ThreadEntryType.location,
       locationName: locationName,
-      gpsCoordinates: lat != null && lng != null 
-          ? GpsCoordinates(lat: lat, lng: lng) 
+      gpsCoordinates: lat != null && lng != null
+          ? GpsCoordinates(lat: lat, lng: lng)
           : null,
       contentText: notes,
     ));
@@ -229,7 +239,7 @@ class TripProvider extends ChangeNotifier {
   Future<Trip?> getTrip(String tripId) async {
     try {
       final response = await _tripService.getTrip(tripId);
-      
+
       if (response.success && response.data != null) {
         return response.data;
       } else {

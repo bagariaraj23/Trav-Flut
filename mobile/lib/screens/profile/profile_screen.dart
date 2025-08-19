@@ -115,7 +115,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
               title: const Text('Profile'),
               leading: IconButton(
                 icon: const Icon(Icons.arrow_back),
-                onPressed: () => context.go('/home'),
+                onPressed: () {
+                  // Get the 'from' parameter or default to home
+                  final extra = GoRouterState.of(context).extra;
+                  final from = (extra is Map && extra['from'] != null)
+                      ? extra['from'] as String
+                      : '/home';
+                  context.go(from);
+                },
               ),
             ),
             body: Center(
@@ -154,7 +161,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
             title: Text(profileUser?.name ?? 'Profile'),
             leading: IconButton(
               icon: const Icon(Icons.arrow_back),
-              onPressed: () => context.go('/home'),
+              onPressed: () {
+                // Get the 'from' parameter or default to home
+                final extra = GoRouterState.of(context).extra;
+                final from = (extra is Map && extra['from'] != null)
+                    ? extra['from'] as String
+                    : '/home';
+                context.go(from);
+              },
             ),
             actions: [
               if (isOwnProfile)

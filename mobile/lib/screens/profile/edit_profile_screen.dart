@@ -93,11 +93,9 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         title: const Text('Edit Profile'),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
-          onPressed: () {
-            context.go(from);
-          },
+          onPressed: () => Navigator.of(context).pop(),
         ),
-          actions: [
+        actions: [
           Consumer<UserProvider>(
             builder: (context, userProvider, child) {
               return LoadingButton(
@@ -106,10 +104,10 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                 style: TextButton.styleFrom(),
                 child: const Text('Save'),
               );
-              },
-            ),
-          ],
-        ),
+            },
+          ),
+        ],
+      ),
       body: Form(
         key: _formKey,
         child: SingleChildScrollView(

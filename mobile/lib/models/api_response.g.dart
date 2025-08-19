@@ -45,9 +45,11 @@ PaginatedResponse<T> _$PaginatedResponseFromJson<T>(
   T Function(Object? json) fromJsonT,
 ) =>
     PaginatedResponse<T>(
-      data: (json['data'] as List<dynamic>).map(fromJsonT).toList(),
-      pagination:
-          PaginationInfo.fromJson(json['pagination'] as Map<String, dynamic>),
+      items: (json['items'] as List<dynamic>).map(fromJsonT).toList(),
+      page: (json['page'] as num).toInt(),
+      limit: (json['limit'] as num).toInt(),
+      total: (json['total'] as num).toInt(),
+      hasNext: json['hasNext'] as bool,
     );
 
 Map<String, dynamic> _$PaginatedResponseToJson<T>(
@@ -55,8 +57,11 @@ Map<String, dynamic> _$PaginatedResponseToJson<T>(
   Object? Function(T value) toJsonT,
 ) =>
     <String, dynamic>{
-      'data': instance.data.map(toJsonT).toList(),
-      'pagination': instance.pagination,
+      'items': instance.items.map(toJsonT).toList(),
+      'page': instance.page,
+      'limit': instance.limit,
+      'total': instance.total,
+      'hasNext': instance.hasNext,
     };
 
 PaginationInfo _$PaginationInfoFromJson(Map<String, dynamic> json) =>

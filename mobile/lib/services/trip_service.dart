@@ -2,6 +2,7 @@ import 'package:dio/dio.dart';
 import 'package:tripthread/models/api_response.dart';
 import 'package:tripthread/models/trip.dart';
 import 'package:tripthread/services/storage_service.dart';
+import 'dart:convert'; // Added for jsonEncode
 
 class TripService {
   // static const String baseUrl = 'http://localhost:3000/api';
@@ -75,16 +76,36 @@ class TripService {
   // Trip CRUD operations
   Future<ApiResponse<Trip>> createTrip(CreateTripRequest request) async {
     try {
+      print('[DEBUG] TripService.createTrip called');
+      print('[DEBUG] Request data: ${request.toJson()}');
+      print('[DEBUG] Request JSON: ${jsonEncode(request.toJson())}');
+
       final response = await _dio.post('/trips', data: request.toJson());
+
+      print('[DEBUG] HTTP response received:');
+      print('[DEBUG] Status code: ${response.statusCode}');
+      print('[DEBUG] Response data: ${response.data}');
 
       return ApiResponse<Trip>.fromJson(
         response.data,
         (json) => Trip.fromJson(json as Map<String, dynamic>),
       );
     } on DioException catch (e) {
+      print('[DEBUG] DioException in createTrip:');
+      print('[DEBUG] Error type: ${e.type}');
+      print('[DEBUG] Error message: ${e.message}');
+      print('[DEBUG] Response status: ${e.response?.statusCode}');
+      print('[DEBUG] Response data: ${e.response?.data}');
+
       return ApiResponse<Trip>(
         success: false,
         error: e.response?.data['error'] ?? 'Network error occurred',
+      );
+    } catch (e) {
+      print('[DEBUG] Unexpected error in createTrip: $e');
+      return ApiResponse<Trip>(
+        success: false,
+        error: 'An unexpected error occurred',
       );
     }
   }
@@ -144,7 +165,8 @@ class TripService {
 
       return ApiResponse<Trip?>.fromJson(
         response.data,
-        (json) => json != null ? Trip.fromJson(json as Map<String, dynamic>) : null,
+        (json) =>
+            json != null ? Trip.fromJson(json as Map<String, dynamic>) : null,
       );
     } on DioException catch (e) {
       return ApiResponse<Trip?>(
@@ -176,7 +198,8 @@ class TripService {
     CreateThreadEntryRequest request,
   ) async {
     try {
-      final response = await _dio.post('/trips/$tripId/entries', data: request.toJson());
+      final response =
+          await _dio.post('/trips/$tripId/entries', data: request.toJson());
 
       return ApiResponse<TripThreadEntry>.fromJson(
         response.data,
@@ -190,7 +213,8 @@ class TripService {
     }
   }
 
-  Future<ApiResponse<List<TripThreadEntry>>> getThreadEntries(String tripId) async {
+  Future<ApiResponse<List<TripThreadEntry>>> getThreadEntries(
+      String tripId) async {
     try {
       final response = await _dio.get('/trips/$tripId/entries');
 
@@ -234,7 +258,8 @@ class TripService {
     }
   }
 
-  Future<ApiResponse<List<TripParticipant>>> getParticipants(String tripId) async {
+  Future<ApiResponse<List<TripParticipant>>> getParticipants(
+      String tripId) async {
     try {
       final response = await _dio.get('/trips/$tripId/participants');
 
@@ -276,7 +301,8 @@ class TripService {
     Map<String, dynamic> updates,
   ) async {
     try {
-      final response = await _dio.put('/trips/$tripId/final-post', data: updates);
+      final response =
+          await _dio.put('/trips/$tripId/final-post', data: updates);
 
       return ApiResponse<TripFinalPost>.fromJson(
         response.data,

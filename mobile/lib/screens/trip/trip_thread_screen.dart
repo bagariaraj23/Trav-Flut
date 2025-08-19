@@ -4,6 +4,9 @@ import 'package:tripthread/providers/trip_provider.dart';
 import 'package:tripthread/providers/auth_provider.dart';
 import 'package:tripthread/models/trip.dart';
 import 'package:tripthread/widgets/custom_text_field.dart';
+import 'package:tripthread/services/media_service.dart';
+import 'dart:io';
+import 'package:go_router/go_router.dart';
 
 class TripThreadScreen extends StatefulWidget {
   final String tripId;
@@ -21,10 +24,13 @@ class _TripThreadScreenState extends State<TripThreadScreen> {
   final _textController = TextEditingController();
   final _locationController = TextEditingController();
   final _scrollController = ScrollController();
-  
+  final _mediaService = MediaService();
+
   Trip? _trip;
   bool _isLoading = true;
   ThreadEntryType _selectedType = ThreadEntryType.text;
+  File? _selectedMediaFile;
+  bool _isUploadingMedia = false;
 
   @override
   void initState() {
@@ -43,13 +49,13 @@ class _TripThreadScreenState extends State<TripThreadScreen> {
   Future<void> _loadTrip() async {
     final tripProvider = context.read<TripProvider>();
     final trip = await tripProvider.getTrip(widget.tripId);
-    
+
     if (mounted) {
       setState(() {
         _trip = trip;
         _isLoading = false;
       });
-      
+
       if (trip != null) {
         await tripProvider.loadCurrentTripEntries();
       }
@@ -63,7 +69,8 @@ class _TripThreadScreenState extends State<TripThreadScreen> {
     switch (_selectedType) {
       case ThreadEntryType.text:
         if (_textController.text.trim().isNotEmpty) {
-          success = await tripProvider.addTextEntry(_textController.text.trim());
+          success =
+              await tripProvider.addTextEntry(_textController.text.trim());
           if (success) _textController.clear();
         }
         break;
@@ -71,7 +78,9 @@ class _TripThreadScreenState extends State<TripThreadScreen> {
         if (_locationController.text.trim().isNotEmpty) {
           success = await tripProvider.addLocationEntry(
             _locationController.text.trim(),
-            notes: _textController.text.trim().isEmpty ? null : _textController.text.trim(),
+            notes: _textController.text.trim().isEmpty
+                ? null
+                : _textController.text.trim(),
           );
           if (success) {
             _locationController.clear();
@@ -80,16 +89,57 @@ class _TripThreadScreenState extends State<TripThreadScreen> {
         }
         break;
       case ThreadEntryType.media:
-        // TODO: Implement media picker
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Media upload coming soon!')),
-        );
+        if (_selectedMediaFile != null) {
+          setState(() {
+            _isUploadingMedia = true;
+          });
+
+          try {
+            // For now, we'll use a placeholder URL since we don't have actual file upload
+            // In a real app, you'd upload the file to a server and get back a URL
+            final mediaUrl =
+                "https://example.com/placeholder-media.jpg"; // Placeholder
+            success = await tripProvider.addMediaEntry(
+              mediaUrl,
+              caption: _textController.text.trim().isEmpty
+                  ? null
+                  : _textController.text.trim(),
+            );
+
+            if (success) {
+              _textController.clear();
+              setState(() {
+                _selectedMediaFile = null;
+              });
+            }
+          } catch (e) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('Failed to upload media: $e')),
+            );
+          } finally {
+            setState(() {
+              _isUploadingMedia = false;
+            });
+          }
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Please select a media file first')),
+          );
+        }
         break;
       case ThreadEntryType.checkin:
-        // TODO: Implement check-in
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Check-in feature coming soon!')),
-        );
+        if (_locationController.text.trim().isNotEmpty) {
+          success = await tripProvider.addLocationEntry(
+            _locationController.text.trim(),
+            notes: _textController.text.trim().isEmpty
+                ? null
+                : _textController.text.trim(),
+          );
+          if (success) {
+            _locationController.clear();
+            _textController.clear();
+          }
+        }
         break;
     }
 
@@ -104,6 +154,66 @@ class _TripThreadScreenState extends State<TripThreadScreen> {
           );
         }
       });
+    }
+  }
+
+  Future<void> _pickMedia() async {
+    try {
+      final file = await _mediaService.pickFile();
+      if (file != null) {
+        setState(() {
+          _selectedMediaFile = file;
+        });
+
+        // Auto-switch to media type
+        setState(() {
+          _selectedType = ThreadEntryType.media;
+        });
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error picking media: $e')),
+      );
+    }
+  }
+
+  Future<void> _pickImage({bool fromCamera = false}) async {
+    try {
+      final file = await _mediaService.pickImage(fromCamera: fromCamera);
+      if (file != null) {
+        setState(() {
+          _selectedMediaFile = file;
+        });
+
+        // Auto-switch to media type
+        setState(() {
+          _selectedType = ThreadEntryType.media;
+        });
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error picking image: $e')),
+      );
+    }
+  }
+
+  Future<void> _pickVideo() async {
+    try {
+      final file = await _mediaService.pickVideo();
+      if (file != null) {
+        setState(() {
+          _selectedMediaFile = file;
+        });
+
+        // Auto-switch to media type
+        setState(() {
+          _selectedType = ThreadEntryType.media;
+        });
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error picking video: $e')),
+      );
     }
   }
 
@@ -125,12 +235,26 @@ class _TripThreadScreenState extends State<TripThreadScreen> {
     }
 
     final currentUser = context.read<AuthProvider>().currentUser;
-    final canAddEntries = currentUser?.id == _trip!.userId && _trip!.status == TripStatus.ongoing;
+    final canAddEntries =
+        currentUser?.id == _trip!.userId && _trip!.status == TripStatus.ongoing;
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(_trip!.title),
-        // subtitle: Text('Trip Thread'),
+        title: Text(_trip?.title ?? 'Trip Thread'),
+        backgroundColor: Theme.of(context).colorScheme.primary,
+        foregroundColor: Colors.white,
+        elevation: 2,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back, color: Colors.white),
+          onPressed: () {
+            // Get the 'from' parameter or default to trip detail
+            final extra = GoRouterState.of(context).extra;
+            final from = (extra is Map && extra['from'] != null)
+                ? extra['from'] as String
+                : '/trip/${widget.tripId}';
+            context.go(from);
+          },
+        ),
       ),
       body: Column(
         children: [
@@ -139,7 +263,7 @@ class _TripThreadScreenState extends State<TripThreadScreen> {
             child: Consumer<TripProvider>(
               builder: (context, tripProvider, child) {
                 final entries = tripProvider.currentTripEntries;
-                
+
                 if (entries.isEmpty) {
                   return Center(
                     child: Column(
@@ -153,18 +277,22 @@ class _TripThreadScreenState extends State<TripThreadScreen> {
                         const SizedBox(height: 16),
                         Text(
                           'No entries yet',
-                          style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                            color: Colors.grey[600],
-                          ),
+                          style: Theme.of(context)
+                              .textTheme
+                              .headlineSmall
+                              ?.copyWith(
+                                color: Colors.grey[600],
+                              ),
                         ),
                         const SizedBox(height: 8),
                         Text(
-                          canAddEntries 
+                          canAddEntries
                               ? 'Start documenting your journey!'
                               : 'This trip has no entries yet',
-                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                            color: Colors.grey[500],
-                          ),
+                          style:
+                              Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                    color: Colors.grey[500],
+                                  ),
                           textAlign: TextAlign.center,
                         ),
                       ],
@@ -183,7 +311,7 @@ class _TripThreadScreenState extends State<TripThreadScreen> {
               },
             ),
           ),
-          
+
           // Add entry section
           if (canAddEntries) _buildAddEntrySection(),
         ],
@@ -192,8 +320,9 @@ class _TripThreadScreenState extends State<TripThreadScreen> {
   }
 
   Widget _buildThreadEntry(TripThreadEntry entry) {
-    final isCurrentUser = context.read<AuthProvider>().currentUser?.id == entry.authorId;
-    
+    final isCurrentUser =
+        context.read<AuthProvider>().currentUser?.id == entry.authorId;
+
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
       child: Row(
@@ -203,10 +332,10 @@ class _TripThreadScreenState extends State<TripThreadScreen> {
           CircleAvatar(
             radius: 20,
             backgroundColor: Theme.of(context).colorScheme.primary,
-            backgroundImage: entry.author.avatarUrl != null 
-                ? NetworkImage(entry.author.avatarUrl!) 
+            backgroundImage: entry.author.avatarUrl != null
+                ? NetworkImage(entry.author.avatarUrl!)
                 : null,
-            child: entry.author.avatarUrl == null 
+            child: entry.author.avatarUrl == null
                 ? Text(
                     entry.author.name?.substring(0, 1).toUpperCase() ?? 'U',
                     style: const TextStyle(
@@ -216,15 +345,15 @@ class _TripThreadScreenState extends State<TripThreadScreen> {
                   )
                 : null,
           ),
-          
+
           const SizedBox(width: 12),
-          
+
           // Entry content
           Expanded(
             child: Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: isCurrentUser 
+                color: isCurrentUser
                     ? Theme.of(context).colorScheme.primaryContainer
                     : Theme.of(context).colorScheme.surfaceContainerHighest,
                 borderRadius: BorderRadius.circular(16),
@@ -238,8 +367,8 @@ class _TripThreadScreenState extends State<TripThreadScreen> {
                       Text(
                         entry.author.name ?? 'User',
                         style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                          fontWeight: FontWeight.w600,
-                        ),
+                              fontWeight: FontWeight.w600,
+                            ),
                       ),
                       const SizedBox(width: 8),
                       _buildEntryTypeIcon(entry.type),
@@ -247,14 +376,14 @@ class _TripThreadScreenState extends State<TripThreadScreen> {
                       Text(
                         _formatDateTime(entry.createdAt),
                         style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: Colors.grey[600],
-                        ),
+                              color: Colors.grey[600],
+                            ),
                       ),
                     ],
                   ),
-                  
+
                   const SizedBox(height: 8),
-                  
+
                   // Content
                   if (entry.contentText != null) ...[
                     Text(
@@ -263,13 +392,17 @@ class _TripThreadScreenState extends State<TripThreadScreen> {
                     ),
                     const SizedBox(height: 8),
                   ],
-                  
+
                   // Location
                   if (entry.locationName != null)
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 6),
                       decoration: BoxDecoration(
-                        color: Theme.of(context).colorScheme.primary.withOpacity(0.1),
+                        color: Theme.of(context)
+                            .colorScheme
+                            .primary
+                            .withOpacity(0.1),
                         borderRadius: BorderRadius.circular(12),
                       ),
                       child: Row(
@@ -292,9 +425,10 @@ class _TripThreadScreenState extends State<TripThreadScreen> {
                         ],
                       ),
                     ),
-                  
+
                   // Media placeholder
-                  if (entry.type == ThreadEntryType.media && entry.mediaUrl != null)
+                  if (entry.type == ThreadEntryType.media &&
+                      entry.mediaUrl != null)
                     Container(
                       margin: const EdgeInsets.only(top: 8),
                       height: 200,
@@ -306,9 +440,10 @@ class _TripThreadScreenState extends State<TripThreadScreen> {
                         child: Icon(Icons.image, size: 48, color: Colors.grey),
                       ),
                     ),
-                  
+
                   // Tagged users
-                  if (entry.taggedUsers != null && entry.taggedUsers!.isNotEmpty)
+                  if (entry.taggedUsers != null &&
+                      entry.taggedUsers!.isNotEmpty)
                     Container(
                       margin: const EdgeInsets.only(top: 8),
                       child: Wrap(
@@ -319,7 +454,8 @@ class _TripThreadScreenState extends State<TripThreadScreen> {
                               '@${user.username ?? user.name ?? 'User'}',
                               style: const TextStyle(fontSize: 12),
                             ),
-                            materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                            materialTapTargetSize:
+                                MaterialTapTargetSize.shrinkWrap,
                             visualDensity: VisualDensity.compact,
                           );
                         }).toList(),
@@ -373,9 +509,9 @@ class _TripThreadScreenState extends State<TripThreadScreen> {
               }).toList(),
             ),
           ),
-          
+
           const SizedBox(height: 12),
-          
+
           // Input fields based on type
           if (_selectedType == ThreadEntryType.location) ...[
             CustomTextField(
@@ -386,7 +522,135 @@ class _TripThreadScreenState extends State<TripThreadScreen> {
             ),
             const SizedBox(height: 8),
           ],
-          
+
+          // Media selection for media type
+          if (_selectedType == ThreadEntryType.media) ...[
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                border: Border.all(color: Colors.grey[300]!),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Media',
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.w600,
+                        ),
+                  ),
+                  const SizedBox(height: 12),
+                  if (_selectedMediaFile != null) ...[
+                    // Show selected media
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.grey[100],
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(
+                            _selectedMediaFile!.path
+                                            .split('.')
+                                            .last
+                                            .toLowerCase() ==
+                                        'mp4' ||
+                                    _selectedMediaFile!.path
+                                            .split('.')
+                                            .last
+                                            .toLowerCase() ==
+                                        'mov' ||
+                                    _selectedMediaFile!.path
+                                            .split('.')
+                                            .last
+                                            .toLowerCase() ==
+                                        'avi'
+                                ? Icons.video_file
+                                : Icons.image,
+                            color: Colors.grey[600],
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  _selectedMediaFile!.path.split('/').last,
+                                  style: const TextStyle(
+                                      fontWeight: FontWeight.w500),
+                                ),
+                                Text(
+                                  '${(_selectedMediaFile!.lengthSync() / 1024 / 1024).toStringAsFixed(1)} MB',
+                                  style: TextStyle(
+                                    color: Colors.grey[600],
+                                    fontSize: 12,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          IconButton(
+                            onPressed: () {
+                              setState(() {
+                                _selectedMediaFile = null;
+                              });
+                            },
+                            icon: const Icon(Icons.close, size: 20),
+                            style: IconButton.styleFrom(
+                              backgroundColor: Colors.red[100],
+                              foregroundColor: Colors.red,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ] else ...[
+                    // Media picker buttons
+                    Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton.icon(
+                            onPressed: () => _pickImage(fromCamera: false),
+                            icon: const Icon(Icons.photo_library),
+                            label: const Text('Gallery'),
+                            style: OutlinedButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: OutlinedButton.icon(
+                            onPressed: () => _pickImage(fromCamera: true),
+                            icon: const Icon(Icons.camera_alt),
+                            label: const Text('Camera'),
+                            style: OutlinedButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: OutlinedButton.icon(
+                            onPressed: _pickVideo,
+                            icon: const Icon(Icons.video_file),
+                            label: const Text('Video'),
+                            style: OutlinedButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            const SizedBox(height: 8),
+          ],
+
           // Text input (always shown for notes/captions)
           Row(
             children: [
@@ -411,8 +675,10 @@ class _TripThreadScreenState extends State<TripThreadScreen> {
               Consumer<TripProvider>(
                 builder: (context, tripProvider, child) {
                   return IconButton(
-                    onPressed: tripProvider.isLoading ? null : _addEntry,
-                    icon: tripProvider.isLoading 
+                    onPressed: (tripProvider.isLoading || _isUploadingMedia)
+                        ? null
+                        : _addEntry,
+                    icon: (tripProvider.isLoading || _isUploadingMedia)
                         ? const SizedBox(
                             width: 20,
                             height: 20,
@@ -428,7 +694,7 @@ class _TripThreadScreenState extends State<TripThreadScreen> {
               ),
             ],
           ),
-          
+
           // Error message
           Consumer<TripProvider>(
             builder: (context, tripProvider, child) {
@@ -460,7 +726,7 @@ class _TripThreadScreenState extends State<TripThreadScreen> {
   Widget _buildEntryTypeIcon(ThreadEntryType type) {
     IconData icon;
     Color color;
-    
+
     switch (type) {
       case ThreadEntryType.text:
         icon = Icons.text_fields;
@@ -479,7 +745,7 @@ class _TripThreadScreenState extends State<TripThreadScreen> {
         color = Colors.orange;
         break;
     }
-    
+
     return Icon(icon, color: color, size: 16);
   }
 
@@ -512,7 +778,7 @@ class _TripThreadScreenState extends State<TripThreadScreen> {
   String _formatDateTime(DateTime dateTime) {
     final now = DateTime.now();
     final difference = now.difference(dateTime);
-    
+
     if (difference.inDays > 0) {
       return '${difference.inDays}d ago';
     } else if (difference.inHours > 0) {

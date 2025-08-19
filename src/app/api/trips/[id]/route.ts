@@ -154,6 +154,10 @@ export async function GET(
       updatedAt: trip.updatedAt.toISOString(),
       user: trip.user ? {
         ...trip.user,
+        username: trip.user.username ?? undefined,
+        name: trip.user.name ?? undefined,
+        avatarUrl: trip.user.avatarUrl ?? undefined,
+        bio: trip.user.bio ?? undefined,
         createdAt: trip.user.createdAt.toISOString(),
         updatedAt: trip.user.updatedAt.toISOString()
       } : undefined,
@@ -162,12 +166,24 @@ export async function GET(
         joinedAt: p.joinedAt.toISOString(),
         user: {
           ...p.user,
+          username: p.user.username ?? undefined,
+          name: p.user.name ?? undefined,
+          avatarUrl: p.user.avatarUrl ?? undefined,
+          bio: p.user.bio ?? undefined,
           createdAt: p.user.createdAt.toISOString(),
           updatedAt: p.user.updatedAt.toISOString()
         }
       })),
       threadEntries: trip.threadEntries.map(entry => ({
         ...entry,
+        gpsCoordinates: entry.gpsCoordinates
+        ? ((typeof entry.gpsCoordinates === "string"
+            ? JSON.parse(entry.gpsCoordinates)
+            : entry.gpsCoordinates) as {
+            lat: number | null;
+            lng: number | null;
+          })
+        : null,
         createdAt: entry.createdAt.toISOString(),
         author: {
           ...entry.author,

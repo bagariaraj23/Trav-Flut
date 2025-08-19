@@ -1,8 +1,8 @@
 export interface ApiResponse<T = any> {
   success: boolean;
-  data?: T;
-  error?: string;
-  message?: string;
+  data?: T | null;
+  error?: string | null;
+  message?: string | null;
 }
 
 export interface AuthResponse {
@@ -14,10 +14,10 @@ export interface AuthResponse {
 export interface UserProfile {
   id: string;
   email: string;
-  username?: string;
-  name?: string;
-  avatarUrl?: string;
-  bio?: string;
+  username?: string | null;
+  name?: string | null;
+  avatarUrl?: string | null;
+  bio?: string | null;
   isPrivate: boolean;
   createdAt: string;
   updatedAt: string;
@@ -49,10 +49,10 @@ export interface FollowRequestResponse {
 
 export interface DiscoverUserDto {
   id: string;
-  username?: string;
-  name?: string;
-  avatarUrl?: string;
-  bio?: string;
+  username?: string | null;
+  name?: string | null;
+  avatarUrl?: string | null;
+  bio?: string | null;
   isPrivate: boolean;
   isFollowing: boolean;
   isFollowedBy: boolean;
@@ -74,25 +74,25 @@ export interface TripResponse {
   id: string;
   userId: string;
   title: string;
-  description?: string;
-  startDate?: string;
-  endDate?: string;
+  description?: string | null;
+  startDate?: string | null;
+  endDate?: string | null;
   destinations: string[];
-  mood?: "RELAXED" | "ADVENTURE" | "SPIRITUAL" | "CULTURAL" | "PARTY" | "MIXED";
-  type?: "SOLO" | "GROUP" | "COUPLE" | "FAMILY";
-  coverMediaUrl?: string;
+  mood?: "RELAXED" | "ADVENTURE" | "SPIRITUAL" | "CULTURAL" | "PARTY" | "MIXED" | null;
+  type?: "SOLO" | "GROUP" | "COUPLE" | "FAMILY" | null;
+  coverMediaUrl?: string | null;
   status: "UPCOMING" | "ONGOING" | "ENDED";
   createdAt: string;
   updatedAt: string;
-  user?: UserProfile;
-  participants?: TripParticipantResponse[];
-  threadEntries?: TripThreadEntryResponse[];
-  finalPost?: TripFinalPostResponse;
+  user?: UserProfile | null;
+  participants?: TripParticipantResponse[] | null;
+  threadEntries?: TripThreadEntryResponse[] | null;
+  finalPost?: TripFinalPostResponse | null;
   _count?: {
-    threadEntries: number;
-    media: number;
-    participants: number;
-  };
+    threadEntries: number | null;
+    media: number | null;
+    participants: number | null;
+  } | null;
 }
 
 export interface TripParticipantResponse {
@@ -109,14 +109,14 @@ export interface TripThreadEntryResponse {
   tripId: string;
   authorId: string;
   type: "TEXT" | "MEDIA" | "LOCATION" | "CHECKIN";
-  contentText?: string;
-  mediaUrl?: string;
-  locationName?: string;
-  gpsCoordinates?: { lat: number; lng: number };
+  contentText?: string | null;
+  mediaUrl?: string | null;
+  locationName?: string | null;
+  gpsCoordinates?: { lat: number | null; lng: number | null } | null;
   createdAt: string;
   author: UserProfile;
-  taggedUsers?: UserProfile[];
-  media?: MediaResponse;
+  taggedUsers?: UserProfile[] | null;
+  media?: MediaResponse | null;
 }
 
 export interface TripFinalPostResponse {
@@ -124,7 +124,7 @@ export interface TripFinalPostResponse {
   tripId: string;
   summaryText: string;
   curatedMedia: string[];
-  caption?: string;
+  caption?: string | null;
   isPublished: boolean;
   createdAt: string;
 }
@@ -133,41 +133,41 @@ export interface MediaResponse {
   id: string;
   url: string;
   type: "IMAGE" | "VIDEO";
-  filename?: string;
-  size?: number;
+  filename?: string | null;
+  size?: number | null;
   uploadedById: string;
-  tripId?: string;
+  tripId?: string | null;
   createdAt: string;
 }
 
 // Request DTOs
 export interface CreateTripRequest {
   title: string;
-  description?: string;
-  startDate?: string;
-  endDate?: string;
+  description?: string | null;
+  startDate?: string | null;
+  endDate?: string | null;
   destinations: string[];
-  mood?: "RELAXED" | "ADVENTURE" | "SPIRITUAL" | "CULTURAL" | "PARTY" | "MIXED";
-  type?: "SOLO" | "GROUP" | "COUPLE" | "FAMILY";
-  coverMediaUrl?: string;
+  mood?: "RELAXED" | "ADVENTURE" | "SPIRITUAL" | "CULTURAL" | "PARTY" | "MIXED" | null;
+  type?: "SOLO" | "GROUP" | "COUPLE" | "FAMILY" | null;
+  coverMediaUrl?: string | null;
 }
 
 export interface CreateThreadEntryRequest {
   type: "TEXT" | "MEDIA" | "LOCATION" | "CHECKIN";
-  contentText?: string;
-  mediaUrl?: string;
-  locationName?: string;
-  gpsCoordinates?: { lat: number; lng: number };
-  taggedUserIds?: string[];
+  contentText?: string | null;
+  mediaUrl?: string | null;
+  locationName?: string | null;
+  gpsCoordinates?: { lat: number | null; lng: number | null } | null;
+  taggedUserIds?: string[] | null;
 }
 
 export interface AddParticipantRequest {
-  userId: string;
-  role?: string;
+  userId: string | null;
+  role?: string | null;
 }
 
 export interface UpdateFinalPostRequest {
   summaryText: string;
   curatedMedia: string[];
-  caption?: string;
+  caption?: string | null;
 }

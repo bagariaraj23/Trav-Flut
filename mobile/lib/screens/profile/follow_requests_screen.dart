@@ -305,7 +305,7 @@ class _FollowRequestsScreenState extends State<FollowRequestsScreen>
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    _getTimeAgo(DateTime.parse(request.createdAt)),
+                    _getTimeAgo(request.createdAt),
                     style: TextStyle(
                       color: Colors.grey[500],
                       fontSize: 12,

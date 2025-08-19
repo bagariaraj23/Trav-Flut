@@ -8,6 +8,7 @@ import 'package:tripthread/services/api_service.dart';
 import 'package:tripthread/services/storage_service.dart';
 import 'package:tripthread/services/trip_service.dart';
 import 'package:tripthread/services/connectivity_service.dart';
+import 'package:tripthread/services/media_service.dart';
 import 'package:tripthread/screens/splash_screen.dart';
 import 'package:tripthread/screens/auth/login_screen.dart';
 import 'package:tripthread/screens/auth/signup_screen.dart';
@@ -33,6 +34,7 @@ void main() async {
 
     final apiService = ApiService();
     final tripService = TripService();
+    final mediaService = MediaService();
 
     runApp(
       MultiProvider(
@@ -40,6 +42,7 @@ void main() async {
           Provider<StorageService>.value(value: storageService),
           Provider<ApiService>.value(value: apiService),
           Provider<TripService>.value(value: tripService),
+          Provider<MediaService>.value(value: mediaService),
           ChangeNotifierProvider<ConnectivityService>.value(
               value: connectivityService),
           ChangeNotifierProvider<AuthProvider>(
@@ -199,6 +202,10 @@ class TripThreadAppRouter extends StatelessWidget {
         GoRoute(
           path: '/home',
           builder: (context, state) => const HomeScreen(),
+        ),
+        GoRoute(
+          path: '/trips',
+          builder: (context, state) => const HomeScreen(initialTab: 1),
         ),
         GoRoute(
           path: '/profile/:userId',
