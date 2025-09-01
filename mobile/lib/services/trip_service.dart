@@ -7,7 +7,7 @@ import 'dart:convert'; // Added for jsonEncode
 class TripService {
   // static const String baseUrl = 'http://localhost:3000/api';
   // static const String baseUrl = 'http://10.61.114.100:3000/api';
-  static const String baseUrl = 'http://192.168.0.110:3000/api';
+  static const String baseUrl = 'http://192.168.0.198:3000/api';
   // static const String baseUrl = 'http://192.168.0.111:3000/api';
 
   late final Dio _dio;
