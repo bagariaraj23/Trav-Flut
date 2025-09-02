@@ -33,8 +33,8 @@ export async function requestReset(payload: unknown, ctx?: { ip?: string; userAg
     },
   });
 
-  const { webUrl } = buildPasswordResetLink(rawToken);
-  await sendPasswordResetEmail({ to: user.email, resetLink: webUrl, ttlMinutes: TTL_MIN });
+  const { webUrl, schemeUrl } = buildPasswordResetLink(rawToken);
+  await sendPasswordResetEmail({ to: user.email, resetLink: webUrl, appLink: schemeUrl, ttlMinutes: TTL_MIN });
   await recordSecurityEvent({ userId: user.id, type: "PASSWORD_RESET_REQUESTED" });
 }
 
@@ -51,7 +51,10 @@ export async function resetWithToken(payload: unknown) {
   const pwHash = await bcrypt.hash(newPassword, 10);
   await prisma.user.update({ where: { id: user.id }, data: { password: pwHash } });
 
-  await prisma.passwordReset.update({ where: { id: reset.id }, data: { usedAt: new Date() } });
+  await prisma.passwordReset.update({
+    where: { id: reset.id },
+    data: { usedAt: new Date() },
+  });
 
   await revokeAllRefreshTokens(user.id);
 

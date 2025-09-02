@@ -3,22 +3,39 @@ import { requestReset } from "@/lib/services/passwordReset";
 // import { ok } from "@/lib/response";
 
 export async function POST(req: NextRequest) {
-  const body = await req.json().catch(() => ({}));
-  const debugEcho =
-    process.env.NODE_ENV !== "production" &&
-    (process.env.PASSWORD_RESET_DEBUG_ECHO === "1" ||
-     req.headers.get("x-debug-echo") === "1");
+  try {
+    const body = await req.json().catch(() => ({}));
+    const debugEcho =
+      process.env.NODE_ENV !== "production" &&
+      (process.env.PASSWORD_RESET_DEBUG_ECHO === "1" ||
+        req.headers.get("x-debug-echo") === "1");
 
-  let leakedToken: string | undefined;
-  await requestReset(
-    body,
-    { ip: req.headers.get("x-forwarded-for") || undefined, userAgent: req.headers.get("user-agent") || undefined },
-    debugEcho ? { onToken: (t) => (leakedToken = t) } : undefined,
-  );
+    let leakedToken: string | undefined;
+    await requestReset(
+      body,
+      {
+        ip: req.headers.get("x-forwarded-for") || undefined,
+        userAgent: req.headers.get("user-agent") || undefined,
+      },
+      debugEcho ? { onToken: (t) => (leakedToken = t) } : undefined
+    );
 
-  return Response.json({
-    ok: true,
-    message: "If an account exists for this email, a reset link has been sent.",
-    ...(debugEcho ? { debugToken: leakedToken } : {}),
-  });
+    return Response.json({
+      ok: true,
+      message:
+        "If an account exists for this email, a reset link has been sent.",
+      ...(debugEcho ? { debugToken: leakedToken } : {}),
+    });
+  } catch (err) {
+    console.error("[forgot-password] error:", err);
+    return Response.json(
+      {
+        ok: false,
+        message:
+          "If an account exists for this email, a reset link has been sent.",
+        error: "Internal server error. Please try again later.",
+      },
+      { status: 200 }
+    );
+  }
 }

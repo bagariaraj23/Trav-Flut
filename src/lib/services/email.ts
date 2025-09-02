@@ -1,4 +1,5 @@
 import sgMail from "@sendgrid/mail";
+import { ms } from "zod/v4/locales";
 
 const SENDGRID_API_KEY = process.env.SENDGRID_API_KEY!;
 const MAIL_FROM = process.env.MAIL_FROM || "no-reply@your-domain";
@@ -9,8 +10,13 @@ if (SENDGRID_API_KEY) {
   sgMail.setApiKey(SENDGRID_API_KEY);
 }
 
-type ResetEmailArgs = { to: string; resetLink: string; ttlMinutes: number };
-export async function sendPasswordResetEmail({ to, resetLink, ttlMinutes }: ResetEmailArgs) {
+type ResetEmailArgs = {
+  to: string;
+  resetLink: string;
+  appLink:string;
+  ttlMinutes: number;
+};
+export async function sendPasswordResetEmail({ to, resetLink, appLink, ttlMinutes }: ResetEmailArgs) {
   if (!SENDGRID_API_KEY) {
     if (DEBUG) console.error("SENDGRID_API_KEY missing");
     return;
@@ -19,9 +25,13 @@ export async function sendPasswordResetEmail({ to, resetLink, ttlMinutes }: Rese
     to,
     from: MAIL_FROM,
     subject: `${APP_NAME}: Reset your password`,
-    text: `This link expires in ${ttlMinutes} minutes.\n${resetLink}`,
-    html: `<p>This link expires in <b>${ttlMinutes} minutes</b>.</p><p><a href="${resetLink}">Reset Password</a></p>`,
+    text: `This link expires in ${ttlMinutes} minutes.\nApp: ${appLink}\nWeb: ${resetLink}`,
+    html: `<p>This link expires in <b>${ttlMinutes} minutes</b>.</p>
+           <p><a href="${`${appLink}`}">Open in App: ${appLink}</a> (mobile only)</p>
+           <p><a href="${resetLink}">Open in Browser</a></p>`,
   };
+
+  console.log("Sending password reset email to:", JSON.stringify(msg, null, 2));
 
   try {
     const res = await sgMail.send(msg as any);

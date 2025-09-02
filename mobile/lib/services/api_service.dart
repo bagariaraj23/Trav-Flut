@@ -11,21 +11,22 @@ class ApiService {
   // static const String baseUrl = 'http://localhost:3000/api';
   // static const String baseUrl = 'http://10.61.114.100:3000/api';
   // static const String baseUrl = 'http://192.168.0.110:3000/api';
-  static const String baseUrl = 'http://192.168.0.198:3000/api';
+  static const String baseUrl = 'http://192.168.0.111:3000/api';
   // static const String baseUrl = 'http://192.168.0.111:3000/api';
 
   final Dio _dio;
   StorageService? _storageService;
   VoidCallback? _onUnauthorized;
 
-  ApiService() : _dio = Dio(BaseOptions(
-    baseUrl: baseUrl,
-    connectTimeout: const Duration(seconds: 30),
-    receiveTimeout: const Duration(seconds: 30),
-    headers: {
-      'Content-Type': 'application/json',
-    },
-  )) {
+  ApiService()
+      : _dio = Dio(BaseOptions(
+          baseUrl: baseUrl,
+          connectTimeout: const Duration(seconds: 30),
+          receiveTimeout: const Duration(seconds: 30),
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        )) {
     _setupInterceptors();
   }
 
@@ -233,10 +234,16 @@ class ApiService {
         'email': email,
       });
 
-      debugPrint('[ApiService] Forgot password response: ${response.statusCode}');
+      debugPrint(
+          '[ApiService] Forgot password response: ${response.statusCode}');
+      debugPrint('[ApiService] Response data: ${response.data}');
+      // Map 'ok' from backend to 'success' in ApiResponse, defaulting to false if missing
+      final bool success =
+          response.data['success'] ?? response.data['ok'] ?? false;
       return ApiResponse<void>(
-        success: response.data['success'],
-        error: response.data['message'],
+        success: success,
+        message: response.data['message'],
+        error: response.data['error'],
       );
     } on DioException catch (e) {
       debugPrint('[ApiService] Forgot password DioException: ${e.message}');
@@ -264,10 +271,15 @@ class ApiService {
         'newPassword': newPassword,
       });
 
-      debugPrint('[ApiService] Reset password response: ${response.statusCode}');
+      debugPrint(
+          '[ApiService] Reset password response: ${response.statusCode}');
+      debugPrint('[ApiService] Response data: ${response.data}');
+      final bool success =
+          response.data['success'] ?? response.data['ok'] ?? false;
       return ApiResponse<void>(
-        success: response.data['success'],
-        error: response.data['message'],
+        success: success,
+        message: response.data['message'],
+        error: response.data['error'],
       );
     } on DioException catch (e) {
       debugPrint('[ApiService] Reset password DioException: ${e.message}');
@@ -333,7 +345,6 @@ class ApiService {
       );
     }
   }
-  
 
   Future<ApiResponse<User>> updateProfile({
     String? name,
@@ -529,7 +540,8 @@ class ApiService {
     }
   }
 
-  Future<ApiResponse<PaginatedUsers>> getFollowers(String userId, {int page = 1, int limit = 20}) async {
+  Future<ApiResponse<PaginatedUsers>> getFollowers(String userId,
+      {int page = 1, int limit = 20}) async {
     try {
       debugPrint('[ApiService] Getting followers for user: $userId');
       final response =
@@ -537,15 +549,14 @@ class ApiService {
         'page': page,
         'limit': limit,
       });
-      debugPrint(
-          '[ApiService] Get followers response: ${response.statusCode}');
+      debugPrint('[ApiService] Get followers response: ${response.statusCode}');
 
       if (response.data['success'] && response.data['data'] != null) {
         final data = response.data['data'];
         final users = (data['followers'] as List<dynamic>)
             .map((follower) => User.fromJson(follower))
             .toList();
-        
+
         final paginatedUsers = PaginatedUsers(
           users: users,
           pagination: Pagination(
@@ -556,7 +567,8 @@ class ApiService {
           ),
         );
 
-        debugPrint('[ApiService] Found ${users.length} followers (page ${paginatedUsers.pagination.page} of ${paginatedUsers.pagination.totalPages})');
+        debugPrint(
+            '[ApiService] Found ${users.length} followers (page ${paginatedUsers.pagination.page} of ${paginatedUsers.pagination.totalPages})');
         return ApiResponse<PaginatedUsers>(
           success: true,
           data: paginatedUsers,
@@ -585,7 +597,7 @@ class ApiService {
   }
 
   Future<ApiResponse<PaginatedUsers>> getFollowing(String userId,
-    {int page = 1, int limit = 20}) async {
+      {int page = 1, int limit = 20}) async {
     try {
       debugPrint('[ApiService] Getting following for user: $userId');
       final response =
@@ -593,15 +605,14 @@ class ApiService {
         'page': page.toString(),
         'limit': limit.toString(),
       });
-      debugPrint(
-          '[ApiService] Get following response: ${response.statusCode}');
+      debugPrint('[ApiService] Get following response: ${response.statusCode}');
 
       if (response.data['success'] && response.data['data'] != null) {
         final data = response.data['data'];
         final users = (data['following'] as List<dynamic>)
             .map((user) => User.fromJson(user))
             .toList();
-        
+
         final paginatedUsers = PaginatedUsers(
           users: users,
           pagination: Pagination(
@@ -612,7 +623,8 @@ class ApiService {
           ),
         );
 
-        debugPrint('[ApiService] Found ${users.length} following users (page ${paginatedUsers.pagination.page} of ${paginatedUsers.pagination.totalPages})');
+        debugPrint(
+            '[ApiService] Found ${users.length} following users (page ${paginatedUsers.pagination.page} of ${paginatedUsers.pagination.totalPages})');
         return ApiResponse<PaginatedUsers>(
           success: true,
           data: paginatedUsers,
@@ -640,27 +652,26 @@ class ApiService {
     }
   }
 
-  Future<ApiResponse<FollowStatusResponse>> getFollowStatus(String userId) async {
+  Future<ApiResponse<FollowStatusResponse>> getFollowStatus(
+      String userId) async {
     try {
       debugPrint('[ApiService] Getting follow status for user: $userId');
       final response = await _dio.get('/follow/$userId');
-      debugPrint('[ApiService] Get follow status response: ${response.statusCode}');
+      debugPrint(
+          '[ApiService] Get follow status response: ${response.statusCode}');
 
       if (response.data['success'] && response.data['data'] != null) {
         final data = response.data['data'];
         final isFollowing = data['isFollowing'] as bool;
 
         final status = FollowStatusResponse(isFollowing: isFollowing);
-        return ApiResponse<FollowStatusResponse>(
-          success: true,
-          data: status
-        );
+        return ApiResponse<FollowStatusResponse>(success: true, data: status);
       } else {
-        debugPrint('[ApiService] Get follow status failed: ${response.data['error']}');
+        debugPrint(
+            '[ApiService] Get follow status failed: ${response.data['error']}');
         return ApiResponse<FollowStatusResponse>(
-          success: false,
-          error: response.data['error'] ?? 'Failed to get follow status'
-        );
+            success: false,
+            error: response.data['error'] ?? 'Failed to get follow status');
       }
     } on DioException catch (e) {
       debugPrint('[ApiService] Get follow status DioException: ${e.message}');
@@ -677,11 +688,14 @@ class ApiService {
     }
   }
 
-  Future<ApiResponse<FollowStatusResponse>> getDetailedFollowStatus(String userId) async {
+  Future<ApiResponse<FollowStatusResponse>> getDetailedFollowStatus(
+      String userId) async {
     try {
-      debugPrint('[ApiService] Getting detailed follow status for user: $userId');
+      debugPrint(
+          '[ApiService] Getting detailed follow status for user: $userId');
       final response = await _dio.get('/follow/$userId');
-      debugPrint('[ApiService] Get detailed follow status response: ${response.statusCode}');
+      debugPrint(
+          '[ApiService] Get detailed follow status response: ${response.statusCode}');
 
       if (response.data['success'] && response.data['data'] != null) {
         final data = response.data['data'];
@@ -696,25 +710,25 @@ class ApiService {
           isRequestPending: isRequestPending,
           isPrivate: isPrivate,
         );
-        return ApiResponse<FollowStatusResponse>(
-          success: true,
-          data: status
-        );
+        return ApiResponse<FollowStatusResponse>(success: true, data: status);
       } else {
-        debugPrint('[ApiService] Get detailed follow status failed: ${response.data['error']}');
+        debugPrint(
+            '[ApiService] Get detailed follow status failed: ${response.data['error']}');
         return ApiResponse<FollowStatusResponse>(
-          success: false,
-          error: response.data['error'] ?? 'Failed to get detailed follow status'
-        );
+            success: false,
+            error: response.data['error'] ??
+                'Failed to get detailed follow status');
       }
     } on DioException catch (e) {
-      debugPrint('[ApiService] Get detailed follow status DioException: ${e.message}');
+      debugPrint(
+          '[ApiService] Get detailed follow status DioException: ${e.message}');
       return ApiResponse<FollowStatusResponse>(
         success: false,
         error: e.response?.data['error'] ?? 'Network error occurred',
       );
     } catch (e) {
-      debugPrint('[ApiService] Get detailed follow status unexpected error: $e');
+      debugPrint(
+          '[ApiService] Get detailed follow status unexpected error: $e');
       return ApiResponse<FollowStatusResponse>(
         success: false,
         error: 'An unexpected error occurred',
@@ -726,29 +740,34 @@ class ApiService {
     try {
       debugPrint('[ApiService] Getting pending follow requests');
       final response = await _dio.get('/follow/requests');
-      debugPrint('[ApiService] Get pending follow requests response: ${response.statusCode}');
-      
+      debugPrint(
+          '[ApiService] Get pending follow requests response: ${response.statusCode}');
+
       if (response.data['success'] && response.data['data'] != null) {
         final List<dynamic> requestsData = response.data['data'];
-        final requests = requestsData.map((data) => FollowRequestDto.fromJson(data)).toList();
+        final requests = requestsData
+            .map((data) => FollowRequestDto.fromJson(data))
+            .toList();
         return ApiResponse<List<FollowRequestDto>>(
           success: true,
           data: requests,
         );
       }
-      
+
       return ApiResponse<List<FollowRequestDto>>(
         success: false,
         error: 'Failed to get pending follow requests',
       );
     } on DioException catch (e) {
-      debugPrint('[ApiService] Get pending follow requests DioException: ${e.message}');
+      debugPrint(
+          '[ApiService] Get pending follow requests DioException: ${e.message}');
       return ApiResponse<List<FollowRequestDto>>(
         success: false,
         error: e.response?.data['error'] ?? 'Network error occurred',
       );
     } catch (e) {
-      debugPrint('[ApiService] Get pending follow requests unexpected error: $e');
+      debugPrint(
+          '[ApiService] Get pending follow requests unexpected error: $e');
       return ApiResponse<List<FollowRequestDto>>(
         success: false,
         error: 'An unexpected error occurred',
@@ -821,7 +840,8 @@ class ApiService {
           data: response.data['data'] as Map<String, dynamic>,
         );
       } else {
-        debugPrint('[ApiService] Get home feed failed: ${response.data['error']}');
+        debugPrint(
+            '[ApiService] Get home feed failed: ${response.data['error']}');
         return ApiResponse<Map<String, dynamic>>(
           success: false,
           error: response.data['error'] ?? 'Failed to get home feed',
@@ -959,11 +979,13 @@ class ApiService {
     try {
       debugPrint('[ApiService] Getting trip entries for trip: $tripId');
       final response = await _dio.get('/trips/$tripId/entries');
-      debugPrint('[ApiService] Get trip entries response: ${response.statusCode}');
+      debugPrint(
+          '[ApiService] Get trip entries response: ${response.statusCode}');
 
       if (response.data['success'] && response.data['data'] != null) {
         final entries = (response.data['data'] as List)
-            .map((json) => TripThreadEntry.fromJson(json as Map<String, dynamic>))
+            .map((json) =>
+                TripThreadEntry.fromJson(json as Map<String, dynamic>))
             .toList();
 
         debugPrint('[ApiService] Found ${entries.length} trip entries');
@@ -972,7 +994,8 @@ class ApiService {
           data: entries,
         );
       } else {
-        debugPrint('[ApiService] Get trip entries failed: ${response.data['error']}');
+        debugPrint(
+            '[ApiService] Get trip entries failed: ${response.data['error']}');
         return ApiResponse<List<TripThreadEntry>>(
           success: false,
           error: response.data['error'] ?? 'Failed to get trip entries',
@@ -994,15 +1017,18 @@ class ApiService {
     }
   }
 
-  Future<ApiResponse<List<TripThreadEntry>>> getThreadEntries(String tripId) async {
+  Future<ApiResponse<List<TripThreadEntry>>> getThreadEntries(
+      String tripId) async {
     try {
       debugPrint('[ApiService] Getting thread entries for trip: $tripId');
       final response = await _dio.get('/trips/$tripId/entries');
-      debugPrint('[ApiService] Get thread entries response: ${response.statusCode}');
+      debugPrint(
+          '[ApiService] Get thread entries response: ${response.statusCode}');
 
       if (response.data['success'] && response.data['data'] != null) {
         final entries = (response.data['data'] as List)
-            .map((json) => TripThreadEntry.fromJson(json as Map<String, dynamic>))
+            .map((json) =>
+                TripThreadEntry.fromJson(json as Map<String, dynamic>))
             .toList();
 
         debugPrint('[ApiService] Found ${entries.length} thread entries');
@@ -1011,7 +1037,8 @@ class ApiService {
           data: entries,
         );
       } else {
-        debugPrint('[ApiService] Get thread entries failed: ${response.data['error']}');
+        debugPrint(
+            '[ApiService] Get thread entries failed: ${response.data['error']}');
         return ApiResponse<List<TripThreadEntry>>(
           success: false,
           error: response.data['error'] ?? 'Failed to get thread entries',
@@ -1076,7 +1103,8 @@ class ApiService {
     bool includePrivate = false,
   }) async {
     try {
-      debugPrint('[ApiService] Getting discover trips: page=$page, limit=$limit, status=$status, mood=$mood');
+      debugPrint(
+          '[ApiService] Getting discover trips: page=$page, limit=$limit, status=$status, mood=$mood');
       final queryParams = {
         'page': page.toString(),
         'limit': limit.toString(),
@@ -1085,8 +1113,10 @@ class ApiService {
         'includePrivate': includePrivate.toString(),
       };
 
-      final response = await _dio.get('/discover/trips', queryParameters: queryParams);
-      debugPrint('[ApiService] Get discover trips response: ${response.statusCode}');
+      final response =
+          await _dio.get('/discover/trips', queryParameters: queryParams);
+      debugPrint(
+          '[ApiService] Get discover trips response: ${response.statusCode}');
 
       if (response.data['success'] && response.data['data'] != null) {
         return ApiResponse<Map<String, dynamic>>(
@@ -1094,7 +1124,8 @@ class ApiService {
           data: response.data['data'] as Map<String, dynamic>,
         );
       } else {
-        debugPrint('[ApiService] Get discover trips failed: ${response.data['error']}');
+        debugPrint(
+            '[ApiService] Get discover trips failed: ${response.data['error']}');
         return ApiResponse<Map<String, dynamic>>(
           success: false,
           error: response.data['error'] ?? 'Failed to load discover trips',
@@ -1122,8 +1153,9 @@ class ApiService {
       final response = await _dio.post('/follow/requests', data: {
         'followeeId': userId,
       });
-      debugPrint('[ApiService] Send follow request response: ${response.statusCode}');
-      
+      debugPrint(
+          '[ApiService] Send follow request response: ${response.statusCode}');
+
       // Both 200 (already pending) and 201 (newly created) are success cases
       if (response.statusCode == 200 || response.statusCode == 201) {
         return ApiResponse<void>(
@@ -1138,15 +1170,16 @@ class ApiService {
       }
     } on DioException catch (e) {
       debugPrint('[ApiService] Send follow request DioException: ${e.message}');
-      
+
       // Handle the case where follow request already exists
-      if (e.response?.statusCode == 400 && e.response?.data['error'] == 'Follow request already pending') {
+      if (e.response?.statusCode == 400 &&
+          e.response?.data['error'] == 'Follow request already pending') {
         return ApiResponse<void>(
           success: true,
           error: null,
         );
       }
-      
+
       return ApiResponse<void>(
         success: false,
         error: e.response?.data['error'] ?? 'Network error occurred',
@@ -1164,18 +1197,22 @@ class ApiService {
     try {
       debugPrint('[ApiService] Getting follow requests');
       final response = await _dio.get('/follow/requests');
-      debugPrint('[ApiService] Get follow requests response: ${response.statusCode}');
+      debugPrint(
+          '[ApiService] Get follow requests response: ${response.statusCode}');
 
       if (response.data['success'] && response.data['data'] != null) {
         final List<dynamic> requestsData = response.data['data'];
-        final requests = requestsData.map((data) => FollowRequestDto.fromJson(data)).toList();
+        final requests = requestsData
+            .map((data) => FollowRequestDto.fromJson(data))
+            .toList();
 
         return ApiResponse<List<FollowRequestDto>>(
           success: true,
           data: requests,
         );
       } else {
-        debugPrint('[ApiService] Get follow requests failed: ${response.data['error']}');
+        debugPrint(
+            '[ApiService] Get follow requests failed: ${response.data['error']}');
         return ApiResponse<List<FollowRequestDto>>(
           success: false,
           error: response.data['error'] ?? 'Failed to get follow requests',
@@ -1196,24 +1233,30 @@ class ApiService {
     }
   }
 
-  Future<ApiResponse<void>> respondToFollowRequest(String userId, bool accept) async {
+  Future<ApiResponse<void>> respondToFollowRequest(
+      String userId, bool accept) async {
     try {
-      debugPrint('[ApiService] Responding to follow request from user: $userId with accept: $accept');
-      
+      debugPrint(
+          '[ApiService] Responding to follow request from user: $userId with accept: $accept');
+
       // First get the request ID for this user
       final requestsResponse = await _dio.get('/follow/requests');
-      if (requestsResponse.data['success'] && requestsResponse.data['data'] != null) {
+      if (requestsResponse.data['success'] &&
+          requestsResponse.data['data'] != null) {
         final requests = requestsResponse.data['data'] as List<dynamic>;
         final request = requests.firstWhere(
           (r) => r['follower']['id'] == userId,
           orElse: () => null,
         );
-        
+
         if (request != null) {
-          final endpoint = accept ? '/follow/requests/${request['id']}/accept' : '/follow/requests/${request['id']}/reject';
+          final endpoint = accept
+              ? '/follow/requests/${request['id']}/accept'
+              : '/follow/requests/${request['id']}/reject';
           final response = await _dio.put(endpoint);
-          debugPrint('[ApiService] Respond to follow request response: ${response.statusCode}');
-          
+          debugPrint(
+              '[ApiService] Respond to follow request response: ${response.statusCode}');
+
           return ApiResponse<void>(
             success: response.data['success'],
             error: response.data['error'],
@@ -1231,7 +1274,8 @@ class ApiService {
         );
       }
     } on DioException catch (e) {
-      debugPrint('[ApiService] Respond to follow request DioException: ${e.message}');
+      debugPrint(
+          '[ApiService] Respond to follow request DioException: ${e.message}');
       return ApiResponse<void>(
         success: false,
         error: e.response?.data['error'] ?? 'Network error occurred',
@@ -1250,19 +1294,21 @@ class ApiService {
       debugPrint('[ApiService] Canceling follow request for user: $userId');
       // First get the request ID for this user
       final requestsResponse = await _dio.get('/follow/requests');
-      if (requestsResponse.data['success'] && requestsResponse.data['data'] != null) {
+      if (requestsResponse.data['success'] &&
+          requestsResponse.data['data'] != null) {
         final requests = requestsResponse.data['data'] as List<dynamic>;
         final request = requests.firstWhere(
           (r) => r['follower']['id'] == userId,
           orElse: () => null,
         );
-        
+
         if (request != null) {
           final response = await _dio.delete('/follow/requests', data: {
             'requestId': request['id'],
           });
-          debugPrint('[ApiService] Cancel follow request response: ${response.statusCode}');
-          
+          debugPrint(
+              '[ApiService] Cancel follow request response: ${response.statusCode}');
+
           return ApiResponse<void>(
             success: response.data['success'],
             error: response.data['error'],
@@ -1280,7 +1326,8 @@ class ApiService {
         );
       }
     } on DioException catch (e) {
-      debugPrint('[ApiService] Cancel follow request DioException: ${e.message}');
+      debugPrint(
+          '[ApiService] Cancel follow request DioException: ${e.message}');
       return ApiResponse<void>(
         success: false,
         error: e.response?.data['error'] ?? 'Network error occurred',
@@ -1298,14 +1345,16 @@ class ApiService {
     try {
       debugPrint('[ApiService] Accepting follow request: $requestId');
       final response = await _dio.put('/follow/requests/$requestId/accept');
-      debugPrint('[ApiService] Accept follow request response: ${response.statusCode}');
-      
+      debugPrint(
+          '[ApiService] Accept follow request response: ${response.statusCode}');
+
       return ApiResponse<void>(
         success: response.data['success'],
         error: response.data['error'],
       );
     } on DioException catch (e) {
-      debugPrint('[ApiService] Accept follow request DioException: ${e.message}');
+      debugPrint(
+          '[ApiService] Accept follow request DioException: ${e.message}');
       return ApiResponse<void>(
         success: false,
         error: e.response?.data['error'] ?? 'Network error occurred',
@@ -1323,14 +1372,16 @@ class ApiService {
     try {
       debugPrint('[ApiService] Rejecting follow request: $requestId');
       final response = await _dio.put('/follow/requests/$requestId/reject');
-      debugPrint('[ApiService] Reject follow request response: ${response.statusCode}');
-      
+      debugPrint(
+          '[ApiService] Reject follow request response: ${response.statusCode}');
+
       return ApiResponse<void>(
         success: response.data['success'],
         error: response.data['error'],
       );
     } on DioException catch (e) {
-      debugPrint('[ApiService] Reject follow request DioException: ${e.message}');
+      debugPrint(
+          '[ApiService] Reject follow request DioException: ${e.message}');
       return ApiResponse<void>(
         success: false,
         error: e.response?.data['error'] ?? 'Network error occurred',

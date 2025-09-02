@@ -46,7 +46,6 @@ model User {
   @@map("users")
 }
 
-
 model PasswordReset {
  id String @id @default(uuid())
  userId String
@@ -61,6 +60,7 @@ model PasswordReset {
  @@index([userId, expiresAt])
  @@map("password_resets")
 }
+
 model SecurityEvent {
  id String @id @default(uuid())
  userId String?
