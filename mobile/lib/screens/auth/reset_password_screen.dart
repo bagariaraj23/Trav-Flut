@@ -5,42 +5,62 @@ import 'package:form_field_validator/form_field_validator.dart';
 import 'package:tripthread/providers/auth_provider.dart';
 import 'package:tripthread/widgets/custom_text_field.dart';
 import 'package:tripthread/widgets/loading_button.dart';
-import 'package:flutter/services.dart';
 
-class LoginScreen extends StatefulWidget {
-  const LoginScreen({Key? key}) : super(key: key);
+class ResetPasswordScreen extends StatefulWidget {
+  final String? token;
+
+  const ResetPasswordScreen({Key? key, this.token}) : super(key: key);
 
   @override
-  State<LoginScreen> createState() => _LoginScreenState();
+  State<ResetPasswordScreen> createState() => _ResetPasswordScreenState();
 }
 
-class _LoginScreenState extends State<LoginScreen> {
+class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
   final _formKey = GlobalKey<FormState>();
-  final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
+  final _confirmPasswordController = TextEditingController();
   bool _obscurePassword = true;
+  bool _obscureConfirmPassword = true;
 
   @override
   void dispose() {
-    _emailController.dispose();
     _passwordController.dispose();
+    _confirmPasswordController.dispose();
     super.dispose();
   }
 
-  Future<void> _handleLogin() async {
+  Future<void> _handleResetPassword() async {
     if (!_formKey.currentState!.validate()) return;
 
+    final token = widget.token;
+    if (token == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Invalid reset link. Please request a new one.'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      context.go('/forgot-password');
+      return;
+    }
+
     final authProvider = context.read<AuthProvider>();
-    final success = await authProvider.login(
-      email: _emailController.text.trim(),
-      password: _passwordController.text,
+    final success = await authProvider.resetPassword(
+      token: token,
+      newPassword: _passwordController.text,
     );
-    print(
-        'LoginScreen: login success = $success, isAuthenticated = ${authProvider.isAuthenticated}');
+
     if (success && mounted) {
-      context.go('/home');
+      // Show success message and navigate to login
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Password reset successfully! You can now sign in with your new password.'),
+          backgroundColor: Colors.green,
+        ),
+      );
+      context.go('/login');
     } else if (mounted) {
-      // Persist inline error; do not auto-dismiss via SnackBar
+      // Error is already handled by AuthProvider
       authProvider.markErrorAsShown();
     }
   }
@@ -48,6 +68,13 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      appBar: AppBar(
+        title: const Text('Reset Password'),
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          onPressed: () => context.go('/login'),
+        ),
+      ),
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(24.0),
@@ -56,7 +83,7 @@ class _LoginScreenState extends State<LoginScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                const SizedBox(height: 60),
+                const SizedBox(height: 40),
 
                 // Logo and Title
                 Column(
@@ -69,20 +96,20 @@ class _LoginScreenState extends State<LoginScreen> {
                         borderRadius: BorderRadius.circular(16),
                       ),
                       child: const Icon(
-                        Icons.travel_explore,
+                        Icons.lock_open,
                         size: 32,
                         color: Colors.white,
                       ),
                     ),
                     const SizedBox(height: 24),
                     Text(
-                      'Welcome back',
+                      'Set new password',
                       style: Theme.of(context).textTheme.displaySmall,
                       textAlign: TextAlign.center,
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      'Sign in to continue your travel journey',
+                      'Enter your new password below',
                       style: Theme.of(context).textTheme.bodyMedium,
                       textAlign: TextAlign.center,
                     ),
@@ -91,31 +118,10 @@ class _LoginScreenState extends State<LoginScreen> {
 
                 const SizedBox(height: 48),
 
-                // Email Field
-                CustomTextField(
-                  controller: _emailController,
-                  label: 'Email',
-                  keyboardType: TextInputType.emailAddress,
-                  prefixIcon: Icons.email_outlined,
-                  validator: MultiValidator([
-                    RequiredValidator(errorText: 'Email is required'),
-                    EmailValidator(errorText: 'Please enter a valid email'),
-                  ]),
-                  onChanged: (_) {
-                    // Clear error when user starts typing after an error
-                    final authProvider = context.read<AuthProvider>();
-                    if (authProvider.error != null) {
-                      authProvider.clearError();
-                    }
-                  },
-                ),
-
-                const SizedBox(height: 16),
-
                 // Password Field
                 CustomTextField(
                   controller: _passwordController,
-                  label: 'Password',
+                  label: 'New Password',
                   obscureText: _obscurePassword,
                   prefixIcon: Icons.lock_outlined,
                   suffixIcon: IconButton(
@@ -130,8 +136,14 @@ class _LoginScreenState extends State<LoginScreen> {
                       });
                     },
                   ),
-                  validator:
-                      RequiredValidator(errorText: 'Password is required'),
+                  validator: MultiValidator([
+                    RequiredValidator(errorText: 'Password is required'),
+                    MinLengthValidator(8, errorText: 'Password must be at least 8 characters'),
+                    PatternValidator(
+                      r'^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)',
+                      errorText: 'Password must contain at least one lowercase letter, one uppercase letter, and one number',
+                    ),
+                  ]),
                   onChanged: (_) {
                     // Clear error when user starts typing after an error
                     final authProvider = context.read<AuthProvider>();
@@ -139,6 +151,51 @@ class _LoginScreenState extends State<LoginScreen> {
                       authProvider.clearError();
                     }
                   },
+                ),
+
+                const SizedBox(height: 16),
+
+                // Confirm Password Field
+                CustomTextField(
+                  controller: _confirmPasswordController,
+                  label: 'Confirm New Password',
+                  obscureText: _obscureConfirmPassword,
+                  prefixIcon: Icons.lock_outlined,
+                  suffixIcon: IconButton(
+                    icon: Icon(
+                      _obscureConfirmPassword
+                          ? Icons.visibility_outlined
+                          : Icons.visibility_off_outlined,
+                    ),
+                    onPressed: () {
+                      setState(() {
+                        _obscureConfirmPassword = !_obscureConfirmPassword;
+                      });
+                    },
+                  ),
+                  validator: (value) {
+                    if (value == null || value.isEmpty) {
+                      return 'Please confirm your password';
+                    }
+                    if (value != _passwordController.text) {
+                      return 'Passwords do not match';
+                    }
+                    return null;
+                  },
+                  onChanged: (_) {
+                    // Clear error when user starts typing after an error
+                    final authProvider = context.read<AuthProvider>();
+                    if (authProvider.error != null) {
+                      authProvider.clearError();
+                    }
+                  },
+                ),
+
+                const SizedBox(height: 8),
+
+                Text(
+                  'Password must be at least 8 characters with uppercase, lowercase, and number',
+                  style: Theme.of(context).textTheme.bodySmall,
                 ),
 
                 const SizedBox(height: 24),
@@ -203,42 +260,25 @@ class _LoginScreenState extends State<LoginScreen> {
                   },
                 ),
 
-                // Login Button
+                // Reset Password Button
                 Consumer<AuthProvider>(
                   builder: (context, authProvider, child) {
                     return LoadingButton(
-                      onPressed: _handleLogin,
+                      onPressed: _handleResetPassword,
                       isLoading: authProvider.isLoading,
-                      child: const Text('Sign In'),
+                      child: const Text('Reset Password'),
                     );
                   },
                 ),
 
                 const SizedBox(height: 24),
 
-                // Forgot Password Link
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: TextButton(
-                    onPressed: () {
-                      final authProvider = context.read<AuthProvider>();
-                      if (authProvider.error != null) {
-                        authProvider.clearError();
-                      }
-                      context.go('/forgot-password');
-                    },
-                    child: const Text('Forgot Password?'),
-                  ),
-                ),
-
-                const SizedBox(height: 24),
-
-                // Sign Up Link
+                // Back to Login Link
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     Text(
-                      "Don't have an account? ",
+                      'Remember your password? ',
                       style: Theme.of(context).textTheme.bodyMedium,
                     ),
                     TextButton(
@@ -247,9 +287,9 @@ class _LoginScreenState extends State<LoginScreen> {
                         if (authProvider.error != null) {
                           authProvider.clearError();
                         }
-                        context.go('/signup');
+                        context.go('/login');
                       },
-                      child: const Text('Sign Up'),
+                      child: const Text('Sign In'),
                     ),
                   ],
                 ),
@@ -261,6 +301,5 @@ class _LoginScreenState extends State<LoginScreen> {
         ),
       ),
     );
-    // );
   }
 }
