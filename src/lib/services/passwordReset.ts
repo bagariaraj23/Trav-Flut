@@ -33,8 +33,10 @@ export async function requestReset(payload: unknown, ctx?: { ip?: string; userAg
     },
   });
 
-  const { webUrl, schemeUrl } = buildPasswordResetLink(rawToken);
-  await sendPasswordResetEmail({ to: user.email, resetLink: webUrl, appLink: schemeUrl, ttlMinutes: TTL_MIN });
+  const { webUrl, schemeUrl, schemeUrlWithoutClickTracking, schemeUrlDeepLinkEmbedded } = buildPasswordResetLink(rawToken);
+  // await sendPasswordResetEmail({ to: user.email, resetLink: webUrl, appLink: schemeUrl, ttlMinutes: TTL_MIN });
+  // await sendPasswordResetEmail({ to: user.email, resetLink: webUrl, appLink: schemeUrlWithoutClickTracking, ttlMinutes: TTL_MIN });
+  await sendPasswordResetEmail({ to: user.email, resetLink: webUrl, appLink: schemeUrlDeepLinkEmbedded, ttlMinutes: TTL_MIN });
   await recordSecurityEvent({ userId: user.id, type: "PASSWORD_RESET_REQUESTED" });
 }
 

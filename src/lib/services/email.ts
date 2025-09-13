@@ -27,7 +27,7 @@ export async function sendPasswordResetEmail({ to, resetLink, appLink, ttlMinute
     subject: `${APP_NAME}: Reset your password`,
     text: `This link expires in ${ttlMinutes} minutes.\nApp: ${appLink}\nWeb: ${resetLink}`,
     html: `<p>This link expires in <b>${ttlMinutes} minutes</b>.</p>
-           <p><a href="${`${appLink}`}">Open in App: ${appLink}</a> (mobile only)</p>
+           <p><a href="${`${appLink}`} clicktracking=off">Open in App: ${appLink}</a> (mobile only)</p>
            <p><a href="${resetLink}">Open in Browser</a></p>`,
   };
 
