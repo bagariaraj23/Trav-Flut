@@ -103,37 +103,13 @@ class UserProvider extends ChangeNotifier {
       _error = null;
       notifyListeners();
 
-      // First check if user is private
-      final targetUser = await fetchUser(userId);
-      if (targetUser == null) {
-        _error = 'User not found';
-        _isLoading = false;
-        notifyListeners();
-        return false;
-      }
-
-      ApiResponse<void> response;
-      if (targetUser.isPrivate) {
-        response = await _apiService.sendFollowRequest(userId);
-        if (response.success) {
-          _detailedFollowStatusCache[userId] = DetailedFollowStatus(
-              isFollowing: false,
-              isFollowedBy: false,
-              isRequestPending: true,
-              isPrivate: true);
-        }
-      } else {
-        response = await _apiService.followUser(userId);
-        if (response.success) {
-          _detailedFollowStatusCache[userId] = DetailedFollowStatus(
-              isFollowing: true,
-              isFollowedBy: false,
-              isRequestPending: false,
-              isPrivate: false);
-        }
-      }
+      // Use the unified follow endpoint that handles both public and private users
+      final response = await _apiService.followUser(userId);
 
       if (response.success) {
+        // Refresh the detailed follow status to get the accurate state
+        await fetchDetailedFollowStatus(userId);
+
         // Refresh stats for both users
         if (currentUserId != null) {
           await fetchUserStats(currentUserId);
@@ -296,16 +272,12 @@ class UserProvider extends ChangeNotifier {
       _isLoading = true;
       notifyListeners();
 
-      final response = await _apiService.sendFollowRequest(userId);
+      // Use the unified follow endpoint
+      final response = await _apiService.followUser(userId);
 
       if (response.success) {
-        // Update local state
-        _detailedFollowStatusCache[userId] = DetailedFollowStatus(
-            isFollowing: false,
-            isFollowedBy: false,
-            isRequestPending: true,
-            isPrivate: true,
-            requestStatus: 'PENDING');
+        // Refresh the detailed follow status to get the accurate state
+        await fetchDetailedFollowStatus(userId);
         notifyListeners();
         return true;
       } else {
@@ -330,13 +302,8 @@ class UserProvider extends ChangeNotifier {
 
       final response = await _apiService.unfollowUser(userId);
       if (response.success) {
-        // Update local state
-        _detailedFollowStatusCache[userId] = DetailedFollowStatus(
-            isFollowing: false,
-            isFollowedBy:
-                _detailedFollowStatusCache[userId]?.isFollowedBy ?? false,
-            isRequestPending: false,
-            isPrivate: _detailedFollowStatusCache[userId]?.isPrivate ?? false);
+        // Refresh the detailed follow status to get the accurate state
+        await fetchDetailedFollowStatus(userId);
 
         // Refresh stats for both users
         if (currentUserId != null) {
@@ -366,23 +333,19 @@ class UserProvider extends ChangeNotifier {
       _error = null;
       notifyListeners();
 
-      final response = await _apiService.cancelFollowRequest(userId);
+      // Use the same unfollow endpoint which now handles both cases
+      final response = await _apiService.unfollowUser(userId);
       if (response.success) {
-        // Update local state
-        _detailedFollowStatusCache[userId] = DetailedFollowStatus(
-            isFollowing: false,
-            isFollowedBy:
-                _detailedFollowStatusCache[userId]?.isFollowedBy ?? false,
-            isRequestPending: false,
-            isPrivate: _detailedFollowStatusCache[userId]?.isPrivate ?? false);
+        // Refresh the detailed follow status to get the accurate state
+        await fetchDetailedFollowStatus(userId);
         notifyListeners();
         return true;
       }
-      _error = response.error ?? 'Failed to cancel follow request';
+      _error = response.error ?? 'Failed to cancel request';
       notifyListeners();
       return false;
     } catch (e) {
-      _error = 'Failed to cancel follow request';
+      _error = 'Failed to cancel request';
       notifyListeners();
       return false;
     } finally {

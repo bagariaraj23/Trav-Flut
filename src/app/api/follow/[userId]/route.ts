@@ -311,7 +311,7 @@ export async function DELETE(
     // Handle unfollow in a transaction
     const result = await prisma.$transaction(async (tx) => {
       // Delete any pending follow requests first
-      await tx.followRequest.deleteMany({
+      const deletedRequests = await tx.followRequest.deleteMany({
         where: {
           followerId,
           followeeId,
@@ -327,11 +327,16 @@ export async function DELETE(
         },
       });
 
+      let message = "Already not following this user";
+      if (deletedFollow.count > 0) {
+        message = "Successfully unfollowed user";
+      } else if (deletedRequests.count > 0) {
+        message = "Follow request cancelled successfully";
+      }
+
       return {
         success: true,
-        message: deletedFollow.count > 0
-          ? "Successfully unfollowed user"
-          : "Already not following this user",
+        message,
         status: 200,
         data: {
           isFollowing: false,
