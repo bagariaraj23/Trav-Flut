@@ -396,7 +396,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       Icon(
                         Icons.lock_outlined,
                         size: 32,
-                        color: Colors.grey[700],
+                        color: Colors.black87,
                       ),
                       const SizedBox(height: 8),
                       Text(
@@ -404,14 +404,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         style:
                             Theme.of(context).textTheme.titleMedium?.copyWith(
                                   fontWeight: FontWeight.w600,
-                                  color: Colors.black87
+                                  color: Colors.black87,
                                 ),
                       ),
                       const SizedBox(height: 4),
                       Text(
                         'Follow to see their trips and posts',
                         style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                              color: Colors.grey[700],
+                              color: Colors.grey[800],
                             ),
                         textAlign: TextAlign.center,
                       ),
@@ -423,6 +423,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   width: double.infinity,
                   child: ElevatedButton(
                     onPressed: isLoading ? null : _handleFollowToggle,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Theme.of(context).colorScheme.primary,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                    ),
                     child: const Text('Send Follow Request'),
                   ),
                 ),
@@ -431,24 +436,67 @@ class _ProfileScreenState extends State<ProfileScreen> {
           else
             SizedBox(
               width: double.infinity,
-              child: ElevatedButton(
-                onPressed: isLoading ? null : _handleFollowToggle,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: isFollowing || isRequestPending
-                      ? Theme.of(context).colorScheme.outline
-                      : Theme.of(context).colorScheme.primary,
-                ),
-                child: isLoading
-                    ? const SizedBox(
-                        height: 16,
-                        width: 16,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : Text(isFollowing
-                        ? 'Unfollow'
-                        : isRequestPending
-                            ? 'Cancel Request'
-                            : 'Follow'),
+              child: Consumer<UserProvider>(
+                builder: (context, userProvider, child) {
+                  final detailedStatus =
+                      userProvider.getDetailedFollowStatus(widget.userId);
+                  final actualIsFollowing =
+                      detailedStatus?.isFollowing ?? false;
+                  final actualIsRequestPending =
+                      detailedStatus?.isRequestPending ?? false;
+                  final isProcessing = userProvider.isLoading;
+
+                  // Use OutlinedButton for following/requested states
+                  if (actualIsFollowing || actualIsRequestPending) {
+                    return OutlinedButton(
+                      onPressed: isProcessing ? null : _handleFollowToggle,
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: Colors.grey[900],
+                        backgroundColor: Colors.grey[100],
+                        side: BorderSide(color: Colors.grey[400]!),
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                      ),
+                      child: isProcessing
+                          ? const SizedBox(
+                              height: 16,
+                              width: 16,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : Text(
+                              actualIsFollowing ? 'Unfollow' : 'Cancel Request',
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                    );
+                  }
+
+                  // Use ElevatedButton for follow state
+                  return ElevatedButton(
+                    onPressed: isProcessing ? null : _handleFollowToggle,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Theme.of(context).colorScheme.primary,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                    ),
+                    child: isProcessing
+                        ? const SizedBox(
+                            height: 16,
+                            width: 16,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              valueColor:
+                                  AlwaysStoppedAnimation<Color>(Colors.white),
+                            ),
+                          )
+                        : Text(
+                            user.isPrivate ? 'Send Request' : 'Follow',
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                  );
+                },
               ),
             ),
         ],

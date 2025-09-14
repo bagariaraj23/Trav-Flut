@@ -8,6 +8,30 @@ import 'package:tripthread/services/media_service.dart';
 import 'dart:io';
 import 'package:go_router/go_router.dart';
 
+const List<Color> _avatarColors = [
+  Colors.orange,
+  Colors.green,
+  Colors.purple,
+  Colors.teal,
+  Colors.pink,
+  Colors.indigo,
+  Colors.brown,
+  Colors.cyan,
+  Colors.deepOrange,
+  Colors.deepPurple,
+  Colors.lime,
+  Colors.amber,
+];
+
+Color _getAvatarColor(String userId, String currentUserId) {
+  if (userId == currentUserId) {
+    return Colors.blue;
+  }
+  // Use a hash of the userId to pick a color from the palette
+  final hash = userId.codeUnits.fold(0, (prev, c) => prev + c);
+  return _avatarColors[hash % _avatarColors.length];
+}
+
 class TripThreadScreen extends StatefulWidget {
   final String tripId;
 
@@ -363,21 +387,30 @@ class _TripThreadScreenState extends State<TripThreadScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // Avatar
-          CircleAvatar(
-            radius: 20,
-            backgroundColor: Theme.of(context).colorScheme.primary,
-            backgroundImage: entry.author.avatarUrl != null
-                ? NetworkImage(entry.author.avatarUrl!)
-                : null,
-            child: entry.author.avatarUrl == null
-                ? Text(
-                    entry.author.name?.substring(0, 1).toUpperCase() ?? 'U',
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  )
-                : null,
+          Builder(
+            builder: (context) {
+              final currentUserId =
+                  context.read<AuthProvider>().currentUser?.id;
+              final avatarColor =
+                  _getAvatarColor(entry.authorId, currentUserId ?? '');
+              return CircleAvatar(
+                radius: 18,
+                backgroundColor: avatarColor,
+                backgroundImage: entry.author.avatarUrl != null
+                    ? NetworkImage(entry.author.avatarUrl!)
+                    : null,
+                child: entry.author.avatarUrl == null
+                    ? Text(
+                        entry.author.name?.substring(0, 1).toUpperCase() ?? 'U',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 14,
+                        ),
+                      )
+                    : null,
+              );
+            },
           ),
 
           const SizedBox(width: 12),
@@ -389,8 +422,21 @@ class _TripThreadScreenState extends State<TripThreadScreen> {
               decoration: BoxDecoration(
                 color: isCurrentUser
                     ? Theme.of(context).colorScheme.primaryContainer
-                    : Theme.of(context).colorScheme.surfaceContainerHighest,
+                    : Colors.white,
                 borderRadius: BorderRadius.circular(16),
+                border: Border.all(
+                  color: isCurrentUser
+                      ? Theme.of(context).colorScheme.primary.withOpacity(0.18)
+                      : Colors.grey[300]!,
+                  width: 1.2,
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.04),
+                    blurRadius: 6,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -401,10 +447,14 @@ class _TripThreadScreenState extends State<TripThreadScreen> {
                       Flexible(
                         child: Text(
                           entry.author.name ?? 'User',
-                          style:
-                              Theme.of(context).textTheme.titleSmall?.copyWith(
-                                    fontWeight: FontWeight.w600,
-                                  ),
+                          style: Theme.of(context)
+                              .textTheme
+                              .titleSmall
+                              ?.copyWith(
+                                fontWeight: FontWeight.w600,
+                                color:
+                                    isCurrentUser ? Colors.white : Colors.black,
+                              ),
                           overflow: TextOverflow.ellipsis,
                           maxLines: 1,
                         ),
@@ -417,7 +467,10 @@ class _TripThreadScreenState extends State<TripThreadScreen> {
                           _formatDateTime(entry.createdAt),
                           style:
                               Theme.of(context).textTheme.bodySmall?.copyWith(
-                                    color: Colors.grey[600],
+                                    color: isCurrentUser
+                                        ? Colors.white.withOpacity(0.85)
+                                        : Colors.grey[700],
+                                    fontWeight: FontWeight.w500,
                                   ),
                           overflow: TextOverflow.ellipsis,
                           maxLines: 1,
@@ -433,11 +486,7 @@ class _TripThreadScreenState extends State<TripThreadScreen> {
                     Text(
                       entry.contentText!,
                       style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                            color: isCurrentUser
-                                ? Theme.of(context)
-                                    .colorScheme
-                                    .onPrimaryContainer
-                                : Theme.of(context).colorScheme.onSurface,
+                            color: isCurrentUser ? Colors.white : Colors.black,
                           ),
                       overflow: TextOverflow.visible,
                       maxLines: null,
@@ -452,11 +501,10 @@ class _TripThreadScreenState extends State<TripThreadScreen> {
                       padding: const EdgeInsets.symmetric(
                           horizontal: 12, vertical: 6),
                       decoration: BoxDecoration(
-                        color: Theme.of(context)
-                            .colorScheme
-                            .primary
-                            .withOpacity(0.1),
+                        color:
+                            isCurrentUser ? Colors.blue[100] : Colors.grey[100],
                         borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: Colors.blue[200]!),
                       ),
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
@@ -464,16 +512,16 @@ class _TripThreadScreenState extends State<TripThreadScreen> {
                           Icon(
                             Icons.location_on,
                             size: 16,
-                            color: Theme.of(context).colorScheme.primary,
+                            color: Colors.blue[700],
                           ),
                           const SizedBox(width: 4),
                           Flexible(
                             child: Text(
                               entry.locationName!,
                               style: TextStyle(
-                                color: Theme.of(context).colorScheme.primary,
-                                fontWeight: FontWeight.w500,
-                                fontSize: 12,
+                                color: Colors.blue[800],
+                                fontWeight: FontWeight.w600,
+                                fontSize: 13,
                               ),
                               overflow: TextOverflow.ellipsis,
                               maxLines: 1,

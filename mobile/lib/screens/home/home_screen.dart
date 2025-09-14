@@ -163,13 +163,14 @@ class _HomeFeedScreenState extends State<HomeFeedScreen> {
                   IconButton(
                     icon: const Icon(Icons.notifications_outlined),
                     onPressed: () {
-                      // Navigate based on what notifications are available
+                      // Navigate to a consolidated notifications screen or a menu
                       if (userProvider.pendingFollowRequests.isNotEmpty) {
                         context.push('/follow-requests');
                       } else if (tripProvider
                           .pendingTripInvitations.isNotEmpty) {
                         context.push('/trip-invites');
                       } else {
+                        // Show a message or navigate to an empty notifications screen
                         ScaffoldMessenger.of(context).showSnackBar(
                           const SnackBar(content: Text('No new notifications')),
                         );

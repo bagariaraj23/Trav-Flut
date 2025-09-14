@@ -117,11 +117,19 @@ class _DiscoverTabState extends State<DiscoverTab> {
     final currentUserId = authProvider.currentUser?.id;
 
     try {
-      bool success;
+      bool success = false;
+      final detailedStatus = userProvider.getDetailedFollowStatus(userId);
+      final isRequestPending = detailedStatus?.isRequestPending ?? false;
+
       if (isCurrentlyFollowing) {
+        // Unfollow
         success = await userProvider.unfollowUser(userId,
             currentUserId: currentUserId);
+      } else if (isRequestPending) {
+        // Cancel follow request
+        success = await userProvider.cancelFollowRequest(userId);
       } else {
+        // Follow or send request
         success =
             await userProvider.followUser(userId, currentUserId: currentUserId);
       }
@@ -155,7 +163,7 @@ class _DiscoverTabState extends State<DiscoverTab> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-              'Failed to ${isCurrentlyFollowing ? 'unfollow' : 'follow'} user'),
+              'Failed to ${isCurrentlyFollowing ? 'unfollow' : (userProvider.getDetailedFollowStatus(userId)?.isRequestPending == true ? 'cancel request' : 'follow')} user'),
           backgroundColor: Colors.red,
         ),
       );
@@ -824,12 +832,14 @@ class _DiscoverTabState extends State<DiscoverTab> {
                             ? null
                             : () => _toggleFollow(userId, isFollowing),
                         style: OutlinedButton.styleFrom(
-                          foregroundColor:
-                              Colors.grey[800], // Dark text for visibility
-                          side: BorderSide(color: Colors.grey[400]!),
+                          foregroundColor: Colors.grey[800],
+                          backgroundColor: Colors.grey[100],
+                          side: BorderSide(color: Colors.grey[300]!),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(20),
                           ),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 12, vertical: 8),
                         ),
                         child: isProcessing
                             ? const SizedBox(
@@ -838,7 +848,18 @@ class _DiscoverTabState extends State<DiscoverTab> {
                                 child:
                                     CircularProgressIndicator(strokeWidth: 2),
                               )
-                            : Text(isFollowing ? 'Following' : 'Requested'),
+                            : FittedBox(
+                                fit: BoxFit.scaleDown,
+                                child: Text(
+                                  isFollowing ? 'Following' : 'Requested',
+                                  style: const TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
+                                  maxLines: 1,
+                                ),
+                              ),
                       );
                     }
 
@@ -851,11 +872,12 @@ class _DiscoverTabState extends State<DiscoverTab> {
                         style: ElevatedButton.styleFrom(
                           backgroundColor:
                               Theme.of(context).colorScheme.primary,
-                          foregroundColor:
-                              Colors.white, // White text on dark background
+                          foregroundColor: Colors.white,
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(20),
                           ),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 12, vertical: 8),
                         ),
                         child: isProcessing
                             ? const SizedBox(
@@ -867,7 +889,18 @@ class _DiscoverTabState extends State<DiscoverTab> {
                                       Colors.white),
                                 ),
                               )
-                            : Text(isPrivate ? 'Request' : 'Follow'),
+                            : FittedBox(
+                                fit: BoxFit.scaleDown,
+                                child: Text(
+                                  isPrivate ? 'Request' : 'Follow',
+                                  style: const TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
+                                  maxLines: 1,
+                                ),
+                              ),
                       );
                     }
                   })),

@@ -335,7 +335,7 @@ class _TripParticipantsScreenState extends State<TripParticipantsScreen> {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Text(
-                    'Search Results',
+                    'Invite Participants',
                     style: Theme.of(context).textTheme.titleSmall?.copyWith(
                           fontWeight: FontWeight.w600,
                         ),
