@@ -248,8 +248,8 @@ export async function DELETE(
         { status: 400 }
       );
     }
-    // Remove participant and decrement participantCount in a transaction
-    const [deleted, _] = await prisma.$transaction([
+    // Remove participant, delete any pending TripJoinRequest, and decrement participantCount in a transaction
+    await prisma.$transaction([
       prisma.tripParticipant.delete({
         where: {
           tripId_userId: {
@@ -262,10 +262,17 @@ export async function DELETE(
         where: { id: tripId },
         data: { participantCount: { decrement: 1 }, updatedAt: new Date() },
       }),
+      prisma.tripJoinRequest.deleteMany({
+        where: {
+          tripId,
+          receiverId: userIdToRemove,
+          status: "PENDING",
+        },
+      }),
     ]);
     return NextResponse.json<ApiResponse>({
       success: true,
-      message: "Participant removed successfully",
+      message: "Participant and any pending join requests removed successfully",
     });
   } catch (error: any) {
     console.error("Remove participant error:", error);

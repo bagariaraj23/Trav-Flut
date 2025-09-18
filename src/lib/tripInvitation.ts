@@ -58,6 +58,12 @@ export class TripInvitationService {
         message: "Invitation already pending",
       };
     }
+    // If an old request exists (rejected/accepted), delete it before creating a new one
+    if (existingRequest) {
+      await prisma.tripJoinRequest.delete({
+        where: { id: existingRequest.id },
+      });
+    }
 
     // 6. Create new invitation
     const newRequest = await prisma.tripJoinRequest.create({
