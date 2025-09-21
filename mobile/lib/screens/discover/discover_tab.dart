@@ -117,11 +117,21 @@ class _DiscoverTabState extends State<DiscoverTab> {
     final currentUserId = authProvider.currentUser?.id;
 
     try {
-      bool success;
+      bool success = false;
+      final detailedStatus = userProvider.getDetailedFollowStatus(userId);
+      final isRequestPending = detailedStatus?.isRequestPending ?? false;
+
       if (isCurrentlyFollowing) {
-        success = await userProvider.unfollowUser(userId, currentUserId: currentUserId);
+        // Unfollow
+        success = await userProvider.unfollowUser(userId,
+            currentUserId: currentUserId);
+      } else if (isRequestPending) {
+        // Cancel follow request
+        success = await userProvider.cancelFollowRequest(userId);
       } else {
-        success = await userProvider.followUser(userId, currentUserId: currentUserId);
+        // Follow or send request
+        success =
+            await userProvider.followUser(userId, currentUserId: currentUserId);
       }
 
       if (!mounted) return;
@@ -130,9 +140,9 @@ class _DiscoverTabState extends State<DiscoverTab> {
         // Only update local state if the action was successful
         final status = userProvider.getDetailedFollowStatus(userId);
         if (status != null) {
-          final newState = status.isRequestPending 
-            ? 'requested to follow'
-            : (status.isFollowing ? 'following' : 'not following');
+          final newState = status.isRequestPending
+              ? 'requested to follow'
+              : (status.isFollowing ? 'following' : 'not following');
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text('Successfully ${newState} user'),
@@ -152,7 +162,8 @@ class _DiscoverTabState extends State<DiscoverTab> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Failed to ${isCurrentlyFollowing ? 'unfollow' : 'follow'} user'),
+          content: Text(
+              'Failed to ${isCurrentlyFollowing ? 'unfollow' : (userProvider.getDetailedFollowStatus(userId)?.isRequestPending == true ? 'cancel request' : 'follow')} user'),
           backgroundColor: Colors.red,
         ),
       );
@@ -451,118 +462,126 @@ class _DiscoverTabState extends State<DiscoverTab> {
   }
 
   Widget _buildDiscoverTripCard(BuildContext context, Trip trip) {
-  return Card(
-    elevation: 3,
-    shape: RoundedRectangleBorder(
-      borderRadius: BorderRadius.circular(16),
-    ),
-    clipBehavior: Clip.antiAlias,
-    child: InkWell(
-      onTap: () => context.go('/trip/${trip.id}',
-          extra: {'from': '/home', 'tab': 'discover'}),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch, // Stretch children to fill width
-        children: [
-          // Cover image
-          Expanded(
-            flex: 5,
-            child: SizedBox(
-              width: double.infinity,
-              child: trip.coverMediaUrl != null
-                  ? Image.network(
-                      trip.coverMediaUrl!,
-                      fit: BoxFit.cover,
-                      errorBuilder: (context, error, stackTrace) {
-                        return _buildTripPlaceholder(context, trip);
-                      },
-                    )
-                  : _buildTripPlaceholder(context, trip),
+    return Card(
+      elevation: 3,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: () => context.go('/trip/${trip.id}',
+            extra: {'from': '/home', 'tab': 'discover'}),
+        child: Column(
+          crossAxisAlignment:
+              CrossAxisAlignment.stretch, // Stretch children to fill width
+          children: [
+            // Cover image
+            Expanded(
+              flex: 5,
+              child: SizedBox(
+                width: double.infinity,
+                child: trip.coverMediaUrl != null
+                    ? Image.network(
+                        trip.coverMediaUrl!,
+                        fit: BoxFit.cover,
+                        errorBuilder: (context, error, stackTrace) {
+                          return _buildTripPlaceholder(context, trip);
+                        },
+                      )
+                    : _buildTripPlaceholder(context, trip),
+              ),
             ),
-          ),
-          // Trip info
-          Padding(
-            padding: const EdgeInsets.all(12),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Top section: Status and Mood
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    _buildCompactStatusBadge(context, trip.status),
-                    if (trip.mood != null)
-                      Text(
-                        _getTripMoodEmoji(trip.mood!),
-                        style: const TextStyle(fontSize: 16),
-                      ),
-                  ],
-                ),
-                const SizedBox(height: 6),
-                // Title
-                if (trip.title.isNotEmpty)
-                  Text(
-                    trip.title,
-                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                          fontWeight: FontWeight.bold,
-                        ),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                const SizedBox(height: 4),
-                // Destination
-                if (trip.destinations.isNotEmpty)
-                  Text(
-                    trip.destinations.first,
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: Colors.grey[600],
-                        ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                const SizedBox(height: 8),
-                // Author info
-                if (trip.user != null)
+            // Trip info
+            Padding(
+              padding: const EdgeInsets.all(12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Top section: Status and Mood
                   Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      CircleAvatar(
-                        radius: 10,
-                        backgroundColor: Theme.of(context).colorScheme.primary,
-                        backgroundImage: trip.user!.avatarUrl != null
-                            ? NetworkImage(trip.user!.avatarUrl!)
-                            : null,
-                        child: trip.user!.avatarUrl == null
-                            ? Text(
-                                trip.user!.name
-                                        ?.substring(0, 1)
-                                        .toUpperCase() ??
-                                    'U',
-                                style: const TextStyle(
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.white,
-                                ),
-                              )
-                            : null,
-                      ),
-                      const SizedBox(width: 6),
-                      Expanded(
-                        child: Text(
-                          trip.user!.name ?? 'Unknown',
-                          style:
-                              Theme.of(context).textTheme.bodySmall?.copyWith(
-                                    fontWeight: FontWeight.w500,
-                                    fontSize: 12,
-                                  ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
+                      Flexible(
+                          child:
+                              _buildCompactStatusBadge(context, trip.status)),
+                      if (trip.mood != null)
+                        Flexible(
+                          child: Text(
+                            _getTripMoodEmoji(trip.mood!),
+                            style: const TextStyle(fontSize: 16),
+                            overflow: TextOverflow.ellipsis,
+                            maxLines: 1,
+                          ),
                         ),
-                      ),
                     ],
                   ),
-               ],
-             ),
-           ),
-         ],
+                  const SizedBox(height: 6),
+                  // Title
+                  if (trip.title.isNotEmpty)
+                    Text(
+                      trip.title,
+                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                            fontWeight: FontWeight.bold,
+                          ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  const SizedBox(height: 4),
+                  // Destination
+                  if (trip.destinations.isNotEmpty)
+                    Text(
+                      trip.destinations.first,
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color: Colors.grey[600],
+                          ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  const SizedBox(height: 8),
+                  // Author info
+                  if (trip.user != null)
+                    Row(
+                      children: [
+                        CircleAvatar(
+                          radius: 10,
+                          backgroundColor:
+                              Theme.of(context).colorScheme.primary,
+                          backgroundImage: trip.user!.avatarUrl != null
+                              ? NetworkImage(trip.user!.avatarUrl!)
+                              : null,
+                          child: trip.user!.avatarUrl == null
+                              ? Text(
+                                  trip.user!.name
+                                          ?.substring(0, 1)
+                                          .toUpperCase() ??
+                                      'U',
+                                  style: const TextStyle(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.white,
+                                  ),
+                                )
+                              : null,
+                        ),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: Text(
+                            trip.user!.name ?? 'Unknown',
+                            style:
+                                Theme.of(context).textTheme.bodySmall?.copyWith(
+                                      fontWeight: FontWeight.w500,
+                                      fontSize: 12,
+                                    ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    ),
+                ],
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -690,7 +709,8 @@ class _DiscoverTabState extends State<DiscoverTab> {
               CircleAvatar(
                 radius: 25,
                 backgroundColor: Theme.of(context).colorScheme.primary,
-                backgroundImage: avatarUrl != null ? NetworkImage(avatarUrl) : null,
+                backgroundImage:
+                    avatarUrl != null ? NetworkImage(avatarUrl) : null,
                 child: avatarUrl == null
                     ? Text(
                         name.substring(0, 1).toUpperCase(),
@@ -715,24 +735,63 @@ class _DiscoverTabState extends State<DiscoverTab> {
                         Expanded(
                           child: Text(
                             name,
-                            style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                            style: Theme.of(context)
+                                .textTheme
+                                .titleMedium
+                                ?.copyWith(
                                   fontWeight: FontWeight.w600,
                                 ),
+                            overflow: TextOverflow.ellipsis,
+                            maxLines: 1,
                           ),
                         ),
                         if (isPrivate)
-                          Icon(
-                            Icons.lock_outline,
-                            size: 16,
-                            color: Colors.grey[600],
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: Colors.orange[100],
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: Colors.orange[300]!),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  Icons.lock_outline,
+                                  size: 12,
+                                  color: Colors.orange[700],
+                                ),
+                                const SizedBox(width: 2),
+                                Text(
+                                  'Private',
+                                  style: TextStyle(
+                                    color: Colors.orange[700],
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
                       ],
                     ),
-                    Text(
-                      '@$username',
-                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                            color: Colors.grey[600],
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            '@$username',
+                            style: Theme.of(context)
+                                .textTheme
+                                .bodyMedium
+                                ?.copyWith(
+                                  color: Colors.grey[600],
+                                ),
+                            overflow: TextOverflow.ellipsis,
+                            maxLines: 1,
                           ),
+                        ),
+                      ],
                     ),
                     if (bio != null && bio.isNotEmpty) ...[
                       const SizedBox(height: 4),
@@ -753,46 +812,98 @@ class _DiscoverTabState extends State<DiscoverTab> {
 
               // Follow Button
               SizedBox(
-                width: 100,
-                child: Consumer<UserProvider>(
-                  builder: (context, userProvider, child) {
-                    final isProcessing = userProvider.isProcessingRequestId == userId;
-                    final detailedStatus = userProvider.getDetailedFollowStatus(userId);
-                    final isRequestPending = detailedStatus?.isRequestPending ?? false;
+                  width: 110,
+                  child: Consumer<UserProvider>(
+                      builder: (context, userProvider, child) {
+                    final isProcessing =
+                        userProvider.isProcessingRequestId == userId;
+                    final detailedStatus =
+                        userProvider.getDetailedFollowStatus(userId);
+                    final isFollowing = detailedStatus?.isFollowing ??
+                        false; // Get the latest state
+                    final isRequestPending =
+                        detailedStatus?.isRequestPending ?? false;
+                    final isPrivate = detailedStatus?.isPrivate ?? false;
 
-                    return ElevatedButton(
-                      onPressed: isProcessing ? null : () => _toggleFollow(userId, isFollowing),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: isFollowing || isRequestPending
-                            ? Theme.of(context).colorScheme.outline
-                            : Theme.of(context).colorScheme.primary,
-                        foregroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(20),
+                    // STATE 1: Already following or request is pending (Use OutlinedButton)
+                    if (isFollowing || isRequestPending) {
+                      return OutlinedButton(
+                        onPressed: isProcessing
+                            ? null
+                            : () => _toggleFollow(userId, isFollowing),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: Colors.grey[800],
+                          backgroundColor: Colors.grey[100],
+                          side: BorderSide(color: Colors.grey[300]!),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 12, vertical: 8),
                         ),
-                      ),
-                      child: isProcessing
-                          ? const SizedBox(
-                              height: 16,
-                              width: 16,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                        child: isProcessing
+                            ? const SizedBox(
+                                height: 16,
+                                width: 16,
+                                child:
+                                    CircularProgressIndicator(strokeWidth: 2),
+                              )
+                            : FittedBox(
+                                fit: BoxFit.scaleDown,
+                                child: Text(
+                                  isFollowing ? 'Following' : 'Requested',
+                                  style: const TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
+                                  maxLines: 1,
+                                ),
                               ),
-                            )
-                          : Text(
-                              isFollowing
-                                  ? 'Unfollow'
-                                  : isRequestPending
-                                      ? 'Cancel'
-                                      : isPrivate
-                                          ? 'Request'
-                                          : 'Follow',
-                            ),
-                    );
-                  },
-                ),
-              ),
+                      );
+                    }
+
+                    // STATE 2: Not following (Use ElevatedButton)
+                    else {
+                      return ElevatedButton(
+                        onPressed: isProcessing
+                            ? null
+                            : () => _toggleFollow(userId, isFollowing),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor:
+                              Theme.of(context).colorScheme.primary,
+                          foregroundColor: Colors.white,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 12, vertical: 8),
+                        ),
+                        child: isProcessing
+                            ? const SizedBox(
+                                height: 16,
+                                width: 16,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  valueColor: AlwaysStoppedAnimation<Color>(
+                                      Colors.white),
+                                ),
+                              )
+                            : FittedBox(
+                                fit: BoxFit.scaleDown,
+                                child: Text(
+                                  isPrivate ? 'Request' : 'Follow',
+                                  style: const TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
+                                  maxLines: 1,
+                                ),
+                              ),
+                      );
+                    }
+                  })),
             ],
           ),
         ),

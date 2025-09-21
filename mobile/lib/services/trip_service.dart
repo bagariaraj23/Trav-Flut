@@ -1,26 +1,21 @@
 import 'package:dio/dio.dart';
 import 'package:tripthread/models/api_response.dart';
 import 'package:tripthread/models/trip.dart';
+import 'package:tripthread/models/trip_join_request.dart';
 import 'package:tripthread/services/storage_service.dart';
+import 'package:tripthread/config/app_config.dart';
 import 'dart:convert'; // Added for jsonEncode
 
 class TripService {
-  // static const String baseUrl = 'http://localhost:3000/api';
-  // static const String baseUrl = 'http://10.61.114.100:3000/api';
-  static const String baseUrl = 'http://192.168.0.111:3000/api';
-  // static const String baseUrl = 'http://192.168.0.111:3000/api';
-
   late final Dio _dio;
   StorageService? _storageService;
 
   TripService() {
     _dio = Dio(BaseOptions(
-      baseUrl: baseUrl,
-      connectTimeout: const Duration(seconds: 30),
-      receiveTimeout: const Duration(seconds: 30),
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      baseUrl: AppConfig.apiBaseUrl,
+      connectTimeout: AppConfig.connectTimeout,
+      receiveTimeout: AppConfig.receiveTimeout,
+      headers: AppConfig.defaultHeaders,
     ));
 
     _setupInterceptors();
@@ -326,6 +321,100 @@ class TripService {
       );
     } on DioException catch (e) {
       return ApiResponse<void>(
+        success: false,
+        error: e.response?.data['error'] ?? 'Network error occurred',
+      );
+    }
+  }
+
+  // Trip Join Request methods
+  Future<ApiResponse<Map<String, dynamic>>> sendTripInvitation(
+      String tripId, String receiverId) async {
+    try {
+      final response = await _dio.post('/trips/$tripId/invites', data: {
+        'receiverId': receiverId,
+      });
+
+      return ApiResponse<Map<String, dynamic>>(
+        success: response.data['success'],
+        data: response.data['data'],
+        message: response.data['message'],
+      );
+    } on DioException catch (e) {
+      return ApiResponse<Map<String, dynamic>>(
+        success: false,
+        error: e.response?.data['error'] ?? 'Network error occurred',
+      );
+    }
+  }
+
+  Future<ApiResponse<List<TripJoinRequest>>> getPendingTripInvitations() async {
+    try {
+      final response = await _dio.get('/users/me/trip-invites');
+
+      if (response.data['success'] && response.data['data'] != null) {
+        final requests = (response.data['data'] as List)
+            .map((json) => TripJoinRequest.fromJson(json))
+            .toList();
+        return ApiResponse<List<TripJoinRequest>>(
+          success: true,
+          data: requests,
+        );
+      }
+
+      return ApiResponse<List<TripJoinRequest>>(
+        success: false,
+        error: response.data['error'] ?? 'Failed to get pending invitations',
+      );
+    } on DioException catch (e) {
+      return ApiResponse<List<TripJoinRequest>>(
+        success: false,
+        error: e.response?.data['error'] ?? 'Network error occurred',
+      );
+    }
+  }
+
+  Future<ApiResponse<void>> respondToTripInvitation(
+      String inviteId, bool accept) async {
+    try {
+      final endpoint = accept
+          ? '/users/me/trip-invites/$inviteId/accept'
+          : '/users/me/trip-invites/$inviteId/reject';
+      final response = await _dio.put(endpoint);
+
+      return ApiResponse<void>(
+        success: response.data['success'],
+        message: response.data['message'],
+      );
+    } on DioException catch (e) {
+      return ApiResponse<void>(
+        success: false,
+        error: e.response?.data['error'] ?? 'Network error occurred',
+      );
+    }
+  }
+
+  Future<ApiResponse<List<TripJoinRequest>>> getSentTripInvitations(
+      String tripId) async {
+    try {
+      final response = await _dio.get('/trips/$tripId/invites');
+
+      if (response.data['success'] && response.data['data'] != null) {
+        final requests = (response.data['data'] as List)
+            .map((json) => TripJoinRequest.fromJson(json))
+            .toList();
+        return ApiResponse<List<TripJoinRequest>>(
+          success: true,
+          data: requests,
+        );
+      }
+
+      return ApiResponse<List<TripJoinRequest>>(
+        success: false,
+        error: response.data['error'] ?? 'Failed to get sent invitations',
+      );
+    } on DioException catch (e) {
+      return ApiResponse<List<TripJoinRequest>>(
         success: false,
         error: e.response?.data['error'] ?? 'Network error occurred',
       );

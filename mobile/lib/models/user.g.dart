@@ -8,14 +8,18 @@ part of 'user.dart';
 
 User _$UserFromJson(Map<String, dynamic> json) => User(
       id: json['id'] as String,
-      email: json['email'] as String,
+      email: json['email'] as String?,
       username: json['username'] as String?,
       name: json['name'] as String?,
       avatarUrl: json['avatarUrl'] as String?,
       bio: json['bio'] as String?,
       isPrivate: json['isPrivate'] as bool,
-      createdAt: DateTime.parse(json['createdAt'] as String),
-      updatedAt: DateTime.parse(json['updatedAt'] as String),
+      createdAt: json['createdAt'] == null
+          ? null
+          : DateTime.parse(json['createdAt'] as String),
+      updatedAt: json['updatedAt'] == null
+          ? null
+          : DateTime.parse(json['updatedAt'] as String),
     );
 
 Map<String, dynamic> _$UserToJson(User instance) => <String, dynamic>{
@@ -26,8 +30,8 @@ Map<String, dynamic> _$UserToJson(User instance) => <String, dynamic>{
       'avatarUrl': instance.avatarUrl,
       'bio': instance.bio,
       'isPrivate': instance.isPrivate,
-      'createdAt': instance.createdAt.toIso8601String(),
-      'updatedAt': instance.updatedAt.toIso8601String(),
+      'createdAt': instance.createdAt?.toIso8601String(),
+      'updatedAt': instance.updatedAt?.toIso8601String(),
     };
 
 UserStats _$UserStatsFromJson(Map<String, dynamic> json) => UserStats(

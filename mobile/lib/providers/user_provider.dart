@@ -67,7 +67,7 @@ class UserProvider extends ChangeNotifier {
   final ApiService _apiService;
   String? _followRequestsError;
   String? isProcessingRequestId;
-  
+
   UserProvider({required ApiService apiService}) : _apiService = apiService {
     _setupErrorHandling();
   }
@@ -103,39 +103,13 @@ class UserProvider extends ChangeNotifier {
       _error = null;
       notifyListeners();
 
-      // First check if user is private
-      final targetUser = await fetchUser(userId);
-      if (targetUser == null) {
-        _error = 'User not found';
-        _isLoading = false;
-        notifyListeners();
-        return false;
-      }
-
-      ApiResponse<void> response;
-      if (targetUser.isPrivate) {
-        response = await _apiService.sendFollowRequest(userId);
-        if (response.success) {
-          _detailedFollowStatusCache[userId] = DetailedFollowStatus(
-            isFollowing: false,
-            isFollowedBy: false,
-            isRequestPending: true,
-            isPrivate: true
-          );
-        }
-      } else {
-        response = await _apiService.followUser(userId);
-        if (response.success) {
-          _detailedFollowStatusCache[userId] = DetailedFollowStatus(
-            isFollowing: true,
-            isFollowedBy: false,
-            isRequestPending: false,
-            isPrivate: false
-          );
-        }
-      }
+      // Use the unified follow endpoint that handles both public and private users
+      final response = await _apiService.followUser(userId);
 
       if (response.success) {
+        // Refresh the detailed follow status to get the accurate state
+        await fetchDetailedFollowStatus(userId);
+
         // Refresh stats for both users
         if (currentUserId != null) {
           await fetchUserStats(currentUserId);
@@ -189,7 +163,8 @@ class UserProvider extends ChangeNotifier {
 
   User? getUser(String userId) => _userCache[userId];
   UserStats? getUserStats(String userId) => _statsCache[userId];
-  DetailedFollowStatus? getDetailedFollowStatus(String userId) => _detailedFollowStatusCache[userId];
+  DetailedFollowStatus? getDetailedFollowStatus(String userId) =>
+      _detailedFollowStatusCache[userId];
 
   // --- METHODS ---
 
@@ -289,7 +264,7 @@ class UserProvider extends ChangeNotifier {
       notifyListeners();
     }
   }
-  
+
   // --- ACTIONS (Follow, Unfollow, Requests) ---
 
   Future<bool> sendFollowRequest(String userId) async {
@@ -297,21 +272,17 @@ class UserProvider extends ChangeNotifier {
       _isLoading = true;
       notifyListeners();
 
-      final response = await _apiService.sendFollowRequest(userId);
+      // Use the unified follow endpoint
+      final response = await _apiService.followUser(userId);
 
       if (response.success) {
-        // Update local state
-        _detailedFollowStatusCache[userId] = DetailedFollowStatus(
-          isFollowing: false,
-          isFollowedBy: false,
-          isRequestPending: true,
-          isPrivate: true,
-          requestStatus: 'PENDING'
-        );
+        // Refresh the detailed follow status to get the accurate state
+        await fetchDetailedFollowStatus(userId);
         notifyListeners();
         return true;
       } else {
-        _followRequestsError = response.error ?? 'Failed to send follow request';
+        _followRequestsError =
+            response.error ?? 'Failed to send follow request';
         return false;
       }
     } catch (e) {
@@ -331,14 +302,9 @@ class UserProvider extends ChangeNotifier {
 
       final response = await _apiService.unfollowUser(userId);
       if (response.success) {
-        // Update local state
-        _detailedFollowStatusCache[userId] = DetailedFollowStatus(
-          isFollowing: false,
-          isFollowedBy: _detailedFollowStatusCache[userId]?.isFollowedBy ?? false,
-          isRequestPending: false,
-          isPrivate: _detailedFollowStatusCache[userId]?.isPrivate ?? false
-        );
-        
+        // Refresh the detailed follow status to get the accurate state
+        await fetchDetailedFollowStatus(userId);
+
         // Refresh stats for both users
         if (currentUserId != null) {
           await fetchUserStats(currentUserId);
@@ -367,23 +333,19 @@ class UserProvider extends ChangeNotifier {
       _error = null;
       notifyListeners();
 
-      final response = await _apiService.cancelFollowRequest(userId);
+      // Use the same unfollow endpoint which now handles both cases
+      final response = await _apiService.unfollowUser(userId);
       if (response.success) {
-        // Update local state
-        _detailedFollowStatusCache[userId] = DetailedFollowStatus(
-          isFollowing: false,
-          isFollowedBy: _detailedFollowStatusCache[userId]?.isFollowedBy ?? false,
-          isRequestPending: false,
-          isPrivate: _detailedFollowStatusCache[userId]?.isPrivate ?? false
-        );
+        // Refresh the detailed follow status to get the accurate state
+        await fetchDetailedFollowStatus(userId);
         notifyListeners();
         return true;
       }
-      _error = response.error ?? 'Failed to cancel follow request';
+      _error = response.error ?? 'Failed to cancel request';
       notifyListeners();
       return false;
     } catch (e) {
-      _error = 'Failed to cancel follow request';
+      _error = 'Failed to cancel request';
       notifyListeners();
       return false;
     } finally {
@@ -401,11 +363,13 @@ class UserProvider extends ChangeNotifier {
       final response = await _apiService.acceptFollowRequest(requestId);
       if (response.success) {
         // Remove the request from pending list
-        _pendingFollowRequests.removeWhere((request) => request.id == requestId);
+        _pendingFollowRequests
+            .removeWhere((request) => request.id == requestId);
         notifyListeners();
         return true;
       }
-      _followRequestsError = response.error ?? 'Failed to accept follow request';
+      _followRequestsError =
+          response.error ?? 'Failed to accept follow request';
       return false;
     } catch (e) {
       _followRequestsError = 'Failed to accept follow request';
@@ -426,11 +390,13 @@ class UserProvider extends ChangeNotifier {
       final response = await _apiService.rejectFollowRequest(requestId);
       if (response.success) {
         // Remove the request from pending list
-        _pendingFollowRequests.removeWhere((request) => request.id == requestId);
+        _pendingFollowRequests
+            .removeWhere((request) => request.id == requestId);
         notifyListeners();
         return true;
       }
-      _followRequestsError = response.error ?? 'Failed to reject follow request';
+      _followRequestsError =
+          response.error ?? 'Failed to reject follow request';
       return false;
     } catch (e) {
       _followRequestsError = 'Failed to reject follow request';
@@ -443,7 +409,10 @@ class UserProvider extends ChangeNotifier {
   }
 
   // --- Discover Functions ---
-  Future<void> searchUsers({String? search, bool refresh = false}) async {
+  Future<void> searchUsers(
+      {String? search,
+      bool refresh = false,
+      bool prioritizeFollowed = false}) async {
     if (refresh) {
       _discoverPage = 1;
       _discoverUsers.clear();
@@ -455,7 +424,11 @@ class UserProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final response = await _apiService.searchUsers(search: search, page: _discoverPage);
+      final response = await _apiService.searchUsers(
+        search: search,
+        page: _discoverPage,
+        prioritizeFollowed: prioritizeFollowed,
+      );
       if (response.success && response.data != null) {
         _discoverUsers.addAll(response.data!);
         const int pageSize = 20;
@@ -521,12 +494,11 @@ class UserProvider extends ChangeNotifier {
 
     // Update in detailed status cache
     _detailedFollowStatusCache[userId] = DetailedFollowStatus(
-      isFollowing: isFollowing,
-      isFollowedBy: _detailedFollowStatusCache[userId]?.isFollowedBy ?? false,
-      isRequestPending: false,
-      isPrivate: _detailedFollowStatusCache[userId]?.isPrivate ?? false
-    );
-    
+        isFollowing: isFollowing,
+        isFollowedBy: _detailedFollowStatusCache[userId]?.isFollowedBy ?? false,
+        isRequestPending: false,
+        isPrivate: _detailedFollowStatusCache[userId]?.isPrivate ?? false);
+
     notifyListeners();
   }
 

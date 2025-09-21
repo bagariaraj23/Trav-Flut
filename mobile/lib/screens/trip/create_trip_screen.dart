@@ -5,6 +5,8 @@ import 'package:tripthread/providers/trip_provider.dart';
 import 'package:tripthread/models/trip.dart';
 import 'package:tripthread/widgets/custom_text_field.dart';
 import 'package:tripthread/widgets/loading_button.dart';
+import 'dart:io';
+import 'package:tripthread/services/media_service.dart';
 
 class CreateTripScreen extends StatefulWidget {
   const CreateTripScreen({Key? key}) : super(key: key);
@@ -18,6 +20,9 @@ class _CreateTripScreenState extends State<CreateTripScreen> {
   final _titleController = TextEditingController();
   final _descriptionController = TextEditingController();
   final _destinationController = TextEditingController();
+
+  final MediaService _mediaService = MediaService();
+  File? _selectedCoverFile;
 
   final List<String> _destinations = [];
   DateTime? _startDate;
@@ -79,6 +84,21 @@ class _CreateTripScreenState extends State<CreateTripScreen> {
           print('[DEBUG] End date ISO: ${picked.toIso8601String()}');
         }
       });
+    }
+  }
+
+  Future<void> _pickCoverImage({bool fromCamera = false}) async {
+    try {
+      final file = await _mediaService.pickImage(fromCamera: fromCamera);
+      if (file != null) {
+        setState(() {
+          _selectedCoverFile = file;
+        });
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error picking image: $e')),
+      );
     }
   }
 
@@ -145,6 +165,9 @@ class _CreateTripScreenState extends State<CreateTripScreen> {
       destinations: _destinations,
       mood: _selectedMood,
       type: _selectedType,
+      coverMediaUrl: _selectedCoverFile != null
+          ? 'https://example.com/placeholder-cover.jpg'
+          : null,
     );
 
     print('[DEBUG] CreateTripRequest created:');
@@ -239,6 +262,7 @@ class _CreateTripScreenState extends State<CreateTripScreen> {
                   }
                   return null;
                 },
+                textCapitalization: TextCapitalization.sentences,
               ),
 
               const SizedBox(height: 16),
@@ -251,7 +275,74 @@ class _CreateTripScreenState extends State<CreateTripScreen> {
                 prefixIcon: Icons.description,
                 maxLines: 3,
                 maxLength: 500,
+                textCapitalization: TextCapitalization.sentences,
               ),
+
+              const SizedBox(height: 16),
+
+              // Cover Image Picker
+              Text(
+                'Cover Image (Optional)',
+                style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
+              ),
+              const SizedBox(height: 8),
+              if (_selectedCoverFile != null)
+                Stack(
+                  children: [
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(8),
+                      child: Image.file(
+                        _selectedCoverFile!,
+                        height: 160,
+                        width: double.infinity,
+                        fit: BoxFit.cover,
+                      ),
+                    ),
+                    Positioned(
+                      top: 8,
+                      right: 8,
+                      child: CircleAvatar(
+                        backgroundColor: Colors.black54,
+                        child: IconButton(
+                          icon: const Icon(Icons.close, color: Colors.white),
+                          onPressed: () {
+                            setState(() {
+                              _selectedCoverFile = null;
+                            });
+                          },
+                        ),
+                      ),
+                    ),
+                  ],
+                )
+              else
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: () => _pickCoverImage(fromCamera: false),
+                        icon: const Icon(Icons.photo_library),
+                        label: const Text('Gallery'),
+                        style: OutlinedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: () => _pickCoverImage(fromCamera: true),
+                        icon: const Icon(Icons.camera_alt),
+                        label: const Text('Camera'),
+                        style: OutlinedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
 
               const SizedBox(height: 16),
 

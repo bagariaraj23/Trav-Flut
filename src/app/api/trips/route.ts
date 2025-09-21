@@ -292,7 +292,18 @@ export async function GET(request: NextRequest) {
             | "ENDED"
             | null;
 
-          const whereClause: any = { userId };
+          // Include trips where user is owner OR participant
+          const whereClause: any = {
+            OR: [
+              { userId }, // Trips owned by user
+              {
+                participants: {
+                  some: { userId }, // Trips where user is a participant
+                },
+              },
+            ],
+          };
+
           if (status) {
             whereClause.status = status;
           }

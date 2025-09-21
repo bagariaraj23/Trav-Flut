@@ -22,26 +22,48 @@ import 'package:tripthread/screens/profile/edit_profile_screen.dart';
 import 'package:tripthread/screens/trip/create_trip_screen.dart';
 import 'package:tripthread/screens/trip/trip_detail_screen.dart';
 import 'package:tripthread/screens/trip/trip_thread_screen.dart';
+import 'package:tripthread/screens/trip/trip_participants_screen.dart';
 import 'package:tripthread/screens/profile/follow_requests_screen.dart';
+import 'package:tripthread/screens/profile/trip_invitations_screen.dart';
 import 'package:tripthread/utils/app_theme.dart';
 import 'package:tripthread/utils/error_handler.dart';
+import 'package:tripthread/config/app_config.dart';
 
 void main() async {
   debugPrint('[main] Starting TripThread app initialization');
   WidgetsFlutterBinding.ensureInitialized();
 
   try {
+    debugPrint('[main] Initializing environment configuration');
+    await AppConfig.initialize();
+    debugPrint('[main] Environment configuration initialized');
+
     debugPrint('[main] Initializing services');
 
     // Initialize services
+    debugPrint('[main] Creating StorageService');
     final storageService = StorageService();
-    await storageService.init();
-    debugPrint('[main] StorageService initialized');
+    debugPrint('[main] Initializing StorageService');
+    try {
+      await storageService.init();
+      debugPrint('[main] StorageService initialized');
+    } catch (e) {
+      debugPrint('[main] StorageService initialization failed: $e');
+      throw e;
+    }
 
+    debugPrint('[main] Creating ConnectivityService');
     final connectivityService = ConnectivityService();
-    await connectivityService.initialize();
-    debugPrint('[main] ConnectivityService initialized');
+    debugPrint('[main] Initializing ConnectivityService');
+    try {
+      await connectivityService.initialize();
+      debugPrint('[main] ConnectivityService initialized');
+    } catch (e) {
+      debugPrint('[main] ConnectivityService initialization failed: $e');
+      throw e;
+    }
 
+    debugPrint('[main] Creating core services');
     final apiService = ApiService();
     final tripService = TripService();
     final mediaService = MediaService();
@@ -283,18 +305,25 @@ class TripThreadAppRouter extends StatelessWidget {
             return TripThreadScreen(tripId: tripId);
           },
         ),
-        // GoRoute(
-        //   path: '/trip/:tripId/participants',
-        //   builder: (context, state) {
-        //     final tripId = state.pathParameters['tripId']!;
-        //     return TripParticipantsScreen(tripId: tripId);
-        //   },
-        // ),        
+        GoRoute(
+          path: '/trip/:tripId/participants',
+          builder: (context, state) {
+            final tripId = state.pathParameters['tripId']!;
+            return TripParticipantsScreen(tripId: tripId);
+          },
+        ),
         GoRoute(
           path: '/follow-requests',
           builder: (context, state) {
             debugPrint('[Router] Navigating to FollowRequestsScreen');
             return const FollowRequestsScreen();
+          },
+        ),
+        GoRoute(
+          path: '/trip-invites',
+          builder: (context, state) {
+            debugPrint('[Router] Navigating to TripInvitationsScreen');
+            return const TripInvitationsScreen();
           },
         ),
       ],

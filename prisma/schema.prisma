@@ -23,19 +23,23 @@ model User {
   updatedAt DateTime @updatedAt
 
   // Relations
-  followers              Follow[]         @relation("Followee")
-  following              Follow[]         @relation("Follower")
-  sentFollowRequests     FollowRequest[]  @relation("SentFollowRequests")
-  receivedFollowRequests FollowRequest[]  @relation("ReceivedFollowRequests")
-  oauthAccounts          OAuthAccount[]
-  refreshTokens          JWTRefreshToken[]
+  followers      Follow[]         @relation("Followee")
+  following      Follow[]         @relation("Follower")
+  sentFollowRequests     FollowRequest[] @relation("SentFollowRequests")
+  receivedFollowRequests FollowRequest[] @relation("ReceivedFollowRequests")
+  oauthAccounts  OAuthAccount[]
+  refreshTokens  JWTRefreshToken[]
+  
+  // Trip relations
+  trips          Trip[]
+  tripParticipants TripParticipant[]
+  threadEntries  TripThreadEntry[]
+  threadTags     TripThreadTag[]
+  media          Media[]
 
-  // Trip relations (unchanged)
-  trips             Trip[]
-  tripParticipants  TripParticipant[]
-  threadEntries     TripThreadEntry[]
-  threadTags        TripThreadTag[]
-  media             Media[]
+  // Trip join request relations
+  sentTripJoinRequests     TripJoinRequest[] @relation("SentTripJoinRequests")
+  receivedTripJoinRequests TripJoinRequest[] @relation("ReceivedTripJoinRequests")
 
   // 🔹 NEW: soft delete (optional), security/audit & password reset relations
   deletedAt      DateTime?
@@ -128,7 +132,7 @@ model FollowRequest {
 model JWTRefreshToken {
   id           String   @id @default(uuid())
   userId       String
-  refreshToken String   @unique            // keep raw token to avoid breaking existing code
+  refreshToken String   @unique
   expiresAt    DateTime
   createdAt    DateTime @default(now())
 
@@ -176,6 +180,12 @@ enum MediaType {
   VIDEO
 }
 
+enum TripJoinRequestStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+}
+
 model Trip {
   id             String             @id @default(uuid())
   userId         String
@@ -198,6 +208,7 @@ model Trip {
   media          Media[]
   finalPost      TripFinalPost?
   participants   TripParticipant[]
+  joinRequests   TripJoinRequest[]
 
   @@map("trips")
 }
@@ -277,4 +288,21 @@ model Media {
   threadEntries   TripThreadEntry[]
 
   @@map("media")
+}
+
+model TripJoinRequest {
+  id          String                @id @default(uuid())
+  tripId      String
+  senderId    String
+  receiverId  String
+  status      TripJoinRequestStatus @default(PENDING)
+  createdAt   DateTime              @default(now())
+  updatedAt   DateTime              @updatedAt
+
+  trip        Trip                  @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  sender      User                  @relation("SentTripJoinRequests", fields: [senderId], references: [id], onDelete: Cascade)
+  receiver    User                  @relation("ReceivedTripJoinRequests", fields: [receiverId], references: [id], onDelete: Cascade)
+
+  @@unique([tripId, receiverId])
+  @@map("trip_join_requests")
 }

@@ -4,28 +4,22 @@ import 'package:tripthread/models/user.dart';
 import 'package:tripthread/models/follow_status.dart';
 import 'package:tripthread/models/trip.dart';
 import 'package:tripthread/models/pagination.dart';
+import 'package:tripthread/models/trip_join_request.dart';
 import 'package:tripthread/services/storage_service.dart';
+import 'package:tripthread/config/app_config.dart';
 import 'package:flutter/foundation.dart';
 
 class ApiService {
-  // static const String baseUrl = 'http://localhost:3000/api';
-  // static const String baseUrl = 'http://10.61.114.100:3000/api';
-  // static const String baseUrl = 'http://192.168.0.110:3000/api';
-  static const String baseUrl = 'http://192.168.0.111:3000/api';
-  // static const String baseUrl = 'http://192.168.0.111:3000/api';
-
   final Dio _dio;
   StorageService? _storageService;
   VoidCallback? _onUnauthorized;
 
   ApiService()
       : _dio = Dio(BaseOptions(
-          baseUrl: baseUrl,
-          connectTimeout: const Duration(seconds: 30),
-          receiveTimeout: const Duration(seconds: 30),
-          headers: {
-            'Content-Type': 'application/json',
-          },
+          baseUrl: AppConfig.apiBaseUrl,
+          connectTimeout: AppConfig.connectTimeout,
+          receiveTimeout: AppConfig.receiveTimeout,
+          headers: AppConfig.defaultHeaders,
         )) {
     _setupInterceptors();
   }
@@ -438,14 +432,15 @@ class ApiService {
     String? search,
     int page = 1,
     int limit = 20,
-    bool refresh = false,
+    bool prioritizeFollowed = false,
   }) async {
     try {
       debugPrint(
-          '[ApiService] Searching users: search=$search, page=$page, limit=$limit, refresh=$refresh');
+          '[ApiService] Searching users: search=$search, page=$page, limit=$limit, prioritizeFollowed=$prioritizeFollowed');
       final queryParams = <String, dynamic>{
         'page': page.toString(),
         'limit': limit.toString(),
+        'prioritizeFollowed': prioritizeFollowed.toString(),
       };
       if (search != null && search.isNotEmpty) {
         queryParams['search'] = search;
@@ -1389,6 +1384,192 @@ class ApiService {
     } catch (e) {
       debugPrint('[ApiService] Reject follow request unexpected error: $e');
       return ApiResponse<void>(
+        success: false,
+        error: 'An unexpected error occurred',
+      );
+    }
+  }
+
+  // Participant Management Methods
+  Future<List<TripParticipant>> getTripParticipants(String tripId) async {
+    try {
+      debugPrint('[ApiService] Getting participants for trip: $tripId');
+      final response = await _dio.get('/trips/$tripId/participants');
+      debugPrint(
+          '[ApiService] Get participants response: ${response.statusCode}');
+
+      if (response.data['success'] && response.data['data'] != null) {
+        final participants = response.data['data'] as List<dynamic>;
+        return participants.map((p) => TripParticipant.fromJson(p)).toList();
+      } else {
+        throw Exception(response.data['error'] ?? 'Failed to get participants');
+      }
+    } on DioException catch (e) {
+      debugPrint('[ApiService] Get participants DioException: ${e.message}');
+      throw Exception(e.response?.data['error'] ?? 'Network error occurred');
+    } catch (e) {
+      debugPrint('[ApiService] Get participants unexpected error: $e');
+      throw Exception('An unexpected error occurred');
+    }
+  }
+
+  Future<void> removeTripParticipant(String tripId, String userId) async {
+    try {
+      debugPrint(
+          '[ApiService] Removing participant $userId from trip: $tripId');
+      final response =
+          await _dio.delete('/trips/$tripId/participants?userId=$userId');
+      debugPrint(
+          '[ApiService] Remove participant response: ${response.statusCode}');
+
+      if (!response.data['success']) {
+        throw Exception(
+            response.data['error'] ?? 'Failed to remove participant');
+      }
+    } on DioException catch (e) {
+      debugPrint('[ApiService] Remove participant DioException: ${e.message}');
+      throw Exception(e.response?.data['error'] ?? 'Network error occurred');
+    } catch (e) {
+      debugPrint('[ApiService] Remove participant unexpected error: $e');
+      throw Exception('An unexpected error occurred');
+    }
+  }
+
+  // Trip Join Request Methods
+  Future<ApiResponse<Map<String, dynamic>>> sendTripInvitation(
+      String tripId, String receiverId) async {
+    try {
+      debugPrint(
+          '[ApiService] Sending trip invitation to $receiverId for trip $tripId');
+      final response = await _dio.post('/trips/$tripId/invites', data: {
+        'receiverId': receiverId,
+      });
+      debugPrint(
+          '[ApiService] Send trip invitation response: ${response.statusCode}');
+      return ApiResponse<Map<String, dynamic>>(
+        success: response.data['success'],
+        data: response.data['data'],
+        message: response.data['message'],
+      );
+    } on DioException catch (e) {
+      debugPrint(
+          '[ApiService] Send trip invitation DioException: ${e.message}');
+      return ApiResponse<Map<String, dynamic>>(
+        success: false,
+        error: e.response?.data['error'] ?? 'Network error occurred',
+      );
+    } catch (e) {
+      debugPrint('[ApiService] Send trip invitation unexpected error: $e');
+      return ApiResponse<Map<String, dynamic>>(
+        success: false,
+        error: 'An unexpected error occurred',
+      );
+    }
+  }
+
+  Future<ApiResponse<List<TripJoinRequest>>> getPendingTripInvitations() async {
+    try {
+      debugPrint('[ApiService] Getting pending trip invitations');
+      final response = await _dio.get('/users/me/trip-invites');
+      debugPrint(
+          '[ApiService] Get pending trip invitations response: ${response.statusCode}');
+
+      if (response.data['success'] && response.data['data'] != null) {
+        final List<dynamic> requestsData = response.data['data'];
+        final requests =
+            requestsData.map((data) => TripJoinRequest.fromJson(data)).toList();
+        return ApiResponse<List<TripJoinRequest>>(
+          success: true,
+          data: requests,
+        );
+      }
+      return ApiResponse<List<TripJoinRequest>>(
+        success: false,
+        error: 'Failed to get pending trip invitations',
+      );
+    } on DioException catch (e) {
+      debugPrint(
+          '[ApiService] Get pending trip invitations DioException: ${e.message}');
+      return ApiResponse<List<TripJoinRequest>>(
+        success: false,
+        error: e.response?.data['error'] ?? 'Network error occurred',
+      );
+    } catch (e) {
+      debugPrint(
+          '[ApiService] Get pending trip invitations unexpected error: $e');
+      return ApiResponse<List<TripJoinRequest>>(
+        success: false,
+        error: 'An unexpected error occurred',
+      );
+    }
+  }
+
+  Future<ApiResponse<void>> respondToTripInvitation(
+      String inviteId, bool accept) async {
+    try {
+      debugPrint(
+          '[ApiService] Responding to trip invitation $inviteId with accept: $accept');
+      final endpoint = accept
+          ? '/trip-invites/$inviteId/accept'
+          : '/trip-invites/$inviteId/reject';
+      final response = await _dio.put(endpoint);
+      debugPrint(
+          '[ApiService] Respond to trip invitation response: ${response.statusCode}');
+
+      return ApiResponse<void>(
+        success: response.data['success'],
+        error: response.data['error'],
+        message: response.data['message'],
+      );
+    } on DioException catch (e) {
+      debugPrint(
+          '[ApiService] Respond to trip invitation DioException: ${e.message}');
+      return ApiResponse<void>(
+        success: false,
+        error: e.response?.data['error'] ?? 'Network error occurred',
+      );
+    } catch (e) {
+      debugPrint(
+          '[ApiService] Respond to trip invitation unexpected error: $e');
+      return ApiResponse<void>(
+        success: false,
+        error: 'An unexpected error occurred',
+      );
+    }
+  }
+
+  Future<ApiResponse<List<TripJoinRequest>>> getSentTripInvitations(
+      String tripId) async {
+    try {
+      debugPrint(
+          '[ApiService] Getting sent trip invitations for trip: $tripId');
+      final response = await _dio.get('/trips/$tripId/invites');
+      debugPrint(
+          '[ApiService] Get sent trip invitations response: ${response.statusCode}');
+
+      if (response.data['success'] && response.data['data'] != null) {
+        final List<dynamic> requestsData = response.data['data'];
+        final requests =
+            requestsData.map((data) => TripJoinRequest.fromJson(data)).toList();
+        return ApiResponse<List<TripJoinRequest>>(
+          success: true,
+          data: requests,
+        );
+      }
+      return ApiResponse<List<TripJoinRequest>>(
+        success: false,
+        error: 'Failed to get sent trip invitations',
+      );
+    } on DioException catch (e) {
+      debugPrint(
+          '[ApiService] Get sent trip invitations DioException: ${e.message}');
+      return ApiResponse<List<TripJoinRequest>>(
+        success: false,
+        error: e.response?.data['error'] ?? 'Network error occurred',
+      );
+    } catch (e) {
+      debugPrint('[ApiService] Get sent trip invitations unexpected error: $e');
+      return ApiResponse<List<TripJoinRequest>>(
         success: false,
         error: 'An unexpected error occurred',
       );

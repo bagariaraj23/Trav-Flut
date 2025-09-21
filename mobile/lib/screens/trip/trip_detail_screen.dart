@@ -81,42 +81,29 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
       );
     }
 
-    if (_trip == null) {
-      return Scaffold(
-        appBar: AppBar(title: const Text('Trip')),
-        body: const Center(
-          child: Text('Trip not found'),
-        ),
-      );
-    }
-
-    final currentUser = context.read<AuthProvider>().currentUser;
-    final isOwner = currentUser?.id == _trip!.userId;
-
+    // Use a single, unified Scaffold for both success and error states.
     return Scaffold(
       body: CustomScrollView(
         slivers: [
-          // App Bar with Cover Image
+          // This SliverAppBar is now ALWAYS part of the widget tree,
+          // guaranteeing the back button is always visible.
           SliverAppBar(
             expandedHeight: 250,
             pinned: true,
             leading: IconButton(
               icon: const Icon(Icons.arrow_back, color: Colors.white),
               onPressed: () {
-              // This is the standard and most reliable way to navigate back.
-              // It preserves the state of the previous screen, including the selected tab.
-              if (context.canPop()) {
-                context.pop();
-              } else {
-                // This is a fallback in case there's no screen to pop to,
-                // which is unlikely in this flow but good practice to have.
-                context.go('/home');
-              }
-            },
+                if (context.canPop()) {
+                  context.pop();
+                } else {
+                  context.go('/home');
+                }
+              },
             ),
             flexibleSpace: FlexibleSpaceBar(
               title: Text(
-                _trip!.title,
+                // The title changes based on whether the trip was found.
+                _trip?.title ?? 'Trip Not Found',
                 style: const TextStyle(
                   color: Colors.white,
                   fontWeight: FontWeight.bold,
@@ -132,7 +119,8 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
               background: Stack(
                 fit: StackFit.expand,
                 children: [
-                  _trip!.coverMediaUrl != null
+                  // Conditionally show the trip's cover image or the default cover.
+                  _trip?.coverMediaUrl != null
                       ? Image.network(
                           _trip!.coverMediaUrl!,
                           fit: BoxFit.cover,
@@ -157,7 +145,11 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
               ),
             ),
             actions: [
-              if (isOwner && _trip!.status == TripStatus.ongoing)
+              // Actions are only built if the trip exists and meets the criteria.
+              if (_trip != null &&
+                  _trip!.userId ==
+                      context.read<AuthProvider>().currentUser?.id &&
+                  _trip!.status == TripStatus.ongoing)
                 IconButton(
                   icon: const Icon(Icons.add),
                   onPressed: () {
@@ -168,29 +160,60 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
             ],
           ),
 
-          // Trip Content
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Trip Info Card
-                  _buildTripInfoCard(),
+          // --- CONDITIONAL BODY ---
+          // We use a Sliver widget to place content in the scroll view.
 
-                  const SizedBox(height: 16),
-
-                  // Status and Actions
-                  if (isOwner) _buildOwnerActions(),
-
-                  const SizedBox(height: 16),
-
-                  // Thread Entries
-                  _buildThreadSection(),
-                ],
+          if (_trip == null)
+            // If the trip is not found, show a centered error message
+            // that fills the rest of the available screen space.
+            SliverFillRemaining(
+              child: Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(16.0),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        Icons.error_outline,
+                        size: 64,
+                        color: Colors.grey[400],
+                      ),
+                      const SizedBox(height: 16),
+                      const Text(
+                        'Trip Not Found',
+                        style: TextStyle(
+                            fontSize: 22, fontWeight: FontWeight.bold),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'This trip may have been deleted or you may not have permission to view it.',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(fontSize: 16, color: Colors.grey[600]),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            )
+          else
+            // If the trip IS found, show the normal trip content.
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _buildTripInfoCard(),
+                    const SizedBox(height: 16),
+                    if (_trip!.userId ==
+                        context.read<AuthProvider>().currentUser?.id)
+                      _buildOwnerActions(),
+                    const SizedBox(height: 16),
+                    _buildThreadSection(),
+                  ],
+                ),
               ),
             ),
-          ),
         ],
       ),
     );
@@ -282,13 +305,13 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
               children: [
                 _buildStatItem(
                   Icons.photo_library,
-                  '${_trip!.counts?.threadEntries ?? 0}',
+                  '${_trip!.entryCount ?? 0}',
                   'Entries',
                 ),
                 const SizedBox(width: 24),
                 _buildStatItem(
                   Icons.people,
-                  '${_trip!.counts?.participants ?? 0}',
+                  '${_trip!.participantCount ?? 0}',
                   'Participants',
                 ),
                 if (_trip!.type != null) ...[
@@ -329,6 +352,15 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
                 },
                 icon: const Icon(Icons.add),
                 label: const Text('Add Entry'),
+              ),
+              const SizedBox(height: 8),
+              ElevatedButton.icon(
+                onPressed: () {
+                  context.go('/trip/${widget.tripId}/participants',
+                      extra: {'from': '/trip/${widget.tripId}'});
+                },
+                icon: const Icon(Icons.people),
+                label: const Text('Manage Participants'),
               ),
               const SizedBox(height: 8),
               Consumer<TripProvider>(
