@@ -36,13 +36,46 @@ model User {
   threadEntries  TripThreadEntry[]
   threadTags     TripThreadTag[]
   media          Media[]
-  
+
   // Trip join request relations
   sentTripJoinRequests     TripJoinRequest[] @relation("SentTripJoinRequests")
   receivedTripJoinRequests TripJoinRequest[] @relation("ReceivedTripJoinRequests")
 
+  // 🔹 NEW: soft delete (optional), security/audit & password reset relations
+  deletedAt      DateTime?
+  deleteMeta     Json?
+  passwordResets PasswordReset[]
+  securityEvents SecurityEvent[]
+
   @@map("users")
 }
+
+model PasswordReset {
+ id String @id @default(uuid())
+ userId String
+ tokenHash Bytes @unique
+ otpCodeHash Bytes?
+ expiresAt DateTime
+ usedAt DateTime?
+ createdAt DateTime @default(now())
+ createdIp String?
+ userAgent String?
+ user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+ @@index([userId, expiresAt])
+ @@map("password_resets")
+}
+
+model SecurityEvent {
+ id String @id @default(uuid())
+ userId String?
+ type String
+ meta Json?
+ createdAt DateTime @default(now())
+ user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+ @@index([userId, createdAt])
+ @@map("security_events")
+}
+
 
 model OAuthAccount {
   id             String        @id @default(uuid())
@@ -104,6 +137,10 @@ model JWTRefreshToken {
   createdAt    DateTime @default(now())
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // 🔹 NEW: helpful indexes for fast revocation & cleanup
+  @@index([userId])
+  @@index([expiresAt])
 
   @@map("jwt_refresh_tokens")
 }

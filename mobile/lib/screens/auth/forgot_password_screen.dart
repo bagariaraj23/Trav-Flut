@@ -5,42 +5,43 @@ import 'package:form_field_validator/form_field_validator.dart';
 import 'package:tripthread/providers/auth_provider.dart';
 import 'package:tripthread/widgets/custom_text_field.dart';
 import 'package:tripthread/widgets/loading_button.dart';
-import 'package:flutter/services.dart';
 
-class LoginScreen extends StatefulWidget {
-  const LoginScreen({Key? key}) : super(key: key);
+class ForgotPasswordScreen extends StatefulWidget {
+  const ForgotPasswordScreen({Key? key}) : super(key: key);
 
   @override
-  State<LoginScreen> createState() => _LoginScreenState();
+  State<ForgotPasswordScreen> createState() => _ForgotPasswordScreenState();
 }
 
-class _LoginScreenState extends State<LoginScreen> {
+class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
   final _formKey = GlobalKey<FormState>();
   final _emailController = TextEditingController();
-  final _passwordController = TextEditingController();
-  bool _obscurePassword = true;
 
   @override
   void dispose() {
     _emailController.dispose();
-    _passwordController.dispose();
     super.dispose();
   }
 
-  Future<void> _handleLogin() async {
+  Future<void> _handleForgotPassword() async {
     if (!_formKey.currentState!.validate()) return;
 
     final authProvider = context.read<AuthProvider>();
-    final success = await authProvider.login(
+    final success = await authProvider.forgotPassword(
       email: _emailController.text.trim(),
-      password: _passwordController.text,
     );
-    print(
-        'LoginScreen: login success = $success, isAuthenticated = ${authProvider.isAuthenticated}');
+
     if (success && mounted) {
-      context.go('/home');
+      // Show success message and navigate back to login
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('If an account exists for this email, a reset link has been sent.'),
+          backgroundColor: Colors.green,
+        ),
+      );
+      context.go('/login');
     } else if (mounted) {
-      // Persist inline error; do not auto-dismiss via SnackBar
+      // Error is already handled by AuthProvider
       authProvider.markErrorAsShown();
     }
   }
@@ -48,6 +49,13 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      appBar: AppBar(
+        title: const Text('Forgot Password'),
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          onPressed: () => context.go('/login'),
+        ),
+      ),
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(24.0),
@@ -56,7 +64,7 @@ class _LoginScreenState extends State<LoginScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                const SizedBox(height: 60),
+                const SizedBox(height: 40),
 
                 // Logo and Title
                 Column(
@@ -69,20 +77,20 @@ class _LoginScreenState extends State<LoginScreen> {
                         borderRadius: BorderRadius.circular(16),
                       ),
                       child: const Icon(
-                        Icons.travel_explore,
+                        Icons.lock_reset,
                         size: 32,
                         color: Colors.white,
                       ),
                     ),
                     const SizedBox(height: 24),
                     Text(
-                      'Welcome back',
+                      'Reset your password',
                       style: Theme.of(context).textTheme.displaySmall,
                       textAlign: TextAlign.center,
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      'Sign in to continue your travel journey',
+                      'Enter your email address and we\'ll send you a link to reset your password',
                       style: Theme.of(context).textTheme.bodyMedium,
                       textAlign: TextAlign.center,
                     ),
@@ -101,37 +109,6 @@ class _LoginScreenState extends State<LoginScreen> {
                     RequiredValidator(errorText: 'Email is required'),
                     EmailValidator(errorText: 'Please enter a valid email'),
                   ]),
-                  onChanged: (_) {
-                    // Clear error when user starts typing after an error
-                    final authProvider = context.read<AuthProvider>();
-                    if (authProvider.error != null) {
-                      authProvider.clearError();
-                    }
-                  },
-                ),
-
-                const SizedBox(height: 16),
-
-                // Password Field
-                CustomTextField(
-                  controller: _passwordController,
-                  label: 'Password',
-                  obscureText: _obscurePassword,
-                  prefixIcon: Icons.lock_outlined,
-                  suffixIcon: IconButton(
-                    icon: Icon(
-                      _obscurePassword
-                          ? Icons.visibility_outlined
-                          : Icons.visibility_off_outlined,
-                    ),
-                    onPressed: () {
-                      setState(() {
-                        _obscurePassword = !_obscurePassword;
-                      });
-                    },
-                  ),
-                  validator:
-                      RequiredValidator(errorText: 'Password is required'),
                   onChanged: (_) {
                     // Clear error when user starts typing after an error
                     final authProvider = context.read<AuthProvider>();
@@ -203,42 +180,25 @@ class _LoginScreenState extends State<LoginScreen> {
                   },
                 ),
 
-                // Login Button
+                // Send Reset Link Button
                 Consumer<AuthProvider>(
                   builder: (context, authProvider, child) {
                     return LoadingButton(
-                      onPressed: _handleLogin,
+                      onPressed: _handleForgotPassword,
                       isLoading: authProvider.isLoading,
-                      child: const Text('Sign In'),
+                      child: const Text('Send Reset Link'),
                     );
                   },
                 ),
 
                 const SizedBox(height: 24),
 
-                // Forgot Password Link
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: TextButton(
-                    onPressed: () {
-                      final authProvider = context.read<AuthProvider>();
-                      if (authProvider.error != null) {
-                        authProvider.clearError();
-                      }
-                      context.go('/forgot-password');
-                    },
-                    child: const Text('Forgot Password?'),
-                  ),
-                ),
-
-                const SizedBox(height: 24),
-
-                // Sign Up Link
+                // Back to Login Link
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     Text(
-                      "Don't have an account? ",
+                      'Remember your password? ',
                       style: Theme.of(context).textTheme.bodyMedium,
                     ),
                     TextButton(
@@ -247,9 +207,9 @@ class _LoginScreenState extends State<LoginScreen> {
                         if (authProvider.error != null) {
                           authProvider.clearError();
                         }
-                        context.go('/signup');
+                        context.go('/login');
                       },
-                      child: const Text('Sign Up'),
+                      child: const Text('Sign In'),
                     ),
                   ],
                 ),
@@ -261,6 +221,5 @@ class _LoginScreenState extends State<LoginScreen> {
         ),
       ),
     );
-    // );
   }
 }

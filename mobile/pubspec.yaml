@@ -48,6 +48,9 @@ dependencies:
   connectivity_plus: ^6.1.4
   jwt_decoder: ^2.0.1
 
+  # Deep Links
+  app_links: ^3.4.5
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

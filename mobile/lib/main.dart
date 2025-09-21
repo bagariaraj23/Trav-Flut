@@ -10,9 +10,12 @@ import 'package:tripthread/services/storage_service.dart';
 import 'package:tripthread/services/trip_service.dart';
 import 'package:tripthread/services/connectivity_service.dart';
 import 'package:tripthread/services/media_service.dart';
+import 'package:tripthread/services/deep_link_service.dart';
 import 'package:tripthread/screens/splash_screen.dart';
 import 'package:tripthread/screens/auth/login_screen.dart';
 import 'package:tripthread/screens/auth/signup_screen.dart';
+import 'package:tripthread/screens/auth/forgot_password_screen.dart';
+import 'package:tripthread/screens/auth/reset_password_screen.dart';
 import 'package:tripthread/screens/home/home_screen.dart';
 import 'package:tripthread/screens/profile/profile_screen.dart';
 import 'package:tripthread/screens/profile/edit_profile_screen.dart';
@@ -64,6 +67,7 @@ void main() async {
     final apiService = ApiService();
     final tripService = TripService();
     final mediaService = MediaService();
+    final deepLinkService = DeepLinkService();
     debugPrint('[main] Core services created');
 
     debugPrint('[main] Setting up providers');
@@ -74,6 +78,7 @@ void main() async {
           Provider<ApiService>.value(value: apiService),
           Provider<TripService>.value(value: tripService),
           Provider<MediaService>.value(value: mediaService),
+          Provider<DeepLinkService>.value(value: deepLinkService),
           ChangeNotifierProvider<ConnectivityService>.value(
               value: connectivityService),
           ChangeNotifierProvider<AuthProvider>(
@@ -141,12 +146,19 @@ class TripThreadAppRouter extends StatelessWidget {
   Widget build(BuildContext context) {
     return Consumer<AuthProvider>(
       builder: (context, authProvider, _) {
+        final router = _createRouter(authProvider);
+        
+        // Set up deep link service with router
+        final deepLinkService = Provider.of<DeepLinkService>(context, listen: false);
+        deepLinkService.setRouter(router);
+        deepLinkService.initialize();
+        
         return MaterialApp.router(
           title: 'TripThread',
           theme: AppTheme.lightTheme,
           darkTheme: AppTheme.darkTheme,
           themeMode: ThemeMode.system,
-          routerConfig: _createRouter(authProvider),
+          routerConfig: router,
           debugShowCheckedModeBanner: false,
           builder: (context, child) {
             final authProvider = context.watch<AuthProvider>();
@@ -193,7 +205,7 @@ class TripThreadAppRouter extends StatelessWidget {
   static String? _lastLocation;
 
   GoRouter _createRouter(AuthProvider authProvider) {
-    return GoRouter(
+    final router = GoRouter(
       initialLocation: '/login',
       errorBuilder: (context, state) => Scaffold(
         body: Center(
@@ -226,11 +238,11 @@ class TripThreadAppRouter extends StatelessWidget {
 
         if (isLoading) return null;
 
-        if (!isLoggedIn && location != '/login' && location != '/signup') {
+        if (!isLoggedIn && location != '/login' && location != '/signup' && location != '/forgot-password' && !location.startsWith('/reset-password')) {
           return '/login';
         }
 
-        if (isLoggedIn && (location == '/login' || location == '/signup')) {
+        if (isLoggedIn && (location == '/login' || location == '/signup' || location == '/forgot-password' || location.startsWith('/reset-password'))) {
           return '/home';
         }
 
@@ -244,6 +256,17 @@ class TripThreadAppRouter extends StatelessWidget {
         GoRoute(
           path: '/signup',
           builder: (context, state) => const SignupScreen(),
+        ),
+        GoRoute(
+          path: '/forgot-password',
+          builder: (context, state) => const ForgotPasswordScreen(),
+        ),
+        GoRoute(
+          path: '/reset-password',
+          builder: (context, state) {
+            final token = state.uri.queryParameters['t'];
+            return ResetPasswordScreen(token: token);
+          },
         ),
         GoRoute(
           path: '/home',
@@ -305,5 +328,7 @@ class TripThreadAppRouter extends StatelessWidget {
         ),
       ],
     );
+
+    return router;
   }
 }

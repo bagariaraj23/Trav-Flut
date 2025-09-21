@@ -194,6 +194,68 @@ class AuthProvider extends ChangeNotifier {
     }
   }
 
+  Future<bool> forgotPassword({
+    required String email,
+  }) async {
+    try {
+      _setLoadingState(true);
+      _clearError();
+
+      final response = await _apiService.forgotPassword(email: email);
+
+      print('[AuthProvider] forgotPassword response: success=${response.success}, error=${response.error}');
+
+      if (response.success) {
+        _setLoadingState(false);
+        return true;
+      } else {
+        _setError(response.error ?? 'Failed to send reset email. Please try again.');
+        print('[AuthProvider] forgotPassword error set: $_error');
+        _setLoadingState(false);
+        return false;
+      }
+    } catch (e) {
+      print('[AuthProvider] forgotPassword catch error: $e');
+      _setError('Network error. Please check your connection and try again.');
+      _setLoadingState(false);
+      debugPrint('Forgot password error: $e');
+      return false;
+    }
+  }
+
+  Future<bool> resetPassword({
+    required String token,
+    required String newPassword,
+  }) async {
+    try {
+      _setLoadingState(true);
+      _clearError();
+
+      final response = await _apiService.resetPassword(
+        token: token,
+        newPassword: newPassword,
+      );
+
+      print('[AuthProvider] resetPassword response: success=${response.success}, error=${response.error}');
+
+      if (response.success) {
+        _setLoadingState(false);
+        return true;
+      } else {
+        _setError(response.error ?? 'Failed to reset password. Please try again.');
+        print('[AuthProvider] resetPassword error set: $_error');
+        _setLoadingState(false);
+        return false;
+      }
+    } catch (e) {
+      print('[AuthProvider] resetPassword catch error: $e');
+      _setError('Network error. Please check your connection and try again.');
+      _setLoadingState(false);
+      debugPrint('Reset password error: $e');
+      return false;
+    }
+  }
+
   // Helper methods for cleaner state management
   void _setLoadingState(bool loading) {
     _isLoading = loading;

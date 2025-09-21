@@ -219,6 +219,77 @@ class ApiService {
     }
   }
 
+  Future<ApiResponse<void>> forgotPassword({
+    required String email,
+  }) async {
+    try {
+      debugPrint('[ApiService] Forgot password called with email: $email');
+      final response = await _dio.post('/auth/forgot-password', data: {
+        'email': email,
+      });
+
+      debugPrint(
+          '[ApiService] Forgot password response: ${response.statusCode}');
+      debugPrint('[ApiService] Response data: ${response.data}');
+      // Map 'ok' from backend to 'success' in ApiResponse, defaulting to false if missing
+      final bool success =
+          response.data['success'] ?? response.data['ok'] ?? false;
+      return ApiResponse<void>(
+        success: success,
+        message: response.data['message'],
+        error: response.data['error'],
+      );
+    } on DioException catch (e) {
+      debugPrint('[ApiService] Forgot password DioException: ${e.message}');
+      return ApiResponse<void>(
+        success: false,
+        error: e.response?.data['error'] ?? 'Network error occurred',
+      );
+    } catch (e) {
+      debugPrint('[ApiService] Forgot password unexpected error: $e');
+      return ApiResponse<void>(
+        success: false,
+        error: 'An unexpected error occurred',
+      );
+    }
+  }
+
+  Future<ApiResponse<void>> resetPassword({
+    required String token,
+    required String newPassword,
+  }) async {
+    try {
+      debugPrint('[ApiService] Reset password called');
+      final response = await _dio.post('/auth/reset-password', data: {
+        'token': token,
+        'newPassword': newPassword,
+      });
+
+      debugPrint(
+          '[ApiService] Reset password response: ${response.statusCode}');
+      debugPrint('[ApiService] Response data: ${response.data}');
+      final bool success =
+          response.data['success'] ?? response.data['ok'] ?? false;
+      return ApiResponse<void>(
+        success: success,
+        message: response.data['message'],
+        error: response.data['error'],
+      );
+    } on DioException catch (e) {
+      debugPrint('[ApiService] Reset password DioException: ${e.message}');
+      return ApiResponse<void>(
+        success: false,
+        error: e.response?.data['error'] ?? 'Network error occurred',
+      );
+    } catch (e) {
+      debugPrint('[ApiService] Reset password unexpected error: $e');
+      return ApiResponse<void>(
+        success: false,
+        error: 'An unexpected error occurred',
+      );
+    }
+  }
+
   // User endpoints
   Future<ApiResponse<User>> getCurrentUser() async {
     try {
