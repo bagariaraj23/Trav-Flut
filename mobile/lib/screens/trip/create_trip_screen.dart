@@ -112,6 +112,20 @@ class _CreateTripScreenState extends State<CreateTripScreen> {
       return;
     }
 
+    if (_startDate == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Start date is required')),
+      );
+      return;
+    }
+
+    if (_endDate == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('End date is required')),
+      );
+      return;
+    }
+
     // Add debugging logs
     print('[DEBUG] Creating trip with dates:');
     print('[DEBUG] _startDate: $_startDate');

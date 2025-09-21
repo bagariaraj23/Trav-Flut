@@ -154,8 +154,8 @@ model Trip {
   userId         String
   title          String
   description    String?
-  startDate      DateTime?
-  endDate        DateTime?
+  startDate      DateTime
+  endDate        DateTime
   destinations   String[]           // Array of city/country names
   mood           TripMood?
   type           TripType?
