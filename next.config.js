@@ -1,16 +1,19 @@
 /** @type {import('next').NextConfig} */
+require('dotenv').config();
+
 const nextConfig = {
-  experimental: {
+  env: {
+    ENABLE_SCHEDULER: process.env.ENABLE_SCHEDULER
   },
   images: {
     remotePatterns: [
       {
         protocol: 'https',
-        hostname: 'avatars.githubusercontent.com',
+        hostname: 'storage.googleapis.com',
         port: '',
-        pathname: '/u/**',
-      },
-    ],
+        pathname: '/u/**'
+      }
+    ]
   }
 }
 

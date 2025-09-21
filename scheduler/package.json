@@ -1,0 +1,23 @@
+{
+    "name": "tripthread-scheduler",
+    "version": "1.0.0",
+    "private": true,
+    "scripts": {
+        "start": "ts-node src/index.ts",
+        "dev": "nodemon --exec ts-node src/index.ts",
+        "build": "tsc"
+    },
+    "dependencies": {
+        "@prisma/client": "latest",
+        "bullmq": "^4.12.0",
+        "dotenv": "^16.3.1",
+        "ioredis": "^5.3.2",
+        "winston": "^3.10.0"
+    },
+    "devDependencies": {
+        "@types/node": "^20.8.2",
+        "nodemon": "^3.0.1",
+        "ts-node": "^10.9.1",
+        "typescript": "^5.2.2"
+    }
+}
