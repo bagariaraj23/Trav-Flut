@@ -1,117 +1,106 @@
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient } from "@prisma/client";
+import { updateTripStatuses } from "./tripStatus";
 
-// Define TripStatus enum manually (update values if your schema differs)
-enum TripStatus {
-    UPCOMING = 'UPCOMING',
-    ONGOING = 'ONGOING',
-    ENDED = 'ENDED'
-}
-import { Queue, Worker, Job } from 'bullmq';
-import { Redis } from 'ioredis';
-import { createLogger, format, transports } from 'winston';
+import { Queue, Worker, Job } from "bullmq";
+import { Redis } from "ioredis";
+import { createLogger, format, transports } from "winston";
 
 // Configure logger
 const logger = createLogger({
-    format: format.combine(
-        format.timestamp(),
-        format.json()
-    ),
-    transports: [
-        new transports.Console(),
-        new transports.File({ filename: 'scheduler.log' })
-    ]
+  format: format.combine(format.timestamp(), format.json()),
+  transports: [
+    new transports.Console(),
+    new transports.File({ filename: "scheduler.log" }),
+  ],
 });
 
 // Initialize Redis connection
-const redisConnection = new Redis(process.env.REDIS_URL || 'redis://localhost:6379');
+const redisConnection = new Redis(
+  process.env.REDIS_URL || "redis://localhost:6379"
+);
 
 // Initialize Prisma
 const prisma = new PrismaClient();
 
 // Create queues
-const tripStatusQueue = new Queue('tripStatus', { connection: redisConnection });
+const tripStatusQueue = new Queue("tripStatus", {
+  connection: redisConnection,
+});
 
 // Process trip status updates
-const tripStatusWorker = new Worker('tripStatus', async (job: Job) => {
+const tripStatusWorker = new Worker(
+  "tripStatus",
+  async (job: Job) => {
     try {
-        logger.info('Starting trip status update job', { jobId: job.id });
+      logger.info("Starting trip status update job", { jobId: job.id });
 
-        const now = new Date();
+      const now = new Date();
+      await updateTripStatuses(prisma, now);
 
-        // Update trips that have ended
-        await prisma.trip.updateMany({
-            where: {
-                endDate: {
-                    lte: now
-                },
-                status: TripStatus.ONGOING
-            },
-            data: {
-                status: TripStatus.ENDED
-            }
-        });
-
-        // Update trips that have started
-        await prisma.trip.updateMany({
-            where: {
-                startDate: {
-                    lte: now
-                },
-                status: TripStatus.UPCOMING
-            },
-            data: {
-                status: TripStatus.ONGOING
-            }
-        });
-
-        logger.info('Trip status update job completed', { jobId: job.id });
+      logger.info("Trip status update job completed", { jobId: job.id });
     } catch (error) {
-        logger.error('Trip status update job failed', {
-            jobId: job.id,
-            error: error instanceof Error ? error.message : String(error)
-        });
-        throw error;
+      logger.error("Trip status update job failed", {
+        jobId: job.id,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      throw error;
     }
-}, { connection: redisConnection });
+  },
+  {
+    connection: redisConnection,
+    // Add basic retry/attempts configuration so transient failures are retried
+    autorun: true,
+    concurrency: 1,
+    // Worker options can be extended as needed
+  }
+);
 
 // Schedule jobs
 async function scheduleJobs() {
-    // Schedule trip status updates every hour
-    await tripStatusQueue.add('updateTripStatus', {}, {
-        repeat: {
-            pattern: '0 * * * *' // Every hour
-        }
-    });
+  // Schedule trip status updates every hour
+  // Use a cron expression and a fixed jobId to avoid accidentally scheduling
+  // duplicate repeatable jobs if the scheduler starts multiple times.
+  await tripStatusQueue.add(
+    "updateTripStatus",
+    {},
+    {
+      repeat: {
+        // Run every hour (3600000 ms). Using 'every' avoids cron typing issues
+        every: 60 * 60 * 1000,
+      },
+      jobId: "updateTripStatus:repeat:hourly",
+    }
+  );
 
-    logger.info('Jobs scheduled successfully');
+  logger.info("Jobs scheduled successfully");
 }
 
 // Handle shutdown
 async function shutdown() {
-    logger.info('Shutting down scheduler...');
-    await tripStatusWorker.close();
-    await redisConnection.quit();
-    await prisma.$disconnect();
-    process.exit(0);
+  logger.info("Shutting down scheduler...");
+  await tripStatusWorker.close();
+  await redisConnection.quit();
+  await prisma.$disconnect();
+  process.exit(0);
 }
 
 // Start scheduler
 async function start() {
-    try {
-        logger.info('Starting scheduler service...');
-        await scheduleJobs();
-        logger.info('Scheduler service started successfully');
-    } catch (error) {
-        logger.error('Failed to start scheduler', {
-            error: error instanceof Error ? error.message : String(error)
-        });
-        await shutdown();
-    }
+  try {
+    logger.info("Starting scheduler service...");
+    await scheduleJobs();
+    logger.info("Scheduler service started successfully");
+  } catch (error) {
+    logger.error("Failed to start scheduler", {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    await shutdown();
+  }
 }
 
 // Handle process signals
-process.on('SIGTERM', shutdown);
-process.on('SIGINT', shutdown);
+process.on("SIGTERM", shutdown);
+process.on("SIGINT", shutdown);
 
 // Start the service
 start();
