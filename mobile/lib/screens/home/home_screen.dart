@@ -31,8 +31,6 @@ class _HomeScreenState extends State<HomeScreen> {
       debugPrint('[HomeScreen] Initializing providers');
       context.read<TripProvider>().initialize();
       debugPrint('[HomeScreen] TripProvider initialized');
-      context.read<FeedProvider>().loadHomeFeed(refresh: true);
-      debugPrint('[HomeScreen] FeedProvider loadHomeFeed called');
     });
   }
 
