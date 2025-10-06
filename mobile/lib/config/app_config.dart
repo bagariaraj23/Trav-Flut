@@ -5,14 +5,16 @@ class AppConfig {
   static const String _defaultBaseUrl = 'http://localhost:3000/api';
 
   // For debugging: set this to true to bypass dotenv and use hardcoded values
-  static const bool _useHardcodedConfig = true;
+  // Set this to `true` only when you explicitly want to force the hardcoded URL
+  // (useful for quick local debugging). Default is false so .env values are used.
+  static const bool _useHardcodedConfig = false;
 
   // Hardcoded configuration for debugging
   static const String _hardcodedBaseUrl = 'http://192.168.0.110:3000/api';
 
   // API Configuration
   static String get apiBaseUrl {
-    // Use hardcoded config if enabled
+    // Use hardcoded config only if explicitly enabled
     if (_useHardcodedConfig) {
       if (kDebugMode) {
         debugPrint(
@@ -22,11 +24,36 @@ class AppConfig {
     }
 
     try {
-      final url = dotenv.env['API_BASE_URL'] ?? _defaultBaseUrl;
-      if (kDebugMode) {
-        debugPrint('[AppConfig] Using API base URL: $url');
+      final envUrl = dotenv.env['API_BASE_URL'];
+
+      // Prefer a valid value from the .env file when present
+      if (envUrl != null && envUrl.isNotEmpty) {
+        try {
+          final uri = Uri.parse(envUrl);
+          if (uri.hasScheme && uri.hasAuthority) {
+            if (kDebugMode) {
+              debugPrint('[AppConfig] Using API base URL from .env: $envUrl');
+            }
+            return envUrl;
+          } else {
+            if (kDebugMode) {
+              debugPrint(
+                  '[AppConfig] .env API_BASE_URL appears invalid, falling back');
+            }
+          }
+        } catch (_) {
+          if (kDebugMode) {
+            debugPrint(
+                '[AppConfig] Failed to parse .env API_BASE_URL, falling back');
+          }
+        }
       }
-      return url;
+
+      // No usable .env value found -> use default
+      if (kDebugMode) {
+        debugPrint('[AppConfig] Using default API base URL: $_defaultBaseUrl');
+      }
+      return _defaultBaseUrl;
     } catch (e) {
       if (kDebugMode) {
         debugPrint('[AppConfig] Error getting API base URL, using default: $e');
@@ -90,7 +117,11 @@ class AppConfig {
 
       // Try different possible paths
       final possiblePaths = [
+        // Common locations where the .env might be placed depending on how you
+        // run the app (project root vs. mobile package root).
         '.env',
+        'mobile/.env',
+        '../mobile/.env',
         'assets/.env',
         '../.env',
       ];

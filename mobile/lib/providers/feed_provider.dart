@@ -35,6 +35,11 @@ class FeedProvider extends ChangeNotifier {
   // Home Feed Methods
   Future<void> loadHomeFeed({bool refresh = false}) async {
     try {
+      // Prevent concurrent loads: if a load is already in progress, skip this call.
+      if (_isHomeFeedLoading) {
+        debugPrint('[FeedProvider] loadHomeFeed already in progress, skipping');
+        return;
+      }
       if (refresh) {
         _homeFeedPage = 1;
         _homeFeedPosts.clear();
