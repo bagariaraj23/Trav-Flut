@@ -104,67 +104,39 @@ export const createTripSchema = z
         );
         return val;
       }),
-    startDate: z
-      .union([
-        z.string().refine((date) => {
-          if (!date) return true;
+    startDate: z.string().refine((date) => {
+      // Try to parse the date string
+      const parsedDate = new Date(date);
 
-          // Try to parse the date string
-          const parsedDate = new Date(date);
+      // Check if it's a valid date
+      if (isNaN(parsedDate.getTime())) {
+        console.log(`[DEBUG] Invalid date string received: ${date}`);
+        return false;
+      }
 
-          // Check if it's a valid date
-          if (isNaN(parsedDate.getTime())) {
-            console.log(`[DEBUG] Invalid date string received: ${date}`);
-            return false;
-          }
+      // Check if it's not in the past
+      const now = new Date();
+      now.setHours(0, 0, 0, 0); // Start of today
 
-          // Check if it's not in the past
-          const now = new Date();
-          now.setHours(0, 0, 0, 0); // Start of today
+      console.log(`[DEBUG] Parsed start date: ${parsedDate.toISOString()}`);
+      console.log(`[DEBUG] Today start: ${now.toISOString()}`);
+      console.log(`[DEBUG] Is valid date: ${parsedDate >= now}`);
 
-          console.log(`[DEBUG] Parsed start date: ${parsedDate.toISOString()}`);
-          console.log(`[DEBUG] Today start: ${now.toISOString()}`);
-          console.log(`[DEBUG] Is valid date: ${parsedDate >= now}`);
+      return parsedDate >= now;
+    }, "Start date is required and cannot be in the past"),
+    endDate: z.string().refine((date) => {
+      // Try to parse the date string
+      const parsedDate = new Date(date);
 
-          return parsedDate >= now;
-        }, "Start date cannot be in the past and must be a valid date format"),
-        z.null(),
-        z.undefined(),
-      ])
-      .optional()
-      .transform((val) => {
-        console.log(
-          `[DEBUG] startDate validation - received: ${val}, type: ${typeof val}`
-        );
-        return val;
-      }),
-    endDate: z
-      .union([
-        z.string().refine((date) => {
-          if (!date) return true;
+      // Check if it's a valid date
+      if (isNaN(parsedDate.getTime())) {
+        console.log(`[DEBUG] Invalid end date string received: ${date}`);
+        return false;
+      }
 
-          // Try to parse the date string
-          const parsedDate = new Date(date);
-
-          // Check if it's a valid date
-          if (isNaN(parsedDate.getTime())) {
-            console.log(`[DEBUG] Invalid end date string received: ${date}`);
-            return false;
-          }
-
-          console.log(`[DEBUG] Parsed end date: ${parsedDate.toISOString()}`);
-          return true;
-        }, "End date must be a valid date format"),
-        z.null(),
-        z.undefined(),
-      ])
-      .optional()
-      .transform((val) => {
-        console.log(
-          `[DEBUG] endDate validation - received: ${val}, type: ${typeof val}`
-        );
-        return val;
-      }),
+      console.log(`[DEBUG] Parsed end date: ${parsedDate.toISOString()}`);
+      return true;
+    }, "End date is required and must be a valid date"),
     destinations: z
       .array(
         z
