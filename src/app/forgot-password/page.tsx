@@ -21,14 +21,22 @@ export default function ForgotPasswordPage() {
     if (password !== confirmPassword) return setMessage("Passwords do not match.");
     if (password.length < 8) return setMessage("Password must be at least 8 characters long.");
 
+    // Show confirmation dialog
+    const confirmed = window.confirm(
+      "Are you sure you want to reset your password? You will need to use the new password to login."
+    );
+
     try {
+      if (!confirmed) {
+        return;
+      }
+      
       setLoading(true);
-      await axios.post("http://192.168.18.165:3000/api/auth/reset-password", {
+      await axios.post("http://192.168.1.101:3000/api/auth/reset-password", {
         token,
         newPassword: password,
       });
-      setMessage("✅ Password reset successful! Redirecting to login...");
-      setTimeout(() => router.push("/login"), 2000);
+      router.replace("/reset-success");
     } catch (err: any) {
       setMessage(
         err.response?.data?.message || "❌ Failed to reset password. Try again."

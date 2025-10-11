@@ -16,6 +16,7 @@ import 'package:tripthread/screens/auth/login_screen.dart';
 import 'package:tripthread/screens/auth/signup_screen.dart';
 import 'package:tripthread/screens/auth/forgot_password_screen.dart';
 import 'package:tripthread/screens/auth/reset_password_screen.dart';
+import 'package:tripthread/screens/auth/reset_password_success_screen.dart';
 import 'package:tripthread/screens/home/home_screen.dart';
 import 'package:tripthread/screens/profile/profile_screen.dart';
 import 'package:tripthread/screens/profile/edit_profile_screen.dart';
@@ -245,6 +246,10 @@ class TripThreadAppRouter extends StatelessWidget {
             final token = state.uri.queryParameters['t'];
             return ResetPasswordScreen(token: token);
           },
+        ),
+        GoRoute(
+          path: '/reset-success',
+          builder: (context, state) => const ResetPasswordSuccessScreen(),
         ),
         GoRoute(
           path: '/home',

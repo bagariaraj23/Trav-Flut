@@ -41,22 +41,51 @@ export async function requestReset(payload: unknown, ctx?: { ip?: string; userAg
 export async function resetWithToken(payload: unknown) {
   const { token, newPassword } = resetSchema.parse(payload);
   const tokenHash = crypto.createHash("sha256").update(token).digest();
+  
   const reset = await prisma.passwordReset.findUnique({ where: { tokenHash } });
-  if (!reset || reset.usedAt || reset.expiresAt < new Date()) return;
+  
+  if (!reset) {
+    throw new Error("Invalid reset token");
+  }
+  
+  if (reset.usedAt) {
+    throw new Error("This reset link has already been used");
+  }
+  
+  if (reset.expiresAt < new Date()) {
+    throw new Error("This reset link has expired");
+  }
 
   const user = await prisma.user.findUnique({ where: { id: reset.userId } });
-  if (!user || (user as any).deletedAt) return;
+  if (!user || (user as any).deletedAt) {
+    throw new Error("Invalid user account");
+  }
 
-  const pwHash = await bcrypt.hash(newPassword, 10);
-  await prisma.user.update({ where: { id: user.id }, data: { password: pwHash } });
+  const pwHash = await bcrypt.hash(newPassword, 12);  // Using same salt rounds as AuthService
+  
+  // Use a transaction to ensure atomicity
+  await prisma.$transaction([
+    // Update password
+    prisma.user.update({
+      where: { id: user.id },
+      data: { password: pwHash }
+    }),
+    // Mark token as used
+    prisma.passwordReset.update({
+      where: { id: reset.id },
+      data: { usedAt: new Date() }
+    })
+  ]);
 
-  await prisma.passwordReset.update({ where: { id: reset.id }, data: { usedAt: new Date() } });
-
+  // Revoke all refresh tokens for security
   await revokeAllRefreshTokens(user.id);
 
-  await recordSecurityEvent({ userId: user.id, type: "PASSWORD_RESET_SUCCESS" });
-  await recordSecurityEvent({ userId: user.id, type: "PASSWORD_CHANGED" });
-  await sendSecurityEmail({ to: user.email });
+  // Record security events and send email
+  await Promise.all([
+    recordSecurityEvent({ userId: user.id, type: "PASSWORD_RESET_SUCCESS" }),
+    recordSecurityEvent({ userId: user.id, type: "PASSWORD_CHANGED" }),
+    sendSecurityEmail({ to: user.email })
+  ]);
 }
 
 export async function cleanupExpiredResets() {

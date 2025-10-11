@@ -11,7 +11,7 @@ class ApiService {
   // static const String baseUrl = 'http://localhost:3000/api';
   // static const String baseUrl = 'http://10.61.114.100:3000/api';
   // static const String baseUrl = 'http://192.168.0.110:3000/api';
-  static const String baseUrl = 'http://192.168.18.165:3000/api';
+  static const String baseUrl = 'http://192.168.1.101:3000/api';
   // static const String baseUrl = 'http://192.168.0.111:3000/api';
 
   final Dio _dio;
@@ -235,8 +235,8 @@ class ApiService {
 
       debugPrint('[ApiService] Forgot password response: ${response.statusCode}');
       return ApiResponse<void>(
-        success: response.data['success'],
-        error: response.data['message'],
+        success: response.data['ok'] ?? false,
+        message: response.data['message'],
       );
     } on DioException catch (e) {
       debugPrint('[ApiService] Forgot password DioException: ${e.message}');

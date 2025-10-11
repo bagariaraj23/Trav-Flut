@@ -1,0 +1,44 @@
+import 'package:flutter/material.dart';
+
+class ResetPasswordSuccessScreen extends StatelessWidget {
+  const ResetPasswordSuccessScreen({Key? key}) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    return WillPopScope(
+      onWillPop: () async => false, // Prevent back button
+      child: Scaffold(
+        appBar: AppBar(
+          automaticallyImplyLeading: false, // Remove back button
+        ),
+        body: SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.all(24.0),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(
+                  Icons.check_circle_outline,
+                  color: Colors.green,
+                  size: 64,
+                ),
+                const SizedBox(height: 24),
+                Text(
+                  'Password Reset Successful!',
+                  style: Theme.of(context).textTheme.titleLarge,
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  'Your password has been successfully reset. You can now log in with your new credentials.',
+                  style: Theme.of(context).textTheme.bodyMedium,
+                  textAlign: TextAlign.center,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}

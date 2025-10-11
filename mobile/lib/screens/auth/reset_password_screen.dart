@@ -44,6 +44,38 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
       return;
     }
 
+    // Show confirmation dialog
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          title: const Text('Confirm Password Reset'),
+          content: const Text(
+            'Are you sure you want to reset your password? '
+            'You will need to use the new password to login.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              style: TextButton.styleFrom(
+                foregroundColor: Theme.of(context).colorScheme.primary,
+              ),
+              child: const Text('Reset Password'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirmed != true || !mounted) return;
+
     final authProvider = context.read<AuthProvider>();
     final success = await authProvider.resetPassword(
       token: token,
@@ -51,14 +83,8 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
     );
 
     if (success && mounted) {
-      // Show success message and navigate to login
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Password reset successfully! You can now sign in with your new password.'),
-          backgroundColor: Colors.green,
-        ),
-      );
-      context.go('/login');
+      // Navigate to success page and prevent going back
+      context.go('/reset-success');
     } else if (mounted) {
       // Error is already handled by AuthProvider
       authProvider.markErrorAsShown();
