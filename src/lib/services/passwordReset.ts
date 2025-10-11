@@ -40,7 +40,6 @@ export async function requestReset(payload: unknown, ctx?: { ip?: string; userAg
 
 export async function resetWithToken(payload: unknown) {
   const { token, newPassword } = resetSchema.parse(payload);
-
   const tokenHash = crypto.createHash("sha256").update(token).digest();
   const reset = await prisma.passwordReset.findUnique({ where: { tokenHash } });
   if (!reset || reset.usedAt || reset.expiresAt < new Date()) return;
