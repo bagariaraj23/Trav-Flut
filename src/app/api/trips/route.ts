@@ -169,6 +169,26 @@ export async function POST(request: NextRequest) {
                 },
               });
 
+              // Seed PlaceOnTrip with destinationPlaceIds
+              if (
+                Array.isArray(body.destinationPlaceIds) &&
+                body.destinationPlaceIds.length > 0
+              ) {
+                const values = body.destinationPlaceIds
+                  .filter((id: any) => typeof id === "string")
+                  .map((placeId: string, idx: number) => ({
+                    tripId: (newTrip as any).id,
+                    placeId,
+                    order: idx,
+                  }));
+                if (values.length > 0) {
+                  await (tx as any).placeOnTrip.createMany({
+                    data: values,
+                    skipDuplicates: true,
+                  });
+                }
+              }
+
               // Log trip creation for analytics
               console.log(
                 `[DEBUG] Trip created successfully: ${newTrip.id} by user ${userId}`
@@ -191,14 +211,14 @@ export async function POST(request: NextRequest) {
               updatedAt: trip.updatedAt.toISOString(),
               user: trip.user
                 ? {
-                  ...trip.user,
-                  username: trip.user.username ?? undefined,
-                  name: trip.user.name ?? undefined,
-                  avatarUrl: trip.user.avatarUrl ?? undefined,
-                  bio: trip.user.bio ?? undefined,
-                  createdAt: trip.user.createdAt.toISOString(),
-                  updatedAt: trip.user.updatedAt.toISOString(),
-                }
+                    ...trip.user,
+                    username: trip.user.username ?? undefined,
+                    name: trip.user.name ?? undefined,
+                    avatarUrl: trip.user.avatarUrl ?? undefined,
+                    bio: trip.user.bio ?? undefined,
+                    createdAt: trip.user.createdAt.toISOString(),
+                    updatedAt: trip.user.updatedAt.toISOString(),
+                  }
                 : undefined,
             };
 
@@ -253,12 +273,14 @@ export async function POST(request: NextRequest) {
                 // Provide more specific error messages for date issues
                 if (firstError.path.includes("startDate")) {
                   throw new ValidationError(
-                    `Start date validation failed: ${firstError.message
+                    `Start date validation failed: ${
+                      firstError.message
                     }. Received: ${body?.startDate || "undefined"}`
                   );
                 } else if (firstError.path.includes("endDate")) {
                   throw new ValidationError(
-                    `End date validation failed: ${firstError.message
+                    `End date validation failed: ${
+                      firstError.message
                     }. Received: ${body?.endDate || "undefined"}`
                   );
                 } else {
@@ -355,14 +377,14 @@ export async function GET(request: NextRequest) {
             updatedAt: trip.updatedAt.toISOString(),
             user: trip.user
               ? {
-                ...trip.user,
-                username: trip.user.username ?? undefined,
-                name: trip.user.name ?? undefined,
-                avatarUrl: trip.user.avatarUrl ?? undefined,
-                bio: trip.user.bio ?? undefined,
-                createdAt: trip.user.createdAt.toISOString(),
-                updatedAt: trip.user.updatedAt.toISOString(),
-              }
+                  ...trip.user,
+                  username: trip.user.username ?? undefined,
+                  name: trip.user.name ?? undefined,
+                  avatarUrl: trip.user.avatarUrl ?? undefined,
+                  bio: trip.user.bio ?? undefined,
+                  createdAt: trip.user.createdAt.toISOString(),
+                  updatedAt: trip.user.updatedAt.toISOString(),
+                }
               : undefined,
           }));
 

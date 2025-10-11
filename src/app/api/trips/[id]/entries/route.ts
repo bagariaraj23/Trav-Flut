@@ -126,6 +126,7 @@ export async function POST(
           gpsCoordinates: validatedData.gpsCoordinates
             ? JSON.stringify(validatedData.gpsCoordinates)
             : undefined,
+          placeId: validatedData.placeId ?? undefined,
         },
         include: {
           author: {
