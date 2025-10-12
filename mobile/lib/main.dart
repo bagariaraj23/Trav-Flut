@@ -24,6 +24,7 @@ import 'package:tripthread/screens/trip/create_trip_screen.dart';
 import 'package:tripthread/screens/trip/trip_detail_screen.dart';
 import 'package:tripthread/screens/trip/trip_thread_screen.dart';
 import 'package:tripthread/screens/profile/follow_requests_screen.dart';
+import 'package:tripthread/screens/settings/settings_screen.dart';
 import 'package:tripthread/utils/app_theme.dart';
 import 'package:tripthread/utils/error_handler.dart';
 
@@ -301,6 +302,10 @@ class TripThreadAppRouter extends StatelessWidget {
             debugPrint('[Router] Navigating to FollowRequestsScreen');
             return const FollowRequestsScreen();
           },
+        ),
+        GoRoute(
+          path: '/settings',
+          builder: (context, state) => const SettingsScreen(),
         ),
       ],
     );
