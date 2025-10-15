@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 
 class AppConfig {
   static const String _defaultBaseUrl = 'http://localhost:3000/api';
+  static const String _defaultMapboxToken = '';
 
   // For debugging: set this to true to bypass dotenv and use hardcoded values
   // Set this to `true` only when you explicitly want to force the hardcoded URL
@@ -59,6 +60,34 @@ class AppConfig {
         debugPrint('[AppConfig] Error getting API base URL, using default: $e');
       }
       return _defaultBaseUrl;
+    }
+  }
+
+  // Mapbox Configuration
+  static String get mapboxAccessToken {
+    // Use hardcoded config if enabled
+    if (_useHardcodedConfig) {
+      return _defaultMapboxToken;
+    }
+
+    try {
+      final envToken = dotenv.env['MAPBOX_ACCESS_TOKEN'];
+      if (envToken != null && envToken.isNotEmpty) {
+        if (kDebugMode) {
+          debugPrint('[AppConfig] Using Mapbox token from .env');
+        }
+        return envToken;
+      }
+
+      if (kDebugMode) {
+        debugPrint('[AppConfig] Using default Mapbox token');
+      }
+      return _defaultMapboxToken;
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('[AppConfig] Error getting Mapbox token, using default: $e');
+      }
+      return _defaultMapboxToken;
     }
   }
 

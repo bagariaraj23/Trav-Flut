@@ -1,10 +1,12 @@
 import 'package:dio/dio.dart';
 import 'package:tripthread/models/api_response.dart';
+import 'package:tripthread/models/api_response_with_place.dart';
 import 'package:tripthread/models/user.dart';
 import 'package:tripthread/models/follow_status.dart';
 import 'package:tripthread/models/trip.dart';
 import 'package:tripthread/models/pagination.dart';
 import 'package:tripthread/models/trip_join_request.dart';
+import 'package:tripthread/models/place.dart';
 import 'package:tripthread/services/storage_service.dart';
 import 'package:tripthread/config/app_config.dart';
 import 'package:flutter/foundation.dart';
@@ -695,6 +697,140 @@ class ApiService {
       return ApiResponse<List<FollowRequestDto>>(
         success: false,
         error: 'An unexpected error occurred',
+      );
+    }
+  }
+
+  // Place endpoints
+  Future<ApiResponse<List<Place>>> searchPlaces({
+    required String query,
+    double? lat,
+    double? lng,
+    String? placeType,
+    int limit = 20,
+  }) async {
+    try {
+      debugPrint(
+          '[ApiService] Searching places: query=$query, lat=$lat, lng=$lng, limit=$limit');
+      final response = await _dio.get('/places/search', queryParameters: {
+        'q': query,
+        if (lat != null) 'lat': lat,
+        if (lng != null) 'lng': lng,
+        if (placeType != null) 'placeType': placeType,
+        'limit': limit,
+      });
+
+      if (response.data['success'] && response.data['data'] != null) {
+        final places = (response.data['data'] as List)
+            .map((json) => Place.fromJson(json))
+            .toList();
+        return ApiResponse<List<Place>>(
+          success: true,
+          data: places,
+        );
+      } else {
+        return ApiResponse<List<Place>>(
+          success: false,
+          error: response.data['error'] ?? 'Failed to search places',
+        );
+      }
+    } on DioException catch (e) {
+      debugPrint('[ApiService] Search places DioException: ${e.message}');
+      return ApiResponse<List<Place>>(
+        success: false,
+        error: e.response?.data['error'] ?? 'Network error occurred',
+      );
+    }
+  }
+
+  Future<ApiResponse<ApiResponseWithPlace>> resolvePlace(
+      Place placeCandidate) async {
+    try {
+      debugPrint('[ApiService] Resolving place: ${placeCandidate.name}');
+      final response =
+          await _dio.post('/places/resolve', data: placeCandidate.toJson());
+
+      if (response.data['success'] && response.data['data'] != null) {
+        final data = response.data['data'];
+        return ApiResponse<ApiResponseWithPlace>(
+          success: true,
+          data: ApiResponseWithPlace(
+            success: true,
+            placeId: data['placeId'],
+            place: Place.fromJson(data['place']),
+          ),
+        );
+      } else {
+        return ApiResponse<ApiResponseWithPlace>(
+          success: false,
+          error: response.data['error'] ?? 'Failed to resolve place',
+        );
+      }
+    } on DioException catch (e) {
+      debugPrint('[ApiService] Resolve place DioException: ${e.message}');
+      return ApiResponse<ApiResponseWithPlace>(
+        success: false,
+        error: e.response?.data['error'] ?? 'Network error occurred',
+      );
+    }
+  }
+
+  Future<ApiResponse<List<PlaceOnTrip>>> getTripPlaces(String tripId) async {
+    try {
+      debugPrint('[ApiService] Getting places for trip: $tripId');
+      final response = await _dio.get('/trips/$tripId/places');
+
+      if (response.data['success'] && response.data['data'] != null) {
+        final places = (response.data['data'] as List)
+            .map((json) => PlaceOnTrip.fromJson(json))
+            .toList();
+        return ApiResponse<List<PlaceOnTrip>>(
+          success: true,
+          data: places,
+        );
+      } else {
+        return ApiResponse<List<PlaceOnTrip>>(
+          success: false,
+          error: response.data['error'] ?? 'Failed to get trip places',
+        );
+      }
+    } on DioException catch (e) {
+      debugPrint('[ApiService] Get trip places DioException: ${e.message}');
+      return ApiResponse<List<PlaceOnTrip>>(
+        success: false,
+        error: e.response?.data['error'] ?? 'Network error occurred',
+      );
+    }
+  }
+
+  Future<ApiResponse<void>> attachPlaceToTrip(
+    String tripId,
+    String placeId, {
+    DateTime? visitedAt,
+    int? dayIndex,
+    String? notes,
+    bool createThreadEntry = false,
+  }) async {
+    try {
+      debugPrint('[ApiService] Attaching place $placeId to trip: $tripId');
+      final response = await _dio.post('/trips/$tripId/places', data: {
+        'placeId': placeId,
+        if (visitedAt != null) 'visitedAt': visitedAt.toIso8601String(),
+        if (dayIndex != null) 'dayIndex': dayIndex,
+        if (notes != null) 'notes': notes,
+        'createThreadEntry': createThreadEntry,
+      });
+
+      return ApiResponse<void>(
+        success: response.data['success'],
+        error: response.data['error'],
+      );
+    } on DioException catch (e) {
+      debugPrint(
+          '[ApiService] Attach place to trip DioException: ${e.message}');
+      return ApiResponse<void>(
+        success: false,
+        error: e.response?.data['error'] ?? 'Network error occurred',
       );
     }
   }

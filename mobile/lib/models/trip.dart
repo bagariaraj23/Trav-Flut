@@ -1,5 +1,6 @@
 import 'package:json_annotation/json_annotation.dart';
 import 'package:tripthread/models/user.dart';
+import 'package:tripthread/models/place.dart';
 
 part 'trip.g.dart';
 
@@ -16,6 +17,11 @@ class Trip {
   final TripType? type;
   final String? coverMediaUrl;
   final TripStatus status;
+  final String? startLocationId;
+  final Place? startLocation;
+  final String? endLocationId;
+  final Place? endLocation;
+  final List<PlaceOnTrip>? placeVisits;
   final DateTime createdAt;
   final DateTime updatedAt;
   final User? user;
@@ -38,6 +44,11 @@ class Trip {
     this.type,
     this.coverMediaUrl,
     required this.status,
+    this.startLocationId,
+    this.startLocation,
+    this.endLocationId,
+    this.endLocation,
+    this.placeVisits,
     required this.createdAt,
     required this.updatedAt,
     this.user,
@@ -149,6 +160,8 @@ class TripThreadEntry {
   final String? mediaUrl;
   final String? locationName;
   final GpsCoordinates? gpsCoordinates;
+  final String? placeId;
+  final Place? place;
   final DateTime createdAt;
   final User author;
   final List<User>? taggedUsers;
@@ -163,6 +176,8 @@ class TripThreadEntry {
     this.mediaUrl,
     this.locationName,
     this.gpsCoordinates,
+    this.placeId,
+    this.place,
     required this.createdAt,
     required this.author,
     this.taggedUsers,
@@ -303,6 +318,7 @@ class CreateTripRequest {
   final DateTime? startDate;
   final DateTime? endDate;
   final List<String> destinations;
+  final List<String> destinationPlaceIds;
   final TripMood? mood;
   final TripType? type;
   final String? coverMediaUrl;
@@ -313,6 +329,7 @@ class CreateTripRequest {
     this.startDate,
     this.endDate,
     required this.destinations,
+    required this.destinationPlaceIds,
     this.mood,
     this.type,
     this.coverMediaUrl,
@@ -330,6 +347,7 @@ class CreateThreadEntryRequest {
   final String? mediaUrl;
   final String? locationName;
   final GpsCoordinates? gpsCoordinates;
+  final String? placeId;
   final List<String>? taggedUserIds;
 
   const CreateThreadEntryRequest({
@@ -338,6 +356,7 @@ class CreateThreadEntryRequest {
     this.mediaUrl,
     this.locationName,
     this.gpsCoordinates,
+    this.placeId,
     this.taggedUserIds,
   });
 

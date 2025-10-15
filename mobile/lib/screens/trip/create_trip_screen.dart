@@ -177,6 +177,7 @@ class _CreateTripScreenState extends State<CreateTripScreen> {
       startDate: _startDate,
       endDate: _endDate,
       destinations: _destinations,
+      destinationPlaceIds: _destinations.map((e) => e).toList(),
       mood: _selectedMood,
       type: _selectedType,
       coverMediaUrl: _selectedCoverFile != null
