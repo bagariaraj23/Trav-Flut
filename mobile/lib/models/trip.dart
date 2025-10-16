@@ -23,6 +23,8 @@ class Trip {
   final List<TripThreadEntry>? threadEntries;
   final TripFinalPost? finalPost;
   final TripCounts? counts;
+  final int? entryCount;
+  final int? participantCount;
 
   const Trip({
     required this.id,
@@ -43,6 +45,8 @@ class Trip {
     this.threadEntries,
     this.finalPost,
     this.counts,
+    this.entryCount,
+    this.participantCount,
   });
 
   factory Trip.fromJson(Map<String, dynamic> json) => _$TripFromJson(json);
@@ -67,6 +71,8 @@ class Trip {
     List<TripThreadEntry>? threadEntries,
     TripFinalPost? finalPost,
     TripCounts? counts,
+    int? entryCount,
+    int? participantCount,
   }) {
     return Trip(
       id: id ?? this.id,
@@ -87,6 +93,8 @@ class Trip {
       threadEntries: threadEntries ?? this.threadEntries,
       finalPost: finalPost ?? this.finalPost,
       counts: counts ?? this.counts,
+      entryCount: entryCount ?? this.entryCount,
+      participantCount: participantCount ?? this.participantCount,
     );
   }
 }
@@ -115,7 +123,7 @@ class TripParticipant {
   final String userId;
   final String role;
   final DateTime joinedAt;
-  final User user;
+  final User? user;
 
   const TripParticipant({
     required this.id,
@@ -123,7 +131,7 @@ class TripParticipant {
     required this.userId,
     required this.role,
     required this.joinedAt,
-    required this.user,
+    this.user,
   });
 
   factory TripParticipant.fromJson(Map<String, dynamic> json) =>

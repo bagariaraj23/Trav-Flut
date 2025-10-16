@@ -88,7 +88,17 @@ class _FollowRequestsScreenState extends State<FollowRequestsScreen> {
         title: const Text('Follow Requests'),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
-          onPressed: () => Navigator.of(context).pop(),
+          onPressed: () {
+            // This is the standard and most reliable way to navigate back.
+            // It preserves the state of the previous screen, including the selected tab.
+            if (context.canPop()) {
+              context.pop();
+            } else {
+              // This is a fallback in case there's no screen to pop to,
+              // which is unlikely in this flow but good practice to have.
+              context.go('/home');
+            }
+          },
         ),
       ),
       body: Consumer<UserProvider>(

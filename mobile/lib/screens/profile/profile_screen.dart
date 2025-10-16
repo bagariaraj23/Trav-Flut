@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:tripthread/providers/auth_provider.dart';
 import 'package:tripthread/providers/user_provider.dart';
+import 'package:tripthread/providers/trip_provider.dart';
 import 'package:tripthread/models/user.dart';
 import 'package:go_router/go_router.dart';
 
@@ -58,50 +59,57 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
     bool success = false;
     String actionMessage = '';
-    
+
     if (detailedStatus.isFollowing) {
       success = await userProvider.unfollowUser(widget.userId,
           currentUserId: authProvider.currentUser!.id);
-      actionMessage = success ? 'Successfully unfollowed user' : 'Failed to unfollow user';
+      actionMessage =
+          success ? 'Successfully unfollowed user' : 'Failed to unfollow user';
     } else if (detailedStatus.isRequestPending) {
       success = await userProvider.cancelFollowRequest(widget.userId);
-      actionMessage = success ? 'Follow request cancelled' : 'Failed to cancel follow request';
+      actionMessage = success
+          ? 'Follow request cancelled'
+          : 'Failed to cancel follow request';
     } else {
       success = await userProvider.sendFollowRequest(widget.userId);
-      actionMessage = success ? 'Follow request sent' : 'Failed to send follow request';
+      actionMessage =
+          success ? 'Follow request sent' : 'Failed to send follow request';
     }
 
     if (!mounted) return;
-    
+
     // Show appropriate message regardless of success/failure
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(success ? actionMessage : (userProvider.error ?? 'An error occurred')),
+        content: Text(success
+            ? actionMessage
+            : (userProvider.error ?? 'An error occurred')),
         backgroundColor: success ? Colors.green : Colors.red,
       ),
     );
 
     // Force refresh of profile data to ensure UI is in sync
     if (success) {
-      await userProvider.loadProfileData(widget.userId, authProvider.currentUser!.id);
+      await userProvider.loadProfileData(
+          widget.userId, authProvider.currentUser!.id);
     }
   }
 
   @override
   Widget build(BuildContext context) {
     debugPrint(
-    '[ProfileScreen] Build method called for userId: ${widget.userId}');
+        '[ProfileScreen] Build method called for userId: ${widget.userId}');
 
     // Consumer2 listens to both Auth and User providers for state changes.
-    return Consumer2<AuthProvider, UserProvider>(
-      builder: (context, authProvider, userProvider, child) {
+    return Consumer3<AuthProvider, UserProvider, TripProvider>(
+      builder: (context, authProvider, userProvider, tripProvider, child) {
         final currentUser = authProvider.currentUser;
         final user = userProvider.getUser(widget.userId);
         final stats = userProvider.getUserStats(widget.userId);
         final detailedStatus =
             userProvider.getDetailedFollowStatus(widget.userId);
         final isOwnProfile = currentUser?.id == widget.userId;
-        
+
         // Display a loading indicator only if the main user data is not yet available.
         if (userProvider.isLoading && user == null) {
           return const Scaffold(
@@ -125,42 +133,44 @@ class _ProfileScreenState extends State<ProfileScreen> {
           );
         }
 
-        debugPrint('[ProfileScreen] isOwnProfile: $isOwnProfile (currentUserId: ${currentUser?.id})');
+        debugPrint(
+            '[ProfileScreen] isOwnProfile: $isOwnProfile (currentUserId: ${currentUser?.id})');
         // debugPrint('[ProfileScreen] pendingRequests: ${}');
 
         return Scaffold(
-          appBar: AppBar(
-            title: Text(user.username ?? 'Profile'),
-            actions: _buildAppBarActions(
-              context,
-              isOwnProfile,
-              userProvider.pendingFollowRequests, // Data comes directly from the provider.
-            ),
-          ),
-
-          body: RefreshIndicator(
-            onRefresh: _refreshProfile,
-            child: SingleChildScrollView(
-              physics: const AlwaysScrollableScrollPhysics(),
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                children: [
-                  _buildProfileHeader(
-                    context,
-                    user,
-                    stats,
-                    isOwnProfile,
-                    detailedStatus?.isFollowing ?? false,
-                    detailedStatus?.isRequestPending ?? false,
-                    userProvider.isLoading, // Pass loading state for the button.
-                  ),
-                  const SizedBox(height: 24),
-                  _buildTripsSection(context, user, isOwnProfile),
-                ],
+            appBar: AppBar(
+              title: Text(user.username ?? 'Profile'),
+              actions: _buildAppBarActions(
+                context,
+                isOwnProfile,
+                userProvider
+                    .pendingFollowRequests, // Data comes directly from the provider.
+                tripProvider.pendingTripInvitations, // Add trip invitations
               ),
             ),
-          )
-        );
+            body: RefreshIndicator(
+              onRefresh: _refreshProfile,
+              child: SingleChildScrollView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  children: [
+                    _buildProfileHeader(
+                      context,
+                      user,
+                      stats,
+                      isOwnProfile,
+                      detailedStatus?.isFollowing ?? false,
+                      detailedStatus?.isRequestPending ?? false,
+                      userProvider
+                          .isLoading, // Pass loading state for the button.
+                    ),
+                    const SizedBox(height: 24),
+                    _buildTripsSection(context, user, isOwnProfile),
+                  ],
+                ),
+              ),
+            ));
       },
     );
   }
@@ -169,13 +179,48 @@ class _ProfileScreenState extends State<ProfileScreen> {
     BuildContext context,
     bool isOwnProfile,
     List<dynamic> pendingRequests,
+    List<dynamic> pendingTripInvitations,
   ) {
-    // The logic is now simple: if it's not your own profile, show nothing.
     if (!isOwnProfile) {
       return [];
     }
-    // Otherwise, build the action buttons.
+
     return [
+      // Trip Invitations Button
+      Stack(
+        alignment: Alignment.center,
+        children: [
+          IconButton(
+            icon: const Icon(Icons.mail_outline),
+            tooltip: 'Trip Invitations',
+            onPressed: () => context.push('/trip-invites'),
+          ),
+          if (pendingTripInvitations.isNotEmpty)
+            Positioned(
+              top: 8,
+              right: 8,
+              child: Container(
+                padding: const EdgeInsets.all(2),
+                decoration: BoxDecoration(
+                  color: Colors.red,
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                constraints: const BoxConstraints(
+                  minWidth: 14,
+                  minHeight: 14,
+                ),
+                child: Text(
+                  '${pendingTripInvitations.length}',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 8,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+              ),
+            ),
+        ],
+      ),
       Stack(
         alignment: Alignment.center,
         children: [
@@ -265,10 +310,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
           // Name and Privacy Indicator
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
+            mainAxisSize: MainAxisSize.min,
             children: [
-              Text(
-                user.name ?? 'User',
-                style: Theme.of(context).textTheme.headlineMedium,
+              Flexible(
+                child: Text(
+                  user.name ?? 'User',
+                  style: Theme.of(context).textTheme.headlineMedium,
+                  overflow: TextOverflow.ellipsis,
+                  maxLines: 1,
+                ),
               ),
               if (user.isPrivate) ...[
                 const SizedBox(width: 8),
@@ -287,6 +337,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
             Text(
               '@${user.username}',
               style: Theme.of(context).textTheme.bodyMedium,
+              overflow: TextOverflow.ellipsis,
+              maxLines: 1,
             ),
           ],
 
@@ -344,20 +396,22 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       Icon(
                         Icons.lock_outlined,
                         size: 32,
-                        color: Colors.grey[600],
+                        color: Colors.black87,
                       ),
                       const SizedBox(height: 8),
                       Text(
                         'This account is private',
-                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                              fontWeight: FontWeight.w600,
-                            ),
+                        style:
+                            Theme.of(context).textTheme.titleMedium?.copyWith(
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.black87,
+                                ),
                       ),
                       const SizedBox(height: 4),
                       Text(
                         'Follow to see their trips and posts',
                         style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                              color: Colors.grey[600],
+                              color: Colors.grey[800],
                             ),
                         textAlign: TextAlign.center,
                       ),
@@ -369,6 +423,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   width: double.infinity,
                   child: ElevatedButton(
                     onPressed: isLoading ? null : _handleFollowToggle,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Theme.of(context).colorScheme.primary,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                    ),
                     child: const Text('Send Follow Request'),
                   ),
                 ),
@@ -377,26 +436,67 @@ class _ProfileScreenState extends State<ProfileScreen> {
           else
             SizedBox(
               width: double.infinity,
-              child: ElevatedButton(
-                onPressed: isLoading ? null : _handleFollowToggle,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: isFollowing || isRequestPending
-                      ? Theme.of(context).colorScheme.outline
-                      : Theme.of(context).colorScheme.primary,
-                ),
-                child: isLoading
-                    ? const SizedBox(
-                        height: 16,
-                        width: 16,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : Text(
-                        isFollowing 
-                          ? 'Unfollow' 
-                          : isRequestPending 
-                            ? 'Cancel Request' 
-                            : 'Follow'
+              child: Consumer<UserProvider>(
+                builder: (context, userProvider, child) {
+                  final detailedStatus =
+                      userProvider.getDetailedFollowStatus(widget.userId);
+                  final actualIsFollowing =
+                      detailedStatus?.isFollowing ?? false;
+                  final actualIsRequestPending =
+                      detailedStatus?.isRequestPending ?? false;
+                  final isProcessing = userProvider.isLoading;
+
+                  // Use OutlinedButton for following/requested states
+                  if (actualIsFollowing || actualIsRequestPending) {
+                    return OutlinedButton(
+                      onPressed: isProcessing ? null : _handleFollowToggle,
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: Colors.grey[900],
+                        backgroundColor: Colors.grey[100],
+                        side: BorderSide(color: Colors.grey[400]!),
+                        padding: const EdgeInsets.symmetric(vertical: 12),
                       ),
+                      child: isProcessing
+                          ? const SizedBox(
+                              height: 16,
+                              width: 16,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : Text(
+                              actualIsFollowing ? 'Unfollow' : 'Cancel Request',
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                    );
+                  }
+
+                  // Use ElevatedButton for follow state
+                  return ElevatedButton(
+                    onPressed: isProcessing ? null : _handleFollowToggle,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Theme.of(context).colorScheme.primary,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                    ),
+                    child: isProcessing
+                        ? const SizedBox(
+                            height: 16,
+                            width: 16,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              valueColor:
+                                  AlwaysStoppedAnimation<Color>(Colors.white),
+                            ),
+                          )
+                        : Text(
+                            user.isPrivate ? 'Send Request' : 'Follow',
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                  );
+                },
               ),
             ),
         ],

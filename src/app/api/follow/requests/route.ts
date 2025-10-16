@@ -53,10 +53,10 @@ export async function POST(request: NextRequest) {
 
           if (existingFollow) {
             return NextResponse.json(
-              { 
-                success: false, 
+              {
+                success: false,
                 error: "Already following this user",
-                data: { id: existingFollow.id, status: "FOLLOWING" }
+                data: { id: existingFollow.id, status: "FOLLOWING" },
               },
               { status: 400 }
             );
@@ -73,14 +73,14 @@ export async function POST(request: NextRequest) {
 
           if (existingRequest) {
             return NextResponse.json(
-              { 
-                success: true, 
+              {
+                success: true,
                 message: "Follow request already pending",
-                data: { 
-                  id: existingRequest.id, 
+                data: {
+                  id: existingRequest.id,
                   status: existingRequest.status,
-                  createdAt: existingRequest.createdAt
-                }
+                  createdAt: existingRequest.createdAt,
+                },
               },
               { status: 200 }
             );

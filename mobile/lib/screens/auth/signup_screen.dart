@@ -119,6 +119,7 @@ class _SignupScreenState extends State<SignupScreen> {
                         authProvider.clearError();
                       }
                     },
+                    textCapitalization: TextCapitalization.words,
                   ),
 
                   const SizedBox(height: 16),

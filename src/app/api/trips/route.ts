@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { createTripSchema } from "@/lib/validation";
+import { validateTripStatus } from "@/lib/tripValidation";
 import { ApiResponse, TripResponse } from "@/types/api";
 import {
   withAuth,
@@ -10,6 +11,7 @@ import {
 } from "@/lib/middleware";
 import { PerformanceMonitor, ErrorTracker } from "@/lib/monitoring";
 import { NotFoundError, ConflictError, ValidationError } from "@/lib/errors";
+import { TripStatus } from "@prisma/client";
 
 // Create a new trip
 export async function POST(request: NextRequest) {
@@ -91,15 +93,10 @@ export async function POST(request: NextRequest) {
             const userId = authenticatedReq.user!.userId;
             console.log("[DEBUG] User ID:", userId);
 
-            // Check if user has an ongoing trip
-            const ongoingTrip = await prisma.trip.findFirst({
-              where: {
-                userId,
-                status: "ONGOING",
-              },
-            });
+            // Validate trip status
+            const { hasOngoingTrip } = await validateTripStatus(userId);
 
-            if (ongoingTrip) {
+            if (hasOngoingTrip) {
               throw new ConflictError(
                 "You already have an ongoing trip. Please end it before starting a new one."
               );
@@ -107,17 +104,29 @@ export async function POST(request: NextRequest) {
 
             // Create trip with transaction for data consistency
             const trip = await prisma.$transaction(async (tx) => {
-              const tripData = {
+              const tripData: any = {
                 ...validatedData,
                 userId,
-                startDate: validatedData.startDate
-                  ? new Date(validatedData.startDate)
-                  : null,
-                endDate: validatedData.endDate
-                  ? new Date(validatedData.endDate)
-                  : null,
-                status: "ONGOING" as const,
+                status: (() => {
+                  const now = new Date();
+                  const startDate = new Date(validatedData.startDate);
+                  // Set to start of day for comparison
+                  now.setHours(0, 0, 0, 0);
+                  startDate.setHours(0, 0, 0, 0);
+
+                  if (startDate > now) {
+                    return TripStatus.UPCOMING;
+                  }
+                  return TripStatus.ONGOING;
+                })(),
               };
+
+              if (validatedData.startDate) {
+                tripData.startDate = new Date(validatedData.startDate);
+              }
+              if (validatedData.endDate) {
+                tripData.endDate = new Date(validatedData.endDate);
+              }
 
               console.log(
                 "[DEBUG] Trip data for database:",
@@ -182,14 +191,14 @@ export async function POST(request: NextRequest) {
               updatedAt: trip.updatedAt.toISOString(),
               user: trip.user
                 ? {
-                    ...trip.user,
-                    username: trip.user.username ?? undefined,
-                    name: trip.user.name ?? undefined,
-                    avatarUrl: trip.user.avatarUrl ?? undefined,
-                    bio: trip.user.bio ?? undefined,
-                    createdAt: trip.user.createdAt.toISOString(),
-                    updatedAt: trip.user.updatedAt.toISOString(),
-                  }
+                  ...trip.user,
+                  username: trip.user.username ?? undefined,
+                  name: trip.user.name ?? undefined,
+                  avatarUrl: trip.user.avatarUrl ?? undefined,
+                  bio: trip.user.bio ?? undefined,
+                  createdAt: trip.user.createdAt.toISOString(),
+                  updatedAt: trip.user.updatedAt.toISOString(),
+                }
                 : undefined,
             };
 
@@ -244,14 +253,12 @@ export async function POST(request: NextRequest) {
                 // Provide more specific error messages for date issues
                 if (firstError.path.includes("startDate")) {
                   throw new ValidationError(
-                    `Start date validation failed: ${
-                      firstError.message
+                    `Start date validation failed: ${firstError.message
                     }. Received: ${body?.startDate || "undefined"}`
                   );
                 } else if (firstError.path.includes("endDate")) {
                   throw new ValidationError(
-                    `End date validation failed: ${
-                      firstError.message
+                    `End date validation failed: ${firstError.message
                     }. Received: ${body?.endDate || "undefined"}`
                   );
                 } else {
@@ -286,13 +293,20 @@ export async function GET(request: NextRequest) {
         try {
           const userId = authenticatedReq.user!.userId;
           const { searchParams } = new URL(authenticatedReq.url);
-          const status = searchParams.get("status") as
-            | "UPCOMING"
-            | "ONGOING"
-            | "ENDED"
-            | null;
+          const status = searchParams.get("status") as TripStatus | null;
 
-          const whereClause: any = { userId };
+          // Include trips where user is owner OR participant
+          const whereClause: any = {
+            OR: [
+              { userId }, // Trips owned by user
+              {
+                participants: {
+                  some: { userId }, // Trips where user is a participant
+                },
+              },
+            ],
+          };
+
           if (status) {
             whereClause.status = status;
           }
@@ -325,7 +339,8 @@ export async function GET(request: NextRequest) {
             take: 50, // Limit results for performance
           });
 
-          const tripsResponse: TripResponse[] = trips.map((trip) => ({
+          // Explicitly type trip as any to avoid TS error for .user property
+          const tripsResponse: TripResponse[] = trips.map((trip: any) => ({
             ...trip,
             startDate: trip.startDate
               ? trip.startDate.toISOString()
@@ -340,14 +355,14 @@ export async function GET(request: NextRequest) {
             updatedAt: trip.updatedAt.toISOString(),
             user: trip.user
               ? {
-                  ...trip.user,
-                  username: trip.user.username ?? undefined,
-                  name: trip.user.name ?? undefined,
-                  avatarUrl: trip.user.avatarUrl ?? undefined,
-                  bio: trip.user.bio ?? undefined,
-                  createdAt: trip.user.createdAt.toISOString(),
-                  updatedAt: trip.user.updatedAt.toISOString(),
-                }
+                ...trip.user,
+                username: trip.user.username ?? undefined,
+                name: trip.user.name ?? undefined,
+                avatarUrl: trip.user.avatarUrl ?? undefined,
+                bio: trip.user.bio ?? undefined,
+                createdAt: trip.user.createdAt.toISOString(),
+                updatedAt: trip.user.updatedAt.toISOString(),
+              }
               : undefined,
           }));
 

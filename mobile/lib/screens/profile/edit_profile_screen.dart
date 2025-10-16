@@ -187,6 +187,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                   }
                   return null;
                 },
+                textCapitalization: TextCapitalization.words,
               ),
 
               const SizedBox(height: 16),

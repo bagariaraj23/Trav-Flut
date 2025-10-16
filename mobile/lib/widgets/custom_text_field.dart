@@ -13,6 +13,7 @@ class CustomTextField extends StatelessWidget {
   final int? maxLength;
   final bool enabled;
   final ValueChanged<String>? onChanged;
+  final TextCapitalization textCapitalization;
 
   const CustomTextField({
     Key? key,
@@ -28,6 +29,7 @@ class CustomTextField extends StatelessWidget {
     this.maxLength,
     this.enabled = true,
     this.onChanged,
+    this.textCapitalization = TextCapitalization.none,
   }) : super(key: key);
 
   @override
@@ -51,6 +53,7 @@ class CustomTextField extends StatelessWidget {
           maxLength: maxLength,
           enabled: enabled,
           onChanged: onChanged,
+          textCapitalization: textCapitalization,
           decoration: InputDecoration(
             hintText: hintText ?? label,
             prefixIcon: prefixIcon != null ? Icon(prefixIcon) : null,
