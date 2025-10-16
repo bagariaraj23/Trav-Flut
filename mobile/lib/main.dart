@@ -25,8 +25,8 @@ import 'package:tripthread/screens/trip/trip_detail_screen.dart';
 import 'package:tripthread/screens/trip/trip_thread_screen.dart';
 import 'package:tripthread/screens/trip/trip_participants_screen.dart';
 import 'package:tripthread/screens/profile/follow_requests_screen.dart';
-import 'package:tripthread/screens/settings/settings_screen.dart';
 import 'package:tripthread/screens/profile/trip_invitations_screen.dart';
+import 'package:tripthread/screens/settings/settings_screen.dart';
 import 'package:tripthread/utils/app_theme.dart';
 import 'package:tripthread/utils/error_handler.dart';
 import 'package:tripthread/config/app_config.dart';
@@ -161,11 +161,12 @@ class _TripThreadAppRouterState extends State<TripThreadAppRouter> {
 
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
     final deepLinkService = Provider.of<DeepLinkService>(context, listen: false);
-    final deepLinkService = Provider.of<DeepLinkService>(context, listen: false);
 
     // Create or recreate router only when the AuthProvider instance changes
     if (_router == null || authProvider != _lastAuthProvider) {
       _lastAuthProvider = authProvider;
+      _deepLinkService = deepLinkService;
+
       _router = GoRouter(
         initialLocation: '/login',
         errorBuilder: (context, state) => Scaffold(
@@ -200,18 +201,18 @@ class _TripThreadAppRouterState extends State<TripThreadAppRouter> {
 
           if (isLoading) return null;
 
-          if (!isLoggedIn && 
-              location != '/login' && 
-              location != '/signup' && 
-              location != '/forgot-password' && 
+          if (!isLoggedIn &&
+              location != '/login' &&
+              location != '/signup' &&
+              location != '/forgot-password' &&
               !location.startsWith('/reset-password')) {
             return '/login';
           }
 
           if (isLoggedIn && (
-              location == '/login' || 
-              location == '/signup' || 
-              location == '/forgot-password' || 
+              location == '/login' ||
+              location == '/signup' ||
+              location == '/forgot-password' ||
               location.startsWith('/reset-password'))) {
             return '/home';
           }
@@ -247,24 +248,8 @@ class _TripThreadAppRouterState extends State<TripThreadAppRouter> {
             builder: (context, state) => const HomeScreen(),
           ),
           GoRoute(
-            path: '/reset-password',
-            builder: (context, state) {
-              final token = state.uri.queryParameters['t'];
-              return ResetPasswordScreen(token: token);
-            },
-          ),
-          GoRoute(
-            path: '/reset-success',
-            builder: (context, state) => const ResetPasswordSuccessScreen(),
-          ),
-          GoRoute(
-            path: '/home', 
-            builder: (context, state) => const HomeScreen()
-          ),
-          GoRoute(
-            path: '/trips',
-            builder: (context, state) => const HomeScreen(initialTab: 1)
-          ),
+              path: '/trips',
+              builder: (context, state) => const HomeScreen(initialTab: 1)),
           GoRoute(
             path: '/profile/:userId',
             builder: (context, state) {
@@ -273,13 +258,11 @@ class _TripThreadAppRouterState extends State<TripThreadAppRouter> {
             },
           ),
           GoRoute(
-            path: '/edit-profile',
-            builder: (context, state) => const EditProfileScreen()
-          ),
+              path: '/edit-profile',
+              builder: (context, state) => const EditProfileScreen()),
           GoRoute(
-            path: '/create-trip',
-            builder: (context, state) => const CreateTripScreen()
-          ),
+              path: '/create-trip',
+              builder: (context, state) => const CreateTripScreen()),
           GoRoute(
             path: '/trip/:tripId',
             builder: (context, state) {
@@ -330,57 +313,6 @@ class _TripThreadAppRouterState extends State<TripThreadAppRouter> {
 
   @override
   Widget build(BuildContext context) {
-<<<<<<< HEAD
-    return Consumer<AuthProvider>(
-      builder: (context, authProvider, _) {
-        final router = _createRouter(authProvider);
-        
-        // Set up deep link service with router
-        final deepLinkService = Provider.of<DeepLinkService>(context, listen: false);
-        deepLinkService.setRouter(router);
-        deepLinkService.initialize();
-        
-        return MaterialApp.router(
-          title: 'TripThread',
-          theme: AppTheme.lightTheme,
-          darkTheme: AppTheme.darkTheme,
-          themeMode: ThemeMode.system,
-          routerConfig: router,
-          debugShowCheckedModeBanner: false,
-          builder: (context, child) {
-            final authProvider = context.watch<AuthProvider>();
-            final connectivity = context.watch<ConnectivityService>();
-            return Stack(
-              children: [
-                child ?? const SizedBox.shrink(),
-                // Splash overlay listens only to routingNotifier to avoid heavy rebuilds
-                AnimatedBuilder(
-                  animation: authProvider.routingNotifier,
-                  builder: (context, _) {
-                    if (!authProvider.isLoading) return const SizedBox.shrink();
-                    debugPrint('Rendering SplashScreen');
-                    return const IgnorePointer(
-                      ignoring: false,
-                      child: SplashScreen(),
-                    );
-                  },
-                ),
-                // Offline banner
-                if (!connectivity.isConnected)
-                  Positioned(
-                    top: MediaQuery.of(context).padding.top,
-                    left: 0,
-                    right: 0,
-                    child: Container(
-                      padding: const EdgeInsets.all(8),
-                      color: Colors.red,
-                      child: const Text(
-                        'No internet connection',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(color: Colors.white),
-                      ),
-                    ),
-=======
     // Use the existing router instance; it must be non-null after didChangeDependencies
     final router = _router!;
 
@@ -422,7 +354,6 @@ class _TripThreadAppRouterState extends State<TripThreadAppRouter> {
                     'No internet connection',
                     textAlign: TextAlign.center,
                     style: TextStyle(color: Colors.white),
->>>>>>> refs/heads/main
                   ),
                 ),
               ),
@@ -431,139 +362,4 @@ class _TripThreadAppRouterState extends State<TripThreadAppRouter> {
       },
     );
   }
-<<<<<<< HEAD
-
-  static String? _lastLocation;
-
-  GoRouter _createRouter(AuthProvider authProvider) {
-    final router = GoRouter(
-      initialLocation: '/login',
-      errorBuilder: (context, state) => Scaffold(
-        body: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Icon(Icons.error, size: 64, color: Colors.red),
-              const SizedBox(height: 16),
-              const Text('Page not found'),
-              const SizedBox(height: 16),
-              ElevatedButton(
-                onPressed: () => context.go('/home'),
-                child: const Text('Go Home'),
-              ),
-            ],
-          ),
-        ),
-      ),
-      refreshListenable: authProvider.routingNotifier,
-      redirect: (context, state) {
-        final authProvider = Provider.of<AuthProvider>(context, listen: false);
-        final isLoading = authProvider.isLoading;
-        final isLoggedIn = authProvider.isAuthenticated;
-        final location = state.uri.toString();
-
-        if (location != _lastLocation) {
-          print('[GoRouter] location changed to: $location');
-          _lastLocation = location;
-        }
-
-        if (isLoading) return null;
-
-        if (!isLoggedIn && location != '/login' && location != '/signup' && location != '/forgot-password' && !location.startsWith('/reset-password')) {
-          return '/login';
-        }
-
-        if (isLoggedIn && (location == '/login' || location == '/signup' || location == '/forgot-password' || location.startsWith('/reset-password'))) {
-          return '/home';
-        }
-
-        return null;
-      },
-      routes: [
-        GoRoute(
-          path: '/login',
-          builder: (context, state) => const LoginScreen(),
-        ),
-        GoRoute(
-          path: '/signup',
-          builder: (context, state) => const SignupScreen(),
-        ),
-        GoRoute(
-          path: '/forgot-password',
-          builder: (context, state) => const ForgotPasswordScreen(),
-        ),
-        GoRoute(
-          path: '/reset-password',
-          builder: (context, state) {
-            final token = state.uri.queryParameters['t'];
-            return ResetPasswordScreen(token: token);
-          },
-        ),
-        GoRoute(
-          path: '/reset-success',
-          builder: (context, state) => const ResetPasswordSuccessScreen(),
-        ),
-        GoRoute(
-          path: '/home',
-          builder: (context, state) => const HomeScreen(),
-        ),
-        GoRoute(
-          path: '/trips',
-          builder: (context, state) => const HomeScreen(initialTab: 1),
-        ),
-        GoRoute(
-          path: '/profile/:userId',
-          builder: (context, state) {
-            final userId = state.pathParameters['userId']!;
-            return ProfileScreen(userId: userId);
-          },
-        ),
-        GoRoute(
-          path: '/edit-profile',
-          builder: (context, state) => const EditProfileScreen(),
-        ),
-        GoRoute(
-          path: '/create-trip',
-          builder: (context, state) => const CreateTripScreen(),
-        ),
-        GoRoute(
-          path: '/trip/:tripId',
-          builder: (context, state) {
-            final tripId = state.pathParameters['tripId']!;
-            return TripDetailScreen(tripId: tripId);
-          },
-        ),
-        GoRoute(
-          path: '/trip/:tripId/thread',
-          builder: (context, state) {
-            final tripId = state.pathParameters['tripId']!;
-            return TripThreadScreen(tripId: tripId);
-          },
-        ),
-        // GoRoute(
-        //   path: '/trip/:tripId/participants',
-        //   builder: (context, state) {
-        //     final tripId = state.pathParameters['tripId']!;
-        //     return TripParticipantsScreen(tripId: tripId);
-        //   },
-        // ),        
-        GoRoute(
-          path: '/follow-requests',
-          builder: (context, state) {
-            debugPrint('[Router] Navigating to FollowRequestsScreen');
-            return const FollowRequestsScreen();
-          },
-        ),
-        GoRoute(
-          path: '/settings',
-          builder: (context, state) => const SettingsScreen(),
-        ),
-      ],
-    );
-
-    return router;
-  }
 }
-=======
-}
->>>>>>> refs/heads/main
