@@ -11,19 +11,18 @@ Trip _$TripFromJson(Map<String, dynamic> json) => Trip(
       userId: json['userId'] as String,
       title: json['title'] as String,
       description: json['description'] as String?,
-      startDate: json['startDate'] == null
-          ? null
-          : DateTime.parse(json['startDate'] as String),
-      endDate: json['endDate'] == null
-          ? null
-          : DateTime.parse(json['endDate'] as String),
-      destinations: (json['destinations'] as List<dynamic>)
-          .map((e) => e as String)
-          .toList(),
+      startDate: DateTime.parse(json['startDate'] as String),
+      endDate: DateTime.parse(json['endDate'] as String),
+      destinations: (json['destinations'] as List<dynamic>?)
+              ?.map((e) => e as String)
+              .toList() ??
+          [],
       mood: $enumDecodeNullable(_$TripMoodEnumMap, json['mood']),
       type: $enumDecodeNullable(_$TripTypeEnumMap, json['type']),
       coverMediaUrl: json['coverMediaUrl'] as String?,
       status: $enumDecode(_$TripStatusEnumMap, json['status']),
+      entryCount: (json['entryCount'] as num?)?.toInt() ?? 0,
+      participantCount: (json['participantCount'] as num?)?.toInt() ?? 1,
       createdAt: DateTime.parse(json['createdAt'] as String),
       updatedAt: DateTime.parse(json['updatedAt'] as String),
       user: json['user'] == null
@@ -41,8 +40,6 @@ Trip _$TripFromJson(Map<String, dynamic> json) => Trip(
       counts: json['counts'] == null
           ? null
           : TripCounts.fromJson(json['counts'] as Map<String, dynamic>),
-      entryCount: (json['entryCount'] as num?)?.toInt(),
-      participantCount: (json['participantCount'] as num?)?.toInt(),
     );
 
 Map<String, dynamic> _$TripToJson(Trip instance) => <String, dynamic>{
@@ -50,13 +47,15 @@ Map<String, dynamic> _$TripToJson(Trip instance) => <String, dynamic>{
       'userId': instance.userId,
       'title': instance.title,
       'description': instance.description,
-      'startDate': instance.startDate?.toIso8601String(),
-      'endDate': instance.endDate?.toIso8601String(),
+      'startDate': instance.startDate.toIso8601String(),
+      'endDate': instance.endDate.toIso8601String(),
       'destinations': instance.destinations,
       'mood': _$TripMoodEnumMap[instance.mood],
       'type': _$TripTypeEnumMap[instance.type],
       'coverMediaUrl': instance.coverMediaUrl,
       'status': _$TripStatusEnumMap[instance.status]!,
+      'entryCount': instance.entryCount,
+      'participantCount': instance.participantCount,
       'createdAt': instance.createdAt.toIso8601String(),
       'updatedAt': instance.updatedAt.toIso8601String(),
       'user': instance.user,
@@ -64,8 +63,6 @@ Map<String, dynamic> _$TripToJson(Trip instance) => <String, dynamic>{
       'threadEntries': instance.threadEntries,
       'finalPost': instance.finalPost,
       'counts': instance.counts,
-      'entryCount': instance.entryCount,
-      'participantCount': instance.participantCount,
     };
 
 const _$TripMoodEnumMap = {

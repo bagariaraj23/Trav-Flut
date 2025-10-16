@@ -9,13 +9,18 @@ class Trip {
   final String userId;
   final String title;
   final String? description;
-  final DateTime? startDate;
-  final DateTime? endDate;
+  final DateTime startDate;
+  final DateTime endDate;
+  @JsonKey(defaultValue: [])
   final List<String> destinations;
   final TripMood? mood;
   final TripType? type;
   final String? coverMediaUrl;
   final TripStatus status;
+  @JsonKey(defaultValue: 0)
+  final int entryCount;
+  @JsonKey(defaultValue: 1)
+  final int participantCount;
   final DateTime createdAt;
   final DateTime updatedAt;
   final User? user;
@@ -23,21 +28,21 @@ class Trip {
   final List<TripThreadEntry>? threadEntries;
   final TripFinalPost? finalPost;
   final TripCounts? counts;
-  final int? entryCount;
-  final int? participantCount;
 
   const Trip({
     required this.id,
     required this.userId,
     required this.title,
     this.description,
-    this.startDate,
-    this.endDate,
+    required this.startDate,
+    required this.endDate,
     required this.destinations,
     this.mood,
     this.type,
     this.coverMediaUrl,
     required this.status,
+    required this.entryCount,
+    required this.participantCount,
     required this.createdAt,
     required this.updatedAt,
     this.user,
@@ -45,8 +50,6 @@ class Trip {
     this.threadEntries,
     this.finalPost,
     this.counts,
-    this.entryCount,
-    this.participantCount,
   });
 
   factory Trip.fromJson(Map<String, dynamic> json) => _$TripFromJson(json);

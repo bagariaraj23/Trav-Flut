@@ -647,8 +647,16 @@ class ApiService {
       if (response.data['success'] && response.data['data'] != null) {
         final data = response.data['data'];
         final isFollowing = data['isFollowing'] as bool;
+        final isFollowedBy = data['isFollowedBy'] as bool? ?? false;
+        final isRequestPending = data['isRequestPending'] as bool? ?? false;
+        final isPrivate = data['isPrivate'] as bool? ?? false;
 
-        final status = FollowStatusResponse(isFollowing: isFollowing);
+        final status = FollowStatusResponse(
+          isFollowing: isFollowing,
+          isFollowedBy: isFollowedBy,
+          isRequestPending: isRequestPending,
+          isPrivate: isPrivate,
+        );
         return ApiResponse<FollowStatusResponse>(success: true, data: status);
       } else {
         debugPrint(

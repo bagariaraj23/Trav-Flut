@@ -5,25 +5,29 @@ part 'user.g.dart';
 @JsonSerializable()
 class User {
   final String id;
-  final String? email;
+  final String email;
   final String? username;
   final String? name;
   final String? avatarUrl;
   final String? bio;
   final bool isPrivate;
-  final DateTime? createdAt;
-  final DateTime? updatedAt;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+  final DateTime? deletedAt;
+  final Map<String, dynamic>? deleteMeta;
 
   const User({
     required this.id,
-    this.email,
+    required this.email,
     this.username,
     this.name,
     this.avatarUrl,
     this.bio,
     required this.isPrivate,
-    this.createdAt,
-    this.updatedAt,
+    required this.createdAt,
+    required this.updatedAt,
+    this.deletedAt,
+    this.deleteMeta,
   });
 
   factory User.fromJson(Map<String, dynamic> json) => _$UserFromJson(json);
@@ -39,6 +43,8 @@ class User {
     bool? isPrivate,
     DateTime? createdAt,
     DateTime? updatedAt,
+    DateTime? deletedAt,
+    Map<String, dynamic>? deleteMeta,
   }) {
     return User(
       id: id ?? this.id,
@@ -50,6 +56,8 @@ class User {
       isPrivate: isPrivate ?? this.isPrivate,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
+      deletedAt: deletedAt ?? this.deletedAt,
+      deleteMeta: deleteMeta ?? this.deleteMeta,
     );
   }
 }

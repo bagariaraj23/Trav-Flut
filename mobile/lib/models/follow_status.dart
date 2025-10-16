@@ -11,9 +11,9 @@ class FollowStatusResponse {
 
   const FollowStatusResponse({
     required this.isFollowing,
-    this.isFollowedBy = false,
-    this.isRequestPending = false,
-    this.isPrivate = false,
+    required this.isFollowedBy,
+    required this.isRequestPending,
+    required this.isPrivate,
   });
 
   factory FollowStatusResponse.fromJson(Map<String, dynamic> json) => _$FollowStatusResponseFromJson(json);
