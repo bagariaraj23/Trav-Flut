@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
+import 'package:another_flushbar/flushbar.dart';
+import 'package:tripthread/config/app_config.dart';
 import 'package:tripthread/providers/auth_provider.dart';
 import 'package:tripthread/providers/user_provider.dart';
 import 'package:tripthread/providers/trip_provider.dart';
@@ -29,7 +31,6 @@ import 'package:tripthread/screens/profile/trip_invitations_screen.dart';
 import 'package:tripthread/screens/settings/settings_screen.dart';
 import 'package:tripthread/utils/app_theme.dart';
 import 'package:tripthread/utils/error_handler.dart';
-import 'package:tripthread/config/app_config.dart';
 
 void main() async {
   debugPrint('[main] Starting TripThread app initialization');
@@ -148,6 +149,80 @@ class TripThreadAppRouter extends StatefulWidget {
 
   @override
   State<TripThreadAppRouter> createState() => _TripThreadAppRouterState();
+}
+
+class ConnectivityToastHandler extends StatefulWidget {
+  const ConnectivityToastHandler({super.key});
+
+  @override
+  State<ConnectivityToastHandler> createState() => _ConnectivityToastHandlerState();
+}
+
+class _ConnectivityToastHandlerState extends State<ConnectivityToastHandler> {
+  Flushbar? _flushbar;
+  bool _wasConnected = true;
+
+  @override
+  Widget build(BuildContext context) {
+    final connectivity = context.watch<ConnectivityService>();
+
+    // Use a post-frame callback to safely show/hide the flushbar
+    // after the build cycle is complete.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+
+      // Condition to show: network status changed from connected to disconnected
+      if (_wasConnected && !connectivity.isConnected) {
+        _flushbar?.dismiss(); // Dismiss any existing one first
+        _flushbar = _createOfflineToast();
+        _flushbar?.show(context);
+      }
+      // Condition to hide: network status changed from disconnected to connected
+      else if (!_wasConnected && connectivity.isConnected) {
+        _flushbar?.dismiss();
+        _flushbar = null;
+      }
+    });
+
+    // Update the state for the next rebuild
+    _wasConnected = connectivity.isConnected;
+
+    // This widget is purely for logic and doesn't render anything
+    return const SizedBox.shrink();
+  }
+
+  Flushbar _createOfflineToast() {
+    return Flushbar(
+      title: 'No Internet Connection',
+      message: 'You are offline. Some features may not be available.',
+      icon: const Icon(
+        Icons.wifi_off_rounded,
+        size: 28.0,
+        color: Colors.white,
+      ),
+      backgroundColor: Colors.red.shade700,
+      // The toast will disappear after 8 seconds.
+      // For a persistent toast that only disappears when connection is back
+      // or when the user dismisses it, set `duration: null`.
+      duration: const Duration(seconds: 8),
+      isDismissible: true, // Allows the user to swipe it away
+      flushbarPosition: FlushbarPosition.TOP,
+      margin: const EdgeInsets.fromLTRB(8, kToolbarHeight + 8, 8, 0),
+      borderRadius: BorderRadius.circular(8),
+      onStatusChanged: (status) {
+        // When dismissed, nullify the reference so a new one can be created
+        if (status == FlushbarStatus.DISMISSED) {
+          _flushbar = null;
+        }
+      },
+    );
+  }
+
+  @override
+  void dispose() {
+    _flushbar?.dismiss();
+    super.dispose();
+  }
 }
 
 class _TripThreadAppRouterState extends State<TripThreadAppRouter> {
@@ -315,6 +390,8 @@ class _TripThreadAppRouterState extends State<TripThreadAppRouter> {
   Widget build(BuildContext context) {
     // Use the existing router instance; it must be non-null after didChangeDependencies
     final router = _router!;
+    _deepLinkService?.setRouter(router);
+    _deepLinkService?.initialize();
 
     return MaterialApp.router(
       title: 'TripThread',
@@ -342,21 +419,23 @@ class _TripThreadAppRouterState extends State<TripThreadAppRouter> {
               },
             ),
             // Offline banner
-            if (!connectivity.isConnected)
-              Positioned(
-                top: MediaQuery.of(context).padding.top,
-                left: 0,
-                right: 0,
-                child: Container(
-                  padding: const EdgeInsets.all(8),
-                  color: Colors.red,
-                  child: const Text(
-                    'No internet connection',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(color: Colors.white),
-                  ),
-                ),
-              ),
+            // if (!connectivity.isConnected)
+            //   Positioned(
+            //     top: MediaQuery.of(context).padding.top,
+            //     left: 0,
+            //     right: 0,
+            //     child: Container(
+            //       padding: const EdgeInsets.all(8),
+            //       color: Colors.red,
+            //       child: const Text(
+            //         'No internet connection',
+            //         textAlign: TextAlign.center,
+            //         style: TextStyle(color: Colors.white),
+            //       ),
+            //     ),
+            //   ),
+            // NEW: intelligent toast handler
+            const ConnectivityToastHandler(),
           ],
         );
       },

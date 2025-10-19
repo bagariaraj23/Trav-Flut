@@ -14,44 +14,75 @@ const RESET_RETENTION_DAYS = Number(process.env.RESET_RETENTION_DAYS || 7);
 const forgotSchema = z.object({ email: z.string().email() });
 const resetSchema = z.object({ token: z.string().min(16), newPassword: passwordPolicy });
 
-export async function requestReset(payload: unknown, ctx?: { ip?: string; userAgent?: string },hooks?: { onToken?: (token: string) => void }) {
-  const { email } = forgotSchema.parse(payload);
-  const user = await prisma.user.findUnique({ where: { email } });
-  if (!user || (user as any).deletedAt) return;
-  console.log(`${user}: user`);
-  const rawToken = crypto.randomBytes(48).toString("base64url");
-  const tokenHash = crypto.createHash("sha256").update(rawToken).digest();
-  hooks?.onToken?.(rawToken);
-  const expiresAt = new Date(Date.now() + TTL_MIN * 60 * 1000);
-  await prisma.passwordReset.create({
-    data: {
-      userId: user.id,
-      tokenHash,
-      expiresAt,
-      createdIp: ctx?.ip || null,
-      userAgent: ctx?.userAgent || null,
-    },
-  });
+export async function requestReset(payload: unknown, ctx?: { ip?: string; userAgent?: string }, hooks?: { onToken?: (token: string) => void }) {
+  try {
+    console.log('Starting password reset request with payload:', payload);
 
-  const { webUrl } = buildPasswordResetLink(rawToken);
-  await sendPasswordResetEmail({ to: user.email, resetLink: webUrl, ttlMinutes: TTL_MIN });
-  await recordSecurityEvent({ userId: user.id, type: "PASSWORD_RESET_REQUESTED" });
+    const { email } = forgotSchema.parse(payload);
+    console.log('Looking up user with email:', email);
+
+    const user = await prisma.user.findUnique({
+      where: { email },
+      select: {
+        id: true,
+        email: true,
+        deletedAt: true
+      }
+    });
+
+    console.log('User lookup result:', user);
+
+    if (!user) {
+      console.log('No user found with email:', email);
+      return;
+    }
+
+    if (user.deletedAt) {
+      console.log('User account is deleted:', email);
+      return;
+    }
+
+    console.log('Generating reset token for user:', user.id);
+    const rawToken = crypto.randomBytes(48).toString("base64url");
+    const tokenHash = crypto.createHash("sha256").update(rawToken).digest();
+    hooks?.onToken?.(rawToken);
+    const expiresAt = new Date(Date.now() + TTL_MIN * 60 * 1000);
+
+    // Create the password reset entry
+    console.log('Creating password reset entry');
+    await prisma.passwordReset.create({
+      data: {
+        userId: user.id,
+        tokenHash,
+        expiresAt,
+        createdIp: ctx?.ip || null,
+        userAgent: ctx?.userAgent || null,
+      },
+    });
+
+    const { webUrl } = buildPasswordResetLink(rawToken);
+    await sendPasswordResetEmail({ to: user.email, resetLink: webUrl, ttlMinutes: TTL_MIN });
+    await recordSecurityEvent({ userId: user.id, type: "PASSWORD_RESET_REQUESTED" });
+  } catch (error) {
+    console.error("Error in requestReset:", error);
+    throw error;
+  }
 }
 
 export async function resetWithToken(payload: unknown) {
   const { token, newPassword } = resetSchema.parse(payload);
   const tokenHash = crypto.createHash("sha256").update(token).digest();
-  
+
   const reset = await prisma.passwordReset.findUnique({ where: { tokenHash } });
-  
+
   if (!reset) {
     throw new Error("Invalid reset token");
   }
-  
+
   if (reset.usedAt) {
     throw new Error("This reset link has already been used");
   }
-  
+
   if (reset.expiresAt < new Date()) {
     throw new Error("This reset link has expired");
   }
@@ -62,7 +93,7 @@ export async function resetWithToken(payload: unknown) {
   }
 
   const pwHash = await bcrypt.hash(newPassword, 12);  // Using same salt rounds as AuthService
-  
+
   // Use a transaction to ensure atomicity
   await prisma.$transaction([
     // Update password

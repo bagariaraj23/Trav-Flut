@@ -1,9 +1,17 @@
 "use client";
-import { useState } from "react";
+import { useState, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import axios from "axios";
 
-export default function ForgotPasswordPage() {
+export default function ForgotPasswordPageWrapper() {
+  return (
+    <Suspense>
+      <ForgotPasswordPage />
+    </Suspense>
+  );
+}
+
+function ForgotPasswordPage() {
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [loading, setLoading] = useState(false);
@@ -30,7 +38,6 @@ export default function ForgotPasswordPage() {
       if (!confirmed) {
         return;
       }
-      
       setLoading(true);
       await axios.post("http://192.168.1.101:3000/api/auth/reset-password", {
         token,

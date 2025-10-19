@@ -51,6 +51,8 @@ dependencies:
   # Deep Links
   app_links: ^3.4.5
 
+  another_flushbar: ^1.12.30
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
