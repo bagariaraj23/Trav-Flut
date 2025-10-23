@@ -2,6 +2,9 @@ import 'package:flutter/foundation.dart';
 import 'package:tripthread/models/user.dart';
 import 'package:tripthread/services/api_service.dart';
 import 'package:tripthread/services/storage_service.dart';
+import 'package:provider/provider.dart'; // Needed for context.read
+
+// If you want to access the UserProvider using context, you may need context.
 
 class AuthProvider extends ChangeNotifier {
   final ApiService _apiService;
@@ -203,13 +206,15 @@ class AuthProvider extends ChangeNotifier {
 
       final response = await _apiService.forgotPassword(email: email);
 
-      print('[AuthProvider] forgotPassword response: success=${response.success}, error=${response.error}');
+      print(
+          '[AuthProvider] forgotPassword response: success=${response.success}, error=${response.error}');
 
       if (response.success) {
         _setLoadingState(false);
         return true;
       } else {
-        _setError(response.error ?? 'Failed to send reset email. Please try again.');
+        _setError(
+            response.error ?? 'Failed to send reset email. Please try again.');
         print('[AuthProvider] forgotPassword error set: $_error');
         _setLoadingState(false);
         return false;
@@ -236,13 +241,15 @@ class AuthProvider extends ChangeNotifier {
         newPassword: newPassword,
       );
 
-      print('[AuthProvider] resetPassword response: success=${response.success}, error=${response.error}');
+      print(
+          '[AuthProvider] resetPassword response: success=${response.success}, error=${response.error}');
 
       if (response.success) {
         _setLoadingState(false);
         return true;
       } else {
-        _setError(response.error ?? 'Failed to reset password. Please try again.');
+        _setError(
+            response.error ?? 'Failed to reset password. Please try again.');
         print('[AuthProvider] resetPassword error set: $_error');
         _setLoadingState(false);
         return false;
@@ -297,10 +304,33 @@ class AuthProvider extends ChangeNotifier {
 
   // Called by ApiService when refresh fails or user is unauthorized
   Future<void> forceLogout({String? message}) async {
+    debugPrint('[AuthProvider] forceLogout called with message: $message');
+
+    _isLoading = false;
     _currentUser = null;
-    routingNotifier.notifyListeners();
     await _storageService.clearTokens();
-    _error = message;
+
+    // Set error message if provided
+    if (message != null) {
+      _error = message;
+      _hasShownError = false;
+      uiNotifier.notifyListeners();
+    }
+
+    // If desired, try to clear UserProvider cache (if context is available)
+    // This block is safe in widget code, or can use an injected clearUserCache callback.
+    // try {
+    //   final userProvider = Provider.of<UserProvider>(navigatorKey.currentContext!, listen: false);
+    //   userProvider.clearCache();
+    // } catch (e) {
+    //   debugPrint('[AuthProvider] Could not clear UserProvider cache: $e');
+    // }
+    // For now, leave as a comment unless you want to inject context/global key.
+
+    routingNotifier.notifyListeners();
     notifyListeners();
+
+    debugPrint(
+        '[AuthProvider] forceLogout completed - isAuthenticated: $isAuthenticated');
   }
 }

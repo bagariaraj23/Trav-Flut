@@ -31,6 +31,7 @@ import 'package:tripthread/screens/profile/trip_invitations_screen.dart';
 import 'package:tripthread/screens/settings/settings_screen.dart';
 import 'package:tripthread/utils/app_theme.dart';
 import 'package:tripthread/utils/error_handler.dart';
+import 'package:tripthread/widgets/auth_gate.dart';
 
 void main() async {
   debugPrint('[main] Starting TripThread app initialization');
@@ -87,16 +88,32 @@ void main() async {
           ChangeNotifierProvider<AuthProvider>(
             create: (context) {
               debugPrint('[main] Creating AuthProvider');
-              return AuthProvider(
+              final authProvider = AuthProvider(
                 apiService: apiService,
                 storageService: storageService,
               );
+              // Set up the unauthorized callback to trigger logout
+              apiService.setUnauthorizedCallback(() {
+                debugPrint(
+                    '[main] Unauthorized callback triggered - forcing logout');
+                authProvider.forceLogout(
+                    message: 'Session expired. Please log in again.');
+              });
+              return authProvider;
             },
           ),
           ChangeNotifierProvider<UserProvider>(
             create: (context) {
               debugPrint('[main] Creating UserProvider');
-              return UserProvider(apiService: apiService);
+              final authProvider = context.read<AuthProvider>();
+              final userProvider = UserProvider(apiService: apiService);
+              // Listen to auth changes and clear UserProvider cache on logout
+              authProvider.addListener(() {
+                if (!authProvider.isAuthenticated) {
+                  userProvider.clearCache();
+                }
+              });
+              return userProvider;
             },
           ),
           ChangeNotifierProvider<TripProvider>(
@@ -155,7 +172,8 @@ class ConnectivityToastHandler extends StatefulWidget {
   const ConnectivityToastHandler({super.key});
 
   @override
-  State<ConnectivityToastHandler> createState() => _ConnectivityToastHandlerState();
+  State<ConnectivityToastHandler> createState() =>
+      _ConnectivityToastHandlerState();
 }
 
 class _ConnectivityToastHandlerState extends State<ConnectivityToastHandler> {
@@ -235,7 +253,8 @@ class _TripThreadAppRouterState extends State<TripThreadAppRouter> {
     super.didChangeDependencies();
 
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
-    final deepLinkService = Provider.of<DeepLinkService>(context, listen: false);
+    final deepLinkService =
+        Provider.of<DeepLinkService>(context, listen: false);
 
     // Create or recreate router only when the AuthProvider instance changes
     if (_router == null || authProvider != _lastAuthProvider) {
@@ -261,7 +280,11 @@ class _TripThreadAppRouterState extends State<TripThreadAppRouter> {
             ),
           ),
         ),
-        refreshListenable: authProvider.routingNotifier,
+        refreshListenable: Listenable.merge([
+          authProvider,
+          authProvider.routingNotifier,
+          authProvider.uiNotifier
+        ]),
         redirect: (context, state) {
           final authProvider =
               Provider.of<AuthProvider>(context, listen: false);
@@ -271,27 +294,37 @@ class _TripThreadAppRouterState extends State<TripThreadAppRouter> {
 
           if (location != TripThreadAppRouter._lastLocation) {
             print('[GoRouter] location changed to: $location');
+            print('[GoRouter] isLoading: $isLoading, isLoggedIn: $isLoggedIn');
             TripThreadAppRouter._lastLocation = location;
           }
 
-          if (isLoading) return null;
+          // Don't redirect while loading
+          if (isLoading) {
+            print('[GoRouter] Still loading, no redirect');
+            return null;
+          }
 
+          // Redirect to login if not authenticated and not on auth pages
           if (!isLoggedIn &&
               location != '/login' &&
               location != '/signup' &&
               location != '/forgot-password' &&
               !location.startsWith('/reset-password')) {
+            print('[GoRouter] Not logged in, redirecting to /login');
             return '/login';
           }
 
-          if (isLoggedIn && (
-              location == '/login' ||
-              location == '/signup' ||
-              location == '/forgot-password' ||
-              location.startsWith('/reset-password'))) {
+          // Redirect to home if authenticated and on auth pages
+          if (isLoggedIn &&
+              (location == '/login' ||
+                  location == '/signup' ||
+                  location == '/forgot-password' ||
+                  location.startsWith('/reset-password'))) {
+            print('[GoRouter] Already logged in, redirecting to /home');
             return '/home';
           }
 
+          print('[GoRouter] No redirect needed');
           return null;
         },
         routes: [
@@ -401,16 +434,15 @@ class _TripThreadAppRouterState extends State<TripThreadAppRouter> {
       routerConfig: router,
       debugShowCheckedModeBanner: false,
       builder: (context, child) {
-        final authProvider = context.watch<AuthProvider>();
-        final connectivity = context.watch<ConnectivityService>();
         return Stack(
           children: [
-            child ?? const SizedBox.shrink(),
+            AuthGate(child: child ?? const SizedBox.shrink()),
             // Splash overlay listens only to routingNotifier to avoid heavy rebuilds
             AnimatedBuilder(
-              animation: authProvider.routingNotifier,
+              animation: context.watch<AuthProvider>().routingNotifier,
               builder: (context, _) {
-                if (!authProvider.isLoading) return const SizedBox.shrink();
+                if (!context.read<AuthProvider>().isLoading)
+                  return const SizedBox.shrink();
                 debugPrint('Rendering SplashScreen');
                 return const IgnorePointer(
                   ignoring: false,
