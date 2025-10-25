@@ -61,7 +61,19 @@ export async function requestReset(
     hooks?.onToken?.(rawToken);
     const expiresAt = new Date(Date.now() + TTL_MIN * 60 * 1000);
 
-    // Create the password reset entry
+    // Invalidate all previous unused reset tokens for this user
+    console.log("Invalidating previous unused reset tokens");
+    await prisma.passwordReset.updateMany({
+      where: {
+        userId: user.id,
+        usedAt: null, // Only invalidate unused tokens
+      },
+      data: {
+        usedAt: new Date(), // Mark as used to invalidate
+      },
+    });
+
+    // Create the new password reset entry
     console.log("Creating password reset entry");
     await prisma.passwordReset.create({
       data: {
@@ -73,7 +85,7 @@ export async function requestReset(
       },
     });
 
-    const { webUrl } = buildPasswordResetLink(rawToken);
+    const { webUrl } = buildPasswordResetLink(rawToken, user.email);
     await sendPasswordResetEmail({
       to: user.email,
       resetLink: webUrl,
@@ -93,59 +105,83 @@ export async function resetWithToken(payload: unknown) {
   const { token, currentPassword, newPassword } = resetSchema.parse(payload);
   const tokenHash = crypto.createHash("sha256").update(token).digest();
 
-  const reset = await prisma.passwordReset.findUnique({ where: { tokenHash } });
+  // Use a transaction with raw SQL for SELECT FOR UPDATE to prevent race conditions
+  const result = await prisma.$transaction(async (tx) => {
+    // Use raw SQL with SELECT FOR UPDATE to lock the row atomically
+    const resetResult = await tx.$queryRaw<
+      Array<{
+        id: string;
+        userId: string;
+        tokenHash: Buffer;
+        expiresAt: Date;
+        usedAt: Date | null;
+        createdIp: string | null;
+        userAgent: string | null;
+      }>
+    >`
+      SELECT id, "userId", "tokenHash", "expiresAt", "usedAt", "createdIp", "userAgent"
+      FROM password_resets 
+      WHERE "tokenHash" = ${tokenHash}
+      FOR UPDATE
+    `;
 
-  if (!reset) {
-    throw new Error("Invalid reset token");
-  }
+    if (resetResult.length === 0) {
+      throw new Error("Invalid reset token");
+    }
 
-  if (reset.usedAt) {
-    throw new Error("This reset link has already been used");
-  }
+    const reset = resetResult[0];
 
-  if (reset.expiresAt < new Date()) {
-    throw new Error("This reset link has expired");
-  }
+    // Check if already used (this is now atomic within the locked transaction)
+    if (reset.usedAt) {
+      throw new Error("This reset link has already been used");
+    }
 
-  const user = await prisma.user.findUnique({ where: { id: reset.userId } });
-  if (!user || (user as any).deletedAt) {
-    throw new Error("Invalid user account");
-  }
+    if (reset.expiresAt < new Date()) {
+      throw new Error("This reset link has expired");
+    }
 
-  // Validate current password
-  if (!user.password) {
-    throw new Error("User account has no password set");
-  }
+    const user = await tx.user.findUnique({ where: { id: reset.userId } });
+    if (!user || (user as any).deletedAt) {
+      throw new Error("Invalid user account");
+    }
 
-  const isCurrentPasswordValid = await bcrypt.compare(
-    currentPassword,
-    user.password
-  );
-  if (!isCurrentPasswordValid) {
-    throw new Error("Current password is incorrect");
-  }
+    // Validate current password
+    if (!user.password) {
+      throw new Error("User account has no password set");
+    }
 
-  // Check if new password is different from current password
-  const isSamePassword = await bcrypt.compare(newPassword, user.password);
-  if (isSamePassword) {
-    throw new Error("New password must be different from current password");
-  }
+    const isCurrentPasswordValid = await bcrypt.compare(
+      currentPassword,
+      user.password
+    );
+    if (!isCurrentPasswordValid) {
+      throw new Error("Current password is incorrect");
+    }
 
-  const pwHash = await bcrypt.hash(newPassword, config.bcryptRounds);
+    // Check if new password is different from current password
+    const isSamePassword = await bcrypt.compare(newPassword, user.password);
+    if (isSamePassword) {
+      throw new Error("New password must be different from current password");
+    }
 
-  // Use a transaction to ensure atomicity
-  await prisma.$transaction([
-    // Update password
-    prisma.user.update({
-      where: { id: user.id },
-      data: { password: pwHash },
-    }),
-    // Mark token as used
-    prisma.passwordReset.update({
+    const pwHash = await bcrypt.hash(newPassword, config.bcryptRounds);
+
+    // Mark token as used FIRST to prevent race conditions
+    await tx.passwordReset.update({
       where: { id: reset.id },
       data: { usedAt: new Date() },
-    }),
-  ]);
+    });
+
+    // Then update the password
+    await tx.user.update({
+      where: { id: user.id },
+      data: { password: pwHash },
+    });
+
+    return { user, reset };
+  });
+
+  const { user, reset } = result;
 
   // Revoke all refresh tokens for security
   await revokeAllRefreshTokens(user.id);
@@ -171,6 +207,47 @@ export async function resetWithToken(payload: unknown) {
     }),
     sendSecurityEmail({ to: user.email }),
   ]);
+}
+
+export async function validateResetToken(
+  token: string,
+  email: string,
+  allowUsed: boolean = false
+) {
+  try {
+    const tokenHash = crypto.createHash("sha256").update(token).digest();
+
+    const reset = await prisma.passwordReset.findUnique({
+      where: { tokenHash },
+      include: { user: { select: { email: true, deletedAt: true } } },
+    });
+
+    if (!reset) {
+      return { valid: false, error: "invalid-token" };
+    }
+
+    if (reset.user.email !== email) {
+      return { valid: false, error: "email-mismatch" };
+    }
+
+    if (reset.user.deletedAt) {
+      return { valid: false, error: "account-deleted" };
+    }
+
+    // Only check for used tokens if allowUsed is false (for forgot-password page)
+    if (!allowUsed && reset.usedAt) {
+      return { valid: false, error: "token-used" };
+    }
+
+    if (reset.expiresAt < new Date()) {
+      return { valid: false, error: "token-expired" };
+    }
+
+    return { valid: true };
+  } catch (error) {
+    console.error("Error validating reset token:", error);
+    return { valid: false, error: "validation-error" };
+  }
 }
 
 export async function cleanupExpiredResets() {
