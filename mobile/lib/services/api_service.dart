@@ -13,11 +13,21 @@ import 'package:flutter/foundation.dart';
 
 class ApiService {
   final Dio _dio;
+  final Dio _refreshDio;
   StorageService? _storageService;
   VoidCallback? _onUnauthorized;
+  bool _isRefreshing = false;
+  Future<void>? _refreshFuture;
+  int _lastRefreshFailAtMs = 0;
 
   ApiService()
       : _dio = Dio(BaseOptions(
+          baseUrl: AppConfig.apiBaseUrl,
+          connectTimeout: AppConfig.connectTimeout,
+          receiveTimeout: AppConfig.receiveTimeout,
+          headers: AppConfig.defaultHeaders,
+        )),
+        _refreshDio = Dio(BaseOptions(
           baseUrl: AppConfig.apiBaseUrl,
           connectTimeout: AppConfig.connectTimeout,
           receiveTimeout: AppConfig.receiveTimeout,
@@ -75,56 +85,146 @@ class ApiService {
               '[ApiService] Error response data: ${error.response?.data}');
         }
 
-        // Handle token refresh on 401
+        // Handle 401 Unauthorized
         if (error.response?.statusCode == 401 && _storageService != null) {
-          debugPrint('[ApiService] Attempting token refresh...');
-          final refreshToken = await _storageService!.getRefreshToken();
-          if (refreshToken != null) {
-            try {
-              debugPrint('[ApiService] Calling refresh token endpoint');
-              final response = await _dio.post('/auth/refresh-token', data: {
-                'refreshToken': refreshToken,
-              });
+          final path = error.requestOptions.path;
 
-              if (response.statusCode == 200 &&
-                  response.data['success'] == true) {
-                final newToken = response.data['data']['accessToken'];
-                await _storageService!.saveAccessToken(newToken);
-                debugPrint('[ApiService] Token refreshed successfully');
+          // Don't retry auth endpoints
+          if (path.contains('/auth/login') ||
+              path.contains('/auth/signup') ||
+              path.contains('/auth/refresh-token') ||
+              path.contains('/auth/forgot-password') ||
+              path.contains('/auth/reset-password')) {
+            debugPrint('[ApiService] 401 on auth endpoint, not retrying');
+            return handler.next(error);
+          }
 
-                // Retry original request
-                final opts = error.requestOptions;
-                opts.headers['Authorization'] = 'Bearer $newToken';
-                debugPrint(
-                    '[ApiService] Retrying original request with new token');
-                final cloneReq = await _dio.fetch(opts);
-                return handler.resolve(cloneReq);
-              } else {
-                debugPrint(
-                    '[ApiService] Token refresh failed: ${response.data}');
-                // Refresh failed, clear tokens and notify
-                await _storageService!.clearTokens();
-                if (_onUnauthorized != null) {
-                  _onUnauthorized!();
-                }
-              }
-            } catch (e) {
-              debugPrint('[ApiService] Token refresh error: $e');
-              // Refresh failed, clear tokens and notify
-              await _storageService!.clearTokens();
-              if (_onUnauthorized != null) {
-                _onUnauthorized!();
-              }
-            }
-          } else {
-            debugPrint('[ApiService] No refresh token available');
-            // No refresh token, clear tokens and notify
+          // Avoid infinite retry loops: only retry a request once
+          final alreadyRetried = error.requestOptions.extra['retried'] == true;
+          if (alreadyRetried) {
+            debugPrint('[ApiService] Request already retried, forcing logout');
             await _storageService!.clearTokens();
             if (_onUnauthorized != null) {
+              debugPrint(
+                  '[ApiService] Calling unauthorized callback (already retried)');
               _onUnauthorized!();
+            } else {
+              debugPrint('[ApiService] No unauthorized callback set!');
             }
+            return handler.reject(error);
+          }
+
+          // Backoff if refresh just failed recently (e.g., after password reset)
+          final now = DateTime.now().millisecondsSinceEpoch;
+          if (now - _lastRefreshFailAtMs < 5000) {
+            debugPrint(
+                '[ApiService] Recent refresh failure, forcing logout (backoff)');
+            await _storageService!.clearTokens();
+            if (_onUnauthorized != null) {
+              debugPrint(
+                  '[ApiService] Calling unauthorized callback (backoff)');
+              _onUnauthorized!();
+            } else {
+              debugPrint('[ApiService] No unauthorized callback set!');
+            }
+            return handler.reject(error);
+          }
+
+          debugPrint('[ApiService] Attempting token refresh...');
+          final refreshToken = await _storageService!.getRefreshToken();
+
+          if (refreshToken == null) {
+            debugPrint(
+                '[ApiService] No refresh token available, forcing logout');
+            await _storageService!.clearTokens();
+            if (_onUnauthorized != null) {
+              debugPrint(
+                  '[ApiService] Calling unauthorized callback (no refresh token)');
+              _onUnauthorized!();
+            } else {
+              debugPrint('[ApiService] No unauthorized callback set!');
+            }
+            return handler.reject(error);
+          }
+
+          try {
+            // Ensure only one refresh happens at a time
+            if (!_isRefreshing) {
+              _isRefreshing = true;
+              _refreshFuture = () async {
+                debugPrint('[ApiService] Calling refresh token endpoint');
+                final response =
+                    await _refreshDio.post('/auth/refresh-token', data: {
+                  'refreshToken': refreshToken,
+                });
+
+                if (response.statusCode == 200 &&
+                    response.data['success'] == true) {
+                  final newToken = response.data['data']['accessToken'];
+                  final newRefreshToken = response.data['data']['refreshToken'];
+                  await _storageService!.saveTokens(
+                    accessToken: newToken,
+                    refreshToken: newRefreshToken,
+                    userId: await _storageService!.getUserId() ?? '',
+                  );
+                  debugPrint('[ApiService] Token refreshed successfully');
+                } else {
+                  throw DioException(
+                    requestOptions: error.requestOptions,
+                    response: response,
+                    type: DioExceptionType.badResponse,
+                  );
+                }
+              }();
+              await _refreshFuture;
+            } else {
+              debugPrint('[ApiService] Awaiting ongoing token refresh');
+              if (_refreshFuture != null) {
+                await _refreshFuture;
+              }
+            }
+
+            // Retry original request once with new token
+            final newToken = await _storageService!.getAccessToken();
+            if (newToken != null) {
+              final opts = error.requestOptions;
+              opts.headers['Authorization'] = 'Bearer $newToken';
+              opts.extra['retried'] = true;
+              debugPrint(
+                  '[ApiService] Retrying original request with new token');
+              final cloneReq = await _dio.fetch(opts);
+              return handler.resolve(cloneReq);
+            } else {
+              debugPrint(
+                  '[ApiService] No new token available after refresh, forcing logout');
+              await _storageService!.clearTokens();
+              if (_onUnauthorized != null) {
+                debugPrint(
+                    '[ApiService] Calling unauthorized callback (no new token)');
+                _onUnauthorized!();
+              }
+              return handler.reject(error);
+            }
+          } catch (e) {
+            debugPrint('[ApiService] Token refresh error: $e');
+            // Refresh failed, clear tokens and notify (and set backoff)
+            _lastRefreshFailAtMs = DateTime.now().millisecondsSinceEpoch;
+            await _storageService!.clearTokens();
+            if (_onUnauthorized != null) {
+              debugPrint(
+                  '[ApiService] Calling unauthorized callback (refresh failed)');
+              _onUnauthorized!();
+            } else {
+              debugPrint('[ApiService] No unauthorized callback set!');
+            }
+            return handler.reject(error);
+          } finally {
+            _isRefreshing = false;
+            _refreshFuture = null; // Clear the future reference
           }
         }
+
+        // Pass through other errors
         handler.next(error);
       },
     ));
@@ -214,6 +314,68 @@ class ApiService {
       );
     } catch (e) {
       debugPrint('[ApiService] Logout unexpected error: $e');
+      return ApiResponse<void>(
+        success: false,
+        error: 'An unexpected error occurred',
+      );
+    }
+  }
+
+  Future<ApiResponse<void>> forgotPassword({
+    required String email,
+  }) async {
+    try {
+      debugPrint('[ApiService] Forgot password called with email: $email');
+      final response = await _dio.post('/auth/forgot-password', data: {
+        'email': email,
+      });
+
+      debugPrint(
+          '[ApiService] Forgot password response: ${response.statusCode}');
+      return ApiResponse<void>(
+        success: response.data['ok'] ?? false,
+        message: response.data['message'],
+      );
+    } on DioException catch (e) {
+      debugPrint('[ApiService] Forgot password DioException: ${e.message}');
+      return ApiResponse<void>(
+        success: false,
+        error: e.response?.data['error'] ?? 'Network error occurred',
+      );
+    } catch (e) {
+      debugPrint('[ApiService] Forgot password unexpected error: $e');
+      return ApiResponse<void>(
+        success: false,
+        error: 'An unexpected error occurred',
+      );
+    }
+  }
+
+  Future<ApiResponse<void>> resetPassword({
+    required String token,
+    required String newPassword,
+  }) async {
+    try {
+      debugPrint('[ApiService] Reset password called');
+      final response = await _dio.post('/auth/reset-password', data: {
+        'token': token,
+        'newPassword': newPassword,
+      });
+
+      debugPrint(
+          '[ApiService] Reset password response: ${response.statusCode}');
+      return ApiResponse<void>(
+        success: response.data['success'],
+        error: response.data['message'],
+      );
+    } on DioException catch (e) {
+      debugPrint('[ApiService] Reset password DioException: ${e.message}');
+      return ApiResponse<void>(
+        success: false,
+        error: e.response?.data['error'] ?? 'Network error occurred',
+      );
+    } catch (e) {
+      debugPrint('[ApiService] Reset password unexpected error: $e');
       return ApiResponse<void>(
         success: false,
         error: 'An unexpected error occurred',
@@ -589,8 +751,16 @@ class ApiService {
       if (response.data['success'] && response.data['data'] != null) {
         final data = response.data['data'];
         final isFollowing = data['isFollowing'] as bool;
+        final isFollowedBy = data['isFollowedBy'] as bool? ?? false;
+        final isRequestPending = data['isRequestPending'] as bool? ?? false;
+        final isPrivate = data['isPrivate'] as bool? ?? false;
 
-        final status = FollowStatusResponse(isFollowing: isFollowing);
+        final status = FollowStatusResponse(
+          isFollowing: isFollowing,
+          isFollowedBy: isFollowedBy,
+          isRequestPending: isRequestPending,
+          isPrivate: isPrivate,
+        );
         return ApiResponse<FollowStatusResponse>(success: true, data: status);
       } else {
         debugPrint(
