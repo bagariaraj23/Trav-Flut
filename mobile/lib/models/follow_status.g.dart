@@ -10,9 +10,9 @@ FollowStatusResponse _$FollowStatusResponseFromJson(
         Map<String, dynamic> json) =>
     FollowStatusResponse(
       isFollowing: json['isFollowing'] as bool,
-      isFollowedBy: json['isFollowedBy'] as bool? ?? false,
-      isRequestPending: json['isRequestPending'] as bool? ?? false,
-      isPrivate: json['isPrivate'] as bool? ?? false,
+      isFollowedBy: json['isFollowedBy'] as bool,
+      isRequestPending: json['isRequestPending'] as bool,
+      isPrivate: json['isPrivate'] as bool,
     );
 
 Map<String, dynamic> _$FollowStatusResponseToJson(

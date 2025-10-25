@@ -7,56 +7,97 @@ set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
-ENV_FILE="$PROJECT_DIR/.env"
+MOBILE_ENV_FILE="$PROJECT_DIR/.env"
+BACKEND_PROJECT_DIR="$(dirname "$PROJECT_DIR")"
+BACKEND_ENV_FILE="$BACKEND_PROJECT_DIR/.env"
 
 # Default to local if no argument provided
 ENVIRONMENT=${1:-local}
 
 echo "🔄 Switching TripThread environment to: $ENVIRONMENT"
 
+# Function to update or add a variable in .env file
+update_env_var() {
+    local file="$1"
+    local key="$2"
+    local value="$3"
+    
+    # Create file if it doesn't exist
+    if [ ! -f "$file" ]; then
+        touch "$file"
+    fi
+    
+    # Check if the variable exists in the file
+    if grep -q "^${key}=" "$file"; then
+        # Update existing variable
+        sed -i.bak "s|^${key}=.*|${key}=${value}|" "$file"
+        rm -f "${file}.bak"
+    else
+        # Add new variable
+        echo "${key}=${value}" >> "$file"
+    fi
+}
+
 case $ENVIRONMENT in
   "local")
-    cat > "$ENV_FILE" << EOF
-# API Configuration
-API_BASE_URL=http://localhost:3000/api
+    # Update mobile .env - only API_BASE_URL and ENVIRONMENT
+    update_env_var "$MOBILE_ENV_FILE" "API_BASE_URL" "http://localhost:3000/api"
+    update_env_var "$MOBILE_ENV_FILE" "ENVIRONMENT" "development"
+    
+    # Update backend .env - only server and CORS related variables
+    update_env_var "$BACKEND_ENV_FILE" "NEXT_PUBLIC_API_BASE_URL" "http://localhost:3000/api"
+    update_env_var "$BACKEND_ENV_FILE" "API_BASE_URL" "http://localhost:3000/api"
+    update_env_var "$BACKEND_ENV_FILE" "NODE_ENV" "development"
+    update_env_var "$BACKEND_ENV_FILE" "ALLOWED_ORIGINS" "http://localhost:3000,http://localhost:3001,http://127.0.0.1:3000,http://127.0.0.1:3001"
+    update_env_var "$BACKEND_ENV_FILE" "APP_RESET_WEB_URL" "http://$IP_ADDRESS:3000/forgot-password"
 
-# Environment
-ENVIRONMENT=development
-EOF
     echo "✅ Switched to local environment (localhost:3000)"
     ;;
     
   "network")
     read -p "Enter your local IP address: " IP_ADDRESS
-    cat > "$ENV_FILE" << EOF
-# API Configuration
-API_BASE_URL=http://$IP_ADDRESS:3000/api
+    
+    # Update mobile .env - only API_BASE_URL and ENVIRONMENT
+    update_env_var "$MOBILE_ENV_FILE" "API_BASE_URL" "http://$IP_ADDRESS:3000/api"
+    update_env_var "$MOBILE_ENV_FILE" "ENVIRONMENT" "development"
+    
+    # Update backend .env - only server and CORS related variables
+    update_env_var "$BACKEND_ENV_FILE" "NEXT_PUBLIC_API_BASE_URL" "http://$IP_ADDRESS:3000/api"
+    update_env_var "$BACKEND_ENV_FILE" "API_BASE_URL" "http://$IP_ADDRESS:3000/api"
+    update_env_var "$BACKEND_ENV_FILE" "NODE_ENV" "development"
+    update_env_var "$BACKEND_ENV_FILE" "ALLOWED_ORIGINS" "http://$IP_ADDRESS:3000,http://$IP_ADDRESS:3001,http://localhost:3000,http://localhost:3001,http://127.0.0.1:3000,http://127.0.0.1:3001"
+    update_env_var "$BACKEND_ENV_FILE" "APP_RESET_WEB_URL" "http://$IP_ADDRESS:3000/forgot-password"
 
-# Environment
-ENVIRONMENT=development
-EOF
     echo "✅ Switched to network environment ($IP_ADDRESS:3000)"
     ;;
     
   "staging")
-    cat > "$ENV_FILE" << EOF
-# API Configuration
-API_BASE_URL=https://staging-api.tripthread.com/api
+    # Update mobile .env - only API_BASE_URL and ENVIRONMENT
+    update_env_var "$MOBILE_ENV_FILE" "API_BASE_URL" "https://staging-api.tripthread.com/api"
+    update_env_var "$MOBILE_ENV_FILE" "ENVIRONMENT" "staging"
+    
+    # Update backend .env - only server and CORS related variables
+    update_env_var "$BACKEND_ENV_FILE" "NEXT_PUBLIC_API_BASE_URL" "https://staging-api.tripthread.com/api"
+    update_env_var "$BACKEND_ENV_FILE" "API_BASE_URL" "https://staging-api.tripthread.com/api"
+    update_env_var "$BACKEND_ENV_FILE" "NODE_ENV" "staging"
+    update_env_var "$BACKEND_ENV_FILE" "ALLOWED_ORIGINS" "https://staging.tripthread.com,https://staging-api.tripthread.com"
+    update_env_var "$BACKEND_ENV_FILE" "APP_RESET_WEB_URL" "http://$IP_ADDRESS:3000/forgot-password"
 
-# Environment
-ENVIRONMENT=staging
-EOF
     echo "✅ Switched to staging environment"
     ;;
     
   "production")
-    cat > "$ENV_FILE" << EOF
-# API Configuration
-API_BASE_URL=https://api.tripthread.com/api
+    # Update mobile .env - only API_BASE_URL and ENVIRONMENT
+    update_env_var "$MOBILE_ENV_FILE" "API_BASE_URL" "https://api.tripthread.com/api"
+    update_env_var "$MOBILE_ENV_FILE" "ENVIRONMENT" "production"
+    
+    # Update backend .env - only server and CORS related variables
+    update_env_var "$BACKEND_ENV_FILE" "NEXT_PUBLIC_API_BASE_URL" "https://api.tripthread.com/api"
+    update_env_var "$BACKEND_ENV_FILE" "API_BASE_URL" "https://api.tripthread.com/api"
+    update_env_var "$BACKEND_ENV_FILE" "NODE_ENV" "production"
+    update_env_var "$BACKEND_ENV_FILE" "ALLOWED_ORIGINS" "https://tripthread.com,https://api.tripthread.com"
+    update_env_var "$BACKEND_ENV_FILE" "APP_RESET_WEB_URL" "http://$IP_ADDRESS:3000/forgot-password"
 
-# Environment
-ENVIRONMENT=production
-EOF
     echo "✅ Switched to production environment"
     ;;
     
@@ -68,7 +109,10 @@ EOF
 esac
 
 echo ""
-echo "📋 Current configuration:"
-cat "$ENV_FILE"
+echo "📋 Mobile configuration (updated variables only):"
+grep -E "^(API_BASE_URL|ENVIRONMENT)=" "$MOBILE_ENV_FILE" || echo "No matching variables found"
 echo ""
-echo "🔄 Restart your Flutter app for changes to take effect"
+echo "📋 Backend configuration (updated variables only):"
+grep -E "^(NEXT_PUBLIC_API_BASE_URL|API_BASE_URL|NODE_ENV|ALLOWED_ORIGINS|APP_RESET_WEB_URL)=" "$BACKEND_ENV_FILE" || echo "No matching variables found"
+echo ""
+echo "🔄 Restart your Flutter app and Next.js server for changes to take effect"

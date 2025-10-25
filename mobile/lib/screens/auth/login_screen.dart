@@ -216,6 +216,23 @@ class _LoginScreenState extends State<LoginScreen> {
 
                 const SizedBox(height: 24),
 
+                // Forgot Password Link
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: TextButton(
+                    onPressed: () {
+                      final authProvider = context.read<AuthProvider>();
+                      if (authProvider.error != null) {
+                        authProvider.clearError();
+                      }
+                      context.go('/forgot-password');
+                    },
+                    child: const Text('Forgot Password?'),
+                  ),
+                ),
+
+                const SizedBox(height: 24),
+
                 // Sign Up Link
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
