@@ -872,7 +872,7 @@ class ApiService {
   }
 
   // Place endpoints
-  Future<ApiResponse<List<Place>>> searchPlaces({
+  Future<ApiResponse<List<Place>>>searchPlaces({
     required String query,
     double? lat,
     double? lng,

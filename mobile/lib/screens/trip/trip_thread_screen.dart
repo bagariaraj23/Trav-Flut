@@ -274,85 +274,87 @@ class _TripThreadScreenState extends State<TripThreadScreen> {
                 final entries = tripProvider.currentTripEntries;
 
                 if (entries.isEmpty) {
-                  return Center(
-                    child: Padding(
-                      padding: const EdgeInsets.all(32),
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.all(24),
-                            decoration: BoxDecoration(
-                              color: Theme.of(context)
-                                  .colorScheme
-                                  .primaryContainer
-                                  .withOpacity(0.3),
-                              shape: BoxShape.circle,
-                            ),
-                            child: Icon(
-                              Icons.timeline,
-                              size: 64,
-                              color: Theme.of(context).colorScheme.primary,
-                            ),
-                          ),
-                          const SizedBox(height: 24),
-                          Text(
-                            'No entries yet',
-                            style: Theme.of(context)
-                                .textTheme
-                                .headlineSmall
-                                ?.copyWith(
-                                  color:
-                                      Theme.of(context).colorScheme.onSurface,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                          ),
-                          const SizedBox(height: 12),
-                          Text(
-                            canAddEntries
-                                ? 'Start documenting your journey!\nShare your experiences, photos, and locations.'
-                                : 'This trip has no entries yet.\nCheck back later for updates.',
-                            style: Theme.of(context)
-                                .textTheme
-                                .bodyMedium
-                                ?.copyWith(
-                                  color: Theme.of(context)
-                                      .colorScheme
-                                      .onSurface
-                                      .withOpacity(0.7),
-                                  height: 1.5,
-                                ),
-                            textAlign: TextAlign.center,
-                          ),
-                          if (canAddEntries) ...[
-                            const SizedBox(height: 24),
-                            ElevatedButton.icon(
-                              onPressed: () {
-                                // Scroll to bottom to show add entry section
-                                WidgetsBinding.instance
-                                    .addPostFrameCallback((_) {
-                                  if (_scrollController.hasClients) {
-                                    _scrollController.animateTo(
-                                      _scrollController
-                                          .position.maxScrollExtent,
-                                      duration:
-                                          const Duration(milliseconds: 300),
-                                      curve: Curves.easeOut,
-                                    );
-                                  }
-                                });
-                              },
-                              icon: const Icon(Icons.add),
-                              label: const Text('Add First Entry'),
-                              style: ElevatedButton.styleFrom(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 24,
-                                  vertical: 12,
-                                ),
+                  return SingleChildScrollView(
+                    child: Center(
+                      child: Padding(
+                        padding: const EdgeInsets.all(32),
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(24),
+                              decoration: BoxDecoration(
+                                color: Theme.of(context)
+                                    .colorScheme
+                                    .primaryContainer
+                                    .withOpacity(0.3),
+                                shape: BoxShape.circle,
+                              ),
+                              child: Icon(
+                                Icons.timeline,
+                                size: 64,
+                                color: Theme.of(context).colorScheme.primary,
                               ),
                             ),
+                            const SizedBox(height: 24),
+                            Text(
+                              'No entries yet',
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .headlineSmall
+                                  ?.copyWith(
+                                    color:
+                                        Theme.of(context).colorScheme.onSurface,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                            ),
+                            const SizedBox(height: 12),
+                            Text(
+                              canAddEntries
+                                  ? 'Start documenting your journey!\nShare your experiences, photos, and locations.'
+                                  : 'This trip has no entries yet.\nCheck back later for updates.',
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .bodyMedium
+                                  ?.copyWith(
+                                    color: Theme.of(context)
+                                        .colorScheme
+                                        .onSurface
+                                        .withOpacity(0.7),
+                                    height: 1.5,
+                                  ),
+                              textAlign: TextAlign.center,
+                            ),
+                            if (canAddEntries) ...[
+                              const SizedBox(height: 24),
+                              ElevatedButton.icon(
+                                onPressed: () {
+                                  // Scroll to bottom to show add entry section
+                                  WidgetsBinding.instance
+                                      .addPostFrameCallback((_) {
+                                    if (_scrollController.hasClients) {
+                                      _scrollController.animateTo(
+                                        _scrollController
+                                            .position.maxScrollExtent,
+                                        duration:
+                                            const Duration(milliseconds: 300),
+                                        curve: Curves.easeOut,
+                                      );
+                                    }
+                                  });
+                                },
+                                icon: const Icon(Icons.add),
+                                label: const Text('Add First Entry'),
+                                style: ElevatedButton.styleFrom(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 24,
+                                    vertical: 12,
+                                  ),
+                                ),
+                              ),
+                            ],
                           ],
-                        ],
+                        ),
                       ),
                     ),
                   );

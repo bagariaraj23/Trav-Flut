@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:another_flushbar/flushbar.dart';
 import 'package:tripthread/config/app_config.dart';
 import 'package:tripthread/providers/auth_provider.dart';
+import 'package:tripthread/providers/place_provider.dart';
 import 'package:tripthread/providers/user_provider.dart';
 import 'package:tripthread/providers/trip_provider.dart';
 import 'package:tripthread/providers/feed_provider.dart';
@@ -130,6 +131,10 @@ void main() async {
               return FeedProvider(apiService: apiService);
             },
           ),
+          ChangeNotifierProvider<PlaceProvider>(create: (context) {
+              debugPrint('[main] Creating PlaceProvider');
+              return PlaceProvider(apiService: apiService);
+          })
         ],
         child: TripThreadAppRouter(),
       ),

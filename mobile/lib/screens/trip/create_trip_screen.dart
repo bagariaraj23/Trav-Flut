@@ -1,12 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
+import 'package:tripthread/models/place.dart';
+import 'package:tripthread/providers/place_provider.dart';
 import 'package:tripthread/providers/trip_provider.dart';
 import 'package:tripthread/models/trip.dart';
 import 'package:tripthread/widgets/custom_text_field.dart';
 import 'package:tripthread/widgets/loading_button.dart';
 import 'dart:io';
 import 'package:tripthread/services/media_service.dart';
+import 'package:tripthread/widgets/place_autocomplete_field.dart';
 
 class CreateTripScreen extends StatefulWidget {
   const CreateTripScreen({Key? key}) : super(key: key);
@@ -24,7 +27,7 @@ class _CreateTripScreenState extends State<CreateTripScreen> {
   final MediaService _mediaService = MediaService();
   File? _selectedCoverFile;
 
-  final List<String> _destinations = [];
+  final List<Place> _destinations = [];
   DateTime? _startDate;
   DateTime? _endDate;
   TripMood? _selectedMood;
@@ -36,22 +39,6 @@ class _CreateTripScreenState extends State<CreateTripScreen> {
     _descriptionController.dispose();
     _destinationController.dispose();
     super.dispose();
-  }
-
-  void _addDestination() {
-    final destination = _destinationController.text.trim();
-    if (destination.isNotEmpty && !_destinations.contains(destination)) {
-      setState(() {
-        _destinations.add(destination);
-        _destinationController.clear();
-      });
-    }
-  }
-
-  void _removeDestination(String destination) {
-    setState(() {
-      _destinations.remove(destination);
-    });
   }
 
   Future<void> _selectDate(BuildContext context, bool isStartDate) async {
@@ -176,8 +163,8 @@ class _CreateTripScreenState extends State<CreateTripScreen> {
           : _descriptionController.text.trim(),
       startDate: _startDate,
       endDate: _endDate,
-      destinations: _destinations,
-      destinationPlaceIds: _destinations.map((e) => e).toList(),
+      destinations: _destinations.map((e) => e.name).toList(),
+      destinationPlaceIds: _destinations.map((e) => e.id).toList(),
       mood: _selectedMood,
       type: _selectedType,
       coverMediaUrl: _selectedCoverFile != null
@@ -372,34 +359,69 @@ class _CreateTripScreenState extends State<CreateTripScreen> {
                         ),
                   ),
                   const SizedBox(height: 8),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: TextFormField(
-                          controller: _destinationController,
-                          decoration: InputDecoration(
-                            hintText: 'Add destination',
-                            prefixIcon: const Icon(Icons.location_on),
-                            suffixIcon: IconButton(
-                              icon: const Icon(Icons.add),
-                              onPressed: _addDestination,
-                            ),
-                          ),
-                          onFieldSubmitted: (_) => _addDestination(),
-                        ),
+                  // Row(
+                  //   children: [
+                  //     Expanded(
+                  //       child: TextFormField(
+                  //         controller: _destinationController,
+                  //         decoration: InputDecoration(
+                  //           hintText: 'Add destination',
+                  //           prefixIcon: const Icon(Icons.location_on),
+                  //           suffixIcon: IconButton(
+                  //             icon: const Icon(Icons.add),
+                  //             onPressed: _addDestination,
+                  //           ),
+                  //         ),
+                  //         onFieldSubmitted: (_) => _addDestination(),
+                  //       ),
+                  //     ),
+                  //   ],
+                  // ),
+                  PlaceAutocompleteField(
+                    controller: _destinationController,
+                    hintText: 'Search destinations...',
+                    decoration: InputDecoration(
+                      prefixIcon: const Icon(Icons.location_on),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
                       ),
-                    ],
+                    ),
+                    onPlaceSelected: (place) {
+                      setState(() {
+                        if (!_destinations.any((p) => p.id == place.id)) {
+                          _destinations.add(place);
+                        }
+                        _destinationController
+                            .clear();
+                      });
+                      context.read<PlaceProvider>().clearSearchResults();
+                      FocusScope.of(context).unfocus();
+                    },
                   ),
                   const SizedBox(height: 12),
                   if (_destinations.isNotEmpty)
                     Wrap(
                       spacing: 8,
                       runSpacing: 8,
-                      children: _destinations.map((destination) {
+                      // children: _destinations.map((destination) {
+                      //   return Chip(
+                      //     label: Text(destination),
+                      //     deleteIcon: const Icon(Icons.close, size: 18),
+                      //     onDeleted: () => _removeDestination(destination),
+                      //     backgroundColor:
+                      //         Theme.of(context).colorScheme.primaryContainer,
+                      //   );
+                      // }).toList(),
+                      children: _destinations.map((place) {
                         return Chip(
-                          label: Text(destination),
+                          label: Text(place.name),
                           deleteIcon: const Icon(Icons.close, size: 18),
-                          onDeleted: () => _removeDestination(destination),
+                          onDeleted: () {
+                            setState(() {
+                              _destinations
+                                  .removeWhere((p) => p.id == place.id);
+                            });
+                          },
                           backgroundColor:
                               Theme.of(context).colorScheme.primaryContainer,
                         );

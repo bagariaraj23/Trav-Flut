@@ -6,9 +6,6 @@
 
 */
 -- CreateEnum
-CREATE TYPE "TripJoinRequestStatus" AS ENUM ('PENDING', 'ACCEPTED', 'REJECTED');
-
--- CreateEnum
 CREATE TYPE "PlaceType" AS ENUM ('POI', 'STAY', 'FOOD', 'TRANSPORT', 'VIEWPOINT', 'OTHER');
 
 -- CreateEnum
@@ -72,19 +69,6 @@ CREATE TABLE "place_shares" (
     CONSTRAINT "place_shares_pkey" PRIMARY KEY ("id")
 );
 
--- CreateTable
-CREATE TABLE "trip_join_requests" (
-    "id" TEXT NOT NULL,
-    "tripId" TEXT NOT NULL,
-    "senderId" TEXT NOT NULL,
-    "receiverId" TEXT NOT NULL,
-    "status" "TripJoinRequestStatus" NOT NULL DEFAULT 'PENDING',
-    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt" TIMESTAMP(3) NOT NULL,
-
-    CONSTRAINT "trip_join_requests_pkey" PRIMARY KEY ("id")
-);
-
 -- CreateIndex
 CREATE UNIQUE INDEX "places_externalId_key" ON "places"("externalId");
 
@@ -96,9 +80,6 @@ CREATE UNIQUE INDEX "places_on_trip_tripId_placeId_visitedAt_key" ON "places_on_
 
 -- CreateIndex
 CREATE UNIQUE INDEX "place_shares_token_key" ON "place_shares"("token");
-
--- CreateIndex
-CREATE UNIQUE INDEX "trip_join_requests_tripId_receiverId_key" ON "trip_join_requests"("tripId", "receiverId");
 
 -- AddForeignKey
 ALTER TABLE "trips" ADD CONSTRAINT "trips_startLocationId_fkey" FOREIGN KEY ("startLocationId") REFERENCES "places"("id") ON DELETE SET NULL ON UPDATE CASCADE;
@@ -126,12 +107,3 @@ ALTER TABLE "place_shares" ADD CONSTRAINT "place_shares_threadEntryId_fkey" FORE
 
 -- AddForeignKey
 ALTER TABLE "place_shares" ADD CONSTRAINT "place_shares_createdById_fkey" FOREIGN KEY ("createdById") REFERENCES "users"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "trip_join_requests" ADD CONSTRAINT "trip_join_requests_tripId_fkey" FOREIGN KEY ("tripId") REFERENCES "trips"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "trip_join_requests" ADD CONSTRAINT "trip_join_requests_senderId_fkey" FOREIGN KEY ("senderId") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "trip_join_requests" ADD CONSTRAINT "trip_join_requests_receiverId_fkey" FOREIGN KEY ("receiverId") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;

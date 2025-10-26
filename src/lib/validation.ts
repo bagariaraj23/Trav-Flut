@@ -88,6 +88,7 @@ export const createTripSchema = z
       .min(1, "Title is required")
       .max(100, "Title must be less than 100 characters")
       .transform((title) => title.trim()),
+    // destinationPlaceIds: z.array(z.string().uuid("Invalid place ID")).optional(),
     description: z
       .union([
         z

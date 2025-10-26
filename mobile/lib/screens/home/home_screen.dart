@@ -817,7 +817,7 @@ class TripsTab extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           Text(
-            trip.destinations.first,
+            trip.destinations.isNotEmpty ? trip.destinations.first : trip.title,
             style: const TextStyle(
               color: Colors.white,
               fontSize: 18,

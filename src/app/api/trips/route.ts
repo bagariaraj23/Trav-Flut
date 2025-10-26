@@ -104,29 +104,84 @@ export async function POST(request: NextRequest) {
 
             // Create trip with transaction for data consistency
             const trip = await prisma.$transaction(async (tx) => {
-              const tripData: any = {
-                ...validatedData,
-                userId,
-                status: (() => {
-                  const now = new Date();
-                  const startDate = new Date(validatedData.startDate);
-                  // Set to start of day for comparison
-                  now.setHours(0, 0, 0, 0);
-                  startDate.setHours(0, 0, 0, 0);
+              // Calculate trip status based on start date
+              const now = new Date();
+              const startDate = new Date(validatedData.startDate);
+              now.setHours(0, 0, 0, 0);
+              startDate.setHours(0, 0, 0, 0);
 
-                  if (startDate > now) {
-                    return TripStatus.UPCOMING;
+              const status = startDate > now ? TripStatus.UPCOMING : TripStatus.ONGOING;
+
+              // Extract destinationPlaceIds from validated data
+              const { destinationPlaceIds, ...tripData } = validatedData;
+
+              // Create trip with required fields
+              const trip = await tx.trip.create({
+                data: {
+                  title: tripData.title,
+                  userId,
+                  status,
+                  startDate: new Date(tripData.startDate),
+                  // Optional fields with proper null handling
+                  endDate: tripData.endDate ? new Date(tripData.endDate) : new Date(tripData.startDate),
+                  description: tripData.description ?? null,
+                  type: tripData.type ?? null,
+                  mood: tripData.mood ?? null,
+                  coverMediaUrl: tripData.coverMediaUrl ?? null,
+                },
+                include: {
+                  user: {
+                    select: {
+                      id: true,
+                      email: true,
+                      username: true,
+                      name: true,
+                      avatarUrl: true,
+                      bio: true,
+                      isPrivate: true,
+                      createdAt: true,
+                      updatedAt: true,
+                    },
+                  },
+                  _count: {
+                    select: {
+                      threadEntries: true,
+                      media: true,
+                      participants: true,
+                    },
+                  },
+                },
+              }) as any; // Type assertion needed due to complex response type
+
+              // Create place associations if destinationPlaceIds are provided
+              if (destinationPlaceIds?.length > 0) {
+                await tx.placeOnTrip.createMany({
+                  data: destinationPlaceIds.map((placeId: string, index: number) => ({
+                    tripId: trip.id,
+                    placeId,
+                    order: index
+                  })),
+                  skipDuplicates: true,
+                });
+              }
+
+              // Return trip with properly formatted user data
+              return {
+                ...trip,
+                user: trip.user
+                  ? {
+                    id: trip.user.id,
+                    email: trip.user.email,
+                    username: trip.user.username ?? undefined,
+                    name: trip.user.name ?? undefined,
+                    avatarUrl: trip.user.avatarUrl ?? undefined,
+                    bio: trip.user.bio ?? undefined,
+                    isPrivate: trip.user.isPrivate,
+                    createdAt: trip.user.createdAt,
+                    updatedAt: trip.user.updatedAt,
                   }
-                  return TripStatus.ONGOING;
-                })(),
+                  : undefined,
               };
-
-              if (validatedData.startDate) {
-                tripData.startDate = new Date(validatedData.startDate);
-              }
-              if (validatedData.endDate) {
-                tripData.endDate = new Date(validatedData.endDate);
-              }
 
               console.log(
                 "[DEBUG] Trip data for database:",
@@ -144,7 +199,17 @@ export async function POST(request: NextRequest) {
               console.log("[DEBUG] type in tripData:", tripData.type);
 
               const newTrip = await tx.trip.create({
-                data: tripData,
+                data: {
+                  title: validatedData.title,
+                  userId,
+                  status,
+                  startDate: validatedData.startDate,
+                  endDate: validatedData.endDate || validatedData.startDate,
+                  description: validatedData.description ?? null,
+                  type: validatedData.type ?? null,
+                  mood: validatedData.mood ?? null,
+                  coverMediaUrl: validatedData.coverMediaUrl ?? null,
+                } as const,
                 include: {
                   user: {
                     select: {
@@ -211,14 +276,14 @@ export async function POST(request: NextRequest) {
               updatedAt: trip.updatedAt.toISOString(),
               user: trip.user
                 ? {
-                    ...trip.user,
-                    username: trip.user.username ?? undefined,
-                    name: trip.user.name ?? undefined,
-                    avatarUrl: trip.user.avatarUrl ?? undefined,
-                    bio: trip.user.bio ?? undefined,
-                    createdAt: trip.user.createdAt.toISOString(),
-                    updatedAt: trip.user.updatedAt.toISOString(),
-                  }
+                  ...trip.user,
+                  username: trip.user.username ?? undefined,
+                  name: trip.user.name ?? undefined,
+                  avatarUrl: trip.user.avatarUrl ?? undefined,
+                  bio: trip.user.bio ?? undefined,
+                  createdAt: trip.user.createdAt.toISOString(),
+                  updatedAt: trip.user.updatedAt.toISOString(),
+                }
                 : undefined,
             };
 
@@ -273,14 +338,12 @@ export async function POST(request: NextRequest) {
                 // Provide more specific error messages for date issues
                 if (firstError.path.includes("startDate")) {
                   throw new ValidationError(
-                    `Start date validation failed: ${
-                      firstError.message
+                    `Start date validation failed: ${firstError.message
                     }. Received: ${body?.startDate || "undefined"}`
                   );
                 } else if (firstError.path.includes("endDate")) {
                   throw new ValidationError(
-                    `End date validation failed: ${
-                      firstError.message
+                    `End date validation failed: ${firstError.message
                     }. Received: ${body?.endDate || "undefined"}`
                   );
                 } else {
@@ -377,14 +440,14 @@ export async function GET(request: NextRequest) {
             updatedAt: trip.updatedAt.toISOString(),
             user: trip.user
               ? {
-                  ...trip.user,
-                  username: trip.user.username ?? undefined,
-                  name: trip.user.name ?? undefined,
-                  avatarUrl: trip.user.avatarUrl ?? undefined,
-                  bio: trip.user.bio ?? undefined,
-                  createdAt: trip.user.createdAt.toISOString(),
-                  updatedAt: trip.user.updatedAt.toISOString(),
-                }
+                ...trip.user,
+                username: trip.user.username ?? undefined,
+                name: trip.user.name ?? undefined,
+                avatarUrl: trip.user.avatarUrl ?? undefined,
+                bio: trip.user.bio ?? undefined,
+                createdAt: trip.user.createdAt.toISOString(),
+                updatedAt: trip.user.updatedAt.toISOString(),
+              }
               : undefined,
           }));
 

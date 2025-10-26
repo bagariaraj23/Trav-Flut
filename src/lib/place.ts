@@ -3,8 +3,27 @@ import { cacheGetJson, cacheSetJson, cacheKeys } from "@/lib/cache";
 import { rlKeyFromUserOrIp, rateLimit } from "@/lib/rateLimit";
 import { MapboxPlacesAdapter } from "@/lib/mapProviders/mapbox";
 import type { NormalizedPlace } from "@/lib/mapProviders/adapter";
+import { PlaceType, PlaceSource } from '@prisma/client'; // Import enums
 
 const placesProvider = new MapboxPlacesAdapter();
+
+// Helper function
+function mapPlaceType(mapboxType?: string): PlaceType {
+  const type = mapboxType?.toLowerCase();
+  switch (type) {
+    case 'restaurant':
+    case 'cafe':
+      return PlaceType.FOOD;
+    case 'hotel':
+    case 'lodging':
+      return PlaceType.STAY;
+    case 'poi':
+    case 'landmark':
+      return PlaceType.POI;
+    default:
+      return PlaceType.OTHER;
+  }
+}
 
 export async function searchPlaces(params: {
   q: string;
@@ -67,14 +86,18 @@ export async function resolvePlace(input: {
   }
 
   // 3) upsert new
-  const place = await prisma.place.create({
-    data: {
+  const place = await prisma.place.upsert({
+    where: {
+      externalId: input.externalId ?? '',
+    },
+    update: {}, // no updates needed since we're just preventing duplicates
+    create: {
       name,
       address: input.address,
       lat,
       lng,
-      placeType: (input.placeType as any) ?? "POI",
-      source: (input.source as any) ?? "USER",
+      placeType: mapPlaceType(input.placeType),
+      source: (input.source as PlaceSource) ?? PlaceSource.MAPBOX,
       externalId: input.externalId,
     },
   });
