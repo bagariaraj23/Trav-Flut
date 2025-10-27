@@ -34,6 +34,8 @@ export async function searchPlaces(params: {
   ip?: string;
 }) {
   const { q, lat, lng, limit = 10, userId, ip } = params;
+
+  // 1. Rate limiting check
   const rl = await rateLimit(
     rlKeyFromUserOrIp(userId, ip, "places:search"),
     30,
@@ -41,13 +43,27 @@ export async function searchPlaces(params: {
   );
   if (!rl.allowed) return [] as NormalizedPlace[];
 
+  // 2. Try cache with fallback to Mapbox
   const key = cacheKeys.search(q, lat, lng, undefined, limit);
   const cached = await cacheGetJson<NormalizedPlace[]>(key);
-  if (cached) return cached;
+  
+  if (cached) {
+    console.log(`[Cache] Hit for search query: ${q}`);
+    return cached;
+  }
 
-  const results = await placesProvider.search({ q, lat, lng, limit });
-  await cacheSetJson(key, results, 600);
-  return results;
+  console.log(`[Cache] Miss for search query: ${q}`);
+  
+  // 4. If not in cache, call Mapbox
+  const searchResults = await placesProvider.search({ q, lat, lng, limit });
+
+  // 5. Cache results with TTL
+  if (searchResults.length > 0) {
+    await cacheSetJson(key, searchResults, 3600); // Cache for 1 hour
+    console.log(`[Cache] Stored ${searchResults.length} results for query: ${q}`);
+  }
+
+  return searchResults;
 }
 
 export async function resolvePlace(input: {
@@ -59,16 +75,53 @@ export async function resolvePlace(input: {
   placeType?: string;
   source?: string;
 }) {
-  // 1) externalId lookup
+  // Helper to convert Place to cache-safe object
+  const serializePlace = (place: any) => ({
+    ...place,
+    createdAt: place.createdAt.toISOString(),
+    updatedAt: place.updatedAt.toISOString()
+  });
+
+  // Helper to deserialize cached place
+  const deserializePlace = (cached: any) => ({
+    ...cached,
+    createdAt: new Date(cached.createdAt),
+    updatedAt: new Date(cached.updatedAt)
+  });
+
+  // 1. Try cache first for resolved places
+  const cacheKey = input.externalId
+    ? `place:${input.externalId}`
+    : `place:${input.name}:${input.lat}:${input.lng}`;
+
+  const cached = await cacheGetJson<{ placeId: string; place: any }>(cacheKey);
+  if (cached) {
+    console.log(`[Cache] Hit for place resolution: ${input.name}`);
+    return { 
+      placeId: cached.placeId, 
+      place: deserializePlace(cached.place)
+    };
+  }
+
+  // 2. If has externalId, try direct lookup
   if (input.externalId) {
     const existingByExt = await prisma.place.findUnique({
       where: { externalId: input.externalId },
     });
-    if (existingByExt)
-      return { placeId: existingByExt.id, place: existingByExt };
+    if (existingByExt) {
+      const serialized = {
+        placeId: existingByExt.id,
+        place: serializePlace(existingByExt)
+      };
+      await cacheSetJson(cacheKey, serialized, 86400); // Cache for 24 hours
+      return {
+        placeId: existingByExt.id,
+        place: existingByExt
+      };
+    }
   }
 
-  // 2) name + 25m radius dedupe
+  // 3. Try spatial deduplication
   const lat = input.lat;
   const lng = input.lng;
   const name = input.name.trim();
@@ -78,20 +131,24 @@ export async function resolvePlace(input: {
       lat: { gte: lat - 0.00025, lte: lat + 0.00025 },
       lng: { gte: lng - 0.00025, lte: lng + 0.00025 },
     },
-    take: 5,
+    take: 1,
   });
+
   if (nearby.length > 0) {
-    const p = nearby[0];
-    return { placeId: p.id, place: p };
+    const serialized = {
+      placeId: nearby[0].id,
+      place: serializePlace(nearby[0])
+    };
+    await cacheSetJson(cacheKey, serialized, 86400); // Cache for 24 hours
+    return {
+      placeId: nearby[0].id,
+      place: nearby[0]
+    };
   }
 
-  // 3) upsert new
-  const place = await prisma.place.upsert({
-    where: {
-      externalId: input.externalId ?? '',
-    },
-    update: {}, // no updates needed since we're just preventing duplicates
-    create: {
+  // 4. Create new place if no match found
+  const place = await prisma.place.create({
+    data: {
       name,
       address: input.address,
       lat,

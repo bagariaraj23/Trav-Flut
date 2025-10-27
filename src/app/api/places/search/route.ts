@@ -5,59 +5,69 @@ import { Place } from "@prisma/client";
 import { debug } from "console";
 
 export async function GET(request: NextRequest) {
-  const { searchParams } = new URL(request.url);
-  const q = searchParams.get("q") ?? "";
-  const lat = searchParams.get("lat");
-  const lng = searchParams.get("lng");
-  const limit = searchParams.get("limit");
+  try {
+    const { searchParams } = new URL(request.url);
+    const q = searchParams.get("q")?.trim() ?? "";
+    const lat = searchParams.get("lat");
+    const lng = searchParams.get("lng");
+    const limit = searchParams.get("limit");
 
-  if (!q) {
-    return NextResponse.json<ApiResponse>({ success: true, data: [] });
-  }
-
-  const ip = request.headers.get("x-forwarded-for") ?? request.ip ?? undefined;
-
-  // 1. Get normalized results from Mapbox
-  const normalizedResults = await searchPlaces({
-    q,
-    lat: lat ? parseFloat(lat) : undefined,
-    lng: lng ? parseFloat(lng) : undefined,
-    limit: limit ? parseInt(limit, 10) : 10,
-    ip,
-  });
-
-  console.log("[DEBUG] /api/places/search - Normalized results:", JSON.stringify(normalizedResults, null, 2));
-
-  // 2. Resolve each normalized result against your database
-  // This finds existing places or creates new ones and returns your DB Place objects
-  const resolvedPlacesPromises = normalizedResults.map(async (result) => {
-    try {
-      const resolved = await resolvePlace({
-        name: result.name,
-        address: result.address,
-        lat: result.lat,
-        lng: result.lng,
-        externalId: result.externalId,
-        placeType: result.placeType,
-        source: result.source ?? "MAPBOX",
-      });
-      // resolvePlace returns { placeId: string, place: Place }
-      return resolved.place; 
-    } catch (error) {
-      console.error(`Error resolving place "${result.name}":`, error);
-      return null;
+    // Early return for empty queries
+    if (q.length < 2) {
+      return NextResponse.json<ApiResponse>({ success: true, data: [] });
     }
-  });
 
-  const resolvedPlaces = (await Promise.all(resolvedPlacesPromises)).filter(
-    (place): place is Place => place !== null
-  );
+    const ip = request.headers.get("x-forwarded-for") ?? request.ip ?? undefined;
 
-  console.log("[DEBUG] /api/places/search - Returning resolved places:", JSON.stringify(resolvedPlaces, null, 2));
+    // 1. Search with caching
+    console.log(`[Search] Query: "${q}" from IP: ${ip}`);
+    const normalizedResults = await searchPlaces({
+      q,
+      lat: lat ? parseFloat(lat) : undefined,
+      lng: lng ? parseFloat(lng) : undefined,
+      limit: limit ? parseInt(limit, 10) : 10,
+      ip,
+    });
 
-  // 3. Return the array of Place objects from your database
-  return NextResponse.json<ApiResponse<Place[]>>({
-    success: true,
-    data: resolvedPlaces,
-  });
+    if (normalizedResults.length === 0) {
+      console.log("[Search] No results found");
+      return NextResponse.json<ApiResponse>({ success: true, data: [] });
+    }
+
+    // 2. Resolve places in parallel with optimized caching
+    console.log(`[Search] Resolving ${normalizedResults.length} places`);
+    const resolvedPlacesPromises = normalizedResults.map(async (result) => {
+      try {
+        const resolved = await resolvePlace({
+          name: result.name,
+          address: result.address,
+          lat: result.lat,
+          lng: result.lng,
+          externalId: result.externalId,
+          placeType: result.placeType,
+          source: result.source ?? "MAPBOX",
+        });
+        return resolved.place;
+      } catch (error) {
+        console.error(`[Search] Error resolving "${result.name}":`, error);
+        return null;
+      }
+    });
+
+    const resolvedPlaces = (await Promise.all(resolvedPlacesPromises)).filter(
+      (place): place is Place => place !== null
+    );
+
+    console.log("[DEBUG] /api/places/search - Returning resolved places:", JSON.stringify(resolvedPlaces, null, 2));
+    return NextResponse.json<ApiResponse<Place[]>>({
+      success: true,
+      data: resolvedPlaces,
+    });
+  } catch (error) {
+    console.error("[Search] Unexpected error:", error);
+    return NextResponse.json<ApiResponse>(
+      { success: false, error: "Internal server error" },
+      { status: 500 }
+    );
+  }
 }

@@ -256,7 +256,7 @@ class _CreateTripScreenState extends State<CreateTripScreen> {
               CustomTextField(
                 controller: _titleController,
                 label: 'Trip Title',
-                hintText: 'e.g., Tokyo Adventure 2024',
+                hintText: 'e.g., Tokyo Adventure',
                 prefixIcon: Icons.title,
                 validator: (value) {
                   if (value == null || value.trim().isEmpty) {
@@ -391,8 +391,7 @@ class _CreateTripScreenState extends State<CreateTripScreen> {
                         if (!_destinations.any((p) => p.id == place.id)) {
                           _destinations.add(place);
                         }
-                        _destinationController
-                            .clear();
+                        _destinationController.clear();
                       });
                       context.read<PlaceProvider>().clearSearchResults();
                       FocusScope.of(context).unfocus();
