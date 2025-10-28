@@ -102,7 +102,7 @@ export function validateFileUpload(file: {
   // Allowed file types
   const allowedTypes = [
     'image/jpeg',
-    'image/jpg', 
+    'image/jpg',
     'image/png',
     'image/gif',
     'video/mp4',
@@ -136,19 +136,135 @@ export function validateFileUpload(file: {
 export function getClientIP(request: NextRequest): string {
   const forwarded = request.headers.get('x-forwarded-for')
   const realIP = request.headers.get('x-real-ip')
-  
+
   if (forwarded) {
     return forwarded.split(',')[0].trim()
   }
-  
+
   if (realIP) {
     return realIP
   }
-  
+
   return request.ip || 'unknown'
 }
 
-// Secure headers configuration
+// Rate limiting configuration
+interface RateLimitConfig {
+  maxRequests: number
+  windowMs: number
+}
+
+const rateLimits = {
+  authenticated: {
+    maxRequests: 1000,  // 1000 requests
+    windowMs: 60 * 1000 // per minute
+  },
+  anonymous: {
+    maxRequests: 60,    // 60 requests
+    windowMs: 60 * 1000 // per minute
+  }
+}
+
+interface RateLimitInfo {
+  remaining: number
+  reset: number
+  isBlocked: boolean
+}
+
+// In-memory store for rate limiting
+const rateLimit = new Map<string, { count: number; start: number }>()
+
+// Generate a unique client identifier using multiple signals
+export function getClientIdentifier(request: NextRequest, userId?: string): string {
+  const signals = [
+    getClientIP(request),
+    request.headers.get('user-agent') || 'unknown',
+    request.headers.get('sec-ch-ua') || '',      // Browser info
+    request.headers.get('accept-language') || '', // Language preference
+    userId || 'anon'                             // User ID if authenticated
+  ]
+
+  return crypto
+    .createHash('sha256')
+    .update(signals.join('|'))
+    .digest('hex')
+}
+
+// Check rate limit for a client
+export function checkRateLimit(
+  identifier: string,
+  isAuthenticated: boolean = false
+): RateLimitInfo {
+  const config = isAuthenticated ? rateLimits.authenticated : rateLimits.anonymous
+  const now = Date.now()
+
+  // Clean up expired entries
+  Array.from(rateLimit.entries()).forEach(([key, data]) => {
+    if (now - data.start > config.windowMs) {
+      rateLimit.delete(key)
+    }
+  })
+
+  const clientData = rateLimit.get(identifier) || { count: 0, start: now }
+
+  // Reset window if expired
+  if (now - clientData.start > config.windowMs) {
+    clientData.count = 0
+    clientData.start = now
+  }
+
+  // Increment counter
+  clientData.count++
+  rateLimit.set(identifier, clientData)
+
+  const remaining = Math.max(0, config.maxRequests - clientData.count)
+  const reset = clientData.start + config.windowMs
+
+  return {
+    remaining,
+    reset,
+    isBlocked: clientData.count > config.maxRequests
+  }
+}
+
+// Headers for rate limit response
+export function getRateLimitHeaders(info: RateLimitInfo): HeadersInit {
+  return {
+    'X-RateLimit-Remaining': info.remaining.toString(),
+    'X-RateLimit-Reset': new Date(info.reset).toUTCString(),
+    'X-RateLimit-Blocked': info.isBlocked.toString()
+  }
+}
+
+// Enhanced rate limiting with user context
+export interface RateLimitResult {
+  allowed: boolean;
+  remaining: number;
+  resetAt: number;
+  identifier: string;
+}
+
+export async function enforceRateLimit(
+  request: NextRequest,
+  userId?: string | null,
+  scope: string = 'default'
+): Promise<RateLimitResult> {
+  // Get client identifier using multiple signals
+  const identifier = getClientIdentifier(request, userId || undefined);
+
+  // Get rate limit info based on auth status
+  const rateLimitInfo = checkRateLimit(identifier, !!userId);
+
+  // Calculate reset timestamp in seconds
+  const resetAt = Math.floor(rateLimitInfo.reset / 1000);
+
+  return {
+    allowed: !rateLimitInfo.isBlocked,
+    remaining: rateLimitInfo.remaining,
+    resetAt,
+    identifier
+  };
+}// Secure headers configuration
 export const securityHeaders = {
   'X-Content-Type-Options': 'nosniff',
   'X-Frame-Options': 'DENY',
@@ -169,7 +285,7 @@ export function validateEnvironment(): void {
   ]
 
   const missing = requiredEnvVars.filter(envVar => !process.env[envVar])
-  
+
   if (missing.length > 0) {
     throw new Error(`Missing required environment variables: ${missing.join(', ')}`)
   }
@@ -187,7 +303,7 @@ export function validateEnvironment(): void {
 // Database connection security
 export function validateDatabaseConnection(): void {
   const dbUrl = process.env.DATABASE_URL
-  
+
   if (!dbUrl) {
     throw new Error('DATABASE_URL is required')
   }

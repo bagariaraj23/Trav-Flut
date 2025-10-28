@@ -270,19 +270,70 @@ export async function cacheSetJson(
 }
 
 /**
- * Rounds a coordinate to a specific number of decimal places for cache key generation
+ * Base62 encoding for more compact keys while remaining URL-safe
+ * Using a modified base62 that's case-sensitive for more density
  */
-export function bucketCoord(value: number, decimals = 5): number {
-  const factor = Math.pow(10, decimals);
-  return Math.round(value * factor) / factor;
+const base62Chars = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
+
+function toBase62(num: number): string {
+  if (num === 0) return "0";
+  let result = "";
+  while (num > 0) {
+    result = base62Chars[num % 62] + result;
+    num = Math.floor(num / 62);
+  }
+  return result;
+}
+
+/**
+ * Rounds and encodes a coordinate for cache key generation
+ * Uses 4 decimals (11.1m precision) instead of 5 (1.1m precision)
+ * Encodes as base62 for shorter strings
+ */
+export function bucketCoord(value: number): string {
+  // Use 4 decimals (11.1m precision) instead of 5
+  const factor = 10000;
+  const encoded = toBase62(Math.round(value * factor));
+  return encoded;
 }
 
 /**
  * Cache key generators for different types of place queries
+ * Optimized for storage reduction:
+ * - Shorter prefixes (p=place, s=search, n=nearby)
+ * - Base62 encoded coordinates
+ * - Minimal separators
+ * - Optional params omitted entirely instead of empty strings
  */
 export const cacheKeys = {
   /**
-   * Generate a cache key for place search queries
+   * Primary place storage key
+   * Format: p:{id} - Stores full place data
+   */
+  place: (id: string): string => `p:${id}`,
+
+  /**
+   * Place reference by external ID
+   * Format: p:e:{externalId} - Stores only place ID reference
+   */
+  placeByExternal: (externalId: string): string => `p:e:${externalId}`,
+
+  /**
+   * Place reference by spatial key
+   * Format: p:s:{spatialKey} - Stores only place ID reference
+   */
+  placeBySpatial: (spatialKey: string): string => `p:s:${spatialKey}`,
+
+  /**
+   * Place reference by name and spatial key
+   * Format: p:n:{nameLower}:{spatialKey} - Stores only place ID reference
+   */
+  placeByName: (name: string, spatialKey: string): string =>
+    `p:n:${name.toLowerCase()}:${spatialKey}`,
+
+  /**
+   * Generate a compact cache key for place search queries
+   * Format: p:q:{query}{lat}{lng}{type}{limit}
    */
   search: (
     q: string,
@@ -291,28 +342,29 @@ export const cacheKeys = {
     type?: string,
     limit?: number
   ): string => {
-    const parts = [
-      'plc:srch',
-      q,
-      lat != null ? bucketCoord(lat).toString() : '',
-      lng != null ? bucketCoord(lng).toString() : '',
-      type ?? '',
-      limit?.toString() ?? ''
-    ];
-    return parts.join(':');
+    // Start with minimal prefix
+    let key = 'p:q:' + q;
+
+    // Only add coordinates if both are present
+    if (lat != null && lng != null) {
+      key += ',' + bucketCoord(lat) + bucketCoord(lng);
+    }
+
+    // Only add type and limit if specified
+    if (type) key += ',' + type;
+    if (limit) key += ',' + limit;
+
+    return key;
   },
 
   /**
-   * Generate a cache key for nearby place queries
+   * Generate a compact cache key for nearby place queries
+   * Format: p:n:{lat}{lng}{kinds}
    */
   nearby: (lat: number, lng: number, kinds?: string): string => {
-    const parts = [
-      'plc:nby',
-      bucketCoord(lat).toString(),
-      bucketCoord(lng).toString(),
-      kinds ?? ''
-    ];
-    return parts.join(':');
+    let key = 'p:n:' + bucketCoord(lat) + bucketCoord(lng);
+    if (kinds) key += ',' + kinds;
+    return key;
   }
 };
 
@@ -341,6 +393,53 @@ export async function cacheDelete(key: string): Promise<boolean> {
     console.error("[Cache] Delete failed:", error);
     return false;
   }
+}
+
+/**
+ * Get a place by reference lookup (two-step)
+ * First fetches the reference, then the full place data
+ */
+export async function getPlaceByRef<T>(
+  refKey: string,
+  options: {
+    transform?: (place: T) => T;
+  } = {}
+): Promise<T | null> {
+  // Get the reference
+  const ref = await cacheGetJson<{ id: string }>(refKey);
+  if (!ref?.id) return null;
+
+  // Get the full place data
+  const place = await cacheGetJson<T>(cacheKeys.place(ref.id));
+  if (!place) return null;
+
+  // Apply optional transform
+  return options.transform ? options.transform(place) : place;
+}
+
+/**
+ * Delete a place and all its references from cache
+ */
+export async function deletePlaceFromCache(
+  place: {
+    id: string;
+    externalId?: string;
+    name: string;
+  },
+  spatialKey: string
+): Promise<void> {
+  const keys = [
+    cacheKeys.place(place.id),
+    cacheKeys.placeBySpatial(spatialKey),
+    cacheKeys.placeByName(place.name, spatialKey)
+  ];
+
+  if (place.externalId) {
+    keys.push(cacheKeys.placeByExternal(place.externalId));
+  }
+
+  // Delete all keys in parallel
+  await Promise.all(keys.map(key => cacheDelete(key)));
 }
 
 export { upstashFetch }

@@ -1,8 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { Place, PlaceType, PlaceSource } from '@prisma/client';
 import { MapboxPlacesAdapter } from "@/lib/mapProviders/mapbox";
-import type { NormalizedPlace } from "@/lib/mapProviders/adapter";
-import { cacheGetJson, cacheSetJson, bucketCoord, cacheDelete } from '@/lib/cache';
+import { cacheGetJson, cacheSetJson, bucketCoord, cacheDelete, upstashFetch } from '@/lib/cache';
 import { rlKeyFromUserOrIp, rateLimit } from "@/lib/rateLimit";
 import { withLock } from '@/lib/mutex';
 
@@ -81,8 +80,10 @@ function getPlaceMetrics(placeType?: string): { precision: number; threshold: nu
 // Helper to generate a spatial hash for deduplication
 function generateSpatialKey(lat: number, lng: number, placeType?: string): string {
   const { precision } = getPlaceMetrics(placeType);
-  const bucketLat = bucketCoord(lat, precision);
-  const bucketLng = bucketCoord(lng, precision);
+  // Convert coordinates to base32 strings with precision
+  const factor = Math.pow(10, precision);
+  const bucketLat = Math.round(lat * factor) / factor;
+  const bucketLng = Math.round(lng * factor) / factor;
   return `${bucketLat}:${bucketLng}`;
 }
 
@@ -141,20 +142,20 @@ export async function searchPlaces(params: {
     throw new Error("Rate limit exceeded");
   }
 
-  // Normalize search query
-  const normalizedQuery = q
+  // Basic normalization for cache key
+  const queryForCache = q.trim().replace(/\s+/g, ' ');
+
+  // More aggressive normalization for search
+  const normalizedQuery = queryForCache
     .toLowerCase()
-    .trim()
     .normalize('NFKD')
     .replace(/[\u0300-\u036f]/g, '') // remove diacritics
-    .replace(/\s+/g, ' '); // collapse whitespace
+    .replace(/[^\w\s-]/g, ''); // remove special chars except spaces and hyphens
 
-  const searchKey = `plc:srch:${Buffer.from(JSON.stringify({
-    q: normalizedQuery,
-    lat: lat ? bucketCoord(lat, 3) : null,
-    lng: lng ? bucketCoord(lng, 3) : null,
-    limit
-  })).toString('base64')}`;
+  // Human-readable, debuggable cache key
+  const searchKey = `plc:srch:${encodeURIComponent(queryForCache)}:${lat ? bucketCoord(lat) : 'null'
+    }:${lng ? bucketCoord(lng) : 'null'
+    }:${limit}`;
 
   // 2. Try cache first
   const cached = await cacheGetJson<Place[]>(searchKey);
@@ -187,6 +188,14 @@ export async function searchPlaces(params: {
   // 4. Cache miss - search external API
   console.log(`[Cache] Miss for search: ${q}`);
   const results = await placesProvider.search({ q, lat, lng, limit });
+
+  // Early return if no results
+  if (results.length === 0) {
+    console.log("[Mapbox] No results found");
+    // Cache empty result to prevent repeated API calls
+    await cacheSetJson(searchKey, [], 300);
+    return [];
+  }
 
   // Deduplicate results using spatial indexing
   const deduplicatedResults: Place[] = [];
@@ -228,6 +237,16 @@ export async function searchPlaces(params: {
     }
   }
 
+  const newPlacesToCreate: Array<{
+    name: string;
+    address?: string;
+    lat: number;
+    lng: number;
+    externalId?: string;
+    placeType: PlaceType;
+    source: PlaceSource;
+  }> = [];
+
   // Process mapbox results with optimized matching
   for (const place of results) {
     const spatialKey = generateSpatialKey(place.lat, place.lng, place.placeType);
@@ -258,18 +277,30 @@ export async function searchPlaces(params: {
     }
 
     if (!isDuplicate) {
-      // No match found, add this new place
-      const newPlace = await prisma.place.create({
-        data: {
-          name: place.name,
-          address: place.address,
-          lat: place.lat,
-          lng: place.lng,
-          externalId: place.externalId,
-          placeType: place.placeType as PlaceType ?? 'POI',
-          source: place.source as PlaceSource ?? 'MAPBOX'
-        }
+      // Collect for batch creation
+      newPlacesToCreate.push({
+        name: place.name,
+        address: place.address,
+        lat: place.lat,
+        lng: place.lng,
+        externalId: place.externalId,
+        placeType: place.placeType as PlaceType ?? 'POI',
+        source: place.source as PlaceSource ?? 'MAPBOX'
       });
+    }
+  }
+
+  // Batch create all new places in parallel
+  if (newPlacesToCreate.length > 0) {
+    console.log(`[DB] Creating ${newPlacesToCreate.length} new places in parallel`);
+
+    const createdPlaces = await Promise.all(
+      newPlacesToCreate.map(data =>
+        prisma.place.create({ data })
+      )
+    );
+
+    for (const newPlace of createdPlaces) {
       deduplicatedResults.push(newPlace);
       seen.add(newPlace.id);
     }
@@ -288,19 +319,28 @@ export async function searchPlaces(params: {
 export async function resolvePlace(input: PlaceInput) {
   const spatialKey = generateSpatialKey(input.lat, input.lng);
 
-  // Generate cache keys
+  // Generate reference cache keys
   const cacheKeys = [
-    input.externalId ? `place:external:${input.externalId}` : null,
+    input.externalId ? `place:ext:${input.externalId}` : null,
     `place:spatial:${spatialKey}`,
     `place:name:${input.name.toLowerCase()}:${spatialKey}`
   ].filter(Boolean) as string[];
 
-  // 1. Try cache first
+  // 1. Try cache first with two-step lookup
   for (const key of cacheKeys) {
-    const cached = await cacheGetJson<any>(key);
-    if (cached) {
-      console.log(`[Cache] Hit for key: ${key}`);
-      return deserializePlace(cached);
+    // First lookup: get the primary key reference
+    const ref = await cacheGetJson<string>(key);
+
+    if (ref && typeof ref === 'string' && ref.length > 0) {
+      const cachedPlace = await cacheGetJson<any>(`place:${ref}`);
+      if (cachedPlace) {
+        console.log(`[Cache] Hit for key: ${key} -> place:${ref}`);
+        return deserializePlace(cachedPlace);
+      } else {
+        // Reference exists but data missing - clean up the dangling reference
+        console.warn(`[Cache] Dangling reference at ${key}, cleaning up`);
+        await cacheDelete(key);
+      }
     }
   }
 
@@ -356,12 +396,59 @@ export async function resolvePlace(input: PlaceInput) {
   });
 }
 
-// Helper to cache place across multiple keys
-async function cacheResults(place: any, keys: string[]) {
-  const serialized = serializePlace(place);
-  await Promise.all(
-    keys.map(key => cacheSetJson(key, serialized, 3600)) // 1 hour TTL
-  );
+// Helper to cache place with storage optimization using pipelining
+async function cacheResults(place: Place, keys: string[]) {
+  const spatialKey = generateSpatialKey(place.lat, place.lng, place.placeType);
+  const serializedPlace = serializePlace(place);
+
+  // Build pipeline manually for full control
+  const pipeline: [string, ...string[]][] = [];
+
+  // 1. Store full place data at primary key
+  pipeline.push([
+    "setex",
+    `place:${place.id}`,
+    "3600",
+    JSON.stringify(serializedPlace)
+  ]);
+
+  // 2. Store reference at external ID key
+  if (place.externalId) {
+    pipeline.push([
+      "setex",
+      `place:ext:${place.externalId}`,
+      "3600",
+      place.id
+    ]);
+  }
+
+  // 3. Store reference at spatial key
+  pipeline.push([
+    "setex",
+    `place:spatial:${spatialKey}`,
+    "3600",
+    place.id
+  ]);
+
+  // 4. Store reference at name+spatial key
+  pipeline.push([
+    "setex",
+    `place:name:${place.name.toLowerCase()}:${spatialKey}`,
+    "3600",
+    place.id
+  ]);
+
+  // Execute pipeline with error handling
+  try {
+    const result = await upstashFetch("pipeline", pipeline);
+    if (!result) {
+      console.warn(`[Cache] Pipeline failed for place ${place.id} - Redis unavailable`);
+    } else {
+      console.log(`[Cache] ✓ Stored place ${place.id} (${pipeline.length} commands)`);
+    }
+  } catch (error) {
+    console.error(`[Cache] Pipeline error for place ${place.id}:`, error);
+  }
 }
 
 // Cache invalidation helper

@@ -3,8 +3,10 @@ export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
 import { searchPlaces, resolvePlace } from "@/lib/place";
 import type { PlaceInput } from "@/lib/place";
-import { ApiResponse } from "@/types/api";
+import type { ApiResponse } from "@/types/api";
 import { Place } from "@prisma/client";
+import { getAuthSession } from "@/lib/auth";
+import { enforceRateLimit } from "@/lib/security";
 
 export async function GET(request: NextRequest) {
   try {
@@ -19,16 +21,39 @@ export async function GET(request: NextRequest) {
       return NextResponse.json<ApiResponse>({ success: true, data: [] });
     }
 
-    const ip = request.headers.get("x-forwarded-for") ?? request.ip ?? undefined;
+    // Get authenticated user if available
+    const session = await getAuthSession();
+    const userId = session?.user?.id;
+
+    // Enhanced rate limiting with security checks
+    const rateLimitResult = await enforceRateLimit(request, userId, "places:search");
+    if (!rateLimitResult.allowed) {
+      return NextResponse.json<ApiResponse>(
+        {
+          success: false,
+          error: "Rate limit exceeded",
+          meta: {
+            resetAt: new Date(rateLimitResult.resetAt * 1000).toISOString(),
+            retryAfter: rateLimitResult.resetAt - Math.floor(Date.now() / 1000)
+          }
+        },
+        {
+          status: 429,
+          headers: {
+            'Retry-After': String(rateLimitResult.resetAt - Math.floor(Date.now() / 1000))
+          }
+        }
+      );
+    }
 
     // 1. Search with caching
-    console.log(`[Search] Query: "${q}" from IP: ${ip}`);
+    console.log(`[Search] Query: "${q}" from ${userId ? 'user:' + userId : 'anon'}`);
     const normalizedResults = await searchPlaces({
       q,
       lat: lat ? parseFloat(lat) : undefined,
       lng: lng ? parseFloat(lng) : undefined,
       limit: limit ? parseInt(limit, 10) : 10,
-      ip,
+      userId,
     });
 
     if (normalizedResults.length === 0) {
