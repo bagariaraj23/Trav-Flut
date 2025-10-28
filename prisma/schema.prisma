@@ -33,7 +33,7 @@ model User {
   threadTags               TripThreadTag[]
   trips                    Trip[]
   media                    Media[]
-  createdPlaceShares PlaceShare[]
+  createdPlaceShares       PlaceShare[]
   sentTripJoinRequests     TripJoinRequest[] @relation("SentTripJoinRequests")
   receivedTripJoinRequests TripJoinRequest[] @relation("ReceivedTripJoinRequests")
 
@@ -241,7 +241,8 @@ model Place {
   startTrips    Trip[]            @relation("TripStartLocation")
   endTrips      Trip[]            @relation("TripEndLocation")
 
-  @@index([lat, lng])
+  @@index([lat, lng], name: "coordinate_spatial_idx")
+  @@index([externalId], name: "external_id_idx")
   @@map("places")
 }
 
@@ -258,6 +259,7 @@ model PlaceOnTrip {
   place Place @relation(fields: [placeId], references: [id])
 
   @@unique([tripId, placeId, visitedAt])
+  @@index([tripId, visitedAt], name: "trip_visits_idx")
   @@map("places_on_trip")
 }
 
