@@ -1,8 +1,9 @@
+export const dynamic = "force-dynamic";
+
 import { NextRequest, NextResponse } from "next/server";
 import { searchPlaces, resolvePlace } from "@/lib/place";
 import { ApiResponse } from "@/types/api";
 import { Place } from "@prisma/client";
-import { debug } from "console";
 
 export async function GET(request: NextRequest) {
   try {

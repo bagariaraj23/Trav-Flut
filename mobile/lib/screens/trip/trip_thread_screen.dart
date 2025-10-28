@@ -3,7 +3,8 @@ import 'package:provider/provider.dart';
 import 'package:tripthread/providers/trip_provider.dart';
 import 'package:tripthread/providers/auth_provider.dart';
 import 'package:tripthread/models/trip.dart';
-import 'package:tripthread/widgets/custom_text_field.dart';
+import 'package:tripthread/models/place.dart';
+import 'package:tripthread/widgets/place_search_sheet.dart';
 import 'package:tripthread/services/media_service.dart';
 import 'dart:io';
 import 'package:go_router/go_router.dart';
@@ -49,12 +50,14 @@ class _TripThreadScreenState extends State<TripThreadScreen> {
   final _locationController = TextEditingController();
   final _scrollController = ScrollController();
   final _mediaService = MediaService();
+  final _placeSearchScrollController = ScrollController();
 
   Trip? _trip;
   bool _isLoading = true;
   ThreadEntryType _selectedType = ThreadEntryType.text;
   File? _selectedMediaFile;
   bool _isUploadingMedia = false;
+  Place? _selectedPlace;
 
   @override
   void initState() {
@@ -99,17 +102,22 @@ class _TripThreadScreenState extends State<TripThreadScreen> {
         }
         break;
       case ThreadEntryType.location:
-        if (_locationController.text.trim().isNotEmpty) {
+        if (_selectedPlace != null) {
           success = await tripProvider.addLocationEntry(
-            _locationController.text.trim(),
+            _selectedPlace!.name,
             notes: _textController.text.trim().isEmpty
                 ? null
                 : _textController.text.trim(),
+            lat: _selectedPlace!.lat,
+            lng: _selectedPlace!.lng,
             tripId: widget.tripId,
           );
           if (success) {
-            _locationController.clear();
-            _textController.clear();
+            setState(() {
+              _selectedPlace = null;
+              _locationController.clear();
+              _textController.clear();
+            });
           }
         }
         break;
@@ -674,11 +682,74 @@ class _TripThreadScreenState extends State<TripThreadScreen> {
 
           // Input fields based on type
           if (_selectedType == ThreadEntryType.location) ...[
-            CustomTextField(
-              controller: _locationController,
-              label: 'Location',
-              hintText: 'Where are you?',
-              prefixIcon: Icons.location_on,
+            InkWell(
+              onTap: () async {
+                final place = await showModalBottomSheet<Place>(
+                  context: context,
+                  isScrollControlled: true,
+                  backgroundColor: Colors.transparent,
+                  builder: (context) => PlaceSearchSheet(
+                    controller: _placeSearchScrollController,
+                  ),
+                );
+
+                if (place != null) {
+                  setState(() {
+                    _selectedPlace = place;
+                    _locationController.text = place.name;
+                  });
+                }
+              },
+              child: Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                decoration: BoxDecoration(
+                  border: Border.all(color: Colors.grey[300]!),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.location_on, color: Colors.grey[600]),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: _selectedPlace != null
+                          ? Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  _selectedPlace!.name,
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                                if (_selectedPlace!.address != null)
+                                  Text(
+                                    _selectedPlace!.address!,
+                                    style: TextStyle(
+                                      color: Colors.grey[600],
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                              ],
+                            )
+                          : Text(
+                              'Select a location',
+                              style: TextStyle(color: Colors.grey[600]),
+                            ),
+                    ),
+                    if (_selectedPlace != null)
+                      IconButton(
+                        icon: const Icon(Icons.close),
+                        onPressed: () {
+                          setState(() {
+                            _selectedPlace = null;
+                            _locationController.clear();
+                          });
+                        },
+                      ),
+                  ],
+                ),
+              ),
             ),
             const SizedBox(height: 8),
           ],
