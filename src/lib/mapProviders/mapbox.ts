@@ -1,6 +1,35 @@
 import { ENV } from "@/env";
 import { NormalizedPlace, PlacesProviderAdapter } from "./adapter";
 
+// Mapping Mapbox feature types to our place types
+function mapFeatureType(featureType: string | undefined): string {
+  if (!featureType) return 'POI';
+
+  const type = featureType.toLowerCase();
+
+  // City-level places
+  if (type.includes('place') ||
+    type.includes('city') ||
+    type.includes('region') ||
+    type.includes('country') ||
+    type.includes('locality.place')) {
+    return 'CITY';
+  }
+
+  // District-level places
+  if (type.includes('district') ||
+    type.includes('neighborhood') ||
+    type.includes('locality') ||
+    type.includes('postcode') ||
+    type.includes('suburb') ||
+    type.includes('borough')) {
+    return 'DISTRICT';
+  }
+
+  // Everything else is considered a POI
+  return 'POI';
+}
+
 export class MapboxPlacesAdapter implements PlacesProviderAdapter {
   async search({
     q,
@@ -34,7 +63,7 @@ export class MapboxPlacesAdapter implements PlacesProviderAdapter {
           lat: Array.isArray(coords) ? coords[1] : undefined,
           lng: Array.isArray(coords) ? coords[0] : undefined,
           externalId: f?.id,
-          placeType: props?.feature_type ?? props?.category ?? undefined,
+          placeType: mapFeatureType(props?.feature_type ?? props?.category),
           source: "MAPBOX" as const,
         } as NormalizedPlace;
       })

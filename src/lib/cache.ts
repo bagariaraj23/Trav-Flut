@@ -315,3 +315,32 @@ export const cacheKeys = {
     return parts.join(':');
   }
 };
+
+/**
+ * Deletes a cache entry by key
+ * @param key The cache key to delete
+ * @returns True if the entry was deleted, false otherwise
+ */
+/**
+ * Deletes a cache entry by key from both memory and Redis caches
+ * @param key Cache key to delete
+ * @returns Promise<boolean> True if deletion was successful
+ */
+export async function cacheDelete(key: string): Promise<boolean> {
+  // Always clear memory cache
+  memoryCache.delete(key);
+
+  if (!ENV.REDIS_REST_URL || !ENV.REDIS_REST_TOKEN) {
+    return true; // Consider memory-only deletion successful
+  }
+
+  try {
+    const result = await upstashFetch<number>("pipeline", [["del", key]]);
+    return result === 1; // DEL returns number of keys removed
+  } catch (error) {
+    console.error("[Cache] Delete failed:", error);
+    return false;
+  }
+}
+
+export { upstashFetch }

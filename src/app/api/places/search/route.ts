@@ -2,6 +2,7 @@ export const dynamic = "force-dynamic";
 
 import { NextRequest, NextResponse } from "next/server";
 import { searchPlaces, resolvePlace } from "@/lib/place";
+import type { PlaceInput } from "@/lib/place";
 import { ApiResponse } from "@/types/api";
 import { Place } from "@prisma/client";
 
@@ -39,16 +40,20 @@ export async function GET(request: NextRequest) {
     console.log(`[Search] Resolving ${normalizedResults.length} places`);
     const resolvedPlacesPromises = normalizedResults.map(async (result) => {
       try {
-        const resolved = await resolvePlace({
+        // Ensure all fields match expected types
+        const placeInput: PlaceInput = {
           name: result.name,
-          address: result.address,
+          address: result.address ?? undefined,
           lat: result.lat,
           lng: result.lng,
-          externalId: result.externalId,
-          placeType: result.placeType,
+          externalId: result.externalId ?? undefined,
+          placeType: result.placeType ?? 'POI',
           source: result.source ?? "MAPBOX",
-        });
-        return resolved.place;
+        };
+
+        const place = await resolvePlace(placeInput);
+        if (!place) throw new Error('Place resolution failed');
+        return place;
       } catch (error) {
         console.error(`[Search] Error resolving "${result.name}":`, error);
         return null;
