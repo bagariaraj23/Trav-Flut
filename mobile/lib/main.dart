@@ -3,11 +3,13 @@ import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
 import 'package:another_flushbar/flushbar.dart';
 import 'package:tripthread/config/app_config.dart';
+import 'package:tripthread/models/place.dart';
 import 'package:tripthread/providers/auth_provider.dart';
 import 'package:tripthread/providers/place_provider.dart';
 import 'package:tripthread/providers/user_provider.dart';
 import 'package:tripthread/providers/trip_provider.dart';
 import 'package:tripthread/providers/feed_provider.dart';
+import 'package:tripthread/screens/trip/trip_map_screen.dart';
 import 'package:tripthread/services/api_service.dart';
 import 'package:tripthread/services/storage_service.dart';
 import 'package:tripthread/services/trip_service.dart';
@@ -388,6 +390,21 @@ class _TripThreadAppRouterState extends State<TripThreadAppRouter> {
             builder: (context, state) {
               final tripId = state.pathParameters['tripId']!;
               return TripThreadScreen(tripId: tripId);
+            },
+          ),
+          GoRoute(
+            path: '/trip/:tripId/map',
+            builder: (context, state) {
+              final tripId = state.pathParameters['tripId']!;
+              final extra = state.extra as Map<String, dynamic>?;
+              final tripTitle = extra?['tripTitle'] as String? ?? 'Trip Map';
+              final places = extra?['places'] as List<PlaceOnTrip>?;
+
+              return TripMapScreen(
+                tripId: tripId,
+                tripTitle: tripTitle,
+                initialPlaces: places,
+              );
             },
           ),
           GoRoute(

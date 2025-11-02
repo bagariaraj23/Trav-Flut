@@ -344,6 +344,25 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
                   ),
             ),
             const SizedBox(height: 12),
+            
+            ElevatedButton.icon(
+              onPressed: () {
+                context.push(
+                  '/trip/${widget.tripId}/map',
+                  extra: {
+                    'tripTitle': _trip!.title,
+                    'places': _trip!.placeVisits, // Optional prefetch
+                  },
+                );
+              },
+              icon: const Icon(Icons.map),
+              label: const Text('View Trip Map'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Theme.of(context).colorScheme.secondary,
+              ),
+            ),
+            const SizedBox(height: 8),
+
             if (_trip!.status == TripStatus.ongoing) ...[
               ElevatedButton.icon(
                 onPressed: () {

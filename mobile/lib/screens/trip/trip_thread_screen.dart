@@ -103,14 +103,16 @@ class _TripThreadScreenState extends State<TripThreadScreen> {
         break;
       case ThreadEntryType.location:
         if (_selectedPlace != null) {
-          success = await tripProvider.addLocationEntry(
-            _selectedPlace!.name,
-            notes: _textController.text.trim().isEmpty
-                ? null
-                : _textController.text.trim(),
-            lat: _selectedPlace!.lat,
-            lng: _selectedPlace!.lng,
+            debugPrint(
+              '[TripThread] Submitting location entry with placeId: ${_selectedPlace!.id}');
+
+          success = await tripProvider.addThreadEntryWithPlace(
             tripId: widget.tripId,
+            type: ThreadEntryType.location,
+            contentText: _textController.text.trim().isNotEmpty
+                ? _textController.text.trim()
+                : null,
+            placeId: _selectedPlace!.id,
           );
           if (success) {
             setState(() {

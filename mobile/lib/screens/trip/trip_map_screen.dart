@@ -27,6 +27,7 @@ class _TripMapScreenState extends State<TripMapScreen> {
   List<PlaceOnTrip>? _places;
   bool _loading = true;
   String? _error;
+  mapbox.PolylineAnnotationManager? _routeManager;
 
   @override
   void initState() {
@@ -140,23 +141,42 @@ class _TripMapScreenState extends State<TripMapScreen> {
       double minLng = double.infinity;
       double maxLng = -double.infinity;
 
-      for (final place in _places!) {
-        final lat = place.place.lat;
-        final lng = place.place.lng;
+      final sortedPlaces = _places!.toList()
+        ..sort((a, b) {
+          if (a.visitedAt == null) return 1;
+          if (b.visitedAt == null) return -1;
+          return a.visitedAt!.compareTo(b.visitedAt!);
+        });
+
+      // Create markers
+      final pointManager =
+          await _mapboxMap?.annotations.createPointAnnotationManager();
+      
+      for (final placeOnTrip in sortedPlaces) {
+        final place = placeOnTrip.place;
+        final lat = place.lat;
+        final lng = place.lng;
 
         minLat = lat < minLat ? lat : minLat;
         maxLat = lat > maxLat ? lat : maxLat;
         minLng = lng < minLng ? lng : minLng;
         maxLng = lng > maxLng ? lng : maxLng;
 
-        // Add marker for each place
-        final pointManager = await _mapboxMap?.annotations.createPointAnnotationManager();
+        // Add marker
         await pointManager?.create(mapbox.PointAnnotationOptions(
           geometry: mapbox.Point(
             coordinates: mapbox.Position(lng, lat),
           ),
-          textField: place.place.name,
+          textField: place.name,
+          textColor: Colors.black.value,
+          textHaloColor: Colors.white.value,
+          textHaloWidth: 2.0,
         ));
+      }
+
+      // Draw route line connecting places
+      if (sortedPlaces.length > 1) {
+        await _drawRoute(sortedPlaces);
       }
 
       // Fit map bounds to show all places
@@ -178,6 +198,30 @@ class _TripMapScreenState extends State<TripMapScreen> {
         ),
         mapbox.MapAnimationOptions(duration: 0, startDelay: 0),
       );
+    }
+  }
+
+  // Draw route polyline
+  Future<void> _drawRoute(List<PlaceOnTrip> sortedPlaces) async {
+    try {
+      final coordinates = sortedPlaces
+          .map((p) => mapbox.Position(p.place.lng, p.place.lat))
+          .toList();
+
+      _routeManager =
+          await _mapboxMap?.annotations.createPolylineAnnotationManager();
+
+      await _routeManager?.create(mapbox.PolylineAnnotationOptions(
+        geometry: mapbox.LineString(coordinates: coordinates),
+        lineColor: Colors.blue.value,
+        lineWidth: 3.0,
+        lineOpacity: 0.7,
+      ));
+
+      debugPrint(
+          '[TripMapScreen] Route drawn with ${coordinates.length} points');
+    } catch (e) {
+      debugPrint('[TripMapScreen] Error drawing route: $e');
     }
   }
 
@@ -210,6 +254,7 @@ class _TripMapScreenState extends State<TripMapScreen> {
 
   @override
   void dispose() {
+    _routeManager?.deleteAll();
     _mapboxMap = null;
     super.dispose();
   }

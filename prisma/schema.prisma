@@ -201,10 +201,6 @@ model TripThreadEntry {
   @@map("trip_thread_entries")
 }
 
-// =============================
-// Map Integration Models
-// =============================
-
 enum PlaceType {
   POI
   STAY

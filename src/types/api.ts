@@ -128,10 +128,25 @@ export interface TripThreadEntryResponse {
   mediaUrl?: string | null;
   locationName?: string | null;
   gpsCoordinates?: { lat: number | null; lng: number | null } | null;
+  placeId?: string | null;
+  place?: PlaceResponse | null;
   createdAt: string;
   author: UserProfile;
   taggedUsers?: UserProfile[] | null;
   media?: MediaResponse | null;
+}
+
+export interface PlaceResponse {
+  id: string;
+  name: string;
+  address?: string | null;
+  lat: number;
+  lng: number;
+  placeType: "POI" | "STAY" | "FOOD" | "TRANSPORT" | "VIEWPOINT" | "OTHER";
+  source: "USER" | "GOOGLE" | "MAPBOX" | "APPLE";
+  externalId?: string | null;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface TripFinalPostResponse {
@@ -181,6 +196,7 @@ export interface CreateThreadEntryRequest {
   mediaUrl?: string | null;
   locationName?: string | null;
   gpsCoordinates?: { lat: number | null; lng: number | null } | null;
+  placeId?: string | null;
   taggedUsernames?: string[] | null;
 }
 
