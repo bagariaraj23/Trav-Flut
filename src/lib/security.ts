@@ -1,5 +1,6 @@
 import crypto from 'crypto'
 import { NextRequest } from 'next/server'
+import { rateLimit as redisRateLimit } from "./rateLimit";
 
 // Input sanitization
 export function sanitizeInput(input: string): string {
@@ -251,20 +252,19 @@ export async function enforceRateLimit(
 ): Promise<RateLimitResult> {
   // Get client identifier using multiple signals
   const identifier = getClientIdentifier(request, userId || undefined);
+  const key = `${scope}:${identifier}`;
 
-  // Get rate limit info based on auth status
-  const rateLimitInfo = checkRateLimit(identifier, !!userId);
-
-  // Calculate reset timestamp in seconds
-  const resetAt = Math.floor(rateLimitInfo.reset / 1000);
+  const rl = await redisRateLimit(key, 100, 60);
 
   return {
-    allowed: !rateLimitInfo.isBlocked,
-    remaining: rateLimitInfo.remaining,
-    resetAt,
-    identifier
+    allowed: rl.allowed,
+    remaining: rl.remaining,
+    resetAt: rl.resetAt,
+    identifier,
   };
-}// Secure headers configuration
+}
+
+// Secure headers configuration
 export const securityHeaders = {
   'X-Content-Type-Options': 'nosniff',
   'X-Frame-Options': 'DENY',

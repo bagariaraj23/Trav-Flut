@@ -233,3 +233,18 @@ export interface TripJoinRequestDto {
   sender?: UserProfile;
   receiver?: UserProfile;
 }
+
+export type MapPlaceOrigin = "DESTINATION" | "THREAD_ENTRY" | "ON_TRIP";
+
+export interface MapPlaceResponse {
+  place: PlaceResponse;
+  origin: MapPlaceOrigin;
+  destinationIndex?: number;
+  threadEntryId?: string;
+  visitedAt?: string; // ISO string
+  dayIndex?: number;
+  order?: number;
+  placeOnTripId?: string;
+  notes?: string | null;
+  createdAt?: string; // for thread entry
+}

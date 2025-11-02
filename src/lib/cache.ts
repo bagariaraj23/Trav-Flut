@@ -245,12 +245,19 @@ export async function cacheGetJson<T = JsonValue>(
   }
 }
 
-export async function cacheSetJson(
+export async function cacheSetJson<T = any>(
   key: string,
-  value: JsonValue,
+  value: T,
   ttlSeconds?: number
 ): Promise<boolean> {
-  const stringValue = JSON.stringify(value);
+  // Validate JSON serializable
+  let stringValue: string;
+  try {
+    stringValue = JSON.stringify(value);
+  } catch (error) {
+    console.error("[Cache] Value is not JSON serializable to string:", error);
+    return false;
+  }
 
   // Set in Redis
   const payload = ttlSeconds
@@ -262,7 +269,8 @@ export async function cacheSetJson(
   if (result === "OK") {
     memoryCache.set(key, {
       value: stringValue,
-      expiresAt: Date.now() + (ttlSeconds ? ttlSeconds * 1000 : DEFAULT_MEMORY_TTL)
+      expiresAt:
+        Date.now() + (ttlSeconds ? ttlSeconds * 1000 : DEFAULT_MEMORY_TTL),
     });
   }
 

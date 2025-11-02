@@ -43,6 +43,20 @@ export async function POST(
     // Validate input
     const validatedData = createThreadEntrySchema.parse(body);
 
+    if (validatedData.placeId) {
+      const place = await prisma.place.findUnique({
+        where: { id: validatedData.placeId },
+        select: { id: true },
+      });
+
+      if (!place) {
+        return NextResponse.json<ApiResponse>(
+          { success: false, error: "Invalid placeId" },
+          { status: 400 }
+        );
+      }
+    }
+
     // Resolve tagged usernames to user IDs
     let taggedUserIds: string[] = [];
     if (

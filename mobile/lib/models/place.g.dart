@@ -74,3 +74,51 @@ Map<String, dynamic> _$PlaceOnTripToJson(PlaceOnTrip instance) =>
       'order': instance.order,
       'place': instance.place,
     };
+
+MapPlace _$MapPlaceFromJson(Map<String, dynamic> json) => MapPlace(
+      place: Place.fromJson(json['place'] as Map<String, dynamic>),
+      origin: $enumDecode(_$MapPlaceOriginEnumMap, json['origin']),
+      destinationIndex: (json['destinationIndex'] as num?)?.toInt(),
+      threadEntryId: json['threadEntryId'] as String?,
+      visitedAt: json['visitedAt'] == null
+          ? null
+          : DateTime.parse(json['visitedAt'] as String),
+      dayIndex: (json['dayIndex'] as num?)?.toInt(),
+      order: (json['order'] as num?)?.toInt(),
+      placeOnTripId: json['placeOnTripId'] as String?,
+      notes: json['notes'] as String?,
+      createdAt: json['createdAt'] == null
+          ? null
+          : DateTime.parse(json['createdAt'] as String),
+    );
+
+Map<String, dynamic> _$MapPlaceToJson(MapPlace instance) => <String, dynamic>{
+      'place': instance.place,
+      'origin': _$MapPlaceOriginEnumMap[instance.origin]!,
+      'destinationIndex': instance.destinationIndex,
+      'threadEntryId': instance.threadEntryId,
+      'visitedAt': instance.visitedAt?.toIso8601String(),
+      'dayIndex': instance.dayIndex,
+      'order': instance.order,
+      'placeOnTripId': instance.placeOnTripId,
+      'notes': instance.notes,
+      'createdAt': instance.createdAt?.toIso8601String(),
+    };
+
+const _$MapPlaceOriginEnumMap = {
+  MapPlaceOrigin.destination: 'DESTINATION',
+  MapPlaceOrigin.threadEntry: 'THREAD_ENTRY',
+  MapPlaceOrigin.onTrip: 'ON_TRIP',
+};
+
+ResolvedPlaceResponse _$ResolvedPlaceResponseFromJson(
+        Map<String, dynamic> json) =>
+    ResolvedPlaceResponse(
+      place: Place.fromJson(json['place'] as Map<String, dynamic>),
+    );
+
+Map<String, dynamic> _$ResolvedPlaceResponseToJson(
+        ResolvedPlaceResponse instance) =>
+    <String, dynamic>{
+      'place': instance.place,
+    };

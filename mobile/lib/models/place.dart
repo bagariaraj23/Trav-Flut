@@ -88,3 +88,57 @@ enum PlaceSource {
   @JsonValue('APPLE')
   apple,
 }
+
+@JsonEnum()
+enum MapPlaceOrigin {
+  @JsonValue('DESTINATION')
+  destination,
+  @JsonValue('THREAD_ENTRY')
+  threadEntry,
+  @JsonValue('ON_TRIP')
+  onTrip,
+}
+
+@JsonSerializable()
+class MapPlace {
+  final Place place;
+  final MapPlaceOrigin origin;
+  final int? destinationIndex;
+  final String? threadEntryId;
+  final DateTime? visitedAt;
+  final int? dayIndex;
+  final int? order;
+  final String? placeOnTripId;
+  final String? notes;
+  final DateTime? createdAt;
+
+  const MapPlace({
+    required this.place,
+    required this.origin,
+    this.destinationIndex,
+    this.threadEntryId,
+    this.visitedAt,
+    this.dayIndex,
+    this.order,
+    this.placeOnTripId,
+    this.notes,
+    this.createdAt,
+  });
+
+  factory MapPlace.fromJson(Map<String, dynamic> json) =>
+      _$MapPlaceFromJson(json);
+  Map<String, dynamic> toJson() => _$MapPlaceToJson(this);
+}
+
+@JsonSerializable()
+class ResolvedPlaceResponse {
+  final Place place;
+
+  const ResolvedPlaceResponse({
+    required this.place,
+  });
+
+  factory ResolvedPlaceResponse.fromJson(Map<String, dynamic> json) =>
+      _$ResolvedPlaceResponseFromJson(json);
+  Map<String, dynamic> toJson() => _$ResolvedPlaceResponseToJson(this);
+}

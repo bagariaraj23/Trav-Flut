@@ -134,8 +134,8 @@ void main() async {
             },
           ),
           ChangeNotifierProvider<PlaceProvider>(create: (context) {
-              debugPrint('[main] Creating PlaceProvider');
-              return PlaceProvider(apiService: apiService);
+            debugPrint('[main] Creating PlaceProvider');
+            return PlaceProvider(apiService: apiService);
           })
         ],
         child: TripThreadAppRouter(),
@@ -398,7 +398,7 @@ class _TripThreadAppRouterState extends State<TripThreadAppRouter> {
               final tripId = state.pathParameters['tripId']!;
               final extra = state.extra as Map<String, dynamic>?;
               final tripTitle = extra?['tripTitle'] as String? ?? 'Trip Map';
-              final places = extra?['places'] as List<PlaceOnTrip>?;
+              final places = extra?['places'] as List<MapPlace>?;
 
               return TripMapScreen(
                 tripId: tripId,

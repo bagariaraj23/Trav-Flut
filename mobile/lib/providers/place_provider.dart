@@ -28,8 +28,7 @@ class PlaceProvider extends ChangeNotifier {
   // Method to search for places (for autocomplete)
   Future<void> searchPlaces(String query,
       {double? lat, double? lng, PlaceType? placeType, int limit = 20}) async {
-    debugPrint(
-        '[PlaceProvider] searchPlaces called with query: "$query"');
+    debugPrint('[PlaceProvider] searchPlaces called with query: "$query"');
     _debounceTimer?.cancel();
 
     if (query.isEmpty) {
@@ -48,8 +47,7 @@ class PlaceProvider extends ChangeNotifier {
       notifyListeners();
 
       try {
-        debugPrint(
-            '[PlaceProvider] Calling apiService.searchPlaces...');
+        debugPrint('[PlaceProvider] Calling apiService.searchPlaces...');
         final response = await _apiService.searchPlaces(
           query: query,
           lat: lat,
@@ -67,8 +65,7 @@ class PlaceProvider extends ChangeNotifier {
         } else {
           _searchError = response.error ?? 'Failed to search places';
           _searchResults = [];
-          debugPrint(
-              '[PlaceProvider] Search failed: $_searchError');
+          debugPrint('[PlaceProvider] Search failed: $_searchError');
         }
       } catch (e) {
         _searchError = 'An unexpected error occurred during search: $e';
@@ -76,8 +73,7 @@ class PlaceProvider extends ChangeNotifier {
         debugPrint('[PlaceProvider] Place search EXCEPTION: $e');
       } finally {
         _isSearching = false;
-        debugPrint(
-            '[PlaceProvider] Search finished. Notifying listeners.');
+        debugPrint('[PlaceProvider] Search finished. Notifying listeners.');
         notifyListeners();
       }
     });
@@ -137,10 +133,9 @@ class PlaceProvider extends ChangeNotifier {
     }
   }
 
-  // Method to get places for a specific trip
-  Future<List<PlaceOnTrip>> getTripPlaces(String tripId) async {
-    debugPrint(
-        '[PlaceProvider] getTripPlaces called for TripID: $tripId');
+  // Method to get places for a specific trip (MapPlace-aware)
+  Future<List<MapPlace>> getTripPlaces(String tripId) async {
+    debugPrint('[PlaceProvider] getTripPlaces called for TripID: $tripId');
     try {
       final response = await _apiService.getTripPlaces(tripId);
       debugPrint(

@@ -9,7 +9,7 @@ import 'package:provider/provider.dart';
 class TripMapScreen extends StatefulWidget {
   final String tripId;
   final String tripTitle;
-  final List<PlaceOnTrip>? initialPlaces;
+  final List<MapPlace>? initialPlaces;
 
   const TripMapScreen({
     super.key,
@@ -24,10 +24,12 @@ class TripMapScreen extends StatefulWidget {
 
 class _TripMapScreenState extends State<TripMapScreen> {
   mapbox.MapboxMap? _mapboxMap;
-  List<PlaceOnTrip>? _places;
+  List<MapPlace>? _places;
   bool _loading = true;
   String? _error;
   mapbox.PolylineAnnotationManager? _routeManager;
+  mapbox.CircleAnnotationManager? _circleManager;
+  mapbox.PointAnnotationManager? _textManager;
 
   @override
   void initState() {
@@ -44,7 +46,8 @@ class _TripMapScreenState extends State<TripMapScreen> {
       });
     } else {
       try {
-        final places = await context.read<PlaceProvider>().getTripPlaces(widget.tripId);
+        final places =
+            await context.read<PlaceProvider>().getTripPlaces(widget.tripId);
         setState(() {
           _places = places;
           _loading = false;
@@ -58,73 +61,256 @@ class _TripMapScreenState extends State<TripMapScreen> {
     }
   }
 
+  Color colorForOrigin(MapPlaceOrigin origin) {
+    switch (origin) {
+      case MapPlaceOrigin.destination:
+        return Colors.red;
+      case MapPlaceOrigin.threadEntry:
+        return Colors.blue;
+      case MapPlaceOrigin.onTrip:
+        return Colors.green;
+    }
+  }
+
+  IconData iconForOrigin(MapPlaceOrigin origin) {
+    switch (origin) {
+      case MapPlaceOrigin.destination:
+        return Icons.flag;
+      case MapPlaceOrigin.threadEntry:
+        return Icons.location_on;
+      case MapPlaceOrigin.onTrip:
+        return Icons.add_location_alt;
+    }
+  }
+
+  String labelForOrigin(MapPlaceOrigin origin) {
+    switch (origin) {
+      case MapPlaceOrigin.destination:
+        return 'Destination';
+      case MapPlaceOrigin.threadEntry:
+        return 'Shared';
+      case MapPlaceOrigin.onTrip:
+        return 'Visit';
+    }
+  }
+
+  Widget _buildLegendDialog() {
+    return AlertDialog(
+      title: const Text('Map Legend'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _legendItem(Colors.red, 'Destination', Icons.flag),
+          const SizedBox(height: 8),
+          _legendItem(Colors.green, 'Visited', Icons.add_location_alt),
+          const SizedBox(height: 8),
+          _legendItem(Colors.blue, 'Shared', Icons.location_on),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Close'),
+        ),
+      ],
+    );
+  }
+
+  Widget _legendItem(Color color, String label, IconData icon) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 16,
+          height: 16,
+          decoration: BoxDecoration(
+            color: color,
+            shape: BoxShape.circle,
+            border: Border.all(color: Colors.white, width: 2),
+          ),
+        ),
+        const SizedBox(width: 8),
+        Icon(icon, size: 16, color: color),
+        const SizedBox(width: 4),
+        Text(label, style: const TextStyle(fontSize: 14)),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         title: Text(widget.tripTitle),
+        actions: [
+          // Legend button
+          IconButton(
+            icon: const Icon(Icons.info_outline),
+            onPressed: () {
+              showDialog(
+                context: context,
+                builder: (context) => _buildLegendDialog(),
+              );
+            },
+          ),
+        ],
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : _error != null
-              ? Center(child: Text(_error!))
-              : Stack(
-                  children: [
-                    mapbox.MapWidget(
-                      key: const Key('tripMapWidget'),
-                      onMapCreated: _onMapCreated,
-                    ),
-                    if (_places != null && _places!.isNotEmpty)
-                      Positioned(
-                        left: 0,
-                        right: 0,
-                        bottom: 0,
-                        child: Container(
-                          height: 100,
-                          padding: const EdgeInsets.symmetric(vertical: 8.0),
-                          child: ListView.builder(
-                            scrollDirection: Axis.horizontal,
-                            itemCount: _places!.length,
-                            padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                            itemBuilder: (context, index) {
-                              final place = _places![index].place;
-                              return Card(
-                                margin: const EdgeInsets.only(right: 8.0),
-                                child: InkWell(
-                                  onTap: () => _flyToPlace(place),
-                                  child: Container(
-                                    width: 200,
-                                    padding: const EdgeInsets.all(8.0),
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      mainAxisAlignment: MainAxisAlignment.center,
-                                      children: [
-                                        Text(
-                                          place.name,
-                                          style: const TextStyle(
-                                            fontWeight: FontWeight.bold,
-                                          ),
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
-                                        ),
-                                        if (place.address != null)
-                                          Text(
-                                            place.address!,
-                                            style: Theme.of(context).textTheme.bodySmall,
-                                            maxLines: 2,
-                                            overflow: TextOverflow.ellipsis,
-                                          ),
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                              );
-                            },
+              ? Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.error, size: 64, color: Colors.red[300]),
+                      const SizedBox(height: 16),
+                      Text(_error!),
+                      const SizedBox(height: 16),
+                      ElevatedButton(
+                        onPressed: () => Navigator.pop(context),
+                        child: const Text('Go Back'),
+                      ),
+                    ],
+                  ),
+                )
+              : _places == null || _places!.isEmpty
+                  ? Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.map_outlined,
+                              size: 80, color: Colors.grey.shade400),
+                          const SizedBox(height: 12),
+                          const Text(
+                            'No locations yet',
+                            style: TextStyle(fontSize: 18),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            'Share locations in the trip thread to see them here',
+                            style: TextStyle(color: Colors.grey[600]),
+                            textAlign: TextAlign.center,
+                          ),
+                        ],
+                      ),
+                    )
+                  : Stack(
+                      children: [
+                        // Map widget
+                        mapbox.MapWidget(
+                          key: const Key('tripMapWidget'),
+                          onMapCreated: _onMapCreated,
+                        ),
+
+                        // Place cards at bottom (ONLY ONE LIST)
+                        Positioned(
+                          left: 0,
+                          right: 0,
+                          bottom: 0,
+                          child: Container(
+                            height: 120,
+                            padding: const EdgeInsets.symmetric(vertical: 8.0),
+                            child: ListView.separated(
+                              scrollDirection: Axis.horizontal,
+                              itemCount: _places!.length,
+                              padding:
+                                  const EdgeInsets.symmetric(horizontal: 16.0),
+                              separatorBuilder: (_, __) =>
+                                  const SizedBox(width: 8),
+                              itemBuilder: (context, idx) {
+                                final mp = _places![idx];
+                                return _buildPlaceCard(mp);
+                              },
+                            ),
                           ),
                         ),
+                      ],
+                    ),
+    );
+  }
+
+  Widget _buildPlaceCard(MapPlace mapPlace) {
+    final place = mapPlace.place;
+    final color = colorForOrigin(mapPlace.origin);
+    final label = labelForOrigin(mapPlace.origin);
+    final icon = iconForOrigin(mapPlace.origin);
+
+    return Card(
+      elevation: 4,
+      child: InkWell(
+        onTap: () => _flyToPlace(place),
+        child: Container(
+          width: 220,
+          padding: const EdgeInsets.all(12.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              // Origin badge
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: color.withOpacity(0.15),
+                  borderRadius: BorderRadius.circular(4),
+                  border: Border.all(color: color.withOpacity(0.5), width: 1),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(icon, size: 12, color: color),
+                    const SizedBox(width: 4),
+                    Text(
+                      label,
+                      style: TextStyle(
+                        fontSize: 10,
+                        color: color,
+                        fontWeight: FontWeight.w600,
                       ),
+                    ),
                   ],
                 ),
+              ),
+              const SizedBox(height: 6),
+
+              // Place name
+              Text(
+                place.name,
+                style: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 14,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+
+              // Address
+              if (place.address != null)
+                Text(
+                  place.address!,
+                  style: TextStyle(fontSize: 11, color: Colors.grey[600]),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+
+              // Notes
+              if (mapPlace.notes != null && mapPlace.notes!.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(top: 3),
+                  child: Text(
+                    mapPlace.notes!,
+                    style: TextStyle(
+                      fontSize: 10,
+                      color: Colors.grey[600],
+                      fontStyle: FontStyle.italic,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 
@@ -134,109 +320,120 @@ class _TripMapScreenState extends State<TripMapScreen> {
   }
 
   Future<void> _initializeMap() async {
-    if (_places != null && _places!.isNotEmpty) {
-      // Calculate bounds
-      double minLat = double.infinity;
-      double maxLat = -double.infinity;
-      double minLng = double.infinity;
-      double maxLng = -double.infinity;
+    if (_places == null || _places!.isEmpty) return;
 
-      final sortedPlaces = _places!.toList()
-        ..sort((a, b) {
-          if (a.visitedAt == null) return 1;
-          if (b.visitedAt == null) return -1;
-          return a.visitedAt!.compareTo(b.visitedAt!);
-        });
+    // Sort chronologically
+    final sortedPlaces = List<MapPlace>.from(_places!);
+    sortedPlaces.sort((a, b) {
+      final timeA = a.visitedAt ?? a.createdAt ?? DateTime(1970);
+      final timeB = b.visitedAt ?? b.createdAt ?? DateTime(1970);
+      return timeA.compareTo(timeB);
+    });
 
-      // Create markers
-      final pointManager =
-          await _mapboxMap?.annotations.createPointAnnotationManager();
-      
-      for (final placeOnTrip in sortedPlaces) {
-        final place = placeOnTrip.place;
-        final lat = place.lat;
-        final lng = place.lng;
+    double minLat = double.infinity;
+    double maxLat = -double.infinity;
+    double minLng = double.infinity;
+    double maxLng = -double.infinity;
 
-        minLat = lat < minLat ? lat : minLat;
-        maxLat = lat > maxLat ? lat : maxLat;
-        minLng = lng < minLng ? lng : minLng;
-        maxLng = lng > maxLng ? lng : maxLng;
+    // Initialize managers
+    _circleManager ??=
+        await _mapboxMap?.annotations.createCircleAnnotationManager();
+    _textManager ??=
+        await _mapboxMap?.annotations.createPointAnnotationManager();
+    _routeManager ??= await _mapboxMap?.annotations
+        .createPolylineAnnotationManager();
 
-        // Add marker
-        await pointManager?.create(mapbox.PointAnnotationOptions(
-          geometry: mapbox.Point(
-            coordinates: mapbox.Position(lng, lat),
-          ),
-          textField: place.name,
-          textColor: Colors.black.value,
-          textHaloColor: Colors.white.value,
-          textHaloWidth: 2.0,
-        ));
-      }
+    // Create markers
+    for (final mapPlace in sortedPlaces) {
+      final place = mapPlace.place;
+      final lat = place.lat;
+      final lng = place.lng;
 
-      // Draw route line connecting places
-      if (sortedPlaces.length > 1) {
-        await _drawRoute(sortedPlaces);
-      }
+      minLat = lat < minLat ? lat : minLat;
+      maxLat = lat > maxLat ? lat : maxLat;
+      minLng = lng < minLng ? lng : minLng;
+      maxLng = lng > maxLng ? lng : maxLng;
 
-      // Fit map bounds to show all places
-      await _mapboxMap?.flyTo(
-        mapbox.CameraOptions(
-          center: mapbox.Point(
-            coordinates: mapbox.Position(
-              (minLng + maxLng) / 2,
-              (minLat + maxLat) / 2,
-            ),
-          ),
-          zoom: _calculateZoomLevel(minLat, maxLat, minLng, maxLng),
-          padding: mapbox.MbxEdgeInsets(
-            top: 50,
-            right: 50,
-            bottom: 150,
-            left: 50,
+      final color = colorForOrigin(mapPlace.origin);
+
+      // Circle marker
+      await _circleManager?.create(mapbox.CircleAnnotationOptions(
+        geometry: mapbox.Point(coordinates: mapbox.Position(lng, lat)),
+        circleColor: color.value,
+        circleRadius: 10.0,
+        circleStrokeWidth: 2.0,
+        circleStrokeColor: Colors.white.value,
+      ));
+
+      // Text label
+      await _textManager?.create(mapbox.PointAnnotationOptions(
+        geometry: mapbox.Point(coordinates: mapbox.Position(lng, lat)),
+        textField: place.name,
+        textColor: Colors.black.value,
+        textHaloColor: Colors.white.value,
+        textHaloWidth: 2.0,
+        textSize: 12.0,
+        textOffset: [0, 1.5],
+      ));
+    }
+
+    // Draw route
+    if (sortedPlaces.length > 1) {
+      await _drawChronologicalRoute(sortedPlaces);
+    }
+
+    // FIT BOUNDS - Auto-zoom to show all places
+    await _mapboxMap?.flyTo(
+      mapbox.CameraOptions(
+        center: mapbox.Point(
+          coordinates: mapbox.Position(
+            (minLng + maxLng) / 2,
+            (minLat + maxLat) / 2,
           ),
         ),
-        mapbox.MapAnimationOptions(duration: 0, startDelay: 0),
-      );
-    }
+        zoom: _calculateZoomLevel(minLat, maxLat, minLng, maxLng),
+        padding: mapbox.MbxEdgeInsets(
+          top: 60,
+          right: 40,
+          bottom: 160, // Space for place cards
+          left: 40,
+        ),
+      ),
+      mapbox.MapAnimationOptions(duration: 1000, startDelay: 0),
+    );
   }
 
   // Draw route polyline
-  Future<void> _drawRoute(List<PlaceOnTrip> sortedPlaces) async {
-    try {
-      final coordinates = sortedPlaces
-          .map((p) => mapbox.Position(p.place.lng, p.place.lat))
-          .toList();
+  Future<void> _drawChronologicalRoute(List<MapPlace> sortedPlaces) async {
+    // Map to Position objects
+    final coordinates = sortedPlaces
+        .map((mp) => mapbox.Position(mp.place.lng, mp.place.lat))
+        .toList();
 
-      _routeManager =
-          await _mapboxMap?.annotations.createPolylineAnnotationManager();
+    // Use coordinates directly, don't map again!
+    await _routeManager?.create(mapbox.PolylineAnnotationOptions(
+      geometry: mapbox.LineString(coordinates: coordinates),
+      lineColor: Colors.deepPurple.value,
+      lineWidth: 4.0,
+      lineOpacity: 0.7,
+    ));
 
-      await _routeManager?.create(mapbox.PolylineAnnotationOptions(
-        geometry: mapbox.LineString(coordinates: coordinates),
-        lineColor: Colors.blue.value,
-        lineWidth: 3.0,
-        lineOpacity: 0.7,
-      ));
-
-      debugPrint(
-          '[TripMapScreen] Route drawn with ${coordinates.length} points');
-    } catch (e) {
-      debugPrint('[TripMapScreen] Error drawing route: $e');
-    }
+    debugPrint('[TripMapScreen] Route drawn with ${coordinates.length} points');
   }
 
-  double _calculateZoomLevel(double minLat, double maxLat, double minLng, double maxLng) {
-    const zoomOffset = 0.5; // Zoom out a bit to show some context
+  double _calculateZoomLevel(
+      double minLat, double maxLat, double minLng, double maxLng) {
+    const zoomOffset = 0.8;
     const minZoom = 2.0;
-    const maxZoom = 18.0;
+    const maxZoom = 16.0;
 
     final latDiff = maxLat - minLat;
     final lngDiff = maxLng - minLng;
     final maxDiff = latDiff > lngDiff ? latDiff : lngDiff;
 
-    // Simple logarithmic scale
-    final zoom = -(math.log(maxDiff) / math.log(2)) + 8 - zoomOffset;
+    if (maxDiff == 0) return 14.0; // Single location
 
+    final zoom = -(math.log(maxDiff) / math.log(2)) + 8 - zoomOffset;
     return zoom.clamp(minZoom, maxZoom);
   }
 
@@ -255,6 +452,8 @@ class _TripMapScreenState extends State<TripMapScreen> {
   @override
   void dispose() {
     _routeManager?.deleteAll();
+    _circleManager?.deleteAll();
+    _textManager?.deleteAll();
     _mapboxMap = null;
     super.dispose();
   }
