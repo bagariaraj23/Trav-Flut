@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
-import 'package:tripthread/models/api_response.dart';
 import 'package:tripthread/models/place.dart';
 import 'package:tripthread/services/api_service.dart';
 

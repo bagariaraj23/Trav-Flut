@@ -20,111 +20,146 @@ export async function GET(
   req: NextRequest,
   { params }: { params: { id: string } }
 ) {
-  const tripId = params.id;
+  try {
+    const tripId = params.id;
 
-  const trip = await prisma.trip.findUnique({
-    where: { id: tripId },
-    select: {
-      startLocationId: true,
-      endLocationId: true,
-      startDate: true,
-      endDate: true,
-      placeVisits: {
-        include: { place: true },
-        orderBy: [{ visitedAt: "asc" }, { order: "asc" }],
-      },
-      threadEntries: {
-        where: {
-          type: { in: ["LOCATION", "CHECKIN"] },
-          placeId: { not: null },
-        },
-        select: {
-          id: true,
-          placeId: true,
-          contentText: true,
-          createdAt: true,
-          place: true,
-        },
-        orderBy: {
-          createdAt: "asc",
-        },
-      },
-    },
-  });
+    // Optional: Check authentication for access control
+    const authHeader = req.headers.get("authorization");
+    let userId: string | undefined;
+    if (authHeader?.startsWith("Bearer ")) {
+      const token = authHeader.substring(7);
+      const payload = AuthService.verifyAccessToken(token);
+      userId = payload?.userId;
+    }
 
-  if (!trip) {
+    const trip = await prisma.trip.findUnique({
+      where: { id: tripId },
+      select: {
+        startLocationId: true,
+        endLocationId: true,
+        startDate: true,
+        endDate: true,
+        userId: true, // Add userId for access check
+        participants: {
+          select: { userId: true },
+        },
+        placeVisits: {
+          include: { place: true },
+          orderBy: [{ visitedAt: "asc" }, { order: "asc" }],
+        },
+        threadEntries: {
+          where: {
+            type: { in: ["LOCATION", "CHECKIN"] },
+            placeId: { not: null },
+          },
+          select: {
+            id: true,
+            placeId: true,
+            contentText: true,
+            createdAt: true,
+            place: true,
+          },
+          orderBy: {
+            createdAt: "asc",
+          },
+        },
+      },
+    });
+
+    if (!trip) {
+      return NextResponse.json<ApiResponse>(
+        { success: false, error: "Trip not found" },
+        { status: 404 }
+      );
+    }
+
+    // Check access if user is authenticated
+    if (userId) {
+      const isOwner = trip.userId === userId;
+      const isParticipant = trip.participants.some((p) => p.userId === userId);
+      if (!isOwner && !isParticipant) {
+        return NextResponse.json<ApiResponse>(
+          { success: false, error: "Forbidden" },
+          { status: 403 }
+        );
+      }
+    }
+
+    // ✅ 1. Destination places
+    const destPlaceIds = [trip.startLocationId, trip.endLocationId].filter(
+      Boolean
+    ) as string[];
+
+    const destinationPlaces = destPlaceIds.length
+      ? await prisma.place.findMany({ where: { id: { in: destPlaceIds } } })
+      : [];
+
+    const destinationMapPlaces: MapPlaceResponse[] = destinationPlaces.map(
+      (place, idx) => ({
+        place: serializePlace(place),
+        origin: "DESTINATION" as const,
+        destinationIndex: idx as number, // Explicitly ensure it's a number
+        visitedAt:
+          idx === 0
+            ? trip.startDate?.toISOString()
+            : trip.endDate?.toISOString(),
+      })
+    );
+
+    // ✅ 2. PlaceOnTrip records
+    const onTripMapPlaces: MapPlaceResponse[] = trip.placeVisits.map((pot) => ({
+      place: serializePlace(pot.place),
+      origin: "ON_TRIP" as const,
+      visitedAt: pot.visitedAt?.toISOString(),
+      dayIndex: pot.dayIndex !== null ? (pot.dayIndex as number) : undefined,
+      notes: pot.notes ?? undefined,
+      order: pot.order !== null ? (pot.order as number) : undefined,
+      placeOnTripId: pot.id,
+    }));
+
+    // ✅ 3. Thread entry places (FIXED - proper type inference)
+    const threadEntryMapPlaces: MapPlaceResponse[] = trip.threadEntries
+      .map((entry) => {
+        // Skip entries without place
+        if (!entry.place) return null;
+
+        return {
+          place: serializePlace(entry.place),
+          origin: "THREAD_ENTRY" as const,
+          threadEntryId: entry.id,
+          notes: entry.contentText,
+          createdAt: entry.createdAt.toISOString(),
+          // ✅ Removed entryType - not in MapPlaceResponse interface
+        } as MapPlaceResponse;
+      })
+      .filter((entry): entry is MapPlaceResponse => entry !== null);
+
+    // ✅ 4. Combine all places
+    const allMapPlaces: MapPlaceResponse[] = [
+      ...destinationMapPlaces,
+      ...onTripMapPlaces,
+      ...threadEntryMapPlaces,
+    ];
+
+    // ✅ 5. Sort chronologically
+    allMapPlaces.sort((a, b) => {
+      const timeA = new Date(a.visitedAt || a.createdAt || 0).getTime();
+      const timeB = new Date(b.visitedAt || b.createdAt || 0).getTime();
+      return timeA - timeB;
+    });
+
+    // ✅ 6. Return properly typed response (no type assertion needed!)
+    return NextResponse.json<ApiResponse<MapPlaceResponse[]>>({
+      success: true,
+      data: allMapPlaces,
+    });
+  } catch (error) {
+    console.error("[GET /api/trips/[id]/places] Error:", error);
     return NextResponse.json<ApiResponse>(
-      { success: false, error: "Trip not found" },
-      { status: 404 }
+      { success: false, error: "Internal server error" },
+      { status: 500 }
     );
   }
-
-  // ✅ 1. Destination places
-  const destPlaceIds = [trip.startLocationId, trip.endLocationId].filter(
-    Boolean
-  ) as string[];
-
-  const destinationPlaces = destPlaceIds.length
-    ? await prisma.place.findMany({ where: { id: { in: destPlaceIds } } })
-    : [];
-
-  const destinationMapPlaces: MapPlaceResponse[] = destinationPlaces.map(
-    (place, idx) => ({
-      place: serializePlace(place),
-      origin: "DESTINATION" as const,
-      destinationIndex: idx,
-      visitedAt:
-        idx === 0 ? trip.startDate?.toISOString() : trip.endDate?.toISOString(),
-    })
-  );
-
-  // ✅ 2. PlaceOnTrip records
-  const onTripMapPlaces: MapPlaceResponse[] = trip.placeVisits.map((pot) => ({
-    place: serializePlace(pot.place),
-    origin: "ON_TRIP" as const,
-    visitedAt: pot.visitedAt?.toISOString(),
-    dayIndex: pot.dayIndex ?? undefined,
-    notes: pot.notes ?? undefined,
-    order: pot.order ?? undefined,
-    placeOnTripId: pot.id,
-  }));
-
-  // ✅ 3. Thread entry places (FIXED - proper type inference)
-  const threadEntryMapPlaces: MapPlaceResponse[] = trip.threadEntries
-    .map((entry) => {
-      // Skip entries without place
-      if (!entry.place) return null;
-
-      return {
-        place: serializePlace(entry.place),
-        origin: "THREAD_ENTRY" as const,
-        threadEntryId: entry.id,
-        notes: entry.contentText,
-        createdAt: entry.createdAt.toISOString(),
-        // ✅ Removed entryType - not in MapPlaceResponse interface
-      } as MapPlaceResponse;
-    })
-    .filter((entry): entry is MapPlaceResponse => entry !== null);
-
-  // ✅ 4. Combine all places
-  const allMapPlaces: MapPlaceResponse[] = [
-    ...destinationMapPlaces,
-    ...onTripMapPlaces,
-    ...threadEntryMapPlaces,
-  ];
-
-  // ✅ 5. Sort chronologically
-  allMapPlaces.sort((a, b) => {
-    const timeA = new Date(a.visitedAt || a.createdAt || 0).getTime();
-    const timeB = new Date(b.visitedAt || b.createdAt || 0).getTime();
-    return timeA - timeB;
-  });
-
-  // ✅ 6. Return properly typed response (no type assertion needed!)
-  return NextResponse.json<ApiResponse<MapPlaceResponse[]>>({
-    success: true,
-    data: allMapPlaces,
-  });
 }
 
 export async function POST(

@@ -6,11 +6,13 @@ export async function rateLimit(
   windowSeconds: number
 ): Promise<{ allowed: boolean; remaining: number; resetAt: number }> {
   const now = Math.floor(Date.now() / 1000);
+  const windowStart = Math.floor(now / windowSeconds) * windowSeconds;
   const windowKey = `${key}:${Math.floor(now / windowSeconds)}`;
   const current = (await cacheGetJson<number>(windowKey)) ?? 0;
   const next = current + 1;
   const resetAt = (Math.floor(now / windowSeconds) + 1) * windowSeconds;
-  await cacheSetJson(windowKey, next, resetAt - now);
+  await cacheSetJson(windowKey, next, windowSeconds + 60);
+  // await cacheSetJson(windowKey, next, resetAt - now);
   return {
     allowed: next <= limit,
     remaining: Math.max(0, limit - next),

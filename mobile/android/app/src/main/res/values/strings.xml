@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Mapbox token is injected from .env at build time -->
+</resources>

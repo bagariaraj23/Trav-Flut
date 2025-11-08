@@ -2,7 +2,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { AuthService } from "@/lib/auth";
 import { createThreadEntrySchema } from "@/lib/validation";
-import { ApiResponse, TripThreadEntryResponse } from "@/types/api";
+import {
+  ApiResponse,
+  TripThreadEntryResponse,
+  PlaceResponse,
+} from "@/types/api";
+import { serializePlace } from "@/lib/place";
 
 // Create a new thread entry
 export async function POST(
@@ -43,10 +48,12 @@ export async function POST(
     // Validate input
     const validatedData = createThreadEntrySchema.parse(body);
 
+    // If placeId is provided, fetch place details and use its name as locationName if not provided
+    let locationName = validatedData.locationName;
     if (validatedData.placeId) {
       const place = await prisma.place.findUnique({
         where: { id: validatedData.placeId },
-        select: { id: true },
+        select: { id: true, name: true },
       });
 
       if (!place) {
@@ -54,6 +61,11 @@ export async function POST(
           { success: false, error: "Invalid placeId" },
           { status: 400 }
         );
+      }
+
+      // Use place name as locationName if not explicitly provided
+      if (!locationName) {
+        locationName = place.name;
       }
     }
 
@@ -136,7 +148,7 @@ export async function POST(
           type: validatedData.type,
           contentText: validatedData.contentText,
           mediaUrl: validatedData.mediaUrl,
-          locationName: validatedData.locationName,
+          locationName: locationName ?? undefined,
           gpsCoordinates: validatedData.gpsCoordinates
             ? JSON.stringify(validatedData.gpsCoordinates)
             : undefined,
@@ -180,7 +192,7 @@ export async function POST(
       });
     }
 
-    // Fetch the complete entry with tags
+    // Fetch the complete entry with tags and place
     const completeEntry = await prisma.tripThreadEntry.findUnique({
       where: { id: threadEntry.id },
       include: {
@@ -215,6 +227,7 @@ export async function POST(
           },
         },
         media: true,
+        place: true, // Include place relation
       },
     });
 
@@ -245,6 +258,9 @@ export async function POST(
             createdAt: completeEntry!.media.createdAt.toISOString(),
           }
         : undefined,
+      place: completeEntry!.place
+        ? (serializePlace(completeEntry!.place) as PlaceResponse)
+        : null,
     };
 
     return NextResponse.json<ApiResponse<TripThreadEntryResponse>>(
@@ -397,6 +413,7 @@ export async function GET(
           },
         },
         media: true,
+        place: true, // Include place relation
       },
       orderBy: { createdAt: "asc" },
     });
@@ -428,6 +445,9 @@ export async function GET(
             createdAt: entry.media.createdAt.toISOString(),
           }
         : undefined,
+      place: entry.place
+        ? (serializePlace(entry.place) as PlaceResponse)
+        : null,
     }));
 
     return NextResponse.json<ApiResponse<TripThreadEntryResponse[]>>({

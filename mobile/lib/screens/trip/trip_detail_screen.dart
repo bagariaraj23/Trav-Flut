@@ -305,13 +305,13 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
               children: [
                 _buildStatItem(
                   Icons.photo_library,
-                  '${_trip!.entryCount ?? 0}',
+                  '${_trip!.entryCount}',
                   'Entries',
                 ),
                 const SizedBox(width: 24),
                 _buildStatItem(
                   Icons.people,
-                  '${_trip!.participantCount ?? 0}',
+                  '${_trip!.participantCount}',
                   'Participants',
                 ),
                 if (_trip!.type != null) ...[

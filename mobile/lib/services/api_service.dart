@@ -160,8 +160,28 @@ class ApiService {
 
                 if (response.statusCode == 200 &&
                     response.data['success'] == true) {
-                  final newToken = response.data['data']['accessToken'];
-                  final newRefreshToken = response.data['data']['refreshToken'];
+                  final data = response.data['data'];
+                  if (data is! Map<String, dynamic>) {
+                    throw DioException(
+                      requestOptions: error.requestOptions,
+                      response: response,
+                      type: DioExceptionType.badResponse,
+                    );
+                  }
+                  final newToken = data['accessToken'];
+                  final newRefreshToken = data['refreshToken'];
+                  if (newToken is! String ||
+                      newToken.isEmpty ||
+                      newRefreshToken is! String ||
+                      newRefreshToken.isEmpty) {
+                    debugPrint(
+                        '[ApiService] Refresh response missing tokens, forcing logout');
+                    throw DioException(
+                      requestOptions: error.requestOptions,
+                      response: response,
+                      type: DioExceptionType.badResponse,
+                    );
+                  }
                   await _storageService!.saveTokens(
                     accessToken: newToken,
                     refreshToken: newRefreshToken,

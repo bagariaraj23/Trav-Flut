@@ -18,3 +18,18 @@ export interface PlacesProviderAdapter {
     limit?: number;
   }): Promise<NormalizedPlace[]>;
 }
+
+function mapPlaceType(mapboxType: string): string {
+  const typeMap: Record<string, string> = {
+    poi: "POI",
+    address: "POI",
+    place: "OTHER",
+    region: "OTHER",
+    district: "OTHER",
+    locality: "OTHER",
+    neighborhood: "OTHER",
+    postcode: "OTHER",
+  };
+
+  return typeMap[mapboxType.toLowerCase()] || "OTHER";
+}

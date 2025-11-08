@@ -10,7 +10,6 @@ import {
 } from "@/lib/cache";
 import { rlKeyFromUserOrIp, rateLimit } from "@/lib/rateLimit";
 import { withLock } from "@/lib/mutex";
-import { PlaceResponse } from "@/types/api";
 
 const placesProvider = new MapboxPlacesAdapter();
 
@@ -113,47 +112,62 @@ function generateSpatialKey(
 }
 
 // Helper to convert Place to cache-safe object
-export function serializePlace(place: Place): PlaceResponse {
+export function serializePlace(place: any) {
   return {
-    id: place.id,
-    name: place.name,
-    address: place.address,
-    lat: place.lat,
-    lng: place.lng,
-    placeType: place.placeType,
-    source: place.source,
-    externalId: place.externalId,
-    createdAt:
-      place.createdAt instanceof Date
-        ? place.createdAt.toISOString()
-        : place.createdAt,
-    updatedAt:
-      place.updatedAt instanceof Date
-        ? place.updatedAt.toISOString()
-        : place.updatedAt,
+    ...place,
+    createdAt: place.createdAt.toISOString(),
+    updatedAt: place.updatedAt.toISOString(),
   };
 }
 
 // Helper to deserialize cached place
-function deserializePlace(cached: any): Place {
+function deserializePlace(cached: any) {
   return {
-    id: cached.id,
-    name: cached.name,
-    address: cached.address,
-    lat: cached.lat,
-    lng: cached.lng,
-    placeType: cached.placeType,
-    source: cached.source,
-    externalId: cached.externalId,
-    createdAt: cached.createdAt instanceof Date 
-      ? cached.createdAt 
-      : new Date(cached.createdAt),
-    updatedAt: cached.updatedAt instanceof Date 
-      ? cached.updatedAt 
-      : new Date(cached.updatedAt),
+    ...cached,
+    createdAt: new Date(cached.createdAt),
+    updatedAt: new Date(cached.updatedAt),
   };
 }
 
+// Normalize placeType from Mapbox values to valid Prisma enum values
+function normalizePlaceType(placeType?: string): PlaceType {
+  if (!placeType) return "POI";
+
+  const upperType = placeType.toUpperCase();
+
+  // Mapbox returns CITY, DISTRICT, etc. but Prisma only accepts:
+  // POI, STAY, FOOD, TRANSPORT, VIEWPOINT, OTHER
+  if (
+    upperType === "CITY" ||
+    upperType === "REGION" ||
+    upperType === "COUNTRY"
+  ) {
+    return "OTHER";
+  }
+
+  if (
+    upperType === "DISTRICT" ||
+    upperType === "LOCALITY" ||
+    upperType === "NEIGHBORHOOD"
+  ) {
+    return "OTHER";
+  }
+
+  // Try to cast directly, fallback to POI if invalid
+  const validTypes: PlaceType[] = [
+    "POI",
+    "STAY",
+    "FOOD",
+    "TRANSPORT",
+    "VIEWPOINT",
+    "OTHER",
+  ];
+  if (validTypes.includes(upperType as PlaceType)) {
+    return upperType as PlaceType;
+  }
+
+  return "POI";
+}
 
 // Function to check if two places should be considered the same
 function arePlacesClose(
@@ -188,7 +202,7 @@ export async function searchPlaces(params: {
   // 1. Rate limiting check
   const rl = await rateLimit(
     rlKeyFromUserOrIp(userId, ip, "places:search"),
-    30,
+    20,
     60
   );
   if (!rl.allowed) {
@@ -206,9 +220,8 @@ export async function searchPlaces(params: {
     .replace(/[^\w\s-]/g, ""); // remove special chars except spaces and hyphens
 
   // Human-readable, debuggable cache key
-  const searchKey = `plc:srch:${encodeURIComponent(queryForCache)}:${
-    lat ? bucketCoord(lat) : "null"
-  }:${lng ? bucketCoord(lng) : "null"}:${limit}`;
+  const searchKey = `plc:srch:${encodeURIComponent(queryForCache)}:${lat ? bucketCoord(lat) : "null"
+    }:${lng ? bucketCoord(lng) : "null"}:${limit}`;
 
   // 2. Try cache first
   const cached = await cacheGetJson<Place[]>(searchKey);
@@ -344,25 +357,78 @@ export async function searchPlaces(params: {
         lat: place.lat,
         lng: place.lng,
         externalId: place.externalId,
-        placeType: (place.placeType as PlaceType) ?? "POI",
+        placeType: normalizePlaceType(place.placeType),
         source: (place.source as PlaceSource) ?? "MAPBOX",
       });
     }
   }
 
-  // Batch create all new places in parallel
+  // Batch create all new places with deduplication by externalId
   if (newPlacesToCreate.length > 0) {
+    // Deduplicate by externalId before creating
+    const uniqueByExternalId = new Map<string, (typeof newPlacesToCreate)[0]>();
+    const withoutExternalId: typeof newPlacesToCreate = [];
+
+    for (const place of newPlacesToCreate) {
+      if (place.externalId) {
+        // Only keep first occurrence of each externalId
+        if (!uniqueByExternalId.has(place.externalId)) {
+          uniqueByExternalId.set(place.externalId, place);
+        }
+      } else {
+        withoutExternalId.push(place);
+      }
+    }
+
+    const uniquePlaces = [
+      ...Array.from(uniqueByExternalId.values()),
+      ...withoutExternalId,
+    ];
+
     console.log(
-      `[DB] Creating ${newPlacesToCreate.length} new places in parallel`
+      `[DB] Creating ${uniquePlaces.length} new places (deduped from ${newPlacesToCreate.length})`
     );
 
-    const createdPlaces = await Promise.all(
-      newPlacesToCreate.map((data) => prisma.place.create({ data }))
-    );
+    // Use upsert for places with externalId to handle race conditions
+    const createdPlaces: Place[] = [];
+
+    for (const data of uniquePlaces) {
+      try {
+        if (data.externalId) {
+          // Use upsert to handle concurrent creation attempts
+          const place = await prisma.place.upsert({
+            where: { externalId: data.externalId },
+            update: {}, // Don't update if exists
+            create: data,
+          });
+          createdPlaces.push(place);
+        } else {
+          // For places without externalId, use regular create
+          const place = await prisma.place.create({ data });
+          createdPlaces.push(place);
+        }
+      } catch (error: any) {
+        // Handle unique constraint violation (P2002)
+        if (error.code === "P2002" && data.externalId) {
+          // Place already exists, fetch it
+          const existing = await prisma.place.findUnique({
+            where: { externalId: data.externalId },
+          });
+          if (existing) {
+            createdPlaces.push(existing);
+          }
+        } else {
+          console.error(`[DB] Error creating place ${data.name}:`, error);
+          // Continue with other places
+        }
+      }
+    }
 
     for (const newPlace of createdPlaces) {
-      deduplicatedResults.push(newPlace);
-      seen.add(newPlace.id);
+      if (!seen.has(newPlace.id)) {
+        deduplicatedResults.push(newPlace);
+        seen.add(newPlace.id);
+      }
     }
   }
 
@@ -437,18 +503,24 @@ export async function resolvePlace(input: PlaceInput) {
       return match;
     }
 
-    // No match found - create new place
-    const created = await prisma.place.create({
-      data: {
-        name: input.name,
-        address: input.address,
-        lat: input.lat,
-        lng: input.lng,
-        externalId: input.externalId,
-        placeType: (input.placeType as PlaceType) ?? "POI",
-        source: (input.source as PlaceSource) ?? "USER",
-      },
-    });
+    // No match found - create new place (use upsert if externalId exists)
+    const placeData = {
+      name: input.name,
+      address: input.address,
+      lat: input.lat,
+      lng: input.lng,
+      externalId: input.externalId,
+      placeType: normalizePlaceType(input.placeType),
+      source: (input.source as PlaceSource) ?? "USER",
+    };
+
+    const created = input.externalId
+      ? await prisma.place.upsert({
+        where: { externalId: input.externalId },
+        update: {}, // Don't update if exists
+        create: placeData,
+      })
+      : await prisma.place.create({ data: placeData });
 
     await cacheResults(created, cacheKeys);
     return created;

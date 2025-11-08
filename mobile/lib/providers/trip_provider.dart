@@ -251,6 +251,12 @@ class TripProvider extends ChangeNotifier {
       debugPrint(
           '[TripProvider] Adding thread entry: type=$type, placeId=$placeId');
 
+      if (type == ThreadEntryType.location && placeId == null) {
+        _error = 'A place is required for location entries';
+        notifyListeners();
+        return false;
+      }
+
       final request = CreateThreadEntryRequest(
         type: type,
         contentText: contentText,
@@ -263,6 +269,8 @@ class TripProvider extends ChangeNotifier {
         tripId: tripId,
         request: request,
       );
+
+      debugPrint('[TripProvider] Create entry response: ${response.success}');
 
       if (response.success && response.data != null) {
         _currentTripEntries.add(response.data!);

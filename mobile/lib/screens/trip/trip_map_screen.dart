@@ -208,7 +208,7 @@ class _TripMapScreenState extends State<TripMapScreen> {
                           right: 0,
                           bottom: 0,
                           child: Container(
-                            height: 120,
+                            height: 130,
                             padding: const EdgeInsets.symmetric(vertical: 8.0),
                             child: ListView.separated(
                               scrollDirection: Axis.horizontal,
@@ -235,79 +235,112 @@ class _TripMapScreenState extends State<TripMapScreen> {
     final label = labelForOrigin(mapPlace.origin);
     final icon = iconForOrigin(mapPlace.origin);
 
-    return Card(
-      elevation: 4,
-      child: InkWell(
-        onTap: () => _flyToPlace(place),
-        child: Container(
-          width: 220,
-          padding: const EdgeInsets.all(12.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              // Origin badge
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                decoration: BoxDecoration(
-                  color: color.withOpacity(0.15),
-                  borderRadius: BorderRadius.circular(4),
-                  border: Border.all(color: color.withOpacity(0.5), width: 1),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(icon, size: 12, color: color),
-                    const SizedBox(width: 4),
-                    Text(
-                      label,
-                      style: TextStyle(
-                        fontSize: 10,
-                        color: color,
-                        fontWeight: FontWeight.w600,
+    return ConstrainedBox(
+      constraints: const BoxConstraints(
+        minWidth: 180,
+        maxWidth: 280,
+      ),
+      child: Card(
+        elevation: 4,
+        margin: EdgeInsets.zero,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: InkWell(
+          onTap: () => _flyToPlace(place),
+          borderRadius: BorderRadius.circular(12),
+          child: Padding(
+            padding: const EdgeInsets.all(12.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              // mainAxisSize: MainAxisSize.min,
+              children: [
+                // Origin badge
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: color.withOpacity(0.15),
+                    borderRadius: BorderRadius.circular(4),
+                    border: Border.all(color: color.withOpacity(0.5), width: 1),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(icon, size: 12, color: color),
+                      const SizedBox(width: 4),
+                      Flexible(
+                        child: Text(
+                          label,
+                          style: TextStyle(
+                            fontSize: 10,
+                            color: color,
+                            fontWeight: FontWeight.w600,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
-              ),
-              const SizedBox(height: 6),
+                const SizedBox(height: 8),
 
-              // Place name
-              Text(
-                place.name,
-                style: const TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 14,
-                ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-
-              // Address
-              if (place.address != null)
-                Text(
-                  place.address!,
-                  style: TextStyle(fontSize: 11, color: Colors.grey[600]),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                ),
-
-              // Notes
-              if (mapPlace.notes != null && mapPlace.notes!.isNotEmpty)
-                Padding(
-                  padding: const EdgeInsets.only(top: 3),
+                // Place name - dynamic sizing
+                Expanded(
+                  flex: 1,
                   child: Text(
-                    mapPlace.notes!,
-                    style: TextStyle(
-                      fontSize: 10,
-                      color: Colors.grey[600],
-                      fontStyle: FontStyle.italic,
+                    place.name,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 14,
+                      height: 1.2,
                     ),
-                    maxLines: 1,
+                    maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),
-            ],
+
+                // Address - only show if space available
+                if (place.address != null && place.address!.isNotEmpty) ...[
+                  const SizedBox(height: 4),
+                  Expanded(
+                    flex: 1,
+                    child: Text(
+                      place.address!,
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: Colors.grey[600],
+                        height: 1.3,
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+
+                // Notes - only show if space available and no address
+                if (mapPlace.notes != null &&
+                    mapPlace.notes!.isNotEmpty &&
+                    (place.address == null || place.address!.isEmpty)) ...[
+                  const SizedBox(height: 4),
+                  Expanded(
+                    flex: 1, // Also gets 1/3 of the space
+                    child: Text(
+                      mapPlace.notes!,
+                      style: TextStyle(
+                        fontSize: 10,
+                        color: Colors.grey[600],
+                        fontStyle: FontStyle.italic,
+                        height: 1.3,
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ],
+            ),
           ),
         ),
       ),
@@ -340,8 +373,8 @@ class _TripMapScreenState extends State<TripMapScreen> {
         await _mapboxMap?.annotations.createCircleAnnotationManager();
     _textManager ??=
         await _mapboxMap?.annotations.createPointAnnotationManager();
-    _routeManager ??= await _mapboxMap?.annotations
-        .createPolylineAnnotationManager();
+    _routeManager ??=
+        await _mapboxMap?.annotations.createPolylineAnnotationManager();
 
     // Create markers
     for (final mapPlace in sortedPlaces) {
@@ -395,7 +428,7 @@ class _TripMapScreenState extends State<TripMapScreen> {
         padding: mapbox.MbxEdgeInsets(
           top: 60,
           right: 40,
-          bottom: 160, // Space for place cards
+          bottom: 160,
           left: 40,
         ),
       ),

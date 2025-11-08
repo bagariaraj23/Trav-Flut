@@ -1,14 +1,31 @@
 import { NextRequest, NextResponse } from "next/server";
 import { resolvePlace } from "@/lib/place";
 import { ApiResponse } from "@/types/api";
-import { getAuthSession } from "@/lib/auth";
+import { AuthService } from "@/lib/auth";
 import { enforceRateLimit, sanitizeInput } from "@/lib/security";
 
 export async function POST(request: NextRequest) {
   try {
-    // 1. Require authentication
-    const session = await getAuthSession();
-    if (!session?.user) {
+    // 1. Require authentication - check Bearer token first (for mobile apps)
+    let userId: string | undefined;
+    const authHeader = request.headers.get("authorization");
+
+    if (authHeader?.startsWith("Bearer ")) {
+      const token = authHeader.substring(7);
+      const payload = AuthService.verifyAccessToken(token);
+      if (payload) {
+        userId = payload.userId;
+      }
+    }
+
+    // Fallback to cookie-based auth (for web)
+    if (!userId) {
+      const { getAuthSession } = await import("@/lib/auth");
+      const session = await getAuthSession();
+      userId = session?.user?.id;
+    }
+
+    if (!userId) {
       return NextResponse.json<ApiResponse>(
         { success: false, error: "Authentication required" },
         { status: 401 }
@@ -18,7 +35,7 @@ export async function POST(request: NextRequest) {
     // 2. Rate limiting
     const rateLimitResult = await enforceRateLimit(
       request,
-      session.user.id,
+      userId,
       "places:resolve"
     );
     if (!rateLimitResult.allowed) {
@@ -30,7 +47,8 @@ export async function POST(request: NextRequest) {
 
     // 3. Validate and sanitize input
     const body = await request.json();
-    const { name, address, lat, lng, externalId, placeType, source } = body ?? {};
+    const { name, address, lat, lng, externalId, placeType, source } =
+      body ?? {};
 
     if (!name || typeof lat !== "number" || typeof lng !== "number") {
       return NextResponse.json<ApiResponse>(
@@ -58,7 +76,7 @@ export async function POST(request: NextRequest) {
       lng,
       externalId,
       placeType,
-      source
+      source,
     });
 
     return NextResponse.json<ApiResponse>(
