@@ -497,44 +497,107 @@ class TripsTab extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('My Trips'),
-        actions: [
-          Consumer<TripProvider>(
-            builder: (context, tripProvider, child) {
-              return IconButton(
-                icon: const Icon(Icons.add),
+        appBar: AppBar(
+          title: const Text('My Trips'),
+          actions: [
+            Consumer<TripProvider>(
+              builder: (context, tripProvider, child) {
+                return IconButton(
+                  icon: const Icon(Icons.add),
+                  onPressed: tripProvider.hasOngoingTrip
+                      ? null
+                      : () => context
+                          .push('/create-trip', extra: {'from': '/home'}),
+                );
+              },
+            ),
+          ],
+        ),
+        body: SafeArea(child:
+            Consumer<TripProvider>(builder: (context, tripProvider, child) {
+          return SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (tripProvider.currentTrip != null)
+                  _buildOngoingTripBanner(context, tripProvider.currentTrip!),
+                _buildTripsContent(context, tripProvider),
+              ],
+            ),
+          );
+        })));
+  }
+
+  Widget _buildTripsContent(BuildContext context, TripProvider tripProvider) {
+    if (tripProvider.isLoading) {
+      return const Padding(
+        padding: EdgeInsets.all(48.0),
+        child: Center(child: CircularProgressIndicator()),
+      );
+    }
+
+    final trips = tripProvider.trips;
+    if (trips.isEmpty) {
+      return Padding(
+        padding: const EdgeInsets.all(24.0),
+        child: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Icons.map_outlined,
+                size: 64,
+                color: Colors.grey[400],
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'No Trips Yet',
+                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                      color: Colors.grey[600],
+                    ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Start documenting your travel adventures',
+                textAlign: TextAlign.center,
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: Colors.grey[500],
+                    ),
+              ),
+              const SizedBox(height: 24),
+              ElevatedButton.icon(
                 onPressed: tripProvider.hasOngoingTrip
                     ? null
                     : () =>
-                        context.push('/create-trip', extra: {'from': '/home'}),
-              );
-            },
+                        context.push('/trip/create', extra: {'from': '/home'}),
+                icon: const Icon(Icons.add),
+                label: const Text('Start Your First Trip'),
+              ),
+            ],
           ),
-        ],
-      ),
-      body: Consumer<TripProvider>(
-        builder: (context, tripProvider, child) {
-          // Show ongoing trip banner
-          if (tripProvider.currentTrip != null) {
-            return Column(
-              children: [
-                _buildOngoingTripBanner(context, tripProvider.currentTrip!),
-                Expanded(child: _buildTripsList(context, tripProvider)),
-              ],
-            );
-          }
+        ),
+      );
+    }
 
-          return _buildTripsList(context, tripProvider);
-        },
+    return Padding(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          ...trips.map((trip) => _buildTripCard(context, trip)).toList(),
+          const SizedBox(height: 80), // Bottom padding for FAB
+        ],
       ),
     );
   }
 
   Widget _buildOngoingTripBanner(BuildContext context, Trip trip) {
+    final isLandscape =
+        MediaQuery.of(context).orientation == Orientation.landscape;
+
     return Container(
-      margin: const EdgeInsets.all(16),
-      padding: const EdgeInsets.all(16),
+      margin: EdgeInsets.all(isLandscape ? 12 : 16),
+      padding: EdgeInsets.all(isLandscape ? 12 : 16),
       decoration: BoxDecoration(
         gradient: LinearGradient(
           colors: [
@@ -544,67 +607,82 @@ class TripsTab extends StatelessWidget {
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(12),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
         children: [
           Row(
             children: [
-              const Icon(Icons.flight_takeoff, color: Colors.white),
+              Icon(Icons.flight_takeoff,
+                  color: Colors.white, size: isLandscape ? 18 : 20),
               const SizedBox(width: 8),
               Text(
                 'Ongoing Trip',
                 style: Theme.of(context).textTheme.titleMedium?.copyWith(
                       color: Colors.white,
                       fontWeight: FontWeight.w600,
+                      fontSize: isLandscape ? 14 : 16,
                     ),
               ),
               const Spacer(),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                 decoration: BoxDecoration(
                   color: Colors.white.withOpacity(0.2),
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: BorderRadius.circular(8),
                 ),
-                child: const Text(
+                child: Text(
                   'LIVE',
                   style: TextStyle(
                     color: Colors.white,
-                    fontSize: 12,
+                    fontSize: isLandscape ? 10 : 11,
                     fontWeight: FontWeight.bold,
                   ),
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 8),
+          SizedBox(height: isLandscape ? 6 : 8),
           Text(
             trip.title,
             style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                   color: Colors.white,
                   fontWeight: FontWeight.bold,
+                  fontSize: isLandscape ? 18 : 22,
                 ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
           ),
           const SizedBox(height: 4),
           Text(
             trip.destinations.join(', '),
             style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                   color: Colors.white.withOpacity(0.9),
+                  fontSize: isLandscape ? 12 : 14,
                 ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
           ),
-          const SizedBox(height: 12),
+          SizedBox(height: isLandscape ? 8 : 12),
           Row(
             children: [
               Expanded(
                 child: ElevatedButton.icon(
                   onPressed: () => context.go('/trip/${trip.id}/thread',
                       extra: {'from': '/trip/${trip.id}'}),
-                  icon: const Icon(Icons.add),
-                  label: const Text('Add Entry'),
+                  icon: Icon(Icons.add, size: isLandscape ? 16 : 18),
+                  label: Text(
+                    'Add Entry',
+                    style: TextStyle(fontSize: isLandscape ? 12 : 14),
+                  ),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.white,
                     foregroundColor: Theme.of(context).colorScheme.primary,
+                    padding: EdgeInsets.symmetric(
+                      vertical: isLandscape ? 8 : 12,
+                    ),
                   ),
                 ),
               ),
@@ -615,69 +693,20 @@ class TripsTab extends StatelessWidget {
                 style: OutlinedButton.styleFrom(
                   side: const BorderSide(color: Colors.white),
                   foregroundColor: Colors.white,
+                  padding: EdgeInsets.symmetric(
+                    horizontal: isLandscape ? 12 : 16,
+                    vertical: isLandscape ? 8 : 12,
+                  ),
                 ),
-                child: const Text('View'),
+                child: Text(
+                  'View',
+                  style: TextStyle(fontSize: isLandscape ? 12 : 14),
+                ),
               ),
             ],
           ),
         ],
       ),
-    );
-  }
-
-  Widget _buildTripsList(BuildContext context, TripProvider tripProvider) {
-    if (tripProvider.isLoading) {
-      return const Center(child: CircularProgressIndicator());
-    }
-
-    final trips = tripProvider.trips;
-
-    if (trips.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              Icons.map_outlined,
-              size: 64,
-              color: Colors.grey[400],
-            ),
-            const SizedBox(height: 16),
-            Text(
-              'No Trips Yet',
-              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                    color: Colors.grey[600],
-                  ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Start documenting your travel adventures',
-              textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: Colors.grey[500],
-                  ),
-            ),
-            const SizedBox(height: 24),
-            ElevatedButton.icon(
-              onPressed: tripProvider.hasOngoingTrip
-                  ? null
-                  : () =>
-                      context.push('/create-trip', extra: {'from': '/home'}),
-              icon: const Icon(Icons.add),
-              label: const Text('Start Your First Trip'),
-            ),
-          ],
-        ),
-      );
-    }
-
-    return ListView.builder(
-      padding: const EdgeInsets.all(16),
-      itemCount: trips.length,
-      itemBuilder: (context, index) {
-        final trip = trips[index];
-        return _buildTripCard(context, trip);
-      },
     );
   }
 
@@ -690,7 +719,7 @@ class TripsTab extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Cover image or placeholder
+            // Cover image
             Container(
               height: 200,
               decoration: BoxDecoration(
@@ -714,7 +743,6 @@ class TripsTab extends StatelessWidget {
                     )
                   : _buildPlaceholderImage(context, trip),
             ),
-
             // Trip info
             Padding(
               padding: const EdgeInsets.all(16),
@@ -816,12 +844,20 @@ class TripsTab extends StatelessWidget {
             color: Colors.white,
           ),
           const SizedBox(height: 8),
-          Text(
-            trip.destinations.first,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Text(
+              trip.destinations.isNotEmpty
+                  ? trip.destinations.first
+                  : trip.title,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+              ),
+              textAlign: TextAlign.center,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
             ),
           ),
         ],

@@ -1,8 +1,27 @@
+import java.util.Properties
+import java.io.FileInputStream
+
 plugins {
     id("com.android.application")
     id("kotlin-android")
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
     id("dev.flutter.flutter-gradle-plugin")
+}
+
+// Load .env file
+val envFile = project.rootProject.file("../.env")
+val envProperties = Properties()
+if (envFile.exists()) {
+    if (envFile.exists()) {
+        try {
+            envProperties.load(FileInputStream(envFile))
+            println("✅ Loaded .env file successfully")
+        } catch (e: Exception) {
+            println("⚠️ Error loading .env file: ${e.message}")
+        }
+    } else {
+        println("⚠️ .env file not found at: ${envFile.absolutePath}")
+    }
 }
 
 android {
@@ -28,6 +47,10 @@ android {
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+
+        // Inject Mapbox token from .env
+        resValue("string", "mapbox_access_token", 
+            envProperties.getProperty("MAPBOX_ACCESS_TOKEN", ""))
     }
 
     buildTypes {

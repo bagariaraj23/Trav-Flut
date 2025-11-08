@@ -1,4 +1,5 @@
 import 'package:dio/dio.dart';
+import 'package:flutter/cupertino.dart';
 import 'package:tripthread/models/api_response.dart';
 import 'package:tripthread/models/trip.dart';
 import 'package:tripthread/models/trip_join_request.dart';
@@ -188,22 +189,40 @@ class TripService {
   }
 
   // Thread entries
-  Future<ApiResponse<TripThreadEntry>> createThreadEntry(
-    String tripId,
-    CreateThreadEntryRequest request,
-  ) async {
+  Future<ApiResponse<TripThreadEntry>> createThreadEntry({
+      required String tripId,
+      required CreateThreadEntryRequest request,
+    }) async {
     try {
+      print('[TripService] Creating thread entry: ${request.toJson()}');
+
       final response =
           await _dio.post('/trips/$tripId/entries', data: request.toJson());
 
-      return ApiResponse<TripThreadEntry>.fromJson(
-        response.data,
-        (json) => TripThreadEntry.fromJson(json as Map<String, dynamic>),
+      debugPrint('[TripService] Create entry response: ${response.statusCode}');
+
+      if (response.statusCode == 201 && response.data['success']) {
+        return ApiResponse<TripThreadEntry>(
+          success: true,
+          data: TripThreadEntry.fromJson(response.data['data']),
+        );
+      }
+      
+      return ApiResponse<TripThreadEntry>(
+        success: false,
+        error: response.data['error'] ?? 'Failed to create entry',
       );
     } on DioException catch (e) {
+      debugPrint('[TripService] Create entry error: ${e.message}');
       return ApiResponse<TripThreadEntry>(
         success: false,
         error: e.response?.data['error'] ?? 'Network error occurred',
+      );
+    } catch (e) {
+      debugPrint('[TripService] Create entry unexpected error: $e');
+      return ApiResponse<TripThreadEntry>(
+        success: false,
+        error: 'An unexpected error occurred',
       );
     }
   }

@@ -3,6 +3,7 @@ export interface ApiResponse<T = any> {
   data?: T | null;
   error?: string | null;
   message?: string | null;
+  meta?: Record<string, any>;
 }
 
 export interface AuthResponse {
@@ -84,13 +85,13 @@ export interface TripResponse {
   endDate?: string | null;
   destinations: string[];
   mood?:
-    | "RELAXED"
-    | "ADVENTURE"
-    | "SPIRITUAL"
-    | "CULTURAL"
-    | "PARTY"
-    | "MIXED"
-    | null;
+  | "RELAXED"
+  | "ADVENTURE"
+  | "SPIRITUAL"
+  | "CULTURAL"
+  | "PARTY"
+  | "MIXED"
+  | null;
   type?: "SOLO" | "GROUP" | "COUPLE" | "FAMILY" | null;
   coverMediaUrl?: string | null;
   status: "UPCOMING" | "ONGOING" | "ENDED";
@@ -127,10 +128,25 @@ export interface TripThreadEntryResponse {
   mediaUrl?: string | null;
   locationName?: string | null;
   gpsCoordinates?: { lat: number | null; lng: number | null } | null;
+  placeId?: string | null;
+  place?: PlaceResponse | null;
   createdAt: string;
   author: UserProfile;
   taggedUsers?: UserProfile[] | null;
   media?: MediaResponse | null;
+}
+
+export interface PlaceResponse {
+  id: string;
+  name: string;
+  address?: string | null;
+  lat: number;
+  lng: number;
+  placeType: "POI" | "STAY" | "FOOD" | "TRANSPORT" | "VIEWPOINT" | "OTHER";
+  source: "USER" | "GOOGLE" | "MAPBOX" | "APPLE";
+  externalId?: string | null;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface TripFinalPostResponse {
@@ -163,13 +179,13 @@ export interface CreateTripRequest {
   endDate?: string | null;
   destinations: string[];
   mood?:
-    | "RELAXED"
-    | "ADVENTURE"
-    | "SPIRITUAL"
-    | "CULTURAL"
-    | "PARTY"
-    | "MIXED"
-    | null;
+  | "RELAXED"
+  | "ADVENTURE"
+  | "SPIRITUAL"
+  | "CULTURAL"
+  | "PARTY"
+  | "MIXED"
+  | null;
   type?: "SOLO" | "GROUP" | "COUPLE" | "FAMILY" | null;
   coverMediaUrl?: string | null;
 }
@@ -180,6 +196,7 @@ export interface CreateThreadEntryRequest {
   mediaUrl?: string | null;
   locationName?: string | null;
   gpsCoordinates?: { lat: number | null; lng: number | null } | null;
+  placeId?: string | null;
   taggedUsernames?: string[] | null;
 }
 
@@ -215,4 +232,19 @@ export interface TripJoinRequestDto {
   };
   sender?: UserProfile;
   receiver?: UserProfile;
+}
+
+export type MapPlaceOrigin = "DESTINATION" | "THREAD_ENTRY" | "ON_TRIP";
+
+export interface MapPlaceResponse {
+  place: PlaceResponse;
+  origin: MapPlaceOrigin;
+  destinationIndex?: number;
+  threadEntryId?: string;
+  visitedAt?: string;
+  dayIndex?: number;
+  order?: number;
+  placeOnTripId?: string;
+  notes?: string | null;
+  createdAt?: string;
 }

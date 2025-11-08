@@ -194,7 +194,10 @@ class TripProvider extends ChangeNotifier {
     if (id == null) return false;
 
     try {
-      final response = await _tripService.createThreadEntry(id, request);
+      final response = await _tripService.createThreadEntry(
+        tripId: id,
+        request: request,
+      );
 
       if (response.success && response.data != null) {
         _currentTripEntries.add(response.data!);
@@ -236,6 +239,67 @@ class TripProvider extends ChangeNotifier {
   }
 
   // Add location entry
+  Future<bool> addThreadEntryWithPlace({
+    required String tripId,
+    required ThreadEntryType type,
+    String? contentText,
+    String? mediaUrl,
+    String? placeId,
+    List<String>? taggedUserIds,
+  }) async {
+    try {
+      debugPrint(
+          '[TripProvider] Adding thread entry: type=$type, placeId=$placeId');
+
+      if (type == ThreadEntryType.location && placeId == null) {
+        _error = 'A place is required for location entries';
+        notifyListeners();
+        return false;
+      }
+
+      final request = CreateThreadEntryRequest(
+        type: type,
+        contentText: contentText,
+        mediaUrl: mediaUrl,
+        placeId: placeId,
+        taggedUserIds: taggedUserIds,
+      );
+
+      final response = await _tripService.createThreadEntry(
+        tripId: tripId,
+        request: request,
+      );
+
+      debugPrint('[TripProvider] Create entry response: ${response.success}');
+
+      if (response.success && response.data != null) {
+        _currentTripEntries.add(response.data!);
+
+        // Update current trip if loaded
+        if (_currentTrip?.id == tripId) {
+          _currentTrip = _currentTrip!.copyWith(
+            threadEntries: _currentTripEntries,
+            entryCount: _currentTripEntries.length,
+          );
+        }
+
+        notifyListeners();
+        return true;
+      } else {
+        _error = response.error ?? 'Failed to add entry';
+        notifyListeners();
+        return false;
+      }
+    } catch (e) {
+      _error = 'An unexpected error occurred';
+      debugPrint('[TripProvider] Add thread entry error: $e');
+      notifyListeners();
+      return false;
+    }
+  }
+
+  // Add location entry
+  @Deprecated('Use addThreadEntryWithPlace instead')
   Future<bool> addLocationEntry(
     String locationName, {
     double? lat,

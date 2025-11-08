@@ -85,10 +85,11 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
     return Scaffold(
       body: CustomScrollView(
         slivers: [
-          // This SliverAppBar is now ALWAYS part of the widget tree,
-          // guaranteeing the back button is always visible.
           SliverAppBar(
-            expandedHeight: 250,
+            expandedHeight:
+                MediaQuery.of(context).orientation == Orientation.landscape
+                    ? 150 // ← Smaller in landscape
+                    : 250, // ← Larger in portrait
             pinned: true,
             leading: IconButton(
               icon: const Icon(Icons.arrow_back, color: Colors.white),
@@ -305,13 +306,13 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
               children: [
                 _buildStatItem(
                   Icons.photo_library,
-                  '${_trip!.entryCount ?? 0}',
+                  '${_trip!.entryCount}',
                   'Entries',
                 ),
                 const SizedBox(width: 24),
                 _buildStatItem(
                   Icons.people,
-                  '${_trip!.participantCount ?? 0}',
+                  '${_trip!.participantCount}',
                   'Participants',
                 ),
                 if (_trip!.type != null) ...[
@@ -344,6 +345,23 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
                   ),
             ),
             const SizedBox(height: 12),
+            ElevatedButton.icon(
+              onPressed: () {
+                context.push(
+                  '/trip/${widget.tripId}/map',
+                  extra: {
+                    'tripTitle': _trip!.title,
+                    'places': _trip!.placeVisits, // Optional prefetch
+                  },
+                );
+              },
+              icon: const Icon(Icons.map),
+              label: const Text('View Trip Map'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Theme.of(context).colorScheme.secondary,
+              ),
+            ),
+            const SizedBox(height: 8),
             if (_trip!.status == TripStatus.ongoing) ...[
               ElevatedButton.icon(
                 onPressed: () {

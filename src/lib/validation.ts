@@ -88,6 +88,7 @@ export const createTripSchema = z
       .min(1, "Title is required")
       .max(100, "Title must be less than 100 characters")
       .transform((title) => title.trim()),
+    // destinationPlaceIds: z.array(z.string().uuid("Invalid place ID")).optional(),
     description: z
       .union([
         z
@@ -137,14 +138,8 @@ export const createTripSchema = z
       console.log(`[DEBUG] Parsed end date: ${parsedDate.toISOString()}`);
       return true;
     }, "End date is required and must be a valid date"),
-    destinations: z
-      .array(
-        z
-          .string()
-          .min(1, "Destination cannot be empty")
-          .max(100, "Destination name is too long")
-          .transform((dest) => dest.trim())
-      )
+    destinationPlaceIds: z
+      .array(z.string().uuid("Invalid place id"))
       .min(1, "At least one destination is required")
       .max(10, "Maximum 10 destinations allowed"),
     mood: z
@@ -291,6 +286,9 @@ export const createThreadEntrySchema = z
         );
         return val;
       }),
+    placeId: z
+      .union([z.string().uuid("Invalid place id"), z.null(), z.undefined()])
+      .optional(),
     taggedUsernames: z
       .union([
         z
@@ -322,9 +320,15 @@ export const createThreadEntrySchema = z
         case "MEDIA":
           return data.mediaUrl && data.mediaUrl.length > 0;
         case "LOCATION":
-          return data.locationName && data.locationName.length > 0;
+          return (
+            !!data.placeId ||
+            (!!data.locationName && data.locationName.length > 0)
+          );
         case "CHECKIN":
-          return data.locationName && data.locationName.length > 0;
+          return (
+            !!data.placeId ||
+            (!!data.locationName && data.locationName.length > 0)
+          );
         default:
           return false;
       }

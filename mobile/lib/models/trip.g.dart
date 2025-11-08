@@ -23,6 +23,17 @@ Trip _$TripFromJson(Map<String, dynamic> json) => Trip(
       status: $enumDecode(_$TripStatusEnumMap, json['status']),
       entryCount: (json['entryCount'] as num?)?.toInt() ?? 0,
       participantCount: (json['participantCount'] as num?)?.toInt() ?? 1,
+      startLocationId: json['startLocationId'] as String?,
+      startLocation: json['startLocation'] == null
+          ? null
+          : Place.fromJson(json['startLocation'] as Map<String, dynamic>),
+      endLocationId: json['endLocationId'] as String?,
+      endLocation: json['endLocation'] == null
+          ? null
+          : Place.fromJson(json['endLocation'] as Map<String, dynamic>),
+      placeVisits: (json['placeVisits'] as List<dynamic>?)
+          ?.map((e) => PlaceOnTrip.fromJson(e as Map<String, dynamic>))
+          .toList(),
       createdAt: DateTime.parse(json['createdAt'] as String),
       updatedAt: DateTime.parse(json['updatedAt'] as String),
       user: json['user'] == null
@@ -56,6 +67,11 @@ Map<String, dynamic> _$TripToJson(Trip instance) => <String, dynamic>{
       'status': _$TripStatusEnumMap[instance.status]!,
       'entryCount': instance.entryCount,
       'participantCount': instance.participantCount,
+      'startLocationId': instance.startLocationId,
+      'startLocation': instance.startLocation,
+      'endLocationId': instance.endLocationId,
+      'endLocation': instance.endLocation,
+      'placeVisits': instance.placeVisits,
       'createdAt': instance.createdAt.toIso8601String(),
       'updatedAt': instance.updatedAt.toIso8601String(),
       'user': instance.user,
@@ -135,6 +151,10 @@ TripThreadEntry _$TripThreadEntryFromJson(Map<String, dynamic> json) =>
           ? null
           : GpsCoordinates.fromJson(
               json['gpsCoordinates'] as Map<String, dynamic>),
+      placeId: json['placeId'] as String?,
+      place: json['place'] == null
+          ? null
+          : Place.fromJson(json['place'] as Map<String, dynamic>),
       createdAt: DateTime.parse(json['createdAt'] as String),
       author: User.fromJson(json['author'] as Map<String, dynamic>),
       taggedUsers: (json['taggedUsers'] as List<dynamic>?)
@@ -155,6 +175,8 @@ Map<String, dynamic> _$TripThreadEntryToJson(TripThreadEntry instance) =>
       'mediaUrl': instance.mediaUrl,
       'locationName': instance.locationName,
       'gpsCoordinates': instance.gpsCoordinates,
+      'placeId': instance.placeId,
+      'place': instance.place,
       'createdAt': instance.createdAt.toIso8601String(),
       'author': instance.author,
       'taggedUsers': instance.taggedUsers,
@@ -248,6 +270,9 @@ CreateTripRequest _$CreateTripRequestFromJson(Map<String, dynamic> json) =>
       destinations: (json['destinations'] as List<dynamic>)
           .map((e) => e as String)
           .toList(),
+      destinationPlaceIds: (json['destinationPlaceIds'] as List<dynamic>)
+          .map((e) => e as String)
+          .toList(),
       mood: $enumDecodeNullable(_$TripMoodEnumMap, json['mood']),
       type: $enumDecodeNullable(_$TripTypeEnumMap, json['type']),
       coverMediaUrl: json['coverMediaUrl'] as String?,
@@ -260,6 +285,7 @@ Map<String, dynamic> _$CreateTripRequestToJson(CreateTripRequest instance) =>
       'startDate': instance.startDate?.toIso8601String(),
       'endDate': instance.endDate?.toIso8601String(),
       'destinations': instance.destinations,
+      'destinationPlaceIds': instance.destinationPlaceIds,
       'mood': _$TripMoodEnumMap[instance.mood],
       'type': _$TripTypeEnumMap[instance.type],
       'coverMediaUrl': instance.coverMediaUrl,
@@ -276,6 +302,7 @@ CreateThreadEntryRequest _$CreateThreadEntryRequestFromJson(
           ? null
           : GpsCoordinates.fromJson(
               json['gpsCoordinates'] as Map<String, dynamic>),
+      placeId: json['placeId'] as String?,
       taggedUserIds: (json['taggedUserIds'] as List<dynamic>?)
           ?.map((e) => e as String)
           .toList(),
@@ -289,5 +316,6 @@ Map<String, dynamic> _$CreateThreadEntryRequestToJson(
       'mediaUrl': instance.mediaUrl,
       'locationName': instance.locationName,
       'gpsCoordinates': instance.gpsCoordinates,
+      'placeId': instance.placeId,
       'taggedUserIds': instance.taggedUserIds,
     };

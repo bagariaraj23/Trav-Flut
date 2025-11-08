@@ -1,10 +1,12 @@
 import 'package:dio/dio.dart';
 import 'package:tripthread/models/api_response.dart';
+import 'package:tripthread/models/api_response_with_place.dart';
 import 'package:tripthread/models/user.dart';
 import 'package:tripthread/models/follow_status.dart';
 import 'package:tripthread/models/trip.dart';
 import 'package:tripthread/models/pagination.dart';
 import 'package:tripthread/models/trip_join_request.dart';
+import 'package:tripthread/models/place.dart';
 import 'package:tripthread/services/storage_service.dart';
 import 'package:tripthread/config/app_config.dart';
 import 'package:flutter/foundation.dart';
@@ -158,8 +160,28 @@ class ApiService {
 
                 if (response.statusCode == 200 &&
                     response.data['success'] == true) {
-                  final newToken = response.data['data']['accessToken'];
-                  final newRefreshToken = response.data['data']['refreshToken'];
+                  final data = response.data['data'];
+                  if (data is! Map<String, dynamic>) {
+                    throw DioException(
+                      requestOptions: error.requestOptions,
+                      response: response,
+                      type: DioExceptionType.badResponse,
+                    );
+                  }
+                  final newToken = data['accessToken'];
+                  final newRefreshToken = data['refreshToken'];
+                  if (newToken is! String ||
+                      newToken.isEmpty ||
+                      newRefreshToken is! String ||
+                      newRefreshToken.isEmpty) {
+                    debugPrint(
+                        '[ApiService] Refresh response missing tokens, forcing logout');
+                    throw DioException(
+                      requestOptions: error.requestOptions,
+                      response: response,
+                      type: DioExceptionType.badResponse,
+                    );
+                  }
                   await _storageService!.saveTokens(
                     accessToken: newToken,
                     refreshToken: newRefreshToken,
@@ -865,6 +887,299 @@ class ApiService {
       return ApiResponse<List<FollowRequestDto>>(
         success: false,
         error: 'An unexpected error occurred',
+      );
+    }
+  }
+
+  // Place endpoints
+  Future<ApiResponse<List<Place>>> searchPlaces({
+    required String query,
+    double? lat,
+    double? lng,
+    String? placeType,
+    int limit = 20,
+  }) async {
+    try {
+      debugPrint(
+          '[ApiService] Searching places: query=$query, lat=$lat, lng=$lng, limit=$limit');
+      final response = await _dio.get('/places/search', queryParameters: {
+        'q': query,
+        if (lat != null) 'lat': lat,
+        if (lng != null) 'lng': lng,
+        if (placeType != null) 'placeType': placeType,
+        'limit': limit,
+      });
+
+      if (response.data['success'] && response.data['data'] != null) {
+        final places = (response.data['data'] as List)
+            .map((json) => Place.fromJson(json))
+            .toList();
+        return ApiResponse<List<Place>>(
+          success: true,
+          data: places,
+        );
+      } else {
+        return ApiResponse<List<Place>>(
+          success: false,
+          error: response.data['error'] ?? 'Failed to search places',
+        );
+      }
+    } on DioException catch (e) {
+      debugPrint('[ApiService] Search places DioException: ${e.message}');
+      return ApiResponse<List<Place>>(
+        success: false,
+        error: e.response?.data['error'] ?? 'Network error occurred',
+      );
+    }
+  }
+
+  Future<ApiResponse<ApiResponseWithPlace>> resolvePlace(
+      Place placeCandidate) async {
+    try {
+      debugPrint('[ApiService] Resolving place: ${placeCandidate.name}');
+
+      // Validate place candidate has required fields
+      if (placeCandidate.name.isEmpty) {
+        return ApiResponse<ApiResponseWithPlace>(
+          success: false,
+          error: 'Place name is required',
+        );
+      }
+
+      final response =
+          await _dio.post('/places/resolve', data: placeCandidate.toJson());
+
+      if (response.data['success'] && response.data['data'] != null) {
+        final data = response.data['data'];
+
+        // Validate response structure - backend returns Place directly in data
+        if (data is! Map<String, dynamic>) {
+          debugPrint(
+              '[ApiService] resolvePlace: Invalid data structure, expected Map');
+          return ApiResponse<ApiResponseWithPlace>(
+            success: false,
+            error: 'Invalid response format from server',
+          );
+        }
+
+        // Validate required Place fields exist
+        if (!data.containsKey('id') ||
+            !data.containsKey('name') ||
+            !data.containsKey('lat') ||
+            !data.containsKey('lng')) {
+          debugPrint(
+              '[ApiService] resolvePlace: Missing required Place fields (id, name, lat, or lng)');
+          return ApiResponse<ApiResponseWithPlace>(
+            success: false,
+            error: 'Invalid response from server - missing place data',
+          );
+        }
+
+        try {
+          // Backend returns Place object directly, parse it as Place
+          final place = Place.fromJson(data);
+          debugPrint(
+              '[ApiService] resolvePlace: Successfully parsed place: ${place.id}');
+          return ApiResponse<ApiResponseWithPlace>(
+            success: true,
+            data: ApiResponseWithPlace(
+              success: true,
+              placeId: place.id, // Use place.id from parsed Place
+              place: place,
+            ),
+          );
+        } catch (e, stackTrace) {
+          debugPrint('[ApiService] resolvePlace: Failed to parse place: $e');
+          debugPrint('[ApiService] Stack trace: $stackTrace');
+          return ApiResponse<ApiResponseWithPlace>(
+            success: false,
+            error: 'Failed to parse place data: $e',
+          );
+        }
+      } else {
+        final errorMsg = response.data['error'] ?? 'Failed to resolve place';
+        debugPrint('[ApiService] resolvePlace: API returned error: $errorMsg');
+        return ApiResponse<ApiResponseWithPlace>(
+          success: false,
+          error: errorMsg,
+        );
+      }
+    } on DioException catch (e) {
+      debugPrint('[ApiService] resolvePlace DioException: ${e.message}');
+      debugPrint('[ApiService] Response status: ${e.response?.statusCode}');
+      debugPrint('[ApiService] Response data: ${e.response?.data}');
+
+      String errorMsg = 'Network error occurred';
+      if (e.response != null) {
+        if (e.response!.statusCode == 400) {
+          errorMsg = 'Invalid place data provided';
+        } else if (e.response!.statusCode == 401) {
+          errorMsg = 'Unauthorized - please login again';
+        } else if (e.response!.statusCode == 429) {
+          errorMsg = 'Too many requests - please try again later';
+        } else if (e.response!.data != null &&
+            e.response!.data['error'] != null) {
+          errorMsg = e.response!.data['error'];
+        } else {
+          errorMsg = 'Server error (${e.response!.statusCode})';
+        }
+      } else if (e.type == DioExceptionType.connectionTimeout ||
+          e.type == DioExceptionType.receiveTimeout) {
+        errorMsg = 'Connection timeout - please check your internet';
+      } else if (e.type == DioExceptionType.connectionError) {
+        errorMsg = 'No internet connection';
+      }
+
+      return ApiResponse<ApiResponseWithPlace>(
+        success: false,
+        error: errorMsg,
+      );
+    } catch (e, stackTrace) {
+      debugPrint('[ApiService] resolvePlace: Unexpected error: $e');
+      debugPrint('[ApiService] Stack trace: $stackTrace');
+      return ApiResponse<ApiResponseWithPlace>(
+        success: false,
+        error: 'An unexpected error occurred while resolving place',
+      );
+    }
+  }
+
+  Future<ApiResponse<List<MapPlace>>> getTripPlaces(String tripId) async {
+    try {
+      debugPrint('[ApiService] Getting places for trip: $tripId');
+      final response = await _dio.get('/trips/$tripId/places');
+
+      if (response.data['success'] && response.data['data'] != null) {
+        final data = response.data['data'];
+
+        // Validate data is a List
+        if (data is! List) {
+          debugPrint(
+              '[ApiService] getTripPlaces: Invalid data type, expected List');
+          return ApiResponse<List<MapPlace>>(
+            success: false,
+            error: 'Invalid response format from server',
+          );
+        }
+
+        // Parse each MapPlace with validation
+        final List<MapPlace> places = [];
+        for (int i = 0; i < data.length; i++) {
+          try {
+            final item = data[i];
+
+            // Validate required fields exist
+            if (item is! Map<String, dynamic>) {
+              debugPrint('[ApiService] getTripPlaces: Item $i is not a Map');
+              continue;
+            }
+
+            if (!item.containsKey('place') || !item.containsKey('origin')) {
+              debugPrint(
+                  '[ApiService] getTripPlaces: Item $i missing required fields (place or origin)');
+              continue;
+            }
+
+            // Validate place is a Map
+            if (item['place'] is! Map<String, dynamic>) {
+              debugPrint(
+                  '[ApiService] getTripPlaces: Item $i has invalid place structure');
+              continue;
+            }
+
+            final mapPlace = MapPlace.fromJson(item);
+            places.add(mapPlace);
+          } catch (e, stackTrace) {
+            debugPrint(
+                '[ApiService] getTripPlaces: Failed to parse item $i: $e');
+            debugPrint('[ApiService] Stack trace: $stackTrace');
+            // Continue parsing other items instead of failing completely
+            continue;
+          }
+        }
+
+        debugPrint(
+            '[ApiService] getTripPlaces: Successfully parsed ${places.length}/${data.length} places');
+        return ApiResponse<List<MapPlace>>(
+          success: true,
+          data: places,
+        );
+      } else {
+        final errorMsg = response.data['error'] ?? 'Failed to get trip places';
+        debugPrint('[ApiService] getTripPlaces: API returned error: $errorMsg');
+        return ApiResponse<List<MapPlace>>(
+          success: false,
+          error: errorMsg,
+        );
+      }
+    } on DioException catch (e) {
+      debugPrint('[ApiService] getTripPlaces DioException: ${e.message}');
+      debugPrint('[ApiService] Response status: ${e.response?.statusCode}');
+      debugPrint('[ApiService] Response data: ${e.response?.data}');
+
+      String errorMsg = 'Network error occurred';
+      if (e.response != null) {
+        if (e.response!.statusCode == 404) {
+          errorMsg = 'Trip not found';
+        } else if (e.response!.statusCode == 401) {
+          errorMsg = 'Unauthorized - please login again';
+        } else if (e.response!.statusCode == 403) {
+          errorMsg = 'Access denied to this trip';
+        } else if (e.response!.data != null &&
+            e.response!.data['error'] != null) {
+          errorMsg = e.response!.data['error'];
+        } else {
+          errorMsg = 'Server error (${e.response!.statusCode})';
+        }
+      } else if (e.type == DioExceptionType.connectionTimeout ||
+          e.type == DioExceptionType.receiveTimeout) {
+        errorMsg = 'Connection timeout - please check your internet';
+      } else if (e.type == DioExceptionType.connectionError) {
+        errorMsg = 'No internet connection';
+      }
+
+      return ApiResponse<List<MapPlace>>(
+        success: false,
+        error: errorMsg,
+      );
+    } catch (e, stackTrace) {
+      debugPrint('[ApiService] getTripPlaces: Unexpected error: $e');
+      debugPrint('[ApiService] Stack trace: $stackTrace');
+      return ApiResponse<List<MapPlace>>(
+        success: false,
+        error: 'An unexpected error occurred',
+      );
+    }
+  }
+
+  Future<ApiResponse<void>> attachPlaceToTrip(
+    String tripId,
+    String placeId, {
+    DateTime? visitedAt,
+    int? dayIndex,
+    String? notes,
+    bool createThreadEntry = false,
+  }) async {
+    try {
+      debugPrint('[ApiService] Attaching place $placeId to trip: $tripId');
+      final response = await _dio.post('/trips/$tripId/places', data: {
+        'placeId': placeId,
+        if (visitedAt != null) 'visitedAt': visitedAt.toIso8601String(),
+        if (dayIndex != null) 'dayIndex': dayIndex,
+        if (notes != null) 'notes': notes,
+        'createThreadEntry': createThreadEntry,
+      });
+
+      return ApiResponse<void>(
+        success: response.data['success'],
+        error: response.data['error'],
+      );
+    } on DioException catch (e) {
+      debugPrint(
+          '[ApiService] Attach place to trip DioException: ${e.message}');
+      return ApiResponse<void>(
+        success: false,
+        error: e.response?.data['error'] ?? 'Network error occurred',
       );
     }
   }
