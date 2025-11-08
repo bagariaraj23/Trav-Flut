@@ -30,22 +30,21 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // ✅ Generate BOTH new access token AND new refresh token
     const newAccessToken = AuthService.generateAccessToken(user);
     const newRefreshToken = AuthService.generateRefreshToken(user);
 
-    // ✅ Store new refresh token (refresh token rotation - security best practice)
+    // Store new refresh token (refresh token rotation - security best practice)
     await AuthService.storeRefreshToken(user.id, newRefreshToken);
 
-    // ✅ Return BOTH tokens
+    // Return BOTH tokens
     const response: ApiResponse<{ accessToken: string; refreshToken: string }> =
-      {
-        success: true,
-        data: {
-          accessToken: newAccessToken,
-          refreshToken: newRefreshToken, // ✅ CRITICAL FIX
-        },
-      };
+    {
+      success: true,
+      data: {
+        accessToken: newAccessToken,
+        refreshToken: newRefreshToken,
+      },
+    };
 
     return NextResponse.json(response);
   } catch (error: any) {

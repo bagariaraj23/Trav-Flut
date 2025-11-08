@@ -355,13 +355,38 @@ class _TripMapScreenState extends State<TripMapScreen> {
   Future<void> _initializeMap() async {
     if (_places == null || _places!.isEmpty) return;
 
-    // Sort chronologically
+    // Sort places properly - destinations LAST, others chronologically
     final sortedPlaces = List<MapPlace>.from(_places!);
+
     sortedPlaces.sort((a, b) {
+      // STEP 1: Destinations always come LAST (at the end of the route)
+      if (a.origin == MapPlaceOrigin.destination &&
+          b.origin != MapPlaceOrigin.destination) {
+        return 1;
+      }
+      if (b.origin == MapPlaceOrigin.destination &&
+          a.origin != MapPlaceOrigin.destination) {
+        return -1;
+      }
+      // STEP 2: If both are destinations, sort by destinationIndex
+      if (a.origin == MapPlaceOrigin.destination &&
+          b.origin == MapPlaceOrigin.destination) {
+        final indexA = a.destinationIndex ?? 0;
+        final indexB = b.destinationIndex ?? 0;
+        return indexA.compareTo(indexB);
+      }
+
+      // STEP 3: For non-destinations, sort chronologically
       final timeA = a.visitedAt ?? a.createdAt ?? DateTime(1970);
       final timeB = b.visitedAt ?? b.createdAt ?? DateTime(1970);
       return timeA.compareTo(timeB);
     });
+
+    debugPrint('[TripMapScreen] Sorted places order:');
+    for (int i = 0; i < sortedPlaces.length; i++) {
+      final mp = sortedPlaces[i];
+      debugPrint('  $i. ${mp.place.name} - Origin: ${mp.origin}');
+    }
 
     double minLat = double.infinity;
     double maxLat = -double.infinity;

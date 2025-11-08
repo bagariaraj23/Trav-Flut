@@ -762,321 +762,317 @@ class _TripThreadScreenState extends State<TripThreadScreen> {
 
   Widget _buildAddEntrySection() {
     return Container(
-      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: Theme.of(context).colorScheme.surface,
-        border: Border(
-          top: BorderSide(color: Colors.grey[300]!),
-        ),
-      ),
-      child: Column(
-        children: [
-          // Entry type selector
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Row(
-              children: ThreadEntryType.values.map((type) {
-                final isSelected = _selectedType == type;
-                return Padding(
-                  padding: const EdgeInsets.only(right: 8),
-                  child: FilterChip(
-                    label: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        _buildEntryTypeIcon(type),
-                        const SizedBox(width: 4),
-                        Flexible(
-                          child: Text(
-                            _getEntryTypeLabel(type),
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                      ],
-                    ),
-                    selected: isSelected,
-                    onSelected: (selected) {
-                      setState(() {
-                        _selectedType = type;
-                      });
-                    },
-                  ),
-                );
-              }).toList(),
-            ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 8,
+            offset: const Offset(0, -2),
           ),
-
-          const SizedBox(height: 12),
-
-          // Location selector
-          if (_selectedType == ThreadEntryType.location)
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Search field
-                InkWell(
-                  onTap: () async {
-                    final place = await showModalBottomSheet<Place>(
-                      context: context,
-                      isScrollControlled: true,
-                      backgroundColor: Colors.transparent,
-                      builder: (context) => PlaceSearchSheet(
-                        controller: _placeSearchScrollController,
-                      ),
-                    );
-
-                    if (place != null) {
-                      setState(() {
-                        _selectedPlace = place;
-                        _locationController.text = place.name;
-                      });
-                    }
-                  },
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 16, vertical: 12),
-                    decoration: BoxDecoration(
-                      border: Border.all(color: Colors.grey[300]!),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Row(
-                      children: [
-                        Icon(Icons.search, color: Colors.grey[600]),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: _selectedPlace != null
-                              ? Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      _selectedPlace!.name,
-                                      style: const TextStyle(
-                                        fontWeight: FontWeight.w500,
-                                      ),
-                                    ),
-                                    if (_selectedPlace!.address != null)
-                                      Text(
-                                        _selectedPlace!.address!,
-                                        style: TextStyle(
-                                          color: Colors.grey[600],
-                                          fontSize: 12,
-                                        ),
-                                      ),
-                                  ],
-                                )
-                              : Text(
-                                  'Search for a location',
-                                  style: TextStyle(color: Colors.grey[600]),
-                                ),
-                        ),
-                        if (_selectedPlace != null)
-                          IconButton(
-                            icon: const Icon(Icons.close),
-                            onPressed: () {
-                              setState(() {
-                                _selectedPlace = null;
-                                _locationController.clear();
-                              });
-                            },
-                          ),
-                      ],
-                    ),
-                  ),
-                ),
-
-                const SizedBox(height: 12),
-
-                // "OR" divider
-                Row(
-                  children: [
-                    Expanded(child: Divider(color: Colors.grey[300])),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      child: Text(
-                        'OR',
-                        style: TextStyle(
-                          color: Colors.grey[600],
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    ),
-                    Expanded(child: Divider(color: Colors.grey[300])),
-                  ],
-                ),
-
-                const SizedBox(height: 12),
-
-                // Map picker button
-                SizedBox(
-                  width: double.infinity,
-                  child: OutlinedButton.icon(
-                    icon: const Icon(Icons.map),
-                    label: const Text('Pick on Map'),
-                    onPressed: () async {
-                      final place = await Navigator.of(context).push<Place>(
-                        MaterialPageRoute(
-                          fullscreenDialog: true,
-                          builder: (context) => MapPickerModal(
-                            initialPlaceName: _selectedPlace?.name,
-                            initialLat: _selectedPlace?.lat,
-                            initialLng: _selectedPlace?.lng,
-                          ),
-                        ),
-                      );
-
-                      if (place != null) {
-                        setState(() {
-                          _selectedPlace = place;
-                          _locationController.text = place.name;
-                        });
-                      }
-                    },
-                  ),
-                ),
-                const SizedBox(height: 12),
-              ],
-            ),
-
-          // Media selection
-          if (_selectedType == ThreadEntryType.media) ...[
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                border: Border.all(color: Colors.grey[300]!),
-                borderRadius: BorderRadius.circular(8),
-              ),
+        ],
+      ),
+      child: SafeArea(
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.of(context).size.height * 0.5,
+          ),
+          child: SingleChildScrollView(
+            child: Padding(
+              padding: const EdgeInsets.all(16.0),
               child: Column(
+                mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    'Media',
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.w600,
-                        ),
-                  ),
-                  const SizedBox(height: 12),
-                  if (_selectedMediaFile != null) ...[
-                    Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: Colors.grey[100],
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Row(
-                        children: [
-                          Icon(
-                            _selectedMediaFile!.path
-                                            .split('.')
-                                            .last
-                                            .toLowerCase() ==
-                                        'mp4' ||
-                                    _selectedMediaFile!.path
-                                            .split('.')
-                                            .last
-                                            .toLowerCase() ==
-                                        'mov' ||
-                                    _selectedMediaFile!.path
-                                            .split('.')
-                                            .last
-                                            .toLowerCase() ==
-                                        'avi'
-                                ? Icons.video_file
-                                : Icons.image,
-                            color: Colors.grey[600],
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
+                  // Entry type selector - Horizontally scrollable
+                  SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      children: ThreadEntryType.values.map((type) {
+                        final isSelected = _selectedType == type;
+                        return Padding(
+                          padding: const EdgeInsets.only(right: 8),
+                          child: FilterChip(
+                            label: Row(
+                              mainAxisSize: MainAxisSize.min,
                               children: [
+                                _buildEntryTypeIcon(type),
+                                const SizedBox(width: 4),
                                 Text(
-                                  _selectedMediaFile!.path.split('/').last,
-                                  style: const TextStyle(
-                                      fontWeight: FontWeight.w500),
-                                ),
-                                Text(
-                                  '${(_selectedMediaFile!.lengthSync() / 1024 / 1024).toStringAsFixed(1)} MB',
-                                  style: TextStyle(
-                                    color: Colors.grey[600],
-                                    fontSize: 12,
-                                  ),
+                                  _getEntryTypeLabel(type),
+                                  overflow: TextOverflow.ellipsis,
                                 ),
                               ],
                             ),
-                          ),
-                          IconButton(
-                            onPressed: () {
+                            selected: isSelected,
+                            onSelected: (selected) {
                               setState(() {
-                                _selectedMediaFile = null;
+                                _selectedType = type;
                               });
                             },
-                            icon: const Icon(Icons.close, size: 20),
-                            style: IconButton.styleFrom(
-                              backgroundColor: Colors.red[100],
-                              foregroundColor: Colors.red,
+                            visualDensity: VisualDensity.compact,
+                            materialTapTargetSize:
+                                MaterialTapTargetSize.shrinkWrap,
+                          ),
+                        );
+                      }).toList(),
+                    ),
+                  ),
+
+                  const SizedBox(height: 12),
+
+                  // LOCATION SELECTOR - Made scrollable and more spacious
+                  if (_selectedType == ThreadEntryType.location)
+                    Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Search field
+                        InkWell(
+                          onTap: () async {
+                            final place = await showModalBottomSheet<Place>(
+                              context: context,
+                              isScrollControlled: true,
+                              backgroundColor: Colors.transparent,
+                              builder: (context) => PlaceSearchSheet(
+                                controller: _placeSearchScrollController,
+                              ),
+                            );
+
+                            if (place != null) {
+                              setState(() {
+                                _selectedPlace = place;
+                                _locationController.text = place.name;
+                              });
+                            }
+                          },
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 14,
+                            ),
+                            decoration: BoxDecoration(
+                              border: Border.all(color: Colors.grey[300]!),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Row(
+                              children: [
+                                Icon(Icons.search, color: Colors.grey[600]),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: _selectedPlace != null
+                                      ? Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Text(
+                                              _selectedPlace!.name,
+                                              style: const TextStyle(
+                                                fontWeight: FontWeight.w500,
+                                              ),
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                            ),
+                                            if (_selectedPlace!.address != null)
+                                              Text(
+                                                _selectedPlace!.address!,
+                                                style: TextStyle(
+                                                  color: Colors.grey[600],
+                                                  fontSize: 12,
+                                                ),
+                                                maxLines: 1,
+                                                overflow: TextOverflow.ellipsis,
+                                              ),
+                                          ],
+                                        )
+                                      : Text(
+                                          'Search for a location',
+                                          style: TextStyle(
+                                            color: Colors.grey[600],
+                                          ),
+                                        ),
+                                ),
+                                if (_selectedPlace != null)
+                                  IconButton(
+                                    icon: const Icon(Icons.close, size: 20),
+                                    onPressed: () {
+                                      setState(() {
+                                        _selectedPlace = null;
+                                        _locationController.clear();
+                                      });
+                                    },
+                                    padding: const EdgeInsets.all(8),
+                                    constraints: const BoxConstraints(),
+                                    visualDensity: VisualDensity.compact,
+                                  ),
+                              ],
                             ),
                           ),
-                        ],
-                      ),
+                        ),
+
+                        const SizedBox(height: 12),
+
+                        // "OR" divider
+                        Row(
+                          children: [
+                            Expanded(child: Divider(color: Colors.grey[300])),
+                            Padding(
+                              padding:
+                                  const EdgeInsets.symmetric(horizontal: 16),
+                              child: Text(
+                                'OR',
+                                style: TextStyle(
+                                  color: Colors.grey[600],
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ),
+                            Expanded(child: Divider(color: Colors.grey[300])),
+                          ],
+                        ),
+
+                        const SizedBox(height: 12),
+
+                        // Map picker button
+                        SizedBox(
+                          width: double.infinity,
+                          child: OutlinedButton.icon(
+                            icon: const Icon(Icons.map),
+                            label: const Text('Pick on Map'),
+                            onPressed: () async {
+                              final place =
+                                  await Navigator.of(context).push<Place>(
+                                MaterialPageRoute(
+                                  fullscreenDialog: true,
+                                  builder: (context) => MapPickerModal(
+                                    initialPlaceName: _selectedPlace?.name,
+                                    initialLat: _selectedPlace?.lat,
+                                    initialLng: _selectedPlace?.lng,
+                                  ),
+                                ),
+                              );
+
+                              if (place != null) {
+                                setState(() {
+                                  _selectedPlace = place;
+                                  _locationController.text = place.name;
+                                });
+                              }
+                            },
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                      ],
                     ),
-                  ] else ...[
-                    LayoutBuilder(
-                      builder: (context, constraints) {
-                        final isWide = constraints.maxWidth > 400;
-                        return isWide
-                            ? Row(
+
+                  // MEDIA SELECTION - Made more compact
+                  if (_selectedType == ThreadEntryType.media)
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      margin: const EdgeInsets.only(bottom: 12),
+                      decoration: BoxDecoration(
+                        border: Border.all(color: Colors.grey[300]!),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Media',
+                            style: Theme.of(context)
+                                .textTheme
+                                .titleSmall
+                                ?.copyWith(
+                                  fontWeight: FontWeight.w600,
+                                ),
+                          ),
+                          const SizedBox(height: 12),
+                          if (_selectedMediaFile != null)
+                            Container(
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color: Colors.grey[100],
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Row(
                                 children: [
-                                  Expanded(
-                                    child: OutlinedButton.icon(
-                                      onPressed: () =>
-                                          _pickImage(fromCamera: false),
-                                      icon: const Icon(Icons.photo_library),
-                                      label: const Text('Gallery'),
-                                      style: OutlinedButton.styleFrom(
-                                        padding: const EdgeInsets.symmetric(
-                                            vertical: 12),
-                                      ),
-                                    ),
+                                  Icon(
+                                    ['mp4', 'mov', 'avi'].contains(
+                                            _selectedMediaFile!.path
+                                                .split('.')
+                                                .last
+                                                .toLowerCase())
+                                        ? Icons.video_file
+                                        : Icons.image,
+                                    color: Colors.grey[600],
+                                    size: 24,
                                   ),
                                   const SizedBox(width: 8),
                                   Expanded(
-                                    child: OutlinedButton.icon(
-                                      onPressed: () =>
-                                          _pickImage(fromCamera: true),
-                                      icon: const Icon(Icons.camera_alt),
-                                      label: const Text('Camera'),
-                                      style: OutlinedButton.styleFrom(
-                                        padding: const EdgeInsets.symmetric(
-                                            vertical: 12),
-                                      ),
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Text(
+                                          _selectedMediaFile!.path
+                                              .split('/')
+                                              .last,
+                                          style: const TextStyle(
+                                            fontWeight: FontWeight.w500,
+                                            fontSize: 14,
+                                          ),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                        Text(
+                                          '${(_selectedMediaFile!.lengthSync() / 1024 / 1024).toStringAsFixed(1)} MB',
+                                          style: TextStyle(
+                                            color: Colors.grey[600],
+                                            fontSize: 12,
+                                          ),
+                                        ),
+                                      ],
                                     ),
                                   ),
-                                  const SizedBox(width: 8),
-                                  Expanded(
-                                    child: OutlinedButton.icon(
-                                      onPressed: _pickVideo,
-                                      icon: const Icon(Icons.video_file),
-                                      label: const Text('Video'),
-                                      style: OutlinedButton.styleFrom(
-                                        padding: const EdgeInsets.symmetric(
-                                            vertical: 12),
-                                      ),
+                                  IconButton(
+                                    onPressed: () {
+                                      setState(() {
+                                        _selectedMediaFile = null;
+                                      });
+                                    },
+                                    icon: const Icon(Icons.close, size: 20),
+                                    style: IconButton.styleFrom(
+                                      backgroundColor: Colors.red[100],
+                                      foregroundColor: Colors.red,
+                                      visualDensity: VisualDensity.compact,
+                                      padding: const EdgeInsets.all(8),
                                     ),
                                   ),
                                 ],
-                              )
-                            : Column(
-                                children: [
-                                  Row(
+                              ),
+                            )
+                          else
+                            // RESPONSIVE MEDIA BUTTONS
+                            LayoutBuilder(
+                              builder: (context, constraints) {
+                                final isWide = constraints.maxWidth > 400;
+                                if (isWide) {
+                                  return Row(
                                     children: [
                                       Expanded(
                                         child: OutlinedButton.icon(
                                           onPressed: () =>
                                               _pickImage(fromCamera: false),
-                                          icon: const Icon(Icons.photo_library),
+                                          icon: const Icon(Icons.photo_library,
+                                              size: 18),
                                           label: const Text('Gallery'),
                                           style: OutlinedButton.styleFrom(
                                             padding: const EdgeInsets.symmetric(
-                                                vertical: 12),
+                                              vertical: 10,
+                                            ),
                                           ),
                                         ),
                                       ),
@@ -1085,111 +1081,184 @@ class _TripThreadScreenState extends State<TripThreadScreen> {
                                         child: OutlinedButton.icon(
                                           onPressed: () =>
                                               _pickImage(fromCamera: true),
-                                          icon: const Icon(Icons.camera_alt),
+                                          icon: const Icon(Icons.camera_alt,
+                                              size: 18),
                                           label: const Text('Camera'),
                                           style: OutlinedButton.styleFrom(
                                             padding: const EdgeInsets.symmetric(
-                                                vertical: 12),
+                                              vertical: 10,
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Expanded(
+                                        child: OutlinedButton.icon(
+                                          onPressed: _pickVideo,
+                                          icon: const Icon(Icons.video_file,
+                                              size: 18),
+                                          label: const Text('Video'),
+                                          style: OutlinedButton.styleFrom(
+                                            padding: const EdgeInsets.symmetric(
+                                              vertical: 10,
+                                            ),
                                           ),
                                         ),
                                       ),
                                     ],
-                                  ),
-                                  const SizedBox(height: 8),
-                                  SizedBox(
-                                    width: double.infinity,
-                                    child: OutlinedButton.icon(
-                                      onPressed: _pickVideo,
-                                      icon: const Icon(Icons.video_file),
-                                      label: const Text('Video'),
-                                      style: OutlinedButton.styleFrom(
-                                        padding: const EdgeInsets.symmetric(
-                                            vertical: 12),
+                                  );
+                                }
+
+                                // Narrow layout - Stack buttons vertically
+                                return Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Row(
+                                      children: [
+                                        Expanded(
+                                          child: OutlinedButton.icon(
+                                            onPressed: () =>
+                                                _pickImage(fromCamera: false),
+                                            icon: const Icon(
+                                                Icons.photo_library,
+                                                size: 18),
+                                            label: const Text('Gallery'),
+                                            style: OutlinedButton.styleFrom(
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                vertical: 10,
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Expanded(
+                                          child: OutlinedButton.icon(
+                                            onPressed: () =>
+                                                _pickImage(fromCamera: true),
+                                            icon: const Icon(Icons.camera_alt,
+                                                size: 18),
+                                            label: const Text('Camera'),
+                                            style: OutlinedButton.styleFrom(
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                vertical: 10,
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 8),
+                                    SizedBox(
+                                      width: double.infinity,
+                                      child: OutlinedButton.icon(
+                                        onPressed: _pickVideo,
+                                        icon: const Icon(Icons.video_file,
+                                            size: 18),
+                                        label: const Text('Video'),
+                                        style: OutlinedButton.styleFrom(
+                                          padding: const EdgeInsets.symmetric(
+                                            vertical: 10,
+                                          ),
+                                        ),
                                       ),
                                     ),
-                                  ),
-                                ],
-                              );
-                      },
+                                  ],
+                                );
+                              },
+                            ),
+                        ],
+                      ),
                     ),
-                  ],
+
+                  // TEXT INPUT + SEND BUTTON - Compact and responsive
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          controller: _textController,
+                          decoration: InputDecoration(
+                            hintText: _getInputHint(),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(24),
+                            ),
+                            contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 12,
+                            ),
+                            isDense: true,
+                          ),
+                          maxLines: 3,
+                          minLines: 1,
+                          textCapitalization: TextCapitalization.sentences,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Consumer<TripProvider>(
+                        builder: (context, tripProvider, child) {
+                          return IconButton(
+                            onPressed: (tripProvider.isLoading ||
+                                    _isUploadingMedia ||
+                                    (_selectedType ==
+                                            ThreadEntryType.location &&
+                                        _selectedPlace == null))
+                                ? null
+                                : _addEntry,
+                            icon: (tripProvider.isLoading || _isUploadingMedia)
+                                ? const SizedBox(
+                                    width: 20,
+                                    height: 20,
+                                    child: CircularProgressIndicator(
+                                        strokeWidth: 2),
+                                  )
+                                : const Icon(Icons.send),
+                            style: IconButton.styleFrom(
+                              backgroundColor:
+                                  Theme.of(context).colorScheme.primary,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.all(12),
+                            ),
+                          );
+                        },
+                      ),
+                    ],
+                  ),
+
+                  // ERROR MESSAGE - Compact
+                  Consumer<TripProvider>(
+                    builder: (context, tripProvider, child) {
+                      if (tripProvider.error != null) {
+                        return Container(
+                          margin: const EdgeInsets.only(top: 8),
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: Theme.of(context)
+                                .colorScheme
+                                .error
+                                .withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Text(
+                            tripProvider.error!,
+                            style: TextStyle(
+                              color: Theme.of(context).colorScheme.error,
+                              fontSize: 12,
+                            ),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        );
+                      }
+                      return const SizedBox.shrink();
+                    },
+                  ),
                 ],
               ),
             ),
-            const SizedBox(height: 12),
-          ],
-
-          // Text input
-          Row(
-            children: [
-              Expanded(
-                child: TextField(
-                  controller: _textController,
-                  decoration: InputDecoration(
-                    hintText: _getInputHint(),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(24),
-                    ),
-                    contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 12,
-                    ),
-                  ),
-                  maxLines: null,
-                  textCapitalization: TextCapitalization.sentences,
-                ),
-              ),
-              const SizedBox(width: 8),
-              Consumer<TripProvider>(
-                builder: (context, tripProvider, child) {
-                  return IconButton(
-                    onPressed: (tripProvider.isLoading ||
-                            _isUploadingMedia ||
-                            (_selectedType == ThreadEntryType.location &&
-                                _selectedPlace == null))
-                        ? null
-                        : _addEntry,
-                    icon: (tripProvider.isLoading || _isUploadingMedia)
-                        ? const SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : const Icon(Icons.send),
-                    style: IconButton.styleFrom(
-                      backgroundColor: Theme.of(context).colorScheme.primary,
-                      foregroundColor: Colors.white,
-                    ),
-                  );
-                },
-              ),
-            ],
           ),
-
-          // Error message
-          Consumer<TripProvider>(
-            builder: (context, tripProvider, child) {
-              if (tripProvider.error != null) {
-                return Container(
-                  margin: const EdgeInsets.only(top: 8),
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: Theme.of(context).colorScheme.error.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Text(
-                    tripProvider.error!,
-                    style: TextStyle(
-                      color: Theme.of(context).colorScheme.error,
-                      fontSize: 12,
-                    ),
-                  ),
-                );
-              }
-              return const SizedBox.shrink();
-            },
-          ),
-        ],
+        ),
       ),
     );
   }

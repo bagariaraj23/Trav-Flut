@@ -39,7 +39,7 @@ export async function GET(
         endLocationId: true,
         startDate: true,
         endDate: true,
-        userId: true, // Add userId for access check
+        userId: true,
         participants: {
           select: { userId: true },
         },
@@ -85,7 +85,7 @@ export async function GET(
       }
     }
 
-    // ✅ 1. Destination places
+    // Destination places
     const destPlaceIds = [trip.startLocationId, trip.endLocationId].filter(
       Boolean
     ) as string[];
@@ -98,7 +98,7 @@ export async function GET(
       (place, idx) => ({
         place: serializePlace(place),
         origin: "DESTINATION" as const,
-        destinationIndex: idx as number, // Explicitly ensure it's a number
+        destinationIndex: idx as number,
         visitedAt:
           idx === 0
             ? trip.startDate?.toISOString()
@@ -106,7 +106,7 @@ export async function GET(
       })
     );
 
-    // ✅ 2. PlaceOnTrip records
+    // PlaceOnTrip records
     const onTripMapPlaces: MapPlaceResponse[] = trip.placeVisits.map((pot) => ({
       place: serializePlace(pot.place),
       origin: "ON_TRIP" as const,
@@ -117,7 +117,7 @@ export async function GET(
       placeOnTripId: pot.id,
     }));
 
-    // ✅ 3. Thread entry places (FIXED - proper type inference)
+    // Thread entry places
     const threadEntryMapPlaces: MapPlaceResponse[] = trip.threadEntries
       .map((entry) => {
         // Skip entries without place
@@ -129,26 +129,25 @@ export async function GET(
           threadEntryId: entry.id,
           notes: entry.contentText,
           createdAt: entry.createdAt.toISOString(),
-          // ✅ Removed entryType - not in MapPlaceResponse interface
         } as MapPlaceResponse;
       })
       .filter((entry): entry is MapPlaceResponse => entry !== null);
 
-    // ✅ 4. Combine all places
+    // Combine all places
     const allMapPlaces: MapPlaceResponse[] = [
       ...destinationMapPlaces,
       ...onTripMapPlaces,
       ...threadEntryMapPlaces,
     ];
 
-    // ✅ 5. Sort chronologically
+    // Sort chronologically
     allMapPlaces.sort((a, b) => {
       const timeA = new Date(a.visitedAt || a.createdAt || 0).getTime();
       const timeB = new Date(b.visitedAt || b.createdAt || 0).getTime();
       return timeA - timeB;
     });
 
-    // ✅ 6. Return properly typed response (no type assertion needed!)
+    // Return properly typed response
     return NextResponse.json<ApiResponse<MapPlaceResponse[]>>({
       success: true,
       data: allMapPlaces,

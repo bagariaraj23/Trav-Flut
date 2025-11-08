@@ -85,13 +85,13 @@ export interface TripResponse {
   endDate?: string | null;
   destinations: string[];
   mood?:
-    | "RELAXED"
-    | "ADVENTURE"
-    | "SPIRITUAL"
-    | "CULTURAL"
-    | "PARTY"
-    | "MIXED"
-    | null;
+  | "RELAXED"
+  | "ADVENTURE"
+  | "SPIRITUAL"
+  | "CULTURAL"
+  | "PARTY"
+  | "MIXED"
+  | null;
   type?: "SOLO" | "GROUP" | "COUPLE" | "FAMILY" | null;
   coverMediaUrl?: string | null;
   status: "UPCOMING" | "ONGOING" | "ENDED";
@@ -179,13 +179,13 @@ export interface CreateTripRequest {
   endDate?: string | null;
   destinations: string[];
   mood?:
-    | "RELAXED"
-    | "ADVENTURE"
-    | "SPIRITUAL"
-    | "CULTURAL"
-    | "PARTY"
-    | "MIXED"
-    | null;
+  | "RELAXED"
+  | "ADVENTURE"
+  | "SPIRITUAL"
+  | "CULTURAL"
+  | "PARTY"
+  | "MIXED"
+  | null;
   type?: "SOLO" | "GROUP" | "COUPLE" | "FAMILY" | null;
   coverMediaUrl?: string | null;
 }
@@ -241,10 +241,10 @@ export interface MapPlaceResponse {
   origin: MapPlaceOrigin;
   destinationIndex?: number;
   threadEntryId?: string;
-  visitedAt?: string; // ISO string
+  visitedAt?: string;
   dayIndex?: number;
   order?: number;
   placeOnTripId?: string;
   notes?: string | null;
-  createdAt?: string; // for thread entry
+  createdAt?: string;
 }

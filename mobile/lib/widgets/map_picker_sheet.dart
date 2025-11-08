@@ -65,7 +65,7 @@ class _MapPickerModalState extends State<MapPickerModal> {
     super.dispose();
   }
 
-  // ✅ FIX: Only update state if not disposed
+  // Only update state if not disposed
   void _safeSetState(VoidCallback fn) {
     if (!_isDisposed && mounted) {
       setState(fn);

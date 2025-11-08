@@ -85,10 +85,11 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
     return Scaffold(
       body: CustomScrollView(
         slivers: [
-          // This SliverAppBar is now ALWAYS part of the widget tree,
-          // guaranteeing the back button is always visible.
           SliverAppBar(
-            expandedHeight: 250,
+            expandedHeight:
+                MediaQuery.of(context).orientation == Orientation.landscape
+                    ? 150 // ← Smaller in landscape
+                    : 250, // ← Larger in portrait
             pinned: true,
             leading: IconButton(
               icon: const Icon(Icons.arrow_back, color: Colors.white),
@@ -344,7 +345,6 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
                   ),
             ),
             const SizedBox(height: 12),
-            
             ElevatedButton.icon(
               onPressed: () {
                 context.push(
@@ -362,7 +362,6 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
               ),
             ),
             const SizedBox(height: 8),
-
             if (_trip!.status == TripStatus.ongoing) ...[
               ElevatedButton.icon(
                 onPressed: () {

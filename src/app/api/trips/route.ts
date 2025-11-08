@@ -102,6 +102,20 @@ export async function POST(request: NextRequest) {
               );
             }
 
+            // Extract destinationPlaceIds from validated data
+            const { destinationPlaceIds, ...tripData } = validatedData;
+
+            let startLocationId: string | undefined;
+            let endLocationId: string | undefined;
+
+            if (destinationPlaceIds && destinationPlaceIds.length > 0) {
+              startLocationId = destinationPlaceIds[0];
+              endLocationId =
+                destinationPlaceIds.length > 1
+                  ? destinationPlaceIds[destinationPlaceIds.length - 1]
+                  : destinationPlaceIds[0];
+            }
+
             // Create trip with transaction for data consistency
             const trip = await prisma.$transaction(async (tx) => {
               // Calculate trip status based on start date
@@ -112,22 +126,20 @@ export async function POST(request: NextRequest) {
 
               const status = startDate > now ? TripStatus.UPCOMING : TripStatus.ONGOING;
 
-              // Extract destinationPlaceIds from validated data
-              const { destinationPlaceIds, ...tripData } = validatedData;
-
               // Create trip with required fields
-              const trip = await tx.trip.create({
+              const newTrip = await tx.trip.create({
                 data: {
                   title: tripData.title,
                   userId,
                   status,
                   startDate: new Date(tripData.startDate),
-                  // Optional fields with proper null handling
                   endDate: tripData.endDate ? new Date(tripData.endDate) : new Date(tripData.startDate),
                   description: tripData.description ?? null,
                   type: tripData.type ?? null,
                   mood: tripData.mood ?? null,
                   coverMediaUrl: tripData.coverMediaUrl ?? null,
+                  startLocationId: startLocationId ?? null,
+                  endLocationId: endLocationId ?? null,
                 },
                 include: {
                   user: {
@@ -154,109 +166,23 @@ export async function POST(request: NextRequest) {
               }) as any; // Type assertion needed due to complex response type
 
               // Create place associations if destinationPlaceIds are provided
-              if (destinationPlaceIds?.length > 0) {
+              if (destinationPlaceIds && destinationPlaceIds.length > 0) {
                 await tx.placeOnTrip.createMany({
-                  data: destinationPlaceIds.map((placeId: string, index: number) => ({
-                    tripId: trip.id,
-                    placeId,
-                    order: index
-                  })),
+                  data: destinationPlaceIds.map(
+                    (placeId: string, index: number) => ({
+                      tripId: newTrip.id,
+                      placeId,
+                      order: index,
+                      dayIndex: null,
+                    })
+                  ),
                   skipDuplicates: true,
                 });
               }
 
-              // Return trip with properly formatted user data
-              return {
-                ...trip,
-                user: trip.user
-                  ? {
-                    id: trip.user.id,
-                    email: trip.user.email,
-                    username: trip.user.username ?? undefined,
-                    name: trip.user.name ?? undefined,
-                    avatarUrl: trip.user.avatarUrl ?? undefined,
-                    bio: trip.user.bio ?? undefined,
-                    isPrivate: trip.user.isPrivate,
-                    createdAt: trip.user.createdAt,
-                    updatedAt: trip.user.updatedAt,
-                  }
-                  : undefined,
-              };
-
               console.log(
-                "[DEBUG] Trip data for database:",
-                JSON.stringify(tripData, null, 2)
-              );
-              console.log(
-                "[DEBUG] coverMediaUrl in tripData:",
-                tripData.coverMediaUrl
-              );
-              console.log(
-                "[DEBUG] description in tripData:",
-                tripData.description
-              );
-              console.log("[DEBUG] mood in tripData:", tripData.mood);
-              console.log("[DEBUG] type in tripData:", tripData.type);
-
-              const newTrip = await tx.trip.create({
-                data: {
-                  title: validatedData.title,
-                  userId,
-                  status,
-                  startDate: validatedData.startDate,
-                  endDate: validatedData.endDate || validatedData.startDate,
-                  description: validatedData.description ?? null,
-                  type: validatedData.type ?? null,
-                  mood: validatedData.mood ?? null,
-                  coverMediaUrl: validatedData.coverMediaUrl ?? null,
-                } as const,
-                include: {
-                  user: {
-                    select: {
-                      id: true,
-                      email: true,
-                      username: true,
-                      name: true,
-                      avatarUrl: true,
-                      bio: true,
-                      isPrivate: true,
-                      createdAt: true,
-                      updatedAt: true,
-                    },
-                  },
-                  _count: {
-                    select: {
-                      threadEntries: true,
-                      media: true,
-                      participants: true,
-                    },
-                  },
-                },
-              });
-
-              // Seed PlaceOnTrip with destinationPlaceIds
-              if (
-                Array.isArray(body.destinationPlaceIds) &&
-                body.destinationPlaceIds.length > 0
-              ) {
-                const values = body.destinationPlaceIds
-                  .filter((id: any) => typeof id === "string")
-                  .map((placeId: string, idx: number) => ({
-                    tripId: (newTrip as any).id,
-                    placeId,
-                    order: idx,
-                  }));
-                if (values.length > 0) {
-                  await (tx as any).placeOnTrip.createMany({
-                    data: values,
-                    skipDuplicates: true,
-                  });
-                }
-              }
-
-              // Log trip creation for analytics
-              console.log(
-                `[DEBUG] Trip created successfully: ${newTrip.id} by user ${userId}`
+                `[INFO] Trip created: ${newTrip.id} by user ${userId} with ${destinationPlaceIds?.length || 0
+                } destination(s)`
               );
 
               return newTrip;
@@ -362,7 +288,7 @@ export async function POST(request: NextRequest) {
           }
         });
       },
-      { maxRequests: 10, windowMs: 60000 } // 10 trips per minute max
+      { maxRequests: 5, windowMs: 60000 }
     );
   })(request);
 }
@@ -383,10 +309,10 @@ export async function GET(request: NextRequest) {
           // Include trips where user is owner OR participant
           const whereClause: any = {
             OR: [
-              { userId }, // Trips owned by user
+              { userId },
               {
                 participants: {
-                  some: { userId }, // Trips where user is a participant
+                  some: { userId },
                 },
               },
             ],
@@ -421,7 +347,7 @@ export async function GET(request: NextRequest) {
               },
             },
             orderBy: { createdAt: "desc" },
-            take: 50, // Limit results for performance
+            take: 50,
           });
 
           // Explicitly type trip as any to avoid TS error for .user property
@@ -432,9 +358,8 @@ export async function GET(request: NextRequest) {
               : undefined,
             endDate: trip.endDate ? trip.endDate.toISOString() : undefined,
             createdAt: trip.createdAt.toISOString(),
-            coverMediaUrl: trip.coverMediaUrl ?? undefined, // Fix: convert null to undefined for coverMediaUrl
-            type: trip.type ?? undefined, // Fix: convert null to undefined for type
-            // Fix for mood: convert null to undefined to match TripResponse type
+            coverMediaUrl: trip.coverMediaUrl ?? undefined,
+            type: trip.type ?? undefined,
             mood: trip.mood ?? undefined,
             description: trip.description ?? undefined,
             updatedAt: trip.updatedAt.toISOString(),
