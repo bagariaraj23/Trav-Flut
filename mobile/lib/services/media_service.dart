@@ -1,8 +1,8 @@
 import 'dart:io';
 import 'package:image_picker/image_picker.dart';
 import 'package:dio/dio.dart';
+import 'package:http_parser/http_parser.dart' as http_parser;
 import 'package:tripthread/models/trip.dart';
-import 'package:tripthread/models/api_response.dart';
 import 'package:tripthread/services/api_service.dart';
 import 'package:tripthread/utils/validators.dart';
 import 'package:flutter/foundation.dart';
@@ -10,8 +10,10 @@ import 'package:flutter/foundation.dart';
 class MediaService {
   final ImagePicker _imagePicker = ImagePicker();
   final ApiService _apiService;
+  final Dio _uploadClient;
 
-  MediaService(this._apiService);
+  MediaService(this._apiService, {Dio? uploadClient})
+      : _uploadClient = uploadClient ?? Dio();
 
   /// Pick an image from camera or gallery
   Future<File?> pickImage({bool fromCamera = false}) async {
@@ -108,55 +110,67 @@ class MediaService {
 
   /// Uploads a file to Cloudinary using a server-signed request.
   /// Confirms the upload with the backend to create a Media record.
-  Future<Media?> uploadMediaToCloudinary(
-    File file, 
-    String tripId, 
-    {String? threadEntryId}
-  ) async {
+  Future<Media?> uploadMediaToCloudinary({
+    required File file,
+    String? tripId,
+    String usage = 'general',
+  }) async {
     try {
       debugPrint('[MediaService] Starting Cloudinary upload for file: ${file.path}');
       
       final filename = file.path.split('/').last;
-      final contentType = getMediaType(file) == MediaType.image ? 'image/jpeg' : 'video/mp4';
-      final resourceType = getMediaType(file) == MediaType.image ? 'image' : 'video';
+      final mediaType = getMediaType(file);
+      final contentType = _inferMimeType(file, mediaType);
 
       // 1. Get Cloudinary signature from backend
       debugPrint('[MediaService] Getting Cloudinary signature...');
       final signatureResponse = await _apiService.getCloudinarySignature(
-        tripId: tripId,
         filename: filename,
-        resourceType: resourceType,
+        contentType: contentType,
+        tripId: tripId,
+        usage: usage,
       );
 
       if (!signatureResponse.success || signatureResponse.data == null) {
         throw Exception(signatureResponse.error ?? 'Failed to get Cloudinary signature');
       }
 
-      final uploadParams = signatureResponse.data!['uploadParams'] as Map<String, dynamic>;
+      final uploadParams =
+          Map<String, dynamic>.from(signatureResponse.data!);
       debugPrint('[MediaService] Got upload params: $uploadParams');
 
       // 2. Upload file directly to Cloudinary
       debugPrint('[MediaService] Uploading to Cloudinary...');
-      final cloudinaryUrl = await _uploadToCloudinary(file, uploadParams);
+      final cloudinaryData = await _uploadToCloudinary(
+        file: file,
+        uploadParams: uploadParams,
+        contentType: contentType,
+      );
 
-      if (cloudinaryUrl == null) {
-        throw Exception('Failed to upload to Cloudinary');
+      final secureUrl = cloudinaryData['secure_url'] as String?;
+
+      if (secureUrl == null || secureUrl.isEmpty) {
+        throw Exception('Cloudinary upload did not return a secure URL');
       }
 
-      debugPrint('[MediaService] Upload successful, URL: $cloudinaryUrl');
+      debugPrint('[MediaService] Upload successful, secure URL: $secureUrl');
 
       // 3. Confirm upload with backend
       debugPrint('[MediaService] Confirming upload with backend...');
       final confirmResponse = await _apiService.confirmMediaUpload(
-        url: cloudinaryUrl,
-        secureUrl: cloudinaryUrl,
-        publicId: uploadParams['public_id'],
-        format: uploadParams['format'] ?? 'jpg',
-        resourceType: uploadParams['resource_type'] ?? 'image',
-        bytes: await file.length(),
+        url: (cloudinaryData['url'] as String?) ?? secureUrl,
+        secureUrl: secureUrl,
+        publicId: (cloudinaryData['public_id'] as String?) ?? uploadParams['publicId'],
+        format: (cloudinaryData['format'] as String?) ?? contentType.split('/').last,
+        resourceType: (cloudinaryData['resource_type'] as String?) ??
+            (mediaType == MediaType.image ? 'image' : 'video'),
+        bytes: (cloudinaryData['bytes'] as int?) ?? await file.length(),
         originalFilename: filename,
+        width: (cloudinaryData['width'] as num?)?.toInt(),
+        height: (cloudinaryData['height'] as num?)?.toInt(),
+        duration: cloudinaryData['duration'] as num?,
         tripId: tripId,
-        threadEntryId: threadEntryId,
+        usage: usage,
       );
 
       if (!confirmResponse.success || confirmResponse.data == null) {
@@ -172,48 +186,66 @@ class MediaService {
   }
 
   /// Upload file directly to Cloudinary
-  Future<String?> _uploadToCloudinary(
-    File file, 
-    Map<String, dynamic> uploadParams
-  ) async {
+  Future<Map<String, dynamic>> _uploadToCloudinary({
+    required File file,
+    required Map<String, dynamic> uploadParams,
+    required String contentType,
+  }) async {
     try {
       debugPrint('[MediaService] Uploading to Cloudinary with params: $uploadParams');
       
       // Check if this is a mock response
-      if (uploadParams['cloud_name'] == 'test_cloud' || 
-          uploadParams['api_key'] == 'test_key') {
+      if (uploadParams['cloudName'] == 'test_cloud' || 
+          uploadParams['apiKey'] == 'test_key') {
         debugPrint('[MediaService] Mock mode detected, returning placeholder image');
-        return 'https://via.placeholder.com/400x300/007bff/ffffff?text=Test+Image';
+        final placeholderUrl = 'https://via.placeholder.com/400x300/007bff/ffffff?text=Test+Image';
+        return {
+          'secure_url': placeholderUrl,
+          'url': placeholderUrl,
+          'public_id': uploadParams['publicId'],
+          'format': 'jpg',
+          'resource_type': 'image',
+          'bytes': await file.length(),
+          'original_filename': file.path.split('/').last,
+        };
       }
 
-      final uploadUrl = 'https://api.cloudinary.com/v1_1/${uploadParams['cloud_name']}/auto/upload';
+      final uploadUrl = (uploadParams['uploadUrl'] as String?) ??
+          'https://api.cloudinary.com/v1_1/${uploadParams['cloudName']}/auto/upload';
       
       // Create multipart form data
       FormData formData = FormData.fromMap({
-        'file': await MultipartFile.fromFile(file.path, filename: file.path.split('/').last),
-        'api_key': uploadParams['api_key'],
-        'timestamp': uploadParams['timestamp'],
+        'file': await MultipartFile.fromFile(
+          file.path,
+          filename: file.path.split('/').last,
+          contentType: http_parser.MediaType.parse(contentType),
+        ),
+        'api_key': uploadParams['apiKey'],
+        'timestamp': uploadParams['timestamp'].toString(),
         'signature': uploadParams['signature'],
         'folder': uploadParams['folder'],
-        'public_id': uploadParams['public_id'],
-        'resource_type': uploadParams['resource_type'],
-        'overwrite': uploadParams['overwrite'] ?? true,
+        'public_id': uploadParams['publicId'],
       });
 
       // Upload to Cloudinary
-      final response = await Dio().post(uploadUrl, data: formData);
+      final response = await _uploadClient.post(
+        uploadUrl,
+        data: formData,
+        options: Options(contentType: 'multipart/form-data'),
+      );
 
       if (response.statusCode == 200 && response.data != null) {
-        final cloudinaryData = response.data as Map<String, dynamic>;
-        final secureUrl = cloudinaryData['secure_url'] as String?;
-        
-        if (secureUrl != null) {
-          debugPrint('[MediaService] Cloudinary upload successful: $secureUrl');
-          return secureUrl;
-        }
+        final cloudinaryData = Map<String, dynamic>.from(response.data);
+        debugPrint('[MediaService] Cloudinary upload successful');
+        return cloudinaryData;
       }
 
       throw Exception('Cloudinary upload failed: ${response.data}');
+    } on DioException catch (e) {
+      final responseData = e.response?.data;
+      debugPrint(
+          '[MediaService] Error uploading to Cloudinary: ${e.message} | Response data: $responseData');
+      rethrow;
     } catch (e) {
       debugPrint('[MediaService] Error uploading to Cloudinary: $e');
       rethrow;
@@ -241,5 +273,35 @@ class MediaService {
   /// Get file name
   String getFileName(File file) {
     return file.path.split('/').last;
+  }
+
+  String _inferMimeType(File file, MediaType mediaType) {
+    final extension = file.path.split('.').last.toLowerCase();
+
+    if (mediaType == MediaType.image) {
+      switch (extension) {
+        case 'png':
+          return 'image/png';
+        case 'gif':
+          return 'image/gif';
+        case 'webp':
+          return 'image/webp';
+        default:
+          return 'image/jpeg';
+      }
+    } else if (mediaType == MediaType.video) {
+      switch (extension) {
+        case 'mov':
+          return 'video/quicktime';
+        case 'avi':
+          return 'video/x-msvideo';
+        case 'm4v':
+          return 'video/x-m4v';
+        default:
+          return 'video/mp4';
+      }
+    }
+
+    throw Exception('Unsupported media type');
   }
 }

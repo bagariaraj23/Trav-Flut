@@ -727,21 +727,25 @@ class TripsTab extends StatelessWidget {
                     const BorderRadius.vertical(top: Radius.circular(12)),
                 color: Colors.grey[200],
               ),
-              child: trip.coverMediaUrl != null
-                  ? ClipRRect(
-                      borderRadius:
-                          const BorderRadius.vertical(top: Radius.circular(12)),
-                      child: Image.network(
-                        trip.coverMediaUrl!,
-                        width: double.infinity,
-                        height: 200,
-                        fit: BoxFit.cover,
-                        errorBuilder: (context, error, stackTrace) {
-                          return _buildPlaceholderImage(context, trip);
-                        },
-                      ),
-                    )
-                  : _buildPlaceholderImage(context, trip),
+              child: () {
+                final coverUrl = trip.coverMedia?.url ?? trip.coverMediaUrl;
+                if (coverUrl == null) {
+                  return _buildPlaceholderImage(context, trip);
+                }
+                return ClipRRect(
+                  borderRadius:
+                      const BorderRadius.vertical(top: Radius.circular(12)),
+                  child: Image.network(
+                    coverUrl,
+                    width: double.infinity,
+                    height: 200,
+                    fit: BoxFit.cover,
+                    errorBuilder: (context, error, stackTrace) {
+                      return _buildPlaceholderImage(context, trip);
+                    },
+                  ),
+                );
+              }(),
             ),
             // Trip info
             Padding(
@@ -799,11 +803,10 @@ class TripsTab extends StatelessWidget {
                       _buildStatChip(
                         context,
                         Icons.timeline,
-                        '${trip.entryCount ?? 0} entries',
+                        '${trip.entryCount} entries',
                       ),
                       const SizedBox(width: 8),
-                      if (trip.participantCount != null &&
-                          trip.participantCount! > 0)
+                      if (trip.participantCount > 0)
                         _buildStatChip(
                           context,
                           Icons.people,
@@ -1160,33 +1163,54 @@ class ProfileTab extends StatelessWidget {
                           else
                             Column(
                               children: recentTrips.map((trip) {
+                                final theme = Theme.of(context);
+                                final isDark =
+                                    theme.brightness == Brightness.dark;
+                                final cardColor = isDark
+                                    ? theme.colorScheme.surfaceVariant
+                                        .withOpacity(0.65)
+                                    : const Color(0xFF1A1F2B);
+                                final primaryText =
+                                    isDark ? Colors.white : Colors.white;
+                                final secondaryText =
+                                    primaryText.withOpacity(0.7);
+
                                 return Container(
                                   margin: const EdgeInsets.only(bottom: 12),
                                   padding: const EdgeInsets.all(12),
                                   decoration: BoxDecoration(
-                                    color: Colors.grey[50],
-                                    borderRadius: BorderRadius.circular(8),
-                                    border:
-                                        Border.all(color: Colors.grey[200]!),
+                                    color: cardColor,
+                                    borderRadius: BorderRadius.circular(12),
+                                    border: Border.all(
+                                      color: isDark
+                                          ? theme.dividerColor
+                                              .withOpacity(0.35)
+                                          : Colors.white.withOpacity(0.08),
+                                    ),
+                                    boxShadow: [
+                                      if (!isDark)
+                                        BoxShadow(
+                                          color:
+                                              Colors.black.withOpacity(0.25),
+                                          blurRadius: 12,
+                                          offset: const Offset(0, 5),
+                                        ),
+                                    ],
                                   ),
                                   child: Row(
                                     children: [
                                       Container(
-                                        width: 48,
-                                        height: 48,
+                                        width: 52,
+                                        height: 52,
                                         decoration: BoxDecoration(
-                                          color: Theme.of(context)
-                                              .colorScheme
-                                              .primary
-                                              .withOpacity(0.1),
+                                          color: theme.colorScheme.primary
+                                              .withOpacity(0.18),
                                           borderRadius:
-                                              BorderRadius.circular(8),
+                                              BorderRadius.circular(10),
                                         ),
                                         child: Icon(
                                           Icons.travel_explore,
-                                          color: Theme.of(context)
-                                              .colorScheme
-                                              .primary,
+                                          color: primaryText,
                                         ),
                                       ),
                                       const SizedBox(width: 12),
@@ -1197,32 +1221,66 @@ class ProfileTab extends StatelessWidget {
                                           children: [
                                             Text(
                                               trip.title,
-                                              style: Theme.of(context)
-                                                  .textTheme
-                                                  .titleSmall
+                                              style: theme
+                                                  .textTheme.titleMedium
                                                   ?.copyWith(
+                                                    color: primaryText,
                                                     fontWeight: FontWeight.w600,
                                                   ),
-                                              overflow: TextOverflow.ellipsis,
                                               maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
                                             ),
-                                            Text(
-                                              trip.destinations.join(', '),
-                                              style: Theme.of(context)
-                                                  .textTheme
-                                                  .bodySmall
-                                                  ?.copyWith(
-                                                    color: Colors.grey[600],
+                                            if (trip.destinations.isNotEmpty)
+                                              Padding(
+                                                padding:
+                                                    const EdgeInsets.only(
+                                                        top: 2.0),
+                                                child: Text(
+                                                  trip.destinations
+                                                      .take(3)
+                                                      .join(', '),
+                                                  style: theme
+                                                      .textTheme.bodySmall
+                                                      ?.copyWith(
+                                                        color: secondaryText,
+                                                      ),
+                                                  maxLines: 1,
+                                                  overflow:
+                                                      TextOverflow.ellipsis,
+                                                ),
+                                              ),
+                                            Padding(
+                                              padding:
+                                                  const EdgeInsets.only(
+                                                      top: 6.0),
+                                              child: Row(
+                                                children: [
+                                                  Icon(
+                                                    Icons.calendar_today,
+                                                    size: 14,
+                                                    color: secondaryText,
                                                   ),
-                                              overflow: TextOverflow.ellipsis,
-                                              maxLines: 1,
+                                                  const SizedBox(width: 6),
+                                                  Expanded(
+                                                    child: Text(
+                                                      '${trip.startDate.day}/${trip.startDate.month}/${trip.startDate.year} - ${trip.endDate.day}/${trip.endDate.month}/${trip.endDate.year}',
+                                                      style: theme.textTheme
+                                                          .bodySmall
+                                                          ?.copyWith(
+                                                            color:
+                                                                secondaryText,
+                                                          ),
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
                                             ),
                                           ],
                                         ),
                                       ),
                                       Icon(
                                         Icons.chevron_right,
-                                        color: Colors.grey[400],
+                                        color: secondaryText,
                                       ),
                                     ],
                                   ),

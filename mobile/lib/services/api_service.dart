@@ -1147,16 +1147,19 @@ class ApiService {
 
   // Media endpoints
   Future<ApiResponse<Map<String, dynamic>>> getCloudinarySignature({
-    required String tripId,
     required String filename,
-    required String resourceType,
+    required String contentType,
+    String? tripId,
+    String usage = 'general',
   }) async {
     try {
-      debugPrint('[ApiService] Getting Cloudinary signature for trip: $tripId, file: $filename');
+      debugPrint(
+          '[ApiService] Getting Cloudinary signature for file: $filename, contentType: $contentType, tripId: $tripId, usage: $usage');
       final response = await _dio.post('/media/cloudinary-signature', data: {
-        'tripId': tripId,
         'filename': filename,
-        'resourceType': resourceType,
+        'contentType': contentType,
+        if (tripId != null) 'tripId': tripId,
+        'usage': usage,
       });
       debugPrint('[ApiService] Get Cloudinary signature response: ${response.statusCode}');
       return ApiResponse<Map<String, dynamic>>(
@@ -1187,7 +1190,10 @@ class ApiService {
     required int bytes,
     required String originalFilename,
     String? tripId,
-    String? threadEntryId,
+    String usage = 'general',
+    int? width,
+    int? height,
+    num? duration,
   }) async {
     try {
       debugPrint('[ApiService] Confirming media upload: $publicId');
@@ -1199,13 +1205,16 @@ class ApiService {
         'resource_type': resourceType,
         'bytes': bytes,
         'original_filename': originalFilename,
+        if (width != null) 'width': width,
+        if (height != null) 'height': height,
+        if (duration != null) 'duration': duration,
         if (tripId != null) 'tripId': tripId,
-        if (threadEntryId != null) 'threadEntryId': threadEntryId,
+        'usage': usage,
       });
       debugPrint('[ApiService] Confirm media upload response: ${response.statusCode}');
       return ApiResponse<Media>(
         success: response.data['success'],
-        data: Media.fromJson(response.data['data']['media']),
+        data: Media.fromJson(response.data['data']),
       );
     } on DioException catch (e) {
       debugPrint('[ApiService] Confirm media upload DioException: ${e.message}');

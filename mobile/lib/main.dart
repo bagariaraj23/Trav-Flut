@@ -73,7 +73,7 @@ void main() async {
     debugPrint('[main] Creating core services');
     final apiService = ApiService();
     final tripService = TripService();
-    final mediaService = MediaService();
+    final mediaService = MediaService(apiService);
     final deepLinkService = DeepLinkService();
     debugPrint('[main] Core services created');
 

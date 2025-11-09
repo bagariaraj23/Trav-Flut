@@ -227,12 +227,12 @@ class TripProvider extends ChangeNotifier {
   }
 
   // Add media entry
-  Future<bool> addMediaEntry(String mediaUrl,
+  Future<bool> addMediaEntry(String mediaId,
       {String? caption, String? tripId}) async {
     return await addThreadEntry(
         CreateThreadEntryRequest(
           type: ThreadEntryType.media,
-          mediaUrl: mediaUrl,
+          mediaId: mediaId,
           contentText: caption,
         ),
         tripId: tripId);

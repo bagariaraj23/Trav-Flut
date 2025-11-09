@@ -496,15 +496,19 @@ class _DiscoverTabState extends State<DiscoverTab> {
             // Cover image
             Expanded(
               flex: 5,
-              child: trip.coverMediaUrl != null
-                  ? Image.network(
-                      trip.coverMediaUrl!,
-                      fit: BoxFit.cover,
-                      errorBuilder: (context, error, stackTrace) {
-                        return _buildTripPlaceholder(context, trip);
-                      },
-                    )
-                  : _buildTripPlaceholder(context, trip),
+              child: () {
+                final coverUrl = trip.coverMedia?.url ?? trip.coverMediaUrl;
+                if (coverUrl == null) {
+                  return _buildTripPlaceholder(context, trip);
+                }
+                return Image.network(
+                  coverUrl,
+                  fit: BoxFit.cover,
+                  errorBuilder: (context, error, stackTrace) {
+                    return _buildTripPlaceholder(context, trip);
+                  },
+                );
+              }(),
             ),
             Padding(
               padding: const EdgeInsets.all(10),

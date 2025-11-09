@@ -42,6 +42,7 @@ export async function GET(
     const trip = await prisma.trip.findUnique({
       where: { id: tripId },
       include: {
+        coverMedia: true,
         user: {
           select: {
             id: true,
@@ -167,6 +168,7 @@ export async function GET(
       entryCount: trip.entryCount,
       participantCount: trip.participantCount,
       coverMediaUrl: trip.coverMediaUrl ?? undefined,
+      coverMediaId: trip.coverMediaId ?? undefined,
       createdAt: trip.createdAt.toISOString(),
       updatedAt: trip.updatedAt.toISOString(),
       user: trip.user
@@ -193,6 +195,15 @@ export async function GET(
           updatedAt: p.user.updatedAt.toISOString(),
         },
       })),
+      coverMedia: trip.coverMedia
+        ? {
+            ...trip.coverMedia,
+            filename: trip.coverMedia.filename ?? undefined,
+            size: trip.coverMedia.size ?? undefined,
+            tripId: trip.coverMedia.tripId ?? undefined,
+            createdAt: trip.coverMedia.createdAt.toISOString(),
+          }
+        : undefined,
       threadEntries: trip.threadEntries.map((entry) => ({
         ...entry,
         gpsCoordinates: entry.gpsCoordinates
