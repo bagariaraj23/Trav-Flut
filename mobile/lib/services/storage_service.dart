@@ -47,6 +47,10 @@ class StorageService {
     await _storage.write(key: _accessTokenKey, value: token);
   }
 
+  Future<void> saveRefreshToken(String token) async {
+    await _storage.write(key: _refreshTokenKey, value: token);
+  }
+
   Future<void> clearTokens() async {
     await Future.wait([
       _storage.delete(key: _accessTokenKey),

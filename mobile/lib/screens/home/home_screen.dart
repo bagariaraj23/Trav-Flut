@@ -569,7 +569,7 @@ class TripsTab extends StatelessWidget {
                 onPressed: tripProvider.hasOngoingTrip
                     ? null
                     : () =>
-                        context.push('/trip/create', extra: {'from': '/home'}),
+                        context.push('/create-trip', extra: {'from': '/home'}),
                 icon: const Icon(Icons.add),
                 label: const Text('Start Your First Trip'),
               ),

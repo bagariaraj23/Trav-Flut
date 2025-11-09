@@ -34,7 +34,7 @@ export async function POST(request: NextRequest) {
     const newRefreshToken = AuthService.generateRefreshToken(user);
 
     // Store new refresh token (refresh token rotation - security best practice)
-    await AuthService.storeRefreshToken(user.id, newRefreshToken);
+    await AuthService.storeRefreshToken(user.id, newRefreshToken, refreshToken);
 
     // Return BOTH tokens
     const response: ApiResponse<{ accessToken: string; refreshToken: string }> =

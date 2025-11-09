@@ -8,6 +8,7 @@ import 'package:tripthread/models/pagination.dart';
 import 'package:tripthread/models/trip_join_request.dart';
 import 'package:tripthread/models/place.dart';
 import 'package:tripthread/services/storage_service.dart';
+import 'package:tripthread/services/token_refresh_manager.dart';
 import 'package:tripthread/config/app_config.dart';
 import 'package:flutter/foundation.dart';
 
@@ -16,9 +17,6 @@ class ApiService {
   final Dio _refreshDio;
   StorageService? _storageService;
   VoidCallback? _onUnauthorized;
-  bool _isRefreshing = false;
-  Future<void>? _refreshFuture;
-  int _lastRefreshFailAtMs = 0;
 
   ApiService()
       : _dio = Dio(BaseOptions(
@@ -114,99 +112,15 @@ class ApiService {
             return handler.reject(error);
           }
 
-          // Backoff if refresh just failed recently (e.g., after password reset)
-          final now = DateTime.now().millisecondsSinceEpoch;
-          if (now - _lastRefreshFailAtMs < 5000) {
-            debugPrint(
-                '[ApiService] Recent refresh failure, forcing logout (backoff)');
-            await _storageService!.clearTokens();
-            if (_onUnauthorized != null) {
-              debugPrint(
-                  '[ApiService] Calling unauthorized callback (backoff)');
-              _onUnauthorized!();
-            } else {
-              debugPrint('[ApiService] No unauthorized callback set!');
-            }
-            return handler.reject(error);
-          }
-
           debugPrint('[ApiService] Attempting token refresh...');
-          final refreshToken = await _storageService!.getRefreshToken();
-
-          if (refreshToken == null) {
-            debugPrint(
-                '[ApiService] No refresh token available, forcing logout');
-            await _storageService!.clearTokens();
-            if (_onUnauthorized != null) {
-              debugPrint(
-                  '[ApiService] Calling unauthorized callback (no refresh token)');
-              _onUnauthorized!();
-            } else {
-              debugPrint('[ApiService] No unauthorized callback set!');
-            }
-            return handler.reject(error);
-          }
 
           try {
-            // Ensure only one refresh happens at a time
-            if (!_isRefreshing) {
-              _isRefreshing = true;
-              _refreshFuture = () async {
-                debugPrint('[ApiService] Calling refresh token endpoint');
-                final response =
-                    await _refreshDio.post('/auth/refresh-token', data: {
-                  'refreshToken': refreshToken,
-                });
+            final newToken = await TokenRefreshManager.instance.refresh(
+              storage: _storageService!,
+              refreshClient: _refreshDio,
+            );
 
-                if (response.statusCode == 200 &&
-                    response.data['success'] == true) {
-                  final data = response.data['data'];
-                  if (data is! Map<String, dynamic>) {
-                    throw DioException(
-                      requestOptions: error.requestOptions,
-                      response: response,
-                      type: DioExceptionType.badResponse,
-                    );
-                  }
-                  final newToken = data['accessToken'];
-                  final newRefreshToken = data['refreshToken'];
-                  if (newToken is! String ||
-                      newToken.isEmpty ||
-                      newRefreshToken is! String ||
-                      newRefreshToken.isEmpty) {
-                    debugPrint(
-                        '[ApiService] Refresh response missing tokens, forcing logout');
-                    throw DioException(
-                      requestOptions: error.requestOptions,
-                      response: response,
-                      type: DioExceptionType.badResponse,
-                    );
-                  }
-                  await _storageService!.saveTokens(
-                    accessToken: newToken,
-                    refreshToken: newRefreshToken,
-                    userId: await _storageService!.getUserId() ?? '',
-                  );
-                  debugPrint('[ApiService] Token refreshed successfully');
-                } else {
-                  throw DioException(
-                    requestOptions: error.requestOptions,
-                    response: response,
-                    type: DioExceptionType.badResponse,
-                  );
-                }
-              }();
-              await _refreshFuture;
-            } else {
-              debugPrint('[ApiService] Awaiting ongoing token refresh');
-              if (_refreshFuture != null) {
-                await _refreshFuture;
-              }
-            }
-
-            // Retry original request once with new token
-            final newToken = await _storageService!.getAccessToken();
-            if (newToken != null) {
+            if (newToken != null && newToken.isNotEmpty) {
               final opts = error.requestOptions;
               opts.headers['Authorization'] = 'Bearer $newToken';
               opts.extra['retried'] = true;
@@ -214,21 +128,10 @@ class ApiService {
                   '[ApiService] Retrying original request with new token');
               final cloneReq = await _dio.fetch(opts);
               return handler.resolve(cloneReq);
-            } else {
-              debugPrint(
-                  '[ApiService] No new token available after refresh, forcing logout');
-              await _storageService!.clearTokens();
-              if (_onUnauthorized != null) {
-                debugPrint(
-                    '[ApiService] Calling unauthorized callback (no new token)');
-                _onUnauthorized!();
-              }
-              return handler.reject(error);
             }
-          } catch (e) {
-            debugPrint('[ApiService] Token refresh error: $e');
-            // Refresh failed, clear tokens and notify (and set backoff)
-            _lastRefreshFailAtMs = DateTime.now().millisecondsSinceEpoch;
+
+            debugPrint(
+                '[ApiService] Refresh did not yield a token, forcing logout');
             await _storageService!.clearTokens();
             if (_onUnauthorized != null) {
               debugPrint(
@@ -238,9 +141,19 @@ class ApiService {
               debugPrint('[ApiService] No unauthorized callback set!');
             }
             return handler.reject(error);
-          } finally {
-            _isRefreshing = false;
-            _refreshFuture = null; // Clear the future reference
+          }
+          // ignore: unused_catch_clause
+          catch (e) {
+            debugPrint('[ApiService] Token refresh error: $e');
+            await _storageService!.clearTokens();
+            if (_onUnauthorized != null) {
+              debugPrint(
+                  '[ApiService] Calling unauthorized callback (refresh failed)');
+              _onUnauthorized!();
+            } else {
+              debugPrint('[ApiService] No unauthorized callback set!');
+            }
+            return handler.reject(error);
           }
         }
 

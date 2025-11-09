@@ -5,14 +5,22 @@ import 'package:tripthread/models/trip.dart';
 import 'package:tripthread/models/trip_join_request.dart';
 import 'package:tripthread/services/storage_service.dart';
 import 'package:tripthread/config/app_config.dart';
+import 'package:tripthread/services/token_refresh_manager.dart';
 import 'dart:convert'; // Added for jsonEncode
 
 class TripService {
   late final Dio _dio;
+  late final Dio _refreshDio;
   StorageService? _storageService;
 
   TripService() {
     _dio = Dio(BaseOptions(
+      baseUrl: AppConfig.apiBaseUrl,
+      connectTimeout: AppConfig.connectTimeout,
+      receiveTimeout: AppConfig.receiveTimeout,
+      headers: AppConfig.defaultHeaders,
+    ));
+    _refreshDio = Dio(BaseOptions(
       baseUrl: AppConfig.apiBaseUrl,
       connectTimeout: AppConfig.connectTimeout,
       receiveTimeout: AppConfig.receiveTimeout,
@@ -40,28 +48,28 @@ class TripService {
       },
       onError: (error, handler) async {
         // Handle token refresh on 401
-        if (error.response?.statusCode == 401 && _storageService != null) {
-          final refreshToken = await _storageService!.getRefreshToken();
-          if (refreshToken != null) {
-            try {
-              final response = await _dio.post('/auth/refresh-token', data: {
-                'refreshToken': refreshToken,
-              });
+        if (error.response?.statusCode == 401 &&
+            _storageService != null &&
+            error.requestOptions.extra['retried'] != true) {
+          try {
+            final newToken = await TokenRefreshManager.instance.refresh(
+              storage: _storageService!,
+              refreshClient: _refreshDio,
+            );
 
-              if (response.statusCode == 200) {
-                final newToken = response.data['data']['accessToken'];
-                await _storageService!.saveAccessToken(newToken);
-
-                // Retry original request
-                final opts = error.requestOptions;
-                opts.headers['Authorization'] = 'Bearer $newToken';
-                final cloneReq = await _dio.fetch(opts);
-                return handler.resolve(cloneReq);
-              }
-            } catch (e) {
-              // Refresh failed, clear tokens
-              await _storageService!.clearTokens();
+            if (newToken != null && newToken.isNotEmpty) {
+              final opts = error.requestOptions;
+              opts.headers['Authorization'] = 'Bearer $newToken';
+              opts.extra['retried'] = true;
+              final cloneReq = await _dio.fetch(opts);
+              return handler.resolve(cloneReq);
             }
+
+            await _storageService!.clearTokens();
+            return handler.next(error);
+          } catch (e) {
+            await _storageService!.clearTokens();
+            return handler.next(error);
           }
         }
         handler.next(error);
