@@ -1,10 +1,47 @@
 import jwt from 'jsonwebtoken'
 import bcrypt from 'bcryptjs'
+import { randomUUID } from 'crypto'
+import { Prisma, User } from '@prisma/client'
 import { prisma } from './prisma'
-import { User } from '@prisma/client'
+import { cookies } from 'next/headers'
 
 const JWT_SECRET = process.env.JWT_SECRET || 'fallback-secret'
 const JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET || 'fallback-refresh-secret'
+
+interface AuthSession {
+  user: {
+    id: string;
+    email: string;
+  } | null;
+}
+
+// Get the authenticated session from cookies
+export async function getAuthSession(): Promise<AuthSession> {
+  const cookieStore = cookies();
+  const token = cookieStore.get('auth_token')?.value;
+
+  if (!token) {
+    return { user: null };
+  }
+
+  try {
+    const payload = AuthService.verifyAccessToken(token);
+    if (!payload) {
+      return { user: null };
+    }
+
+    // Get user from database to ensure they still exist
+    const user = await prisma.user.findUnique({
+      where: { id: payload.userId },
+      select: { id: true, email: true }
+    });
+
+    return { user };
+  } catch (error) {
+    console.error('[Auth] Session verification failed:', error);
+    return { user: null };
+  }
+}
 
 export interface JWTPayload {
   userId: string
@@ -28,7 +65,10 @@ export class AuthService {
     return jwt.sign(
       { userId: user.id, email: user.email },
       JWT_REFRESH_SECRET,
-      { expiresIn: '30d' }
+      {
+        expiresIn: '30d',
+        jwtid: randomUUID()
+      }
     )
   }
 
@@ -61,17 +101,34 @@ export class AuthService {
   }
 
   // Store refresh token in database
-  static async storeRefreshToken(userId: string, refreshToken: string): Promise<void> {
+  static async storeRefreshToken(userId: string, refreshToken: string, previousToken?: string): Promise<void> {
     const expiresAt = new Date()
     expiresAt.setDate(expiresAt.getDate() + 30) // 30 days
 
-    await prisma.jWTRefreshToken.create({
-      data: {
-        userId,
-        refreshToken,
-        expiresAt
+    if (previousToken) {
+      await prisma.jWTRefreshToken.deleteMany({
+        where: { refreshToken: previousToken }
+      })
+    }
+
+    try {
+      await prisma.jWTRefreshToken.create({
+        data: {
+          userId,
+          refreshToken,
+          expiresAt
+        }
+      })
+    } catch (error) {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2002'
+      ) {
+        throw new Error('Duplicate refresh token detected')
       }
-    })
+
+      throw error
+    }
   }
 
   // Validate refresh token from database

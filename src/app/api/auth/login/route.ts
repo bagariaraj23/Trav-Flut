@@ -7,7 +7,7 @@ import { ApiResponse, AuthResponse } from '@/types/api'
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    
+
     // Validate input
     const validatedData = loginSchema.parse(body)
     const { email, password } = validatedData
@@ -65,7 +65,8 @@ export async function POST(request: NextRequest) {
 
   } catch (error: any) {
     console.error('Login error:', error)
-    
+    console.error('Stack trace:', error.stack)
+
     if (error.name === 'ZodError') {
       return NextResponse.json<ApiResponse>({
         success: false,
@@ -73,9 +74,17 @@ export async function POST(request: NextRequest) {
       }, { status: 400 })
     }
 
+    if (error.name === 'PrismaClientKnownRequestError') {
+      console.error('Prisma Error:', {
+        code: error.code,
+        meta: error.meta,
+        message: error.message
+      })
+    }
+
     return NextResponse.json<ApiResponse>({
       success: false,
-      error: 'Internal server error'
+      error: 'Internal server error: ' + error.message
     }, { status: 500 })
   }
 }

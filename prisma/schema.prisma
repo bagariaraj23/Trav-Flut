@@ -1,6 +1,3 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -11,37 +8,64 @@ datasource db {
 }
 
 model User {
-  id        String   @id @default(uuid())
-  email     String   @unique
-  username  String?  @unique
-  name      String?
-  password  String?  // Nullable for OAuth-only accounts
-  avatarUrl String?
-  bio       String?
-  isPrivate Boolean  @default(false)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  // Relations
-  followers      Follow[]         @relation("Followee")
-  following      Follow[]         @relation("Follower")
-  sentFollowRequests     FollowRequest[] @relation("SentFollowRequests")
-  receivedFollowRequests FollowRequest[] @relation("ReceivedFollowRequests")
-  oauthAccounts  OAuthAccount[]
-  refreshTokens  JWTRefreshToken[]
-  
-  // Trip relations
-  trips          Trip[]
-  tripParticipants TripParticipant[]
-  threadEntries  TripThreadEntry[]
-  threadTags     TripThreadTag[]
-  media          Media[]
-  
-  // Trip join request relations
+  id                       String            @id @default(uuid())
+  email                    String            @unique
+  username                 String?           @unique
+  name                     String?
+  password                 String?
+  avatarUrl                String?
+  bio                      String?
+  isPrivate                Boolean           @default(false)
+  createdAt                DateTime          @default(now())
+  updatedAt                DateTime          @updatedAt
+  deleteMeta               Json?
+  deletedAt                DateTime?
+  receivedFollowRequests   FollowRequest[]   @relation("ReceivedFollowRequests")
+  sentFollowRequests       FollowRequest[]   @relation("SentFollowRequests")
+  followers                Follow[]          @relation("Followee")
+  following                Follow[]          @relation("Follower")
+  refreshTokens            JWTRefreshToken[]
+  oauthAccounts            OAuthAccount[]
+  passwordResets           PasswordReset[]
+  securityEvents           SecurityEvent[]
+  tripParticipants         TripParticipant[]
+  threadEntries            TripThreadEntry[]
+  threadTags               TripThreadTag[]
+  trips                    Trip[]
+  media                    Media[]
+  createdPlaceShares       PlaceShare[]
   sentTripJoinRequests     TripJoinRequest[] @relation("SentTripJoinRequests")
   receivedTripJoinRequests TripJoinRequest[] @relation("ReceivedTripJoinRequests")
 
   @@map("users")
+}
+
+model PasswordReset {
+  id          String    @id @default(uuid())
+  userId      String
+  tokenHash   Bytes     @unique
+  otpCodeHash Bytes?
+  expiresAt   DateTime
+  usedAt      DateTime?
+  createdAt   DateTime  @default(now())
+  createdIp   String?
+  userAgent   String?
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, expiresAt])
+  @@map("password_resets")
+}
+
+model SecurityEvent {
+  id        String   @id @default(uuid())
+  userId    String?
+  type      String
+  meta      Json?
+  createdAt DateTime @default(now())
+  user      User?    @relation(fields: [userId], references: [id])
+
+  @@index([userId, createdAt])
+  @@map("security_events")
 }
 
 model OAuthAccount {
@@ -50,16 +74,10 @@ model OAuthAccount {
   providerUserId String
   userId         String
   createdAt      DateTime      @default(now())
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user           User          @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([provider, providerUserId])
   @@map("oauth_accounts")
-}
-
-enum OAuthProvider {
-  GOOGLE
-  APPLE
 }
 
 model Follow {
@@ -67,30 +85,22 @@ model Follow {
   followerId String
   followeeId String
   createdAt  DateTime @default(now())
-
-  follower User @relation("Follower", fields: [followerId], references: [id], onDelete: Cascade)
-  followee User @relation("Followee", fields: [followeeId], references: [id], onDelete: Cascade)
+  followee   User     @relation("Followee", fields: [followeeId], references: [id], onDelete: Cascade)
+  follower   User     @relation("Follower", fields: [followerId], references: [id], onDelete: Cascade)
 
   @@unique([followerId, followeeId])
   @@map("follows")
 }
 
-enum FollowRequestStatus {
-  PENDING
-  ACCEPTED
-  REJECTED
-}
-
 model FollowRequest {
-  id          String              @id @default(uuid())
-  followerId  String
-  followeeId  String              // Changed from followingId to followeeId for consistency
-  status      FollowRequestStatus @default(PENDING)
-  createdAt   DateTime            @default(now())
-  updatedAt   DateTime            @updatedAt
-
-  follower    User                @relation("SentFollowRequests", fields: [followerId], references: [id], onDelete: Cascade)
-  followee    User                @relation("ReceivedFollowRequests", fields: [followeeId], references: [id], onDelete: Cascade)
+  id         String              @id @default(uuid())
+  followerId String
+  followeeId String
+  status     FollowRequestStatus @default(PENDING)
+  createdAt  DateTime            @default(now())
+  updatedAt  DateTime            @updatedAt
+  followee   User                @relation("ReceivedFollowRequests", fields: [followeeId], references: [id], onDelete: Cascade)
+  follower   User                @relation("SentFollowRequests", fields: [followerId], references: [id], onDelete: Cascade)
 
   @@unique([followerId, followeeId])
   @@map("follow_requests")
@@ -102,13 +112,244 @@ model JWTRefreshToken {
   refreshToken String   @unique
   expiresAt    DateTime
   createdAt    DateTime @default(now())
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
+  @@index([userId])
+  @@index([expiresAt])
   @@map("jwt_refresh_tokens")
 }
 
-// Trip Lifecycle Models
+model Trip {
+  id               String            @id @default(uuid())
+  userId           String
+  title            String
+  description      String?
+  startDate        DateTime
+  endDate          DateTime
+  destinations     String[]
+  mood             TripMood?
+  type             TripType?
+  coverMediaUrl    String?           // DEPRECATED: Keep for backward compatibility
+  coverMediaId     String?           // NEW: Link to Media model
+  status           TripStatus        @default(UPCOMING)
+  entryCount       Int               @default(0)
+  participantCount Int               @default(1)
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  media            Media[]
+  finalPost        TripFinalPost?
+  joinRequests     TripJoinRequest[]
+  participants     TripParticipant[]
+  threadEntries    TripThreadEntry[]
+  coverMedia       Media?            @relation("TripCoverMedia", fields: [coverMediaId], references: [id], onDelete: SetNull)
+  user             User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  placeShares      PlaceShare[]
+
+  // Map integration: optional canonical start/end locations and visited places
+  startLocationId String?
+  startLocation   Place?  @relation("TripStartLocation", fields: [startLocationId], references: [id])
+  endLocationId   String?
+  endLocation     Place?  @relation("TripEndLocation", fields: [endLocationId], references: [id])
+
+  placeVisits PlaceOnTrip[]
+
+  // Optional precomputed map center/bounds (can be derived server-side)
+  centerLat  Float?
+  centerLng  Float?
+  boundNeLat Float?
+  boundNeLng Float?
+  boundSwLat Float?
+  boundSwLng Float?
+
+  @@map("trips")
+}
+
+model TripParticipant {
+  id       String   @id @default(uuid())
+  tripId   String
+  userId   String
+  role     String   @default("member")
+  joinedAt DateTime @default(now())
+  trip     Trip     @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([tripId, userId])
+  @@map("trip_participants")
+}
+
+model TripThreadEntry {
+  id             String          @id @default(uuid())
+  tripId         String
+  authorId       String
+  type           ThreadEntryType
+  contentText    String?
+  mediaUrl       String?         // DEPRECATED: Keep for backward compatibility
+  mediaId        String?         // NEW: Link to Media model
+  locationName   String?
+  gpsCoordinates Json?
+  createdAt      DateTime        @default(now())
+  mediaId        String?
+  author         User            @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  media           Media?             @relation(fields: [mediaId], references: [id], onDelete: SetNull)
+  trip           Trip            @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  taggedUsers    TripThreadTag[]
+
+  // Canonical place link for location/check-in entries
+  placeId String?
+  place   Place?  @relation(fields: [placeId], references: [id])
+
+  // Shares
+  placeShares PlaceShare[]
+
+  @@map("trip_thread_entries")
+}
+
+enum PlaceType {
+  POI
+  STAY
+  FOOD
+  TRANSPORT
+  VIEWPOINT
+  OTHER
+}
+
+enum PlaceSource {
+  USER
+  GOOGLE
+  MAPBOX
+  APPLE
+}
+
+model Place {
+  id         String      @id @default(uuid())
+  name       String
+  address    String?
+  lat        Float
+  lng        Float
+  placeType  PlaceType   @default(POI)
+  source     PlaceSource @default(USER)
+  externalId String?     @unique
+  createdAt  DateTime    @default(now())
+  updatedAt  DateTime    @updatedAt
+
+  // Relations
+  tripVisits    PlaceOnTrip[]
+  threadEntries TripThreadEntry[]
+  placeShares   PlaceShare[]
+  // Back-relations for Trip start/end
+  startTrips    Trip[]            @relation("TripStartLocation")
+  endTrips      Trip[]            @relation("TripEndLocation")
+
+  @@index([lat, lng], name: "coordinate_spatial_idx")
+  @@index([externalId], name: "external_id_idx")
+  @@map("places")
+}
+
+model PlaceOnTrip {
+  id        String    @id @default(uuid())
+  tripId    String
+  placeId   String
+  visitedAt DateTime?
+  dayIndex  Int?
+  notes     String?
+  order     Int?
+
+  trip  Trip  @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  place Place @relation(fields: [placeId], references: [id])
+
+  @@unique([tripId, placeId, visitedAt])
+  @@index([tripId, visitedAt], name: "trip_visits_idx")
+  @@map("places_on_trip")
+}
+
+model PlaceShare {
+  id            String    @id @default(uuid())
+  placeId       String
+  tripId        String?
+  threadEntryId String?
+  token         String    @unique
+  expiresAt     DateTime?
+  createdById   String
+  createdAt     DateTime  @default(now())
+
+  place     Place            @relation(fields: [placeId], references: [id], onDelete: Cascade)
+  trip      Trip?            @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  entry     TripThreadEntry? @relation(fields: [threadEntryId], references: [id])
+  createdBy User             @relation(fields: [createdById], references: [id])
+
+  @@map("place_shares")
+}
+
+model TripThreadTag {
+  id            String          @id @default(uuid())
+  threadEntryId String
+  taggedUserId  String
+  taggedUser    User            @relation(fields: [taggedUserId], references: [id], onDelete: Cascade)
+  threadEntry   TripThreadEntry @relation(fields: [threadEntryId], references: [id], onDelete: Cascade)
+
+  @@unique([threadEntryId, taggedUserId])
+  @@map("trip_thread_tags")
+}
+
+model TripFinalPost {
+  id           String   @id @default(uuid())
+  tripId       String   @unique
+  summaryText  String
+  curatedMedia String[]
+  caption      String?
+  isPublished  Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  trip         Trip     @relation(fields: [tripId], references: [id], onDelete: Cascade)
+
+  @@map("trip_final_posts")
+}
+
+model Media {
+  id              String             @id @default(uuid())
+  url             String
+  publicId        String             @unique // Cloudinary public_id for management
+  type            MediaType
+  filename        String?
+  size            Int?
+  uploadedById    String
+  tripId          String?
+  createdAt       DateTime           @default(now())
+
+  uploadedBy      User               @relation(fields: [uploadedById], references: [id], onDelete: Cascade)
+  trip            Trip?              @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  threadEntries   TripThreadEntry[]
+  tripCover       Trip[]             @relation("TripCoverMedia")
+
+  @@map("media")
+}
+
+model TripJoinRequest {
+  id         String                @id @default(uuid())
+  tripId     String
+  senderId   String
+  receiverId String
+  status     TripJoinRequestStatus @default(PENDING)
+  createdAt  DateTime              @default(now())
+  updatedAt  DateTime              @updatedAt
+  receiver   User                  @relation("ReceivedTripJoinRequests", fields: [receiverId], references: [id], onDelete: Cascade)
+  sender     User                  @relation("SentTripJoinRequests", fields: [senderId], references: [id], onDelete: Cascade)
+  trip       Trip                  @relation(fields: [tripId], references: [id], onDelete: Cascade)
+
+  @@unique([tripId, receiverId])
+  @@map("trip_join_requests")
+}
+
+enum OAuthProvider {
+  GOOGLE
+  APPLE
+}
+
+enum FollowRequestStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+}
+
 enum TripStatus {
   UPCOMING
   ONGOING
@@ -147,129 +388,4 @@ enum TripJoinRequestStatus {
   PENDING
   ACCEPTED
   REJECTED
-}
-
-model Trip {
-  id             String             @id @default(uuid())
-  userId         String
-  title          String
-  description    String?
-  startDate      DateTime?
-  endDate        DateTime?
-  destinations   String[]           // Array of city/country names
-  mood           TripMood?
-  type           TripType?
-  coverMediaUrl  String?            // DEPRECATED: Keep for backward compatibility
-  coverMediaId   String?            // NEW: Link to Media model
-  status         TripStatus         @default(UPCOMING)
-  entryCount     Int                @default(0)
-  participantCount Int              @default(1)
-  createdAt      DateTime           @default(now())
-  updatedAt      DateTime           @updatedAt
-
-  user           User               @relation(fields: [userId], references: [id], onDelete: Cascade)
-  threadEntries  TripThreadEntry[]
-  media          Media[]
-  coverMedia     Media?             @relation("TripCoverMedia", fields: [coverMediaId], references: [id], onDelete: SetNull)
-  finalPost      TripFinalPost?
-  participants   TripParticipant[]
-  joinRequests   TripJoinRequest[]
-
-  @@map("trips")
-}
-
-model TripParticipant {
-  id        String   @id @default(uuid())
-  tripId    String
-  userId    String
-  role      String   @default("member") // member, cohost, etc.
-  joinedAt  DateTime @default(now())
-
-  trip      Trip     @relation(fields: [tripId], references: [id], onDelete: Cascade)
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@unique([tripId, userId])
-  @@map("trip_participants")
-}
-
-model TripThreadEntry {
-  id              String             @id @default(uuid())
-  tripId          String
-  authorId        String             // Can allow participants to post
-  type            ThreadEntryType
-  contentText     String?
-  mediaUrl        String?            // DEPRECATED: Keep for backward compatibility
-  mediaId         String?            // NEW: Link to Media model
-  locationName    String?
-  gpsCoordinates  Json?              // { lat: ..., lng: ... }
-  createdAt       DateTime           @default(now())
-
-  trip            Trip               @relation(fields: [tripId], references: [id], onDelete: Cascade)
-  author          User               @relation(fields: [authorId], references: [id], onDelete: Cascade)
-  taggedUsers     TripThreadTag[]
-  media           Media?             @relation(fields: [mediaId], references: [id], onDelete: SetNull)
-
-  @@map("trip_thread_entries")
-}
-
-model TripThreadTag {
-  id              String   @id @default(uuid())
-  threadEntryId   String
-  taggedUserId    String
-
-  threadEntry     TripThreadEntry @relation(fields: [threadEntryId], references: [id], onDelete: Cascade)
-  taggedUser      User            @relation(fields: [taggedUserId], references: [id], onDelete: Cascade)
-
-  @@unique([threadEntryId, taggedUserId])
-  @@map("trip_thread_tags")
-}
-
-model TripFinalPost {
-  id              String   @id @default(uuid())
-  tripId          String   @unique
-  summaryText     String
-  curatedMedia    String[] // Array of URLs
-  caption         String?
-  isPublished     Boolean  @default(false)
-  createdAt       DateTime @default(now())
-
-  trip            Trip     @relation(fields: [tripId], references: [id], onDelete: Cascade)
-
-  @@map("trip_final_posts")
-}
-
-model Media {
-  id              String             @id @default(uuid())
-  url             String
-  publicId        String             @unique // Cloudinary public_id for management
-  type            MediaType
-  filename        String?
-  size            Int?
-  uploadedById    String
-  tripId          String?
-  createdAt       DateTime           @default(now())
-
-  uploadedBy      User               @relation(fields: [uploadedById], references: [id], onDelete: Cascade)
-  trip            Trip?              @relation(fields: [tripId], references: [id], onDelete: Cascade)
-  threadEntries   TripThreadEntry[]
-  tripCover       Trip[]             @relation("TripCoverMedia")
-
-  @@map("media")
-}
-
-model TripJoinRequest {
-  id          String                @id @default(uuid())
-  tripId      String
-  senderId    String
-  receiverId  String
-  status      TripJoinRequestStatus @default(PENDING)
-  createdAt   DateTime              @default(now())
-  updatedAt   DateTime              @updatedAt
-
-  trip        Trip                  @relation(fields: [tripId], references: [id], onDelete: Cascade)
-  sender      User                  @relation("SentTripJoinRequests", fields: [senderId], references: [id], onDelete: Cascade)
-  receiver    User                  @relation("ReceivedTripJoinRequests", fields: [receiverId], references: [id], onDelete: Cascade)
-
-  @@unique([tripId, receiverId])
-  @@map("trip_join_requests")
 }

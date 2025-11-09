@@ -1,13 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
+import 'package:tripthread/models/place.dart';
+import 'package:tripthread/providers/place_provider.dart';
 import 'package:tripthread/providers/trip_provider.dart';
-import 'package:tripthread/providers/auth_provider.dart';
 import 'package:tripthread/models/trip.dart';
 import 'package:tripthread/widgets/custom_text_field.dart';
 import 'package:tripthread/widgets/loading_button.dart';
 import 'dart:io';
 import 'package:tripthread/services/media_service.dart';
+import 'package:tripthread/widgets/place_autocomplete_field.dart';
 
 class CreateTripScreen extends StatefulWidget {
   const CreateTripScreen({Key? key}) : super(key: key);
@@ -21,24 +23,13 @@ class _CreateTripScreenState extends State<CreateTripScreen> {
   final _titleController = TextEditingController();
   final _descriptionController = TextEditingController();
   final _destinationController = TextEditingController();
-
-  MediaService? _mediaService;
+  final MediaService _mediaService = MediaService();
   File? _selectedCoverFile;
-  Media? _selectedCoverMedia;
-
-  final List<String> _destinations = [];
+  final List<Place> _destinations = [];
   DateTime? _startDate;
   DateTime? _endDate;
   TripMood? _selectedMood;
   TripType? _selectedType;
-  bool _isUploadingMedia = false;
-
-  @override
-  void initState() {
-    super.initState();
-    // Get MediaService from provider
-    _mediaService = Provider.of<MediaService>(context, listen: false);
-  }
 
   @override
   void dispose() {
@@ -48,31 +39,13 @@ class _CreateTripScreenState extends State<CreateTripScreen> {
     super.dispose();
   }
 
-  void _addDestination() {
-    final destination = _destinationController.text.trim();
-    if (destination.isNotEmpty && !_destinations.contains(destination)) {
-      setState(() {
-        _destinations.add(destination);
-        _destinationController.clear();
-      });
-    }
-  }
-
-  void _removeDestination(String destination) {
-    setState(() {
-      _destinations.remove(destination);
-    });
-  }
-
   Future<void> _selectDate(BuildContext context, bool isStartDate) async {
     final DateTime now = DateTime.now();
-    final DateTime today =
-        DateTime(now.year, now.month, now.day); // Start of today
-
+    final DateTime today = DateTime(now.year, now.month, now.day);
     final DateTime? picked = await showDatePicker(
       context: context,
       initialDate: isStartDate ? today : (today.add(const Duration(days: 1))),
-      firstDate: isStartDate ? today : today, // Start date can't be in the past
+      firstDate: isStartDate ? today : today,
       lastDate: now.add(const Duration(days: 365)),
     );
 
@@ -82,8 +55,6 @@ class _CreateTripScreenState extends State<CreateTripScreen> {
           _startDate = picked;
           print('[DEBUG] Start date selected: $picked');
           print('[DEBUG] Start date ISO: ${picked.toIso8601String()}');
-
-          // Reset end date if it's before start date
           if (_endDate != null && _endDate!.isBefore(picked)) {
             _endDate = null;
             print('[DEBUG] End date reset because it was before start date');
@@ -99,19 +70,10 @@ class _CreateTripScreenState extends State<CreateTripScreen> {
 
   Future<void> _pickCoverImage({bool fromCamera = false}) async {
     try {
-      final file = await _mediaService?.pickImage(fromCamera: fromCamera);
+      final file = await _mediaService.pickImage(fromCamera: fromCamera);
       if (file != null) {
         setState(() {
           _selectedCoverFile = file;
-          // Create a temporary Media object for preview
-          _selectedCoverMedia = Media(
-            id: '', // Temporary ID
-            url: file.path, // Local file path for preview
-            publicId: '', // Temporary
-            type: _mediaService!.getMediaType(file),
-            uploadedById: '', // Temporary
-            createdAt: DateTime.now(),
-          );
         });
       }
     } catch (e) {
@@ -131,7 +93,20 @@ class _CreateTripScreenState extends State<CreateTripScreen> {
       return;
     }
 
-    // Add debugging logs
+    if (_startDate == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Start date is required')),
+      );
+      return;
+    }
+
+    if (_endDate == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('End date is required')),
+      );
+      return;
+    }
+
     print('[DEBUG] Creating trip with dates:');
     print('[DEBUG] _startDate: $_startDate');
     print('[DEBUG] _endDate: $_endDate');
@@ -152,11 +127,9 @@ class _CreateTripScreenState extends State<CreateTripScreen> {
       print('[DEBUG] endDate timezone offset: ${_endDate!.timeZoneOffset}');
     }
 
-    // Validate dates before creating request
     if (_startDate != null) {
       final now = DateTime.now();
       final today = DateTime(now.year, now.month, now.day);
-
       if (_startDate!.isBefore(today)) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Start date cannot be in the past')),
@@ -174,547 +147,498 @@ class _CreateTripScreenState extends State<CreateTripScreen> {
       }
     }
 
+    final request = CreateTripRequest(
+      title: _titleController.text.trim(),
+      description: _descriptionController.text.trim().isEmpty
+          ? null
+          : _descriptionController.text.trim(),
+      startDate: _startDate,
+      endDate: _endDate,
+      destinations: _destinations.map((e) => e.name).toList(),
+      destinationPlaceIds: _destinations.map((e) => e.id).toList(),
+      mood: _selectedMood,
+      type: _selectedType,
+      coverMediaUrl: _selectedCoverFile != null
+          ? 'https://example.com/placeholder-cover.jpg'
+          : null,
+    );
+
+    print('[DEBUG] CreateTripRequest created:');
+    print('[DEBUG] request.toJson(): ${request.toJson()}');
+
     final tripProvider = context.read<TripProvider>();
-    final authProvider = context.read<AuthProvider>();
-    final currentUserId = authProvider.currentUser?.id;
+    final success = await tripProvider.createTrip(request);
 
-    if (currentUserId == null) {
+    if (success && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('User not authenticated.')),
+        const SnackBar(content: Text('Trip started successfully! 🎉')),
       );
-      return;
-    }
-
-    String? coverMediaId;
-    
-    // Upload cover media if selected
-    if (_selectedCoverFile != null && _mediaService != null) {
-      setState(() {
-        _isUploadingMedia = true;
-      });
-      
-      try {
-        // First create a temporary trip to get tripId for media upload
-        final tempRequest = CreateTripRequest(
-          title: _titleController.text.trim(),
-          description: _descriptionController.text.trim().isEmpty
-              ? null
-              : _descriptionController.text.trim(),
-          startDate: _startDate,
-          endDate: _endDate,
-          destinations: _destinations,
-          mood: _selectedMood,
-          type: _selectedType,
-        );
-
-        // Create trip first
-        final success = await tripProvider.createTrip(tempRequest);
-        
-        if (success && tripProvider.currentTrip != null) {
-          // Now upload media for the created trip
-          final uploadedMedia = await _mediaService!.uploadMediaToCloudinary(
-            _selectedCoverFile!,
-            tripProvider.currentTrip!.id,
-          );
-          
-          if (uploadedMedia != null) {
-            coverMediaId = uploadedMedia.id;
-            
-            // For now, we'll just show success
-            // TODO: Update trip with cover media ID when update endpoint is available
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Trip created successfully with cover image! 🎉')),
-            );
-            context.go('/home');
-            return;
-          }
-        }
-        
-        if (success) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Trip started successfully! 🎉')),
-          );
-          context.go('/home');
-        }
-      } catch (e) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to upload cover image: ${e.toString()}')),
-        );
-      } finally {
-        setState(() {
-          _isUploadingMedia = false;
-        });
-      }
-    } else {
-      // Create trip without cover media
-      final request = CreateTripRequest(
-        title: _titleController.text.trim(),
-        description: _descriptionController.text.trim().isEmpty
-            ? null
-            : _descriptionController.text.trim(),
-        startDate: _startDate,
-        endDate: _endDate,
-        destinations: _destinations,
-        mood: _selectedMood,
-        type: _selectedType,
-        coverMediaId: coverMediaId,
-      );
-
-      print('[DEBUG] CreateTripRequest created:');
-      print('[DEBUG] request.toJson(): ${request.toJson()}');
-
-      final success = await tripProvider.createTrip(request);
-
-      if (success && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Trip started successfully! 🎉')),
-        );
-        context.go('/home');
-      }
+      context.go('/home');
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final extra = GoRouterState.of(context).extra;
-    final from = (extra is Map && extra['from'] != null)
-        ? extra['from'] as String
-        : '/home';
-
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Start New Trip'),
+        title: const Text('Create Trip'),
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
-          onPressed: () => Navigator.of(context).pop(),
+          icon: const Icon(Icons.close),
+          onPressed: () {
+            if (context.canPop()) {
+              context.pop();
+            } else {
+              context.go('/home');
+            }
+          },
         ),
       ),
-      body: Form(
-        key: _formKey,
+      body: SafeArea(
         child: SingleChildScrollView(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              // Header
-              Container(
-                padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [
-                      Theme.of(context).colorScheme.primary,
-                      Theme.of(context).colorScheme.primary.withOpacity(0.8),
-                    ],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
+          padding: const EdgeInsets.all(16.0),
+          child: Form(
+            key: _formKey,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                // Header Banner
+                Container(
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [
+                        Theme.of(context).colorScheme.primary,
+                        Theme.of(context).colorScheme.primary.withOpacity(0.8),
+                      ],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                    borderRadius: BorderRadius.circular(16),
                   ),
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                child: Column(
-                  children: [
-                    Icon(
-                      Icons.flight_takeoff,
-                      size: 48,
-                      color: Colors.white,
-                    ),
-                    const SizedBox(height: 12),
-                    Text(
-                      'Ready for Adventure?',
-                      style:
-                          Theme.of(context).textTheme.headlineMedium?.copyWith(
-                                color: Colors.white,
-                                fontWeight: FontWeight.bold,
-                              ),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      'Start documenting your journey and create amazing memories',
-                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                            color: Colors.white.withOpacity(0.9),
-                          ),
-                      textAlign: TextAlign.center,
-                    ),
-                  ],
-                ),
-              ),
-
-              const SizedBox(height: 24),
-
-              // Trip Title
-              CustomTextField(
-                controller: _titleController,
-                label: 'Trip Title',
-                hintText: 'e.g., Tokyo Adventure 2024',
-                prefixIcon: Icons.title,
-                validator: (value) {
-                  if (value == null || value.trim().isEmpty) {
-                    return 'Trip title is required';
-                  }
-                  return null;
-                },
-                textCapitalization: TextCapitalization.sentences,
-              ),
-
-              const SizedBox(height: 16),
-
-              // Description
-              CustomTextField(
-                controller: _descriptionController,
-                label: 'Description (Optional)',
-                hintText: 'Tell us about your trip...',
-                prefixIcon: Icons.description,
-                maxLines: 3,
-                maxLength: 500,
-                textCapitalization: TextCapitalization.sentences,
-              ),
-
-              const SizedBox(height: 16),
-
-              // Cover Image Picker
-              Text(
-                'Cover Image (Optional)',
-                style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.w600,
-                    ),
-              ),
-              const SizedBox(height: 8),
-              if (_selectedCoverFile != null)
-                Stack(
-                  children: [
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(8),
-                      child: Image.file(
-                        _selectedCoverFile!,
-                        height: 160,
-                        width: double.infinity,
-                        fit: BoxFit.cover,
-                      ),
-                    ),
-                    Positioned(
-                      top: 8,
-                      right: 8,
-                      child: CircleAvatar(
-                        backgroundColor: Colors.black54,
-                        child: IconButton(
-                          icon: const Icon(Icons.close, color: Colors.white),
-                          onPressed: () {
-                            setState(() {
-                              _selectedCoverFile = null;
-                              _selectedCoverMedia = null;
-                            });
-                          },
-                        ),
-                      ),
-                    ),
-                    if (_isUploadingMedia)
-                      Positioned.fill(
-                        child: Container(
-                          decoration: BoxDecoration(
-                            color: Colors.black54,
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: const Center(
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                CircularProgressIndicator(color: Colors.white),
-                                SizedBox(height: 8),
-                                Text(
-                                  'Uploading image...',
-                                  style: TextStyle(color: Colors.white),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-                  ],
-                )
-              else
-                Row(
-                  children: [
-                    Expanded(
-                      child: OutlinedButton.icon(
-                        onPressed: () => _pickCoverImage(fromCamera: false),
-                        icon: const Icon(Icons.photo_library),
-                        label: const Text('Gallery'),
-                        style: OutlinedButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(vertical: 12),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: OutlinedButton.icon(
-                        onPressed: () => _pickCoverImage(fromCamera: true),
-                        icon: const Icon(Icons.camera_alt),
-                        label: const Text('Camera'),
-                        style: OutlinedButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(vertical: 12),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-
-              const SizedBox(height: 16),
-
-              // Destinations
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Destinations',
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.w600,
-                        ),
-                  ),
-                  const SizedBox(height: 8),
-                  Row(
+                  child: Column(
                     children: [
-                      Expanded(
-                        child: TextFormField(
-                          controller: _destinationController,
-                          decoration: InputDecoration(
-                            hintText: 'Add destination',
-                            prefixIcon: const Icon(Icons.location_on),
-                            suffixIcon: IconButton(
-                              icon: const Icon(Icons.add),
-                              onPressed: _addDestination,
+                      const Icon(
+                        Icons.flight_takeoff,
+                        size: 48,
+                        color: Colors.white,
+                      ),
+                      const SizedBox(height: 12),
+                      Text(
+                        'Ready for Adventure?',
+                        style: Theme.of(context)
+                            .textTheme
+                            .headlineMedium
+                            ?.copyWith(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
                             ),
-                          ),
-                          onFieldSubmitted: (_) => _addDestination(),
-                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Start documenting your journey and create amazing memories',
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                              color: Colors.white.withOpacity(0.9),
+                            ),
+                        textAlign: TextAlign.center,
                       ),
                     ],
                   ),
-                  const SizedBox(height: 12),
-                  if (_destinations.isNotEmpty)
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      children: _destinations.map((destination) {
-                        return Chip(
-                          label: Text(destination),
-                          deleteIcon: const Icon(Icons.close, size: 18),
-                          onDeleted: () => _removeDestination(destination),
-                          backgroundColor:
-                              Theme.of(context).colorScheme.primaryContainer,
+                ),
+                const SizedBox(height: 24),
+
+                // Trip Title
+                CustomTextField(
+                  controller: _titleController,
+                  label: 'Trip Title',
+                  hintText: 'e.g., Tokyo Adventure',
+                  prefixIcon: Icons.title,
+                  validator: (value) {
+                    if (value == null || value.trim().isEmpty) {
+                      return 'Trip title is required';
+                    }
+                    return null;
+                  },
+                  textCapitalization: TextCapitalization.sentences,
+                ),
+                const SizedBox(height: 16),
+
+                // Description
+                CustomTextField(
+                  controller: _descriptionController,
+                  label: 'Description (Optional)',
+                  hintText: 'Tell us about your trip...',
+                  prefixIcon: Icons.description,
+                  maxLines: 3,
+                  maxLength: 500,
+                  textCapitalization: TextCapitalization.sentences,
+                ),
+                const SizedBox(height: 16),
+
+                // Cover Image Picker
+                Text(
+                  'Cover Image (Optional)',
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w600,
+                      ),
+                ),
+                const SizedBox(height: 8),
+                if (_selectedCoverFile != null)
+                  Stack(
+                    children: [
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(8),
+                        child: Image.file(
+                          _selectedCoverFile!,
+                          height: 160,
+                          width: double.infinity,
+                          fit: BoxFit.cover,
+                        ),
+                      ),
+                      Positioned(
+                        top: 8,
+                        right: 8,
+                        child: CircleAvatar(
+                          backgroundColor: Colors.black54,
+                          child: IconButton(
+                            icon: const Icon(Icons.close, color: Colors.white),
+                            onPressed: () {
+                              setState(() {
+                                _selectedCoverFile = null;
+                              });
+                            },
+                          ),
+                        ),
+                      ),
+                    ],
+                  )
+                else
+                  LayoutBuilder(
+                    builder: (context, constraints) {
+                      if (constraints.maxWidth > 400) {
+                        return Row(
+                          children: [
+                            Expanded(
+                              child: OutlinedButton.icon(
+                                onPressed: () =>
+                                    _pickCoverImage(fromCamera: false),
+                                icon: const Icon(Icons.photo_library),
+                                label: const Text('Gallery'),
+                                style: OutlinedButton.styleFrom(
+                                  padding:
+                                      const EdgeInsets.symmetric(vertical: 12),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: OutlinedButton.icon(
+                                onPressed: () =>
+                                    _pickCoverImage(fromCamera: true),
+                                icon: const Icon(Icons.camera_alt),
+                                label: const Text('Camera'),
+                                style: OutlinedButton.styleFrom(
+                                  padding:
+                                      const EdgeInsets.symmetric(vertical: 12),
+                                ),
+                              ),
+                            ),
+                          ],
                         );
-                      }).toList(),
-                    ),
-                ],
-              ),
-
-              const SizedBox(height: 16),
-
-              // Dates
-              Row(
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Start Date',
-                          style:
-                              Theme.of(context).textTheme.titleMedium?.copyWith(
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                        ),
-                        const SizedBox(height: 8),
-                        InkWell(
-                          onTap: () => _selectDate(context, true),
-                          child: Container(
-                            padding: const EdgeInsets.all(16),
-                            decoration: BoxDecoration(
-                              border: Border.all(color: Colors.grey[300]!),
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: Row(
-                              children: [
-                                Icon(Icons.calendar_today,
-                                    color: Colors.grey[600]),
-                                const SizedBox(width: 12),
-                                Text(
-                                  _startDate != null
-                                      ? '${_startDate!.day}/${_startDate!.month}/${_startDate!.year}'
-                                      : 'Select date',
-                                  style: TextStyle(
-                                    color: _startDate != null
-                                        ? null
-                                        : Colors.grey[600],
-                                  ),
-                                ),
-                              ],
+                      }
+                      return Column(
+                        children: [
+                          SizedBox(
+                            width: double.infinity,
+                            child: OutlinedButton.icon(
+                              onPressed: () =>
+                                  _pickCoverImage(fromCamera: false),
+                              icon: const Icon(Icons.photo_library),
+                              label: const Text('Gallery'),
+                              style: OutlinedButton.styleFrom(
+                                padding:
+                                    const EdgeInsets.symmetric(vertical: 12),
+                              ),
                             ),
                           ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'End Date',
-                          style:
-                              Theme.of(context).textTheme.titleMedium?.copyWith(
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                        ),
-                        const SizedBox(height: 8),
-                        InkWell(
-                          onTap: () => _selectDate(context, false),
-                          child: Container(
-                            padding: const EdgeInsets.all(16),
-                            decoration: BoxDecoration(
-                              border: Border.all(color: Colors.grey[300]!),
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: Row(
-                              children: [
-                                Icon(Icons.calendar_today,
-                                    color: Colors.grey[600]),
-                                const SizedBox(width: 12),
-                                Text(
-                                  _endDate != null
-                                      ? '${_endDate!.day}/${_endDate!.month}/${_endDate!.year}'
-                                      : 'Select date',
-                                  style: TextStyle(
-                                    color: _endDate != null
-                                        ? null
-                                        : Colors.grey[600],
-                                  ),
-                                ),
-                              ],
+                          const SizedBox(height: 8),
+                          SizedBox(
+                            width: double.infinity,
+                            child: OutlinedButton.icon(
+                              onPressed: () =>
+                                  _pickCoverImage(fromCamera: true),
+                              icon: const Icon(Icons.camera_alt),
+                              label: const Text('Camera'),
+                              style: OutlinedButton.styleFrom(
+                                padding:
+                                    const EdgeInsets.symmetric(vertical: 12),
+                              ),
                             ),
                           ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-
-              const SizedBox(height: 16),
-
-              // Trip Type
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Trip Type',
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.w600,
-                        ),
-                  ),
-                  const SizedBox(height: 8),
-                  Wrap(
-                    spacing: 8,
-                    children: TripType.values.map((type) {
-                      final isSelected = _selectedType == type;
-                      return FilterChip(
-                        label: Text(_getTripTypeLabel(type)),
-                        selected: isSelected,
-                        onSelected: (selected) {
-                          setState(() {
-                            _selectedType = selected ? type : null;
-                          });
-                        },
+                        ],
                       );
-                    }).toList(),
+                    },
                   ),
-                ],
-              ),
+                const SizedBox(height: 16),
 
-              const SizedBox(height: 16),
-
-              // Trip Mood
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Trip Mood',
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.w600,
-                        ),
+                // Destinations
+                Text(
+                  'Destinations',
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w600,
+                      ),
+                ),
+                const SizedBox(height: 8),
+                PlaceAutocompleteField(
+                  controller: _destinationController,
+                  hintText: 'Search destinations...',
+                  decoration: InputDecoration(
+                    prefixIcon: const Icon(Icons.location_on),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
                   ),
-                  const SizedBox(height: 8),
+                  onPlaceSelected: (place) {
+                    setState(() {
+                      if (!_destinations.any((p) => p.id == place.id)) {
+                        _destinations.add(place);
+                      }
+                      _destinationController.clear();
+                    });
+                    context.read<PlaceProvider>().clearSearchResults();
+                    FocusScope.of(context).unfocus();
+                  },
+                ),
+                const SizedBox(height: 12),
+                if (_destinations.isNotEmpty)
                   Wrap(
                     spacing: 8,
                     runSpacing: 8,
-                    children: TripMood.values.map((mood) {
-                      final isSelected = _selectedMood == mood;
-                      return FilterChip(
-                        label: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text(_getTripMoodEmoji(mood)),
-                            const SizedBox(width: 4),
-                            Text(_getTripMoodLabel(mood)),
-                          ],
-                        ),
-                        selected: isSelected,
-                        onSelected: (selected) {
+                    children: _destinations.map((place) {
+                      return Chip(
+                        label: Text(place.name),
+                        deleteIcon: const Icon(Icons.close, size: 18),
+                        onDeleted: () {
                           setState(() {
-                            _selectedMood = selected ? mood : null;
+                            _destinations.removeWhere((p) => p.id == place.id);
                           });
                         },
+                        backgroundColor:
+                            Theme.of(context).colorScheme.primaryContainer,
                       );
                     }).toList(),
                   ),
-                ],
-              ),
+                const SizedBox(height: 16),
 
-              const SizedBox(height: 32),
+                // Dates
+                Row(
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Start Date',
+                            style: Theme.of(context)
+                                .textTheme
+                                .titleMedium
+                                ?.copyWith(
+                                  fontWeight: FontWeight.w600,
+                                ),
+                          ),
+                          const SizedBox(height: 8),
+                          InkWell(
+                            onTap: () => _selectDate(context, true),
+                            child: Container(
+                              padding: const EdgeInsets.all(16),
+                              decoration: BoxDecoration(
+                                border: Border.all(color: Colors.grey[300]!),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Row(
+                                children: [
+                                  Icon(Icons.calendar_today,
+                                      color: Colors.grey[600]),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Text(
+                                      _startDate != null
+                                          ? '${_startDate!.day}/${_startDate!.month}/${_startDate!.year}'
+                                          : 'Select date',
+                                      style: TextStyle(
+                                        color: _startDate != null
+                                            ? null
+                                            : Colors.grey[600],
+                                      ),
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'End Date',
+                            style: Theme.of(context)
+                                .textTheme
+                                .titleMedium
+                                ?.copyWith(
+                                  fontWeight: FontWeight.w600,
+                                ),
+                          ),
+                          const SizedBox(height: 8),
+                          InkWell(
+                            onTap: () => _selectDate(context, false),
+                            child: Container(
+                              padding: const EdgeInsets.all(16),
+                              decoration: BoxDecoration(
+                                border: Border.all(color: Colors.grey[300]!),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Row(
+                                children: [
+                                  Icon(Icons.calendar_today,
+                                      color: Colors.grey[600]),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Text(
+                                      _endDate != null
+                                          ? '${_endDate!.day}/${_endDate!.month}/${_endDate!.year}'
+                                          : 'Select date',
+                                      style: TextStyle(
+                                        color: _endDate != null
+                                            ? null
+                                            : Colors.grey[600],
+                                      ),
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
 
-              // Error Message
-              Consumer<TripProvider>(
-                builder: (context, tripProvider, child) {
-                  if (tripProvider.error != null) {
-                    return Container(
-                      margin: const EdgeInsets.only(bottom: 16),
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: Theme.of(context)
-                            .colorScheme
-                            .error
-                            .withOpacity(0.1),
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(
+                // Trip Type
+                Text(
+                  'Trip Type',
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w600,
+                      ),
+                ),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 8,
+                  children: TripType.values.map((type) {
+                    final isSelected = _selectedType == type;
+                    return FilterChip(
+                      label: Text(_getTripTypeLabel(type)),
+                      selected: isSelected,
+                      onSelected: (selected) {
+                        setState(() {
+                          _selectedType = selected ? type : null;
+                        });
+                      },
+                    );
+                  }).toList(),
+                ),
+                const SizedBox(height: 16),
+
+                // Trip Mood
+                Text(
+                  'Trip Mood',
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w600,
+                      ),
+                ),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: TripMood.values.map((mood) {
+                    final isSelected = _selectedMood == mood;
+                    return FilterChip(
+                      label: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(_getTripMoodEmoji(mood)),
+                          const SizedBox(width: 4),
+                          Text(_getTripMoodLabel(mood)),
+                        ],
+                      ),
+                      selected: isSelected,
+                      onSelected: (selected) {
+                        setState(() {
+                          _selectedMood = selected ? mood : null;
+                        });
+                      },
+                    );
+                  }).toList(),
+                ),
+                const SizedBox(height: 32),
+
+                // Error Message
+                Consumer<TripProvider>(
+                  builder: (context, tripProvider, child) {
+                    if (tripProvider.error != null) {
+                      return Container(
+                        margin: const EdgeInsets.only(bottom: 16),
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
                           color: Theme.of(context)
                               .colorScheme
                               .error
-                              .withOpacity(0.3),
+                              .withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                            color: Theme.of(context)
+                                .colorScheme
+                                .error
+                                .withOpacity(0.3),
+                          ),
                         ),
-                      ),
-                      child: Text(
-                        tripProvider.error!,
-                        style: TextStyle(
-                          color: Theme.of(context).colorScheme.error,
-                          fontSize: 14,
+                        child: Text(
+                          tripProvider.error!,
+                          style: TextStyle(
+                            color: Theme.of(context).colorScheme.error,
+                            fontSize: 14,
+                          ),
                         ),
-                      ),
-                    );
-                  }
-                  return const SizedBox.shrink();
-                },
-              ),
+                      );
+                    }
+                    return const SizedBox.shrink();
+                  },
+                ),
 
-              // Create Trip Button
-              Consumer<TripProvider>(
-                builder: (context, tripProvider, child) {
-                  return LoadingButton(
-                    onPressed: _createTrip,
-                    isLoading: tripProvider.isLoading,
-                    child: const Text('Start Trip'),
-                  );
-                },
-              ),
-            ],
+                // Create Trip Button
+                Consumer<TripProvider>(
+                  builder: (context, tripProvider, child) {
+                    return LoadingButton(
+                      onPressed: _createTrip,
+                      isLoading: tripProvider.isLoading,
+                      child: const Text('Start Trip'),
+                    );
+                  },
+                ),
+
+                // Bottom padding for keyboard
+                SizedBox(
+                    height:
+                        MediaQuery.of(context).viewInsets.bottom > 0 ? 16 : 80),
+              ],
+            ),
           ),
         ),
       ),

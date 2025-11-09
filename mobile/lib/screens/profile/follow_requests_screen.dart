@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
 import 'package:tripthread/providers/user_provider.dart';
-import 'package:tripthread/models/user.dart';
 import 'package:tripthread/models/follow_status.dart';
 
 class FollowRequestsScreen extends StatefulWidget {
@@ -21,7 +20,8 @@ class _FollowRequestsScreenState extends State<FollowRequestsScreen> {
     });
   }
 
-  Future<void> _handleAcceptRequest(String requestId, String followerName) async {
+  Future<void> _handleAcceptRequest(
+      String requestId, String followerName) async {
     if (!mounted) return;
 
     final userProvider = context.read<UserProvider>();
@@ -44,14 +44,16 @@ class _FollowRequestsScreenState extends State<FollowRequestsScreen> {
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(userProvider.followRequestsError ?? 'Failed to accept request'),
+          content: Text(
+              userProvider.followRequestsError ?? 'Failed to accept request'),
           backgroundColor: Colors.red,
         ),
       );
     }
   }
 
-  Future<void> _handleRejectRequest(String requestId, String followerName) async {
+  Future<void> _handleRejectRequest(
+      String requestId, String followerName) async {
     if (!mounted) return;
 
     final userProvider = context.read<UserProvider>();
@@ -74,7 +76,8 @@ class _FollowRequestsScreenState extends State<FollowRequestsScreen> {
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(userProvider.followRequestsError ?? 'Failed to reject request'),
+          content: Text(
+              userProvider.followRequestsError ?? 'Failed to reject request'),
           backgroundColor: Colors.red,
         ),
       );
@@ -103,7 +106,8 @@ class _FollowRequestsScreenState extends State<FollowRequestsScreen> {
       ),
       body: Consumer<UserProvider>(
         builder: (context, userProvider, child) {
-          if (userProvider.isFollowRequestsLoading && userProvider.pendingFollowRequests.isEmpty) {
+          if (userProvider.isFollowRequestsLoading &&
+              userProvider.pendingFollowRequests.isEmpty) {
             return const Center(child: CircularProgressIndicator());
           }
 
@@ -242,23 +246,28 @@ class _FollowRequestsScreenState extends State<FollowRequestsScreen> {
                       children: [
                         Text(
                           follower.name ?? 'User',
-                          style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                                fontWeight: FontWeight.w600,
-                              ),
+                          style:
+                              Theme.of(context).textTheme.titleMedium?.copyWith(
+                                    fontWeight: FontWeight.w600,
+                                  ),
                         ),
                         if (follower.username != null)
                           Text(
                             '@${follower.username}',
-                            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                            style: Theme.of(context)
+                                .textTheme
+                                .bodyMedium
+                                ?.copyWith(
                                   color: Colors.grey[600],
                                 ),
                           ),
                         const SizedBox(height: 4),
                         Text(
                           _formatDateTime(request.createdAt),
-                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                color: Colors.grey[500],
-                              ),
+                          style:
+                              Theme.of(context).textTheme.bodySmall?.copyWith(
+                                    color: Colors.grey[500],
+                                  ),
                         ),
                       ],
                     ),
@@ -283,12 +292,13 @@ class _FollowRequestsScreenState extends State<FollowRequestsScreen> {
                 children: [
                   Expanded(
                     child: OutlinedButton(
-                      onPressed: userProvider.isProcessingRequestId == request.id
-                          ? null
-                          : () => _handleRejectRequest(
-                                request.id,
-                                follower.name ?? 'User',
-                              ),
+                      onPressed:
+                          userProvider.isProcessingRequestId == request.id
+                              ? null
+                              : () => _handleRejectRequest(
+                                    request.id,
+                                    follower.name ?? 'User',
+                                  ),
                       style: OutlinedButton.styleFrom(
                         foregroundColor: Colors.red,
                         side: BorderSide(color: Colors.red[300]!),
@@ -305,19 +315,21 @@ class _FollowRequestsScreenState extends State<FollowRequestsScreen> {
                   const SizedBox(width: 12),
                   Expanded(
                     child: ElevatedButton(
-                      onPressed: userProvider.isProcessingRequestId == request.id
-                          ? null
-                          : () => _handleAcceptRequest(
-                                request.id,
-                                follower.name ?? 'User',
-                              ),
+                      onPressed:
+                          userProvider.isProcessingRequestId == request.id
+                              ? null
+                              : () => _handleAcceptRequest(
+                                    request.id,
+                                    follower.name ?? 'User',
+                                  ),
                       child: userProvider.isProcessingRequestId == request.id
                           ? const SizedBox(
                               height: 16,
                               width: 16,
                               child: CircularProgressIndicator(
                                 strokeWidth: 2,
-                                valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                                valueColor:
+                                    AlwaysStoppedAnimation<Color>(Colors.white),
                               ),
                             )
                           : const Text('Accept'),

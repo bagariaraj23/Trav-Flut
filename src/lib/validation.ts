@@ -88,6 +88,7 @@ export const createTripSchema = z
       .min(1, "Title is required")
       .max(100, "Title must be less than 100 characters")
       .transform((title) => title.trim()),
+    // destinationPlaceIds: z.array(z.string().uuid("Invalid place ID")).optional(),
     description: z
       .union([
         z
@@ -104,75 +105,41 @@ export const createTripSchema = z
         );
         return val;
       }),
-    startDate: z
-      .union([
-        z.string().refine((date) => {
-          if (!date) return true;
+    startDate: z.string().refine((date) => {
+      // Try to parse the date string
+      const parsedDate = new Date(date);
 
-          // Try to parse the date string
-          const parsedDate = new Date(date);
+      // Check if it's a valid date
+      if (isNaN(parsedDate.getTime())) {
+        console.log(`[DEBUG] Invalid date string received: ${date}`);
+        return false;
+      }
 
-          // Check if it's a valid date
-          if (isNaN(parsedDate.getTime())) {
-            console.log(`[DEBUG] Invalid date string received: ${date}`);
-            return false;
-          }
+      // Check if it's not in the past
+      const now = new Date();
+      now.setHours(0, 0, 0, 0); // Start of today
 
-          // Check if it's not in the past
-          const now = new Date();
-          now.setHours(0, 0, 0, 0); // Start of today
+      console.log(`[DEBUG] Parsed start date: ${parsedDate.toISOString()}`);
+      console.log(`[DEBUG] Today start: ${now.toISOString()}`);
+      console.log(`[DEBUG] Is valid date: ${parsedDate >= now}`);
 
-          console.log(`[DEBUG] Parsed start date: ${parsedDate.toISOString()}`);
-          console.log(`[DEBUG] Today start: ${now.toISOString()}`);
-          console.log(`[DEBUG] Is valid date: ${parsedDate >= now}`);
+      return parsedDate >= now;
+    }, "Start date is required and cannot be in the past"),
+    endDate: z.string().refine((date) => {
+      // Try to parse the date string
+      const parsedDate = new Date(date);
 
-          return parsedDate >= now;
-        }, "Start date cannot be in the past and must be a valid date format"),
-        z.null(),
-        z.undefined(),
-      ])
-      .optional()
-      .transform((val) => {
-        console.log(
-          `[DEBUG] startDate validation - received: ${val}, type: ${typeof val}`
-        );
-        return val;
-      }),
-    endDate: z
-      .union([
-        z.string().refine((date) => {
-          if (!date) return true;
+      // Check if it's a valid date
+      if (isNaN(parsedDate.getTime())) {
+        console.log(`[DEBUG] Invalid end date string received: ${date}`);
+        return false;
+      }
 
-          // Try to parse the date string
-          const parsedDate = new Date(date);
-
-          // Check if it's a valid date
-          if (isNaN(parsedDate.getTime())) {
-            console.log(`[DEBUG] Invalid end date string received: ${date}`);
-            return false;
-          }
-
-          console.log(`[DEBUG] Parsed end date: ${parsedDate.toISOString()}`);
-          return true;
-        }, "End date must be a valid date format"),
-        z.null(),
-        z.undefined(),
-      ])
-      .optional()
-      .transform((val) => {
-        console.log(
-          `[DEBUG] endDate validation - received: ${val}, type: ${typeof val}`
-        );
-        return val;
-      }),
-    destinations: z
-      .array(
-        z
-          .string()
-          .min(1, "Destination cannot be empty")
-          .max(100, "Destination name is too long")
-          .transform((dest) => dest.trim())
-      )
+      console.log(`[DEBUG] Parsed end date: ${parsedDate.toISOString()}`);
+      return true;
+    }, "End date is required and must be a valid date"),
+    destinationPlaceIds: z
+      .array(z.string().uuid("Invalid place id"))
       .min(1, "At least one destination is required")
       .max(10, "Maximum 10 destinations allowed"),
     mood: z
@@ -345,6 +312,9 @@ export const createThreadEntrySchema = z
         );
         return val;
       }),
+    placeId: z
+      .union([z.string().uuid("Invalid place id"), z.null(), z.undefined()])
+      .optional(),
     taggedUsernames: z
       .union([
         z
@@ -376,9 +346,15 @@ export const createThreadEntrySchema = z
         case "MEDIA":
           return (data.mediaUrl && data.mediaUrl.length > 0) || (data.mediaId && data.mediaId.length > 0);
         case "LOCATION":
-          return data.locationName && data.locationName.length > 0;
+          return (
+            !!data.placeId ||
+            (!!data.locationName && data.locationName.length > 0)
+          );
         case "CHECKIN":
-          return data.locationName && data.locationName.length > 0;
+          return (
+            !!data.placeId ||
+            (!!data.locationName && data.locationName.length > 0)
+          );
         default:
           return false;
       }

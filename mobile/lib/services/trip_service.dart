@@ -1,17 +1,26 @@
 import 'package:dio/dio.dart';
+import 'package:flutter/cupertino.dart';
 import 'package:tripthread/models/api_response.dart';
 import 'package:tripthread/models/trip.dart';
 import 'package:tripthread/models/trip_join_request.dart';
 import 'package:tripthread/services/storage_service.dart';
 import 'package:tripthread/config/app_config.dart';
+import 'package:tripthread/services/token_refresh_manager.dart';
 import 'dart:convert'; // Added for jsonEncode
 
 class TripService {
   late final Dio _dio;
+  late final Dio _refreshDio;
   StorageService? _storageService;
 
   TripService() {
     _dio = Dio(BaseOptions(
+      baseUrl: AppConfig.apiBaseUrl,
+      connectTimeout: AppConfig.connectTimeout,
+      receiveTimeout: AppConfig.receiveTimeout,
+      headers: AppConfig.defaultHeaders,
+    ));
+    _refreshDio = Dio(BaseOptions(
       baseUrl: AppConfig.apiBaseUrl,
       connectTimeout: AppConfig.connectTimeout,
       receiveTimeout: AppConfig.receiveTimeout,
@@ -39,28 +48,28 @@ class TripService {
       },
       onError: (error, handler) async {
         // Handle token refresh on 401
-        if (error.response?.statusCode == 401 && _storageService != null) {
-          final refreshToken = await _storageService!.getRefreshToken();
-          if (refreshToken != null) {
-            try {
-              final response = await _dio.post('/auth/refresh-token', data: {
-                'refreshToken': refreshToken,
-              });
+        if (error.response?.statusCode == 401 &&
+            _storageService != null &&
+            error.requestOptions.extra['retried'] != true) {
+          try {
+            final newToken = await TokenRefreshManager.instance.refresh(
+              storage: _storageService!,
+              refreshClient: _refreshDio,
+            );
 
-              if (response.statusCode == 200) {
-                final newToken = response.data['data']['accessToken'];
-                await _storageService!.saveAccessToken(newToken);
-
-                // Retry original request
-                final opts = error.requestOptions;
-                opts.headers['Authorization'] = 'Bearer $newToken';
-                final cloneReq = await _dio.fetch(opts);
-                return handler.resolve(cloneReq);
-              }
-            } catch (e) {
-              // Refresh failed, clear tokens
-              await _storageService!.clearTokens();
+            if (newToken != null && newToken.isNotEmpty) {
+              final opts = error.requestOptions;
+              opts.headers['Authorization'] = 'Bearer $newToken';
+              opts.extra['retried'] = true;
+              final cloneReq = await _dio.fetch(opts);
+              return handler.resolve(cloneReq);
             }
+
+            await _storageService!.clearTokens();
+            return handler.next(error);
+          } catch (e) {
+            await _storageService!.clearTokens();
+            return handler.next(error);
           }
         }
         handler.next(error);
@@ -188,22 +197,40 @@ class TripService {
   }
 
   // Thread entries
-  Future<ApiResponse<TripThreadEntry>> createThreadEntry(
-    String tripId,
-    CreateThreadEntryRequest request,
-  ) async {
+  Future<ApiResponse<TripThreadEntry>> createThreadEntry({
+      required String tripId,
+      required CreateThreadEntryRequest request,
+    }) async {
     try {
+      print('[TripService] Creating thread entry: ${request.toJson()}');
+
       final response =
           await _dio.post('/trips/$tripId/entries', data: request.toJson());
 
-      return ApiResponse<TripThreadEntry>.fromJson(
-        response.data,
-        (json) => TripThreadEntry.fromJson(json as Map<String, dynamic>),
+      debugPrint('[TripService] Create entry response: ${response.statusCode}');
+
+      if (response.statusCode == 201 && response.data['success']) {
+        return ApiResponse<TripThreadEntry>(
+          success: true,
+          data: TripThreadEntry.fromJson(response.data['data']),
+        );
+      }
+      
+      return ApiResponse<TripThreadEntry>(
+        success: false,
+        error: response.data['error'] ?? 'Failed to create entry',
       );
     } on DioException catch (e) {
+      debugPrint('[TripService] Create entry error: ${e.message}');
       return ApiResponse<TripThreadEntry>(
         success: false,
         error: e.response?.data['error'] ?? 'Network error occurred',
+      );
+    } catch (e) {
+      debugPrint('[TripService] Create entry unexpected error: $e');
+      return ApiResponse<TripThreadEntry>(
+        success: false,
+        error: 'An unexpected error occurred',
       );
     }
   }

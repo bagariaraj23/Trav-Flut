@@ -61,7 +61,6 @@ class _DiscoverTabState extends State<DiscoverTab> {
 
         if (query.isNotEmpty) {
           debugPrint('[DiscoverTab] Searching for users with query: "$query"');
-          // Search for users
           context.read<UserProvider>().searchUsers(
                 search: query,
                 refresh: true,
@@ -122,14 +121,11 @@ class _DiscoverTabState extends State<DiscoverTab> {
       final isRequestPending = detailedStatus?.isRequestPending ?? false;
 
       if (isCurrentlyFollowing) {
-        // Unfollow
         success = await userProvider.unfollowUser(userId,
             currentUserId: currentUserId);
       } else if (isRequestPending) {
-        // Cancel follow request
         success = await userProvider.cancelFollowRequest(userId);
       } else {
-        // Follow or send request
         success =
             await userProvider.followUser(userId, currentUserId: currentUserId);
       }
@@ -137,7 +133,6 @@ class _DiscoverTabState extends State<DiscoverTab> {
       if (!mounted) return;
 
       if (success) {
-        // Only update local state if the action was successful
         final status = userProvider.getDetailedFollowStatus(userId);
         if (status != null) {
           final newState = status.isRequestPending
@@ -145,7 +140,7 @@ class _DiscoverTabState extends State<DiscoverTab> {
               : (status.isFollowing ? 'following' : 'not following');
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('Successfully ${newState} user'),
+              content: Text('Successfully $newState user'),
               backgroundColor: Colors.green,
             ),
           );
@@ -177,66 +172,72 @@ class _DiscoverTabState extends State<DiscoverTab> {
         title: const Text('Discover'),
         elevation: 0,
       ),
-      body: Column(
-        children: [
-          // Search Bar
-          Container(
-            padding: const EdgeInsets.all(16),
-            child: TextField(
-              controller: _searchController,
-              onChanged: _onSearchChanged,
-              style: const TextStyle(
-                color: Colors.black87,
-                fontSize: 16,
-              ),
-              decoration: InputDecoration(
-                hintText: 'Search users or trips...',
-                hintStyle: const TextStyle(
-                  color: Colors.grey,
+      body: SafeArea(
+        child: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+              child: TextField(
+                controller: _searchController,
+                onChanged: _onSearchChanged,
+                style: const TextStyle(
+                  color: Colors.black87,
                   fontSize: 16,
                 ),
-                prefixIcon: const Icon(Icons.search, color: Colors.grey),
-                suffixIcon: _isSearching
-                    ? const SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: Padding(
-                          padding: EdgeInsets.all(8.0),
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        ),
-                      )
-                    : _searchController.text.isNotEmpty
-                        ? IconButton(
-                            icon: const Icon(Icons.clear, color: Colors.grey),
-                            onPressed: () {
-                              _searchController.clear();
-                              setState(() {
-                                _showUserSearch = false;
-                              });
-                            },
-                          )
-                        : null,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide.none,
-                ),
-                filled: true,
-                fillColor: Colors.grey[100],
-                contentPadding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 12,
+                decoration: InputDecoration(
+                  hintText: 'Search users or trips...',
+                  hintStyle: const TextStyle(
+                    color: Colors.grey,
+                    fontSize: 16,
+                  ),
+                  prefixIcon:
+                      const Icon(Icons.search, color: Colors.grey, size: 22),
+                  suffixIcon: _isSearching
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: Padding(
+                            padding: EdgeInsets.all(8.0),
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          ),
+                        )
+                      : _searchController.text.isNotEmpty
+                          ? IconButton(
+                              icon: const Icon(Icons.clear,
+                                  color: Colors.grey, size: 20),
+                              onPressed: () {
+                                _searchController.clear();
+                                setState(() {
+                                  _showUserSearch = false;
+                                });
+                              },
+                              padding: const EdgeInsets.all(8),
+                              constraints: const BoxConstraints(),
+                            )
+                          : null,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide.none,
+                  ),
+                  filled: true,
+                  fillColor: Colors.grey[100],
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 14,
+                  ),
+                  isDense: true,
                 ),
               ),
             ),
-          ),
 
-          // Content based on search state
-          Expanded(
-            child: _showUserSearch
-                ? _buildUserSearchResults()
-                : _buildDiscoverTrips(),
-          ),
-        ],
+            // Content based on search state
+            Expanded(
+              child: _showUserSearch
+                  ? _buildUserSearchResults()
+                  : _buildDiscoverTrips(),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -270,10 +271,13 @@ class _DiscoverTabState extends State<DiscoverTab> {
                   ),
                 ),
                 SizedBox(height: 8),
-                Text(
-                  'Try adjusting your search or check back later',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(color: Colors.grey),
+                Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 32),
+                  child: Text(
+                    'Try adjusting your search or check back later',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: Colors.grey),
+                  ),
                 ),
               ],
             ),
@@ -300,10 +304,13 @@ class _DiscoverTabState extends State<DiscoverTab> {
                   ),
                 ),
                 const SizedBox(height: 8),
-                Text(
-                  userProvider.discoverError!,
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(color: Colors.grey),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 32),
+                  child: Text(
+                    userProvider.discoverError!,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(color: Colors.grey),
+                  ),
                 ),
                 const SizedBox(height: 16),
                 ElevatedButton(
@@ -324,11 +331,10 @@ class _DiscoverTabState extends State<DiscoverTab> {
           },
           child: ListView.builder(
             controller: _scrollController,
-            padding: const EdgeInsets.symmetric(horizontal: 16),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             itemCount: userProvider.discoverUsers.length + 1,
             itemBuilder: (context, index) {
               if (index == userProvider.discoverUsers.length) {
-                // Loading indicator at the bottom
                 if (userProvider.isDiscoverLoading &&
                     userProvider.hasMoreUsers) {
                   return const Padding(
@@ -380,10 +386,13 @@ class _DiscoverTabState extends State<DiscoverTab> {
                   ),
                 ),
                 SizedBox(height: 8),
-                Text(
-                  'Follow some travelers to see their amazing journeys',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(color: Colors.grey),
+                Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 32),
+                  child: Text(
+                    'Follow some travelers to see their amazing journeys',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: Colors.grey),
+                  ),
                 ),
               ],
             ),
@@ -410,10 +419,13 @@ class _DiscoverTabState extends State<DiscoverTab> {
                   ),
                 ),
                 const SizedBox(height: 8),
-                Text(
-                  feedProvider.discoverTripsError!,
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(color: Colors.grey),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 32),
+                  child: Text(
+                    feedProvider.discoverTripsError!,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(color: Colors.grey),
+                  ),
                 ),
                 const SizedBox(height: 16),
                 ElevatedButton(
@@ -432,28 +444,35 @@ class _DiscoverTabState extends State<DiscoverTab> {
           onRefresh: () async {
             feedProvider.loadDiscoverTrips(refresh: true);
           },
-          child: GridView.builder(
-            controller: _tripsScrollController,
-            padding: const EdgeInsets.all(16),
-            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 2,
-              crossAxisSpacing: 12,
-              mainAxisSpacing: 12,
-              childAspectRatio: 0.8,
-            ),
-            itemCount: feedProvider.discoverTrips.length +
-                (feedProvider.isDiscoverTripsLoading &&
-                        feedProvider.hasMoreDiscoverTrips
-                    ? 1
-                    : 0),
-            itemBuilder: (context, index) {
-              if (index == feedProvider.discoverTrips.length) {
-                // Loading indicator at the bottom
-                return const Center(child: CircularProgressIndicator());
-              }
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final isLandscape = constraints.maxWidth > constraints.maxHeight;
+              final crossAxisCount = isLandscape ? 3 : 2;
+              final childAspectRatio = isLandscape ? 0.7 : 0.75;
 
-              final trip = feedProvider.discoverTrips[index];
-              return _buildDiscoverTripCard(context, trip);
+              return GridView.builder(
+                controller: _tripsScrollController,
+                padding: const EdgeInsets.all(12),
+                gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: crossAxisCount,
+                  crossAxisSpacing: 12,
+                  mainAxisSpacing: 12,
+                  childAspectRatio: childAspectRatio,
+                ),
+                itemCount: feedProvider.discoverTrips.length +
+                    (feedProvider.isDiscoverTripsLoading &&
+                            feedProvider.hasMoreDiscoverTrips
+                        ? 1
+                        : 0),
+                itemBuilder: (context, index) {
+                  if (index == feedProvider.discoverTrips.length) {
+                    return const Center(child: CircularProgressIndicator());
+                  }
+
+                  final trip = feedProvider.discoverTrips[index];
+                  return _buildDiscoverTripCard(context, trip);
+                },
+              );
             },
           ),
         );
@@ -463,87 +482,77 @@ class _DiscoverTabState extends State<DiscoverTab> {
 
   Widget _buildDiscoverTripCard(BuildContext context, Trip trip) {
     return Card(
-      elevation: 3,
+      elevation: 2,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(12),
       ),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: () => context.go('/trip/${trip.id}',
             extra: {'from': '/home', 'tab': 'discover'}),
         child: Column(
-          crossAxisAlignment:
-              CrossAxisAlignment.stretch, // Stretch children to fill width
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             // Cover image
             Expanded(
               flex: 5,
-              child: SizedBox(
-                width: double.infinity,
-                child: trip.coverMediaUrl != null
-                    ? Image.network(
-                        trip.coverMediaUrl!,
-                        fit: BoxFit.cover,
-                        errorBuilder: (context, error, stackTrace) {
-                          return _buildTripPlaceholder(context, trip);
-                        },
-                      )
-                    : _buildTripPlaceholder(context, trip),
-              ),
+              child: trip.coverMediaUrl != null
+                  ? Image.network(
+                      trip.coverMediaUrl!,
+                      fit: BoxFit.cover,
+                      errorBuilder: (context, error, stackTrace) {
+                        return _buildTripPlaceholder(context, trip);
+                      },
+                    )
+                  : _buildTripPlaceholder(context, trip),
             ),
-            // Trip info
             Padding(
-              padding: const EdgeInsets.all(12),
+              padding: const EdgeInsets.all(10),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
                 children: [
-                  // Top section: Status and Mood
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Flexible(
-                          child:
-                              _buildCompactStatusBadge(context, trip.status)),
+                        child: _buildCompactStatusBadge(context, trip.status),
+                      ),
                       if (trip.mood != null)
-                        Flexible(
-                          child: Text(
-                            _getTripMoodEmoji(trip.mood!),
-                            style: const TextStyle(fontSize: 16),
-                            overflow: TextOverflow.ellipsis,
-                            maxLines: 1,
-                          ),
+                        Text(
+                          _getTripMoodEmoji(trip.mood!),
+                          style: const TextStyle(fontSize: 14),
                         ),
                     ],
                   ),
                   const SizedBox(height: 6),
-                  // Title
                   if (trip.title.isNotEmpty)
                     Text(
                       trip.title,
                       style: Theme.of(context).textTheme.titleSmall?.copyWith(
                             fontWeight: FontWeight.bold,
+                            fontSize: 13,
                           ),
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                     ),
                   const SizedBox(height: 4),
-                  // Destination
                   if (trip.destinations.isNotEmpty)
                     Text(
                       trip.destinations.first,
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
                             color: Colors.grey[600],
+                            fontSize: 11,
                           ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
-                  const SizedBox(height: 8),
-                  // Author info
+                  const SizedBox(height: 6),
                   if (trip.user != null)
                     Row(
                       children: [
                         CircleAvatar(
-                          radius: 10,
+                          radius: 8,
                           backgroundColor:
                               Theme.of(context).colorScheme.primary,
                           backgroundImage: trip.user!.avatarUrl != null
@@ -556,7 +565,7 @@ class _DiscoverTabState extends State<DiscoverTab> {
                                           .toUpperCase() ??
                                       'U',
                                   style: const TextStyle(
-                                    fontSize: 10,
+                                    fontSize: 8,
                                     fontWeight: FontWeight.bold,
                                     color: Colors.white,
                                   ),
@@ -570,7 +579,7 @@ class _DiscoverTabState extends State<DiscoverTab> {
                             style:
                                 Theme.of(context).textTheme.bodySmall?.copyWith(
                                       fontWeight: FontWeight.w500,
-                                      fontSize: 12,
+                                      fontSize: 11,
                                     ),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
@@ -589,7 +598,6 @@ class _DiscoverTabState extends State<DiscoverTab> {
 
   Widget _buildTripPlaceholder(BuildContext context, Trip trip) {
     return Container(
-      width: double.infinity,
       decoration: BoxDecoration(
         gradient: LinearGradient(
           colors: [
@@ -599,29 +607,35 @@ class _DiscoverTabState extends State<DiscoverTab> {
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
       ),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          const Icon(
-            Icons.travel_explore,
-            size: 32,
-            color: Colors.white,
-          ),
-          const SizedBox(height: 8),
-          Text(
-            trip.destinations.first,
-            style: const TextStyle(
+      child: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(
+              Icons.travel_explore,
+              size: 28,
               color: Colors.white,
-              fontSize: 12,
-              fontWeight: FontWeight.bold,
             ),
-            textAlign: TextAlign.center,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-          ),
-        ],
+            const SizedBox(height: 6),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              child: Text(
+                trip.destinations.isNotEmpty
+                    ? trip.destinations.first
+                    : 'Unknown',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 11,
+                  fontWeight: FontWeight.bold,
+                ),
+                textAlign: TextAlign.center,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -649,15 +663,15 @@ class _DiscoverTabState extends State<DiscoverTab> {
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
       decoration: BoxDecoration(
         color: color.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: color.withOpacity(0.3)),
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: color.withOpacity(0.3), width: 1),
       ),
       child: Text(
         label,
         style: TextStyle(
           color: color,
           fontWeight: FontWeight.w600,
-          fontSize: 10,
+          fontSize: 9,
         ),
       ),
     );
@@ -694,7 +708,7 @@ class _DiscoverTabState extends State<DiscoverTab> {
     final userId = user['id'] as String;
 
     return Card(
-      margin: const EdgeInsets.only(bottom: 12),
+      margin: const EdgeInsets.only(bottom: 10),
       elevation: 2,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
@@ -702,12 +716,11 @@ class _DiscoverTabState extends State<DiscoverTab> {
       child: InkWell(
         onTap: () => context.push('/profile/$userId'),
         child: Padding(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.all(14),
           child: Row(
             children: [
-              // Avatar
               CircleAvatar(
-                radius: 25,
+                radius: 24,
                 backgroundColor: Theme.of(context).colorScheme.primary,
                 backgroundImage:
                     avatarUrl != null ? NetworkImage(avatarUrl) : null,
@@ -722,13 +735,11 @@ class _DiscoverTabState extends State<DiscoverTab> {
                       )
                     : null,
               ),
-
-              const SizedBox(width: 16),
-
-              // User Info
+              const SizedBox(width: 14),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
                   children: [
                     Row(
                       children: [
@@ -751,7 +762,7 @@ class _DiscoverTabState extends State<DiscoverTab> {
                                 horizontal: 6, vertical: 2),
                             decoration: BoxDecoration(
                               color: Colors.orange[100],
-                              borderRadius: BorderRadius.circular(8),
+                              borderRadius: BorderRadius.circular(6),
                               border: Border.all(color: Colors.orange[300]!),
                             ),
                             child: Row(
@@ -759,7 +770,7 @@ class _DiscoverTabState extends State<DiscoverTab> {
                               children: [
                                 Icon(
                                   Icons.lock_outline,
-                                  size: 12,
+                                  size: 11,
                                   color: Colors.orange[700],
                                 ),
                                 const SizedBox(width: 2),
@@ -767,7 +778,7 @@ class _DiscoverTabState extends State<DiscoverTab> {
                                   'Private',
                                   style: TextStyle(
                                     color: Colors.orange[700],
-                                    fontSize: 10,
+                                    fontSize: 9,
                                     fontWeight: FontWeight.w600,
                                   ),
                                 ),
@@ -776,22 +787,13 @@ class _DiscoverTabState extends State<DiscoverTab> {
                           ),
                       ],
                     ),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            '@$username',
-                            style: Theme.of(context)
-                                .textTheme
-                                .bodyMedium
-                                ?.copyWith(
-                                  color: Colors.grey[600],
-                                ),
-                            overflow: TextOverflow.ellipsis,
-                            maxLines: 1,
+                    Text(
+                      '@$username',
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                            color: Colors.grey[600],
                           ),
-                        ),
-                      ],
+                      overflow: TextOverflow.ellipsis,
+                      maxLines: 1,
                     ),
                     if (bio != null && bio.isNotEmpty) ...[
                       const SizedBox(height: 4),
@@ -807,25 +809,20 @@ class _DiscoverTabState extends State<DiscoverTab> {
                   ],
                 ),
               ),
-
-              const SizedBox(width: 16),
-
-              // Follow Button
+              const SizedBox(width: 12),
               SizedBox(
-                  width: 110,
-                  child: Consumer<UserProvider>(
-                      builder: (context, userProvider, child) {
+                width: 105,
+                child: Consumer<UserProvider>(
+                  builder: (context, userProvider, child) {
                     final isProcessing =
                         userProvider.isProcessingRequestId == userId;
                     final detailedStatus =
                         userProvider.getDetailedFollowStatus(userId);
-                    final isFollowing = detailedStatus?.isFollowing ??
-                        false; // Get the latest state
+                    final isFollowing = detailedStatus?.isFollowing ?? false;
                     final isRequestPending =
                         detailedStatus?.isRequestPending ?? false;
                     final isPrivate = detailedStatus?.isPrivate ?? false;
 
-                    // STATE 1: Already following or request is pending (Use OutlinedButton)
                     if (isFollowing || isRequestPending) {
                       return OutlinedButton(
                         onPressed: isProcessing
@@ -836,15 +833,15 @@ class _DiscoverTabState extends State<DiscoverTab> {
                           backgroundColor: Colors.grey[100],
                           side: BorderSide(color: Colors.grey[300]!),
                           shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(20),
+                            borderRadius: BorderRadius.circular(18),
                           ),
                           padding: const EdgeInsets.symmetric(
-                              horizontal: 12, vertical: 8),
+                              horizontal: 10, vertical: 8),
                         ),
                         child: isProcessing
                             ? const SizedBox(
-                                height: 16,
-                                width: 16,
+                                height: 14,
+                                width: 14,
                                 child:
                                     CircularProgressIndicator(strokeWidth: 2),
                               )
@@ -853,18 +850,13 @@ class _DiscoverTabState extends State<DiscoverTab> {
                                 child: Text(
                                   isFollowing ? 'Following' : 'Requested',
                                   style: const TextStyle(
-                                    fontSize: 13,
+                                    fontSize: 12,
                                     fontWeight: FontWeight.w600,
                                   ),
-                                  overflow: TextOverflow.ellipsis,
-                                  maxLines: 1,
                                 ),
                               ),
                       );
-                    }
-
-                    // STATE 2: Not following (Use ElevatedButton)
-                    else {
+                    } else {
                       return ElevatedButton(
                         onPressed: isProcessing
                             ? null
@@ -874,15 +866,15 @@ class _DiscoverTabState extends State<DiscoverTab> {
                               Theme.of(context).colorScheme.primary,
                           foregroundColor: Colors.white,
                           shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(20),
+                            borderRadius: BorderRadius.circular(18),
                           ),
                           padding: const EdgeInsets.symmetric(
-                              horizontal: 12, vertical: 8),
+                              horizontal: 10, vertical: 8),
                         ),
                         child: isProcessing
                             ? const SizedBox(
-                                height: 16,
-                                width: 16,
+                                height: 14,
+                                width: 14,
                                 child: CircularProgressIndicator(
                                   strokeWidth: 2,
                                   valueColor: AlwaysStoppedAnimation<Color>(
@@ -894,16 +886,16 @@ class _DiscoverTabState extends State<DiscoverTab> {
                                 child: Text(
                                   isPrivate ? 'Request' : 'Follow',
                                   style: const TextStyle(
-                                    fontSize: 13,
+                                    fontSize: 12,
                                     fontWeight: FontWeight.w600,
                                   ),
-                                  overflow: TextOverflow.ellipsis,
-                                  maxLines: 1,
                                 ),
                               ),
                       );
                     }
-                  })),
+                  },
+                ),
+              ),
             ],
           ),
         ),

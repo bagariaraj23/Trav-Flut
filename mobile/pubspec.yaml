@@ -5,7 +5,7 @@ publish_to: "none"
 version: 1.0.0+1
 
 environment:
-  sdk: ">=3.0.0 <4.0.0"
+  sdk: '>=3.3.0 <4.0.0'
   flutter: ">=3.10.0"
 
 dependencies:
@@ -44,9 +44,19 @@ dependencies:
   intl: ^0.19.0
   flutter_dotenv: ^5.1.0
 
+  # Maps & Location
+  mapbox_maps_flutter: ^2.9.1
+  geolocator: ^10.1.0
+  geocoding: ^2.1.1
+
   # Connectivity
   connectivity_plus: ^6.1.4
   jwt_decoder: ^2.0.1
+
+  # Deep Links
+  app_links: ^3.4.5
+
+  another_flushbar: ^1.12.30
 
 dev_dependencies:
   flutter_test:

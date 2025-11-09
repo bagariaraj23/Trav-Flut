@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { createTripSchema } from "@/lib/validation";
+import { validateTripStatus } from "@/lib/tripValidation";
 import { ApiResponse, TripResponse } from "@/types/api";
 import {
   withAuth,
@@ -10,6 +11,7 @@ import {
 } from "@/lib/middleware";
 import { PerformanceMonitor, ErrorTracker } from "@/lib/monitoring";
 import { NotFoundError, ConflictError, ValidationError } from "@/lib/errors";
+import { TripStatus } from "@prisma/client";
 
 // Create a new trip
 export async function POST(request: NextRequest) {
@@ -91,53 +93,54 @@ export async function POST(request: NextRequest) {
             const userId = authenticatedReq.user!.userId;
             console.log("[DEBUG] User ID:", userId);
 
-            // Check if user has an ongoing trip
-            const ongoingTrip = await prisma.trip.findFirst({
-              where: {
-                userId,
-                status: "ONGOING",
-              },
-            });
+            // Validate trip status
+            const { hasOngoingTrip } = await validateTripStatus(userId);
 
-            if (ongoingTrip) {
+            if (hasOngoingTrip) {
               throw new ConflictError(
                 "You already have an ongoing trip. Please end it before starting a new one."
               );
             }
 
+            // Extract destinationPlaceIds from validated data
+            const { destinationPlaceIds, ...tripData } = validatedData;
+
+            let startLocationId: string | undefined;
+            let endLocationId: string | undefined;
+
+            if (destinationPlaceIds && destinationPlaceIds.length > 0) {
+              startLocationId = destinationPlaceIds[0];
+              endLocationId =
+                destinationPlaceIds.length > 1
+                  ? destinationPlaceIds[destinationPlaceIds.length - 1]
+                  : destinationPlaceIds[0];
+            }
+
             // Create trip with transaction for data consistency
             const trip = await prisma.$transaction(async (tx) => {
-              const tripData = {
-                ...validatedData,
-                userId,
-                startDate: validatedData.startDate
-                  ? new Date(validatedData.startDate)
-                  : null,
-                endDate: validatedData.endDate
-                  ? new Date(validatedData.endDate)
-                  : null,
-                status: "ONGOING" as const,
-                // Handle coverMediaId if provided
-                coverMediaId: validatedData.coverMediaId || null,
-              };
+              // Calculate trip status based on start date
+              const now = new Date();
+              const startDate = new Date(validatedData.startDate);
+              now.setHours(0, 0, 0, 0);
+              startDate.setHours(0, 0, 0, 0);
 
-              console.log(
-                "[DEBUG] Trip data for database:",
-                JSON.stringify(tripData, null, 2)
-              );
-              console.log(
-                "[DEBUG] coverMediaUrl in tripData:",
-                tripData.coverMediaUrl
-              );
-              console.log(
-                "[DEBUG] description in tripData:",
-                tripData.description
-              );
-              console.log("[DEBUG] mood in tripData:", tripData.mood);
-              console.log("[DEBUG] type in tripData:", tripData.type);
+              const status = startDate > now ? TripStatus.UPCOMING : TripStatus.ONGOING;
 
+              // Create trip with required fields
               const newTrip = await tx.trip.create({
-                data: tripData,
+                data: {
+                  title: tripData.title,
+                  userId,
+                  status,
+                  startDate: new Date(tripData.startDate),
+                  endDate: tripData.endDate ? new Date(tripData.endDate) : new Date(tripData.startDate),
+                  description: tripData.description ?? null,
+                  type: tripData.type ?? null,
+                  mood: tripData.mood ?? null,
+                  coverMediaUrl: tripData.coverMediaUrl ?? null,
+                  startLocationId: startLocationId ?? null,
+                  endLocationId: endLocationId ?? null,
+                },
                 include: {
                   user: {
                     select: {
@@ -160,11 +163,26 @@ export async function POST(request: NextRequest) {
                     },
                   },
                 },
-              });
+              }) as any; // Type assertion needed due to complex response type
 
-              // Log trip creation for analytics
+              // Create place associations if destinationPlaceIds are provided
+              if (destinationPlaceIds && destinationPlaceIds.length > 0) {
+                await tx.placeOnTrip.createMany({
+                  data: destinationPlaceIds.map(
+                    (placeId: string, index: number) => ({
+                      tripId: newTrip.id,
+                      placeId,
+                      order: index,
+                      dayIndex: null,
+                    })
+                  ),
+                  skipDuplicates: true,
+                });
+              }
+
               console.log(
-                `[DEBUG] Trip created successfully: ${newTrip.id} by user ${userId}`
+                `[INFO] Trip created: ${newTrip.id} by user ${userId} with ${destinationPlaceIds?.length || 0
+                } destination(s)`
               );
 
               return newTrip;
@@ -184,14 +202,14 @@ export async function POST(request: NextRequest) {
               updatedAt: trip.updatedAt.toISOString(),
               user: trip.user
                 ? {
-                    ...trip.user,
-                    username: trip.user.username ?? undefined,
-                    name: trip.user.name ?? undefined,
-                    avatarUrl: trip.user.avatarUrl ?? undefined,
-                    bio: trip.user.bio ?? undefined,
-                    createdAt: trip.user.createdAt.toISOString(),
-                    updatedAt: trip.user.updatedAt.toISOString(),
-                  }
+                  ...trip.user,
+                  username: trip.user.username ?? undefined,
+                  name: trip.user.name ?? undefined,
+                  avatarUrl: trip.user.avatarUrl ?? undefined,
+                  bio: trip.user.bio ?? undefined,
+                  createdAt: trip.user.createdAt.toISOString(),
+                  updatedAt: trip.user.updatedAt.toISOString(),
+                }
                 : undefined,
             };
 
@@ -246,14 +264,12 @@ export async function POST(request: NextRequest) {
                 // Provide more specific error messages for date issues
                 if (firstError.path.includes("startDate")) {
                   throw new ValidationError(
-                    `Start date validation failed: ${
-                      firstError.message
+                    `Start date validation failed: ${firstError.message
                     }. Received: ${body?.startDate || "undefined"}`
                   );
                 } else if (firstError.path.includes("endDate")) {
                   throw new ValidationError(
-                    `End date validation failed: ${
-                      firstError.message
+                    `End date validation failed: ${firstError.message
                     }. Received: ${body?.endDate || "undefined"}`
                   );
                 } else {
@@ -272,7 +288,7 @@ export async function POST(request: NextRequest) {
           }
         });
       },
-      { maxRequests: 10, windowMs: 60000 } // 10 trips per minute max
+      { maxRequests: 5, windowMs: 60000 }
     );
   })(request);
 }
@@ -288,19 +304,15 @@ export async function GET(request: NextRequest) {
         try {
           const userId = authenticatedReq.user!.userId;
           const { searchParams } = new URL(authenticatedReq.url);
-          const status = searchParams.get("status") as
-            | "UPCOMING"
-            | "ONGOING"
-            | "ENDED"
-            | null;
+          const status = searchParams.get("status") as TripStatus | null;
 
           // Include trips where user is owner OR participant
           const whereClause: any = {
             OR: [
-              { userId }, // Trips owned by user
+              { userId },
               {
                 participants: {
-                  some: { userId }, // Trips where user is a participant
+                  some: { userId },
                 },
               },
             ],
@@ -335,32 +347,32 @@ export async function GET(request: NextRequest) {
               },
             },
             orderBy: { createdAt: "desc" },
-            take: 50, // Limit results for performance
+            take: 50,
           });
 
-          const tripsResponse: TripResponse[] = trips.map((trip) => ({
+          // Explicitly type trip as any to avoid TS error for .user property
+          const tripsResponse: TripResponse[] = trips.map((trip: any) => ({
             ...trip,
             startDate: trip.startDate
               ? trip.startDate.toISOString()
               : undefined,
             endDate: trip.endDate ? trip.endDate.toISOString() : undefined,
             createdAt: trip.createdAt.toISOString(),
-            coverMediaUrl: trip.coverMediaUrl ?? undefined, // Fix: convert null to undefined for coverMediaUrl
-            type: trip.type ?? undefined, // Fix: convert null to undefined for type
-            // Fix for mood: convert null to undefined to match TripResponse type
+            coverMediaUrl: trip.coverMediaUrl ?? undefined,
+            type: trip.type ?? undefined,
             mood: trip.mood ?? undefined,
             description: trip.description ?? undefined,
             updatedAt: trip.updatedAt.toISOString(),
             user: trip.user
               ? {
-                  ...trip.user,
-                  username: trip.user.username ?? undefined,
-                  name: trip.user.name ?? undefined,
-                  avatarUrl: trip.user.avatarUrl ?? undefined,
-                  bio: trip.user.bio ?? undefined,
-                  createdAt: trip.user.createdAt.toISOString(),
-                  updatedAt: trip.user.updatedAt.toISOString(),
-                }
+                ...trip.user,
+                username: trip.user.username ?? undefined,
+                name: trip.user.name ?? undefined,
+                avatarUrl: trip.user.avatarUrl ?? undefined,
+                bio: trip.user.bio ?? undefined,
+                createdAt: trip.user.createdAt.toISOString(),
+                updatedAt: trip.user.updatedAt.toISOString(),
+              }
               : undefined,
           }));
 

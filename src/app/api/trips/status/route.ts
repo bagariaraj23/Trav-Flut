@@ -1,3 +1,5 @@
+export const dynamic = "force-dynamic";
+
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { AuthService } from "@/lib/auth";
@@ -80,14 +82,14 @@ export async function GET(request: NextRequest) {
       updatedAt: trip.updatedAt.toISOString(),
       user: trip.user
         ? {
-            ...trip.user,
-            username: trip.user.username ?? undefined,
-            name: trip.user.name ?? undefined,
-            avatarUrl: trip.user.avatarUrl ?? undefined,
-            bio: trip.user.bio ?? undefined,
-            createdAt: trip.user.createdAt.toISOString(),
-            updatedAt: trip.user.updatedAt.toISOString(),
-          }
+          ...trip.user,
+          username: trip.user.username ?? undefined,
+          name: trip.user.name ?? undefined,
+          avatarUrl: trip.user.avatarUrl ?? undefined,
+          bio: trip.user.bio ?? undefined,
+          createdAt: trip.user.createdAt.toISOString(),
+          updatedAt: trip.user.updatedAt.toISOString(),
+        }
         : undefined,
     };
 
