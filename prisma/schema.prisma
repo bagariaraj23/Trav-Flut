@@ -159,7 +159,8 @@ model Trip {
   destinations   String[]           // Array of city/country names
   mood           TripMood?
   type           TripType?
-  coverMediaUrl  String?
+  coverMediaUrl  String?            // DEPRECATED: Keep for backward compatibility
+  coverMediaId   String?            // NEW: Link to Media model
   status         TripStatus         @default(UPCOMING)
   entryCount     Int                @default(0)
   participantCount Int              @default(1)
@@ -169,6 +170,7 @@ model Trip {
   user           User               @relation(fields: [userId], references: [id], onDelete: Cascade)
   threadEntries  TripThreadEntry[]
   media          Media[]
+  coverMedia     Media?             @relation("TripCoverMedia", fields: [coverMediaId], references: [id], onDelete: SetNull)
   finalPost      TripFinalPost?
   participants   TripParticipant[]
   joinRequests   TripJoinRequest[]
@@ -196,7 +198,8 @@ model TripThreadEntry {
   authorId        String             // Can allow participants to post
   type            ThreadEntryType
   contentText     String?
-  mediaUrl        String?
+  mediaUrl        String?            // DEPRECATED: Keep for backward compatibility
+  mediaId         String?            // NEW: Link to Media model
   locationName    String?
   gpsCoordinates  Json?              // { lat: ..., lng: ... }
   createdAt       DateTime           @default(now())
@@ -204,8 +207,7 @@ model TripThreadEntry {
   trip            Trip               @relation(fields: [tripId], references: [id], onDelete: Cascade)
   author          User               @relation(fields: [authorId], references: [id], onDelete: Cascade)
   taggedUsers     TripThreadTag[]
-  media           Media?             @relation(fields: [mediaId], references: [id])
-  mediaId         String?
+  media           Media?             @relation(fields: [mediaId], references: [id], onDelete: SetNull)
 
   @@map("trip_thread_entries")
 }
@@ -239,6 +241,7 @@ model TripFinalPost {
 model Media {
   id              String             @id @default(uuid())
   url             String
+  publicId        String             @unique // Cloudinary public_id for management
   type            MediaType
   filename        String?
   size            Int?
@@ -249,6 +252,7 @@ model Media {
   uploadedBy      User               @relation(fields: [uploadedById], references: [id], onDelete: Cascade)
   trip            Trip?              @relation(fields: [tripId], references: [id], onDelete: Cascade)
   threadEntries   TripThreadEntry[]
+  tripCover       Trip[]             @relation("TripCoverMedia")
 
   @@map("media")
 }

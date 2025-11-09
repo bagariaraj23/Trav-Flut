@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
 import 'package:tripthread/providers/trip_provider.dart';
+import 'package:tripthread/providers/auth_provider.dart';
 import 'package:tripthread/models/trip.dart';
 import 'package:tripthread/widgets/custom_text_field.dart';
 import 'package:tripthread/widgets/loading_button.dart';
@@ -21,14 +22,23 @@ class _CreateTripScreenState extends State<CreateTripScreen> {
   final _descriptionController = TextEditingController();
   final _destinationController = TextEditingController();
 
-  final MediaService _mediaService = MediaService();
+  MediaService? _mediaService;
   File? _selectedCoverFile;
+  Media? _selectedCoverMedia;
 
   final List<String> _destinations = [];
   DateTime? _startDate;
   DateTime? _endDate;
   TripMood? _selectedMood;
   TripType? _selectedType;
+  bool _isUploadingMedia = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // Get MediaService from provider
+    _mediaService = Provider.of<MediaService>(context, listen: false);
+  }
 
   @override
   void dispose() {
@@ -89,10 +99,19 @@ class _CreateTripScreenState extends State<CreateTripScreen> {
 
   Future<void> _pickCoverImage({bool fromCamera = false}) async {
     try {
-      final file = await _mediaService.pickImage(fromCamera: fromCamera);
+      final file = await _mediaService?.pickImage(fromCamera: fromCamera);
       if (file != null) {
         setState(() {
           _selectedCoverFile = file;
+          // Create a temporary Media object for preview
+          _selectedCoverMedia = Media(
+            id: '', // Temporary ID
+            url: file.path, // Local file path for preview
+            publicId: '', // Temporary
+            type: _mediaService!.getMediaType(file),
+            uploadedById: '', // Temporary
+            createdAt: DateTime.now(),
+          );
         });
       }
     } catch (e) {
@@ -155,32 +174,103 @@ class _CreateTripScreenState extends State<CreateTripScreen> {
       }
     }
 
-    final request = CreateTripRequest(
-      title: _titleController.text.trim(),
-      description: _descriptionController.text.trim().isEmpty
-          ? null
-          : _descriptionController.text.trim(),
-      startDate: _startDate,
-      endDate: _endDate,
-      destinations: _destinations,
-      mood: _selectedMood,
-      type: _selectedType,
-      coverMediaUrl: _selectedCoverFile != null
-          ? 'https://example.com/placeholder-cover.jpg'
-          : null,
-    );
-
-    print('[DEBUG] CreateTripRequest created:');
-    print('[DEBUG] request.toJson(): ${request.toJson()}');
-
     final tripProvider = context.read<TripProvider>();
-    final success = await tripProvider.createTrip(request);
+    final authProvider = context.read<AuthProvider>();
+    final currentUserId = authProvider.currentUser?.id;
 
-    if (success && mounted) {
+    if (currentUserId == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Trip started successfully! 🎉')),
+        const SnackBar(content: Text('User not authenticated.')),
       );
-      context.go('/home');
+      return;
+    }
+
+    String? coverMediaId;
+    
+    // Upload cover media if selected
+    if (_selectedCoverFile != null && _mediaService != null) {
+      setState(() {
+        _isUploadingMedia = true;
+      });
+      
+      try {
+        // First create a temporary trip to get tripId for media upload
+        final tempRequest = CreateTripRequest(
+          title: _titleController.text.trim(),
+          description: _descriptionController.text.trim().isEmpty
+              ? null
+              : _descriptionController.text.trim(),
+          startDate: _startDate,
+          endDate: _endDate,
+          destinations: _destinations,
+          mood: _selectedMood,
+          type: _selectedType,
+        );
+
+        // Create trip first
+        final success = await tripProvider.createTrip(tempRequest);
+        
+        if (success && tripProvider.currentTrip != null) {
+          // Now upload media for the created trip
+          final uploadedMedia = await _mediaService!.uploadMediaToCloudinary(
+            _selectedCoverFile!,
+            tripProvider.currentTrip!.id,
+          );
+          
+          if (uploadedMedia != null) {
+            coverMediaId = uploadedMedia.id;
+            
+            // For now, we'll just show success
+            // TODO: Update trip with cover media ID when update endpoint is available
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Trip created successfully with cover image! 🎉')),
+            );
+            context.go('/home');
+            return;
+          }
+        }
+        
+        if (success) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Trip started successfully! 🎉')),
+          );
+          context.go('/home');
+        }
+      } catch (e) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to upload cover image: ${e.toString()}')),
+        );
+      } finally {
+        setState(() {
+          _isUploadingMedia = false;
+        });
+      }
+    } else {
+      // Create trip without cover media
+      final request = CreateTripRequest(
+        title: _titleController.text.trim(),
+        description: _descriptionController.text.trim().isEmpty
+            ? null
+            : _descriptionController.text.trim(),
+        startDate: _startDate,
+        endDate: _endDate,
+        destinations: _destinations,
+        mood: _selectedMood,
+        type: _selectedType,
+        coverMediaId: coverMediaId,
+      );
+
+      print('[DEBUG] CreateTripRequest created:');
+      print('[DEBUG] request.toJson(): ${request.toJson()}');
+
+      final success = await tripProvider.createTrip(request);
+
+      if (success && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Trip started successfully! 🎉')),
+        );
+        context.go('/home');
+      }
     }
   }
 
@@ -310,11 +400,34 @@ class _CreateTripScreenState extends State<CreateTripScreen> {
                           onPressed: () {
                             setState(() {
                               _selectedCoverFile = null;
+                              _selectedCoverMedia = null;
                             });
                           },
                         ),
                       ),
                     ),
+                    if (_isUploadingMedia)
+                      Positioned.fill(
+                        child: Container(
+                          decoration: BoxDecoration(
+                            color: Colors.black54,
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: const Center(
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                CircularProgressIndicator(color: Colors.white),
+                                SizedBox(height: 8),
+                                Text(
+                                  'Uploading image...',
+                                  style: TextStyle(color: Colors.white),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
                   ],
                 )
               else

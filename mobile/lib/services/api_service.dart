@@ -708,7 +708,8 @@ class ApiService {
     required List<String> destinations,
     String? mood,
     String? type,
-    String? coverMediaUrl,
+    String? coverMediaUrl, // DEPRECATED: Keep for backward compatibility
+    String? coverMediaId, // NEW: Link to Media model
   }) async {
     try {
       debugPrint(
@@ -722,6 +723,7 @@ class ApiService {
         if (mood != null) 'mood': mood,
         if (type != null) 'type': type,
         if (coverMediaUrl != null) 'coverMediaUrl': coverMediaUrl,
+        if (coverMediaId != null) 'coverMediaId': coverMediaId,
       };
 
       final response = await _dio.post('/trips', data: data);
@@ -739,6 +741,83 @@ class ApiService {
     } catch (e) {
       debugPrint('[ApiService] Create trip unexpected error: $e');
       return ApiResponse<Trip>(
+        success: false,
+        error: 'An unexpected error occurred',
+      );
+    }
+  }
+
+  // Media endpoints
+  Future<ApiResponse<Map<String, dynamic>>> getCloudinarySignature({
+    required String tripId,
+    required String filename,
+    required String resourceType,
+  }) async {
+    try {
+      debugPrint('[ApiService] Getting Cloudinary signature for trip: $tripId, file: $filename');
+      final response = await _dio.post('/media/cloudinary-signature', data: {
+        'tripId': tripId,
+        'filename': filename,
+        'resourceType': resourceType,
+      });
+      debugPrint('[ApiService] Get Cloudinary signature response: ${response.statusCode}');
+      return ApiResponse<Map<String, dynamic>>(
+        success: response.data['success'],
+        data: response.data['data'],
+      );
+    } on DioException catch (e) {
+      debugPrint('[ApiService] Get Cloudinary signature DioException: ${e.message}');
+      return ApiResponse<Map<String, dynamic>>(
+        success: false,
+        error: e.response?.data['error'] ?? 'Network error occurred',
+      );
+    } catch (e) {
+      debugPrint('[ApiService] Get Cloudinary signature unexpected error: $e');
+      return ApiResponse<Map<String, dynamic>>(
+        success: false,
+        error: 'An unexpected error occurred',
+      );
+    }
+  }
+
+  Future<ApiResponse<Media>> confirmMediaUpload({
+    required String url,
+    required String secureUrl,
+    required String publicId,
+    required String format,
+    required String resourceType,
+    required int bytes,
+    required String originalFilename,
+    String? tripId,
+    String? threadEntryId,
+  }) async {
+    try {
+      debugPrint('[ApiService] Confirming media upload: $publicId');
+      final response = await _dio.post('/media/confirm', data: {
+        'url': url,
+        'secure_url': secureUrl,
+        'public_id': publicId,
+        'format': format,
+        'resource_type': resourceType,
+        'bytes': bytes,
+        'original_filename': originalFilename,
+        if (tripId != null) 'tripId': tripId,
+        if (threadEntryId != null) 'threadEntryId': threadEntryId,
+      });
+      debugPrint('[ApiService] Confirm media upload response: ${response.statusCode}');
+      return ApiResponse<Media>(
+        success: response.data['success'],
+        data: Media.fromJson(response.data['data']['media']),
+      );
+    } on DioException catch (e) {
+      debugPrint('[ApiService] Confirm media upload DioException: ${e.message}');
+      return ApiResponse<Media>(
+        success: false,
+        error: e.response?.data['error'] ?? 'Network error occurred',
+      );
+    } catch (e) {
+      debugPrint('[ApiService] Confirm media upload unexpected error: $e');
+      return ApiResponse<Media>(
         success: false,
         error: 'An unexpected error occurred',
       );

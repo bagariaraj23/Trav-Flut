@@ -122,6 +122,7 @@ export async function POST(
           type: validatedData.type,
           contentText: validatedData.contentText,
           mediaUrl: validatedData.mediaUrl,
+          mediaId: validatedData.mediaId, // NEW: Handle mediaId
           locationName: validatedData.locationName,
           gpsCoordinates: validatedData.gpsCoordinates
             ? JSON.stringify(validatedData.gpsCoordinates)

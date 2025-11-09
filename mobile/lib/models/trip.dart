@@ -14,7 +14,9 @@ class Trip {
   final List<String> destinations;
   final TripMood? mood;
   final TripType? type;
-  final String? coverMediaUrl;
+  final String? coverMediaUrl; // DEPRECATED: Keep for backward compatibility
+  final String? coverMediaId; // NEW: Link to Media model
+  final Media? coverMedia; // NEW: Media relation
   final TripStatus status;
   final DateTime createdAt;
   final DateTime updatedAt;
@@ -37,6 +39,8 @@ class Trip {
     this.mood,
     this.type,
     this.coverMediaUrl,
+    this.coverMediaId,
+    this.coverMedia,
     required this.status,
     required this.createdAt,
     required this.updatedAt,
@@ -63,6 +67,8 @@ class Trip {
     TripMood? mood,
     TripType? type,
     String? coverMediaUrl,
+    String? coverMediaId,
+    Media? coverMedia,
     TripStatus? status,
     DateTime? createdAt,
     DateTime? updatedAt,
@@ -85,6 +91,8 @@ class Trip {
       mood: mood ?? this.mood,
       type: type ?? this.type,
       coverMediaUrl: coverMediaUrl ?? this.coverMediaUrl,
+      coverMediaId: coverMediaId ?? this.coverMediaId,
+      coverMedia: coverMedia ?? this.coverMedia,
       status: status ?? this.status,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
@@ -146,7 +154,8 @@ class TripThreadEntry {
   final String authorId;
   final ThreadEntryType type;
   final String? contentText;
-  final String? mediaUrl;
+  final String? mediaUrl; // DEPRECATED: Keep for backward compatibility
+  final String? mediaId; // NEW: Link to Media model
   final String? locationName;
   final GpsCoordinates? gpsCoordinates;
   final DateTime createdAt;
@@ -161,6 +170,7 @@ class TripThreadEntry {
     required this.type,
     this.contentText,
     this.mediaUrl,
+    this.mediaId,
     this.locationName,
     this.gpsCoordinates,
     required this.createdAt,
@@ -205,6 +215,7 @@ class TripFinalPost {
 class Media {
   final String id;
   final String url;
+  final String publicId; // NEW: Cloudinary public_id for management
   final MediaType type;
   final String? filename;
   final int? size;
@@ -215,6 +226,7 @@ class Media {
   const Media({
     required this.id,
     required this.url,
+    required this.publicId,
     required this.type,
     this.filename,
     this.size,
@@ -305,7 +317,8 @@ class CreateTripRequest {
   final List<String> destinations;
   final TripMood? mood;
   final TripType? type;
-  final String? coverMediaUrl;
+  final String? coverMediaUrl; // DEPRECATED: Keep for backward compatibility
+  final String? coverMediaId; // NEW: Link to Media model
 
   const CreateTripRequest({
     required this.title,
@@ -316,6 +329,7 @@ class CreateTripRequest {
     this.mood,
     this.type,
     this.coverMediaUrl,
+    this.coverMediaId,
   });
 
   factory CreateTripRequest.fromJson(Map<String, dynamic> json) =>
@@ -327,7 +341,8 @@ class CreateTripRequest {
 class CreateThreadEntryRequest {
   final ThreadEntryType type;
   final String? contentText;
-  final String? mediaUrl;
+  final String? mediaUrl; // DEPRECATED: Keep for backward compatibility
+  final String? mediaId; // NEW: Link to Media model
   final String? locationName;
   final GpsCoordinates? gpsCoordinates;
   final List<String>? taggedUserIds;
@@ -336,6 +351,7 @@ class CreateThreadEntryRequest {
     required this.type,
     this.contentText,
     this.mediaUrl,
+    this.mediaId,
     this.locationName,
     this.gpsCoordinates,
     this.taggedUserIds,

@@ -117,6 +117,8 @@ export async function POST(request: NextRequest) {
                   ? new Date(validatedData.endDate)
                   : null,
                 status: "ONGOING" as const,
+                // Handle coverMediaId if provided
+                coverMediaId: validatedData.coverMediaId || null,
               };
 
               console.log(

@@ -63,7 +63,7 @@ void main() async {
     debugPrint('[main] Creating core services');
     final apiService = ApiService();
     final tripService = TripService();
-    final mediaService = MediaService();
+    final mediaService = MediaService(apiService); // Inject ApiService into MediaService
     debugPrint('[main] Core services created');
 
     debugPrint('[main] Setting up providers');

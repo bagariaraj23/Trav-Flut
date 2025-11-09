@@ -221,6 +221,19 @@ export const createTripSchema = z
         );
         return val;
       }),
+    coverMediaId: z
+      .union([
+        z.string().uuid("Invalid media ID format"),
+        z.null(),
+        z.undefined(),
+      ])
+      .optional()
+      .transform((val) => {
+        console.log(
+          `[DEBUG] coverMediaId validation - received: ${val}, type: ${typeof val}`
+        );
+        return val;
+      }),
   })
   .refine(
     (data) => {
@@ -278,6 +291,19 @@ export const createThreadEntrySchema = z
       .transform((val) => {
         console.log(
           `[DEBUG] mediaUrl validation - received: ${val}, type: ${typeof val}`
+        );
+        return val;
+      }),
+    mediaId: z
+      .union([
+        z.string().uuid("Invalid media ID format"),
+        z.null(),
+        z.undefined(),
+      ])
+      .optional()
+      .transform((val) => {
+        console.log(
+          `[DEBUG] mediaId validation - received: ${val}, type: ${typeof val}`
         );
         return val;
       }),
@@ -348,7 +374,7 @@ export const createThreadEntrySchema = z
         case "TEXT":
           return data.contentText && data.contentText.length > 0;
         case "MEDIA":
-          return data.mediaUrl && data.mediaUrl.length > 0;
+          return (data.mediaUrl && data.mediaUrl.length > 0) || (data.mediaId && data.mediaId.length > 0);
         case "LOCATION":
           return data.locationName && data.locationName.length > 0;
         case "CHECKIN":

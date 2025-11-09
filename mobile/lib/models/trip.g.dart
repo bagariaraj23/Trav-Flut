@@ -23,6 +23,10 @@ Trip _$TripFromJson(Map<String, dynamic> json) => Trip(
       mood: $enumDecodeNullable(_$TripMoodEnumMap, json['mood']),
       type: $enumDecodeNullable(_$TripTypeEnumMap, json['type']),
       coverMediaUrl: json['coverMediaUrl'] as String?,
+      coverMediaId: json['coverMediaId'] as String?,
+      coverMedia: json['coverMedia'] == null
+          ? null
+          : Media.fromJson(json['coverMedia'] as Map<String, dynamic>),
       status: $enumDecode(_$TripStatusEnumMap, json['status']),
       createdAt: DateTime.parse(json['createdAt'] as String),
       updatedAt: DateTime.parse(json['updatedAt'] as String),
@@ -56,6 +60,8 @@ Map<String, dynamic> _$TripToJson(Trip instance) => <String, dynamic>{
       'mood': _$TripMoodEnumMap[instance.mood],
       'type': _$TripTypeEnumMap[instance.type],
       'coverMediaUrl': instance.coverMediaUrl,
+      'coverMediaId': instance.coverMediaId,
+      'coverMedia': instance.coverMedia,
       'status': _$TripStatusEnumMap[instance.status]!,
       'createdAt': instance.createdAt.toIso8601String(),
       'updatedAt': instance.updatedAt.toIso8601String(),
@@ -133,6 +139,7 @@ TripThreadEntry _$TripThreadEntryFromJson(Map<String, dynamic> json) =>
       type: $enumDecode(_$ThreadEntryTypeEnumMap, json['type']),
       contentText: json['contentText'] as String?,
       mediaUrl: json['mediaUrl'] as String?,
+      mediaId: json['mediaId'] as String?,
       locationName: json['locationName'] as String?,
       gpsCoordinates: json['gpsCoordinates'] == null
           ? null
@@ -156,6 +163,7 @@ Map<String, dynamic> _$TripThreadEntryToJson(TripThreadEntry instance) =>
       'type': _$ThreadEntryTypeEnumMap[instance.type]!,
       'contentText': instance.contentText,
       'mediaUrl': instance.mediaUrl,
+      'mediaId': instance.mediaId,
       'locationName': instance.locationName,
       'gpsCoordinates': instance.gpsCoordinates,
       'createdAt': instance.createdAt.toIso8601String(),
@@ -202,6 +210,7 @@ Map<String, dynamic> _$TripFinalPostToJson(TripFinalPost instance) =>
 Media _$MediaFromJson(Map<String, dynamic> json) => Media(
       id: json['id'] as String,
       url: json['url'] as String,
+      publicId: json['publicId'] as String,
       type: $enumDecode(_$MediaTypeEnumMap, json['type']),
       filename: json['filename'] as String?,
       size: (json['size'] as num?)?.toInt(),
@@ -213,6 +222,7 @@ Media _$MediaFromJson(Map<String, dynamic> json) => Media(
 Map<String, dynamic> _$MediaToJson(Media instance) => <String, dynamic>{
       'id': instance.id,
       'url': instance.url,
+      'publicId': instance.publicId,
       'type': _$MediaTypeEnumMap[instance.type]!,
       'filename': instance.filename,
       'size': instance.size,
@@ -254,6 +264,7 @@ CreateTripRequest _$CreateTripRequestFromJson(Map<String, dynamic> json) =>
       mood: $enumDecodeNullable(_$TripMoodEnumMap, json['mood']),
       type: $enumDecodeNullable(_$TripTypeEnumMap, json['type']),
       coverMediaUrl: json['coverMediaUrl'] as String?,
+      coverMediaId: json['coverMediaId'] as String?,
     );
 
 Map<String, dynamic> _$CreateTripRequestToJson(CreateTripRequest instance) =>
@@ -266,6 +277,7 @@ Map<String, dynamic> _$CreateTripRequestToJson(CreateTripRequest instance) =>
       'mood': _$TripMoodEnumMap[instance.mood],
       'type': _$TripTypeEnumMap[instance.type],
       'coverMediaUrl': instance.coverMediaUrl,
+      'coverMediaId': instance.coverMediaId,
     };
 
 CreateThreadEntryRequest _$CreateThreadEntryRequestFromJson(
@@ -274,6 +286,7 @@ CreateThreadEntryRequest _$CreateThreadEntryRequestFromJson(
       type: $enumDecode(_$ThreadEntryTypeEnumMap, json['type']),
       contentText: json['contentText'] as String?,
       mediaUrl: json['mediaUrl'] as String?,
+      mediaId: json['mediaId'] as String?,
       locationName: json['locationName'] as String?,
       gpsCoordinates: json['gpsCoordinates'] == null
           ? null
@@ -290,6 +303,7 @@ Map<String, dynamic> _$CreateThreadEntryRequestToJson(
       'type': _$ThreadEntryTypeEnumMap[instance.type]!,
       'contentText': instance.contentText,
       'mediaUrl': instance.mediaUrl,
+      'mediaId': instance.mediaId,
       'locationName': instance.locationName,
       'gpsCoordinates': instance.gpsCoordinates,
       'taggedUserIds': instance.taggedUserIds,

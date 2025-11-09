@@ -8,7 +8,7 @@ class AppConfig {
   static const bool _useHardcodedConfig = true;
 
   // Hardcoded configuration for debugging
-  static const String _hardcodedBaseUrl = 'http://192.168.0.110:3000/api';
+  static const String _hardcodedBaseUrl = 'http://192.168.0.146:3000/api';
 
   // API Configuration
   static String get apiBaseUrl {
