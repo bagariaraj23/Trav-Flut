@@ -237,6 +237,10 @@ class Media {
   final MediaType type;
   final String? filename;
   final int? size;
+  final int? width;
+  final int? height;
+  final double? duration;
+  final MediaProcessingStatus processingStatus;
   final String uploadedById;
   final String? tripId;
   final DateTime createdAt;
@@ -248,6 +252,10 @@ class Media {
     required this.type,
     this.filename,
     this.size,
+    this.width,
+    this.height,
+    this.duration,
+    this.processingStatus = MediaProcessingStatus.completed,
     required this.uploadedById,
     this.tripId,
     required this.createdAt,
@@ -323,6 +331,17 @@ enum MediaType {
   image,
   @JsonValue('VIDEO')
   video,
+}
+
+enum MediaProcessingStatus {
+  @JsonValue('PENDING')
+  pending,
+  @JsonValue('PROCESSING')
+  processing,
+  @JsonValue('COMPLETED')
+  completed,
+  @JsonValue('FAILED')
+  failed,
 }
 
 // Request DTOs

@@ -1,7 +1,10 @@
+import 'dart:async';
 import 'dart:io';
 import 'package:image_picker/image_picker.dart';
 import 'package:dio/dio.dart';
 import 'package:http_parser/http_parser.dart' as http_parser;
+import 'package:file_picker/file_picker.dart';
+import 'package:mime/mime.dart';
 import 'package:tripthread/models/trip.dart';
 import 'package:tripthread/services/api_service.dart';
 import 'package:tripthread/utils/validators.dart';
@@ -11,6 +14,7 @@ class MediaService {
   final ImagePicker _imagePicker = ImagePicker();
   final ApiService _apiService;
   final Dio _uploadClient;
+  Future<void> _uploadQueue = Future.value();
 
   MediaService(this._apiService, {Dio? uploadClient})
       : _uploadClient = uploadClient ?? Dio();
@@ -108,19 +112,95 @@ class MediaService {
     }
   }
 
+  Future<List<File>> pickMultipleMedia() async {
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        allowMultiple: true,
+        type: FileType.custom,
+        allowedExtensions: const ['jpg', 'jpeg', 'png', 'gif', 'mp4', 'mov', 'avi'],
+      );
+
+      if (result == null || result.files.isEmpty) {
+        return [];
+      }
+
+      const maxSelection = 10;
+      if (result.files.length > maxSelection) {
+        throw Exception('You can select at most $maxSelection files at once.');
+      }
+
+      final files = <File>[];
+
+      for (final file in result.files) {
+        if (file.path == null) {
+          continue;
+        }
+
+        final pickedFile = File(file.path!);
+        final validation = Validators.validateFile(
+          file.name,
+          await pickedFile.length(),
+        );
+
+        if (validation != null) {
+          throw Exception(validation);
+        }
+
+        files.add(pickedFile);
+      }
+
+      return files;
+    } catch (e) {
+      rethrow;
+    }
+  }
+
   /// Uploads a file to Cloudinary using a server-signed request.
   /// Confirms the upload with the backend to create a Media record.
   Future<Media?> uploadMediaToCloudinary({
     required File file,
     String? tripId,
     String usage = 'general',
+    void Function(double progress)? onProgress,
+  }) {
+    return _enqueueUpload(() => _performUpload(
+          file: file,
+          tripId: tripId,
+          usage: usage,
+          onProgress: onProgress,
+        ));
+  }
+
+  Future<T> _enqueueUpload<T>(Future<T> Function() task) {
+    final completer = Completer<T>();
+    _uploadQueue = _uploadQueue.then((_) async {
+      try {
+        final result = await task();
+        if (!completer.isCompleted) completer.complete(result);
+      } catch (error, stackTrace) {
+        if (!completer.isCompleted) {
+          completer.completeError(error, stackTrace);
+        }
+      }
+    });
+    return completer.future;
+  }
+
+  Future<Media?> _performUpload({
+    required File file,
+    String? tripId,
+    String usage = 'general',
+    void Function(double progress)? onProgress,
   }) async {
+    String? uploadedPublicId;
     try {
       debugPrint('[MediaService] Starting Cloudinary upload for file: ${file.path}');
-      
+
       final filename = file.path.split('/').last;
       final mediaType = getMediaType(file);
       final contentType = _inferMimeType(file, mediaType);
+
+      onProgress?.call(0.0);
 
       // 1. Get Cloudinary signature from backend
       debugPrint('[MediaService] Getting Cloudinary signature...');
@@ -135,8 +215,7 @@ class MediaService {
         throw Exception(signatureResponse.error ?? 'Failed to get Cloudinary signature');
       }
 
-      final uploadParams =
-          Map<String, dynamic>.from(signatureResponse.data!);
+      final uploadParams = Map<String, dynamic>.from(signatureResponse.data!);
       debugPrint('[MediaService] Got upload params: $uploadParams');
 
       // 2. Upload file directly to Cloudinary
@@ -145,11 +224,21 @@ class MediaService {
         file: file,
         uploadParams: uploadParams,
         contentType: contentType,
+        onProgress: (progress) {
+          onProgress?.call(progress.clamp(0.0, 0.99));
+        },
       );
+
+      uploadedPublicId =
+          (cloudinaryData['public_id'] as String?) ?? uploadParams['publicId'];
 
       final secureUrl = cloudinaryData['secure_url'] as String?;
 
       if (secureUrl == null || secureUrl.isEmpty) {
+        if (uploadedPublicId != null) {
+          await _cleanupFailedUpload(uploadedPublicId);
+          uploadedPublicId = null;
+        }
         throw Exception('Cloudinary upload did not return a secure URL');
       }
 
@@ -160,7 +249,7 @@ class MediaService {
       final confirmResponse = await _apiService.confirmMediaUpload(
         url: (cloudinaryData['url'] as String?) ?? secureUrl,
         secureUrl: secureUrl,
-        publicId: (cloudinaryData['public_id'] as String?) ?? uploadParams['publicId'],
+        publicId: uploadedPublicId ?? uploadParams['publicId'],
         format: (cloudinaryData['format'] as String?) ?? contentType.split('/').last,
         resourceType: (cloudinaryData['resource_type'] as String?) ??
             (mediaType == MediaType.image ? 'image' : 'video'),
@@ -174,13 +263,22 @@ class MediaService {
       );
 
       if (!confirmResponse.success || confirmResponse.data == null) {
+        if (uploadedPublicId != null) {
+          await _cleanupFailedUpload(uploadedPublicId);
+          uploadedPublicId = null;
+        }
         throw Exception(confirmResponse.error ?? 'Failed to confirm media upload');
       }
 
       debugPrint('[MediaService] Upload confirmation successful');
+      onProgress?.call(1.0);
       return confirmResponse.data;
     } catch (e) {
       debugPrint('[MediaService] Error during media upload: $e');
+      if (uploadedPublicId != null) {
+        await _cleanupFailedUpload(uploadedPublicId);
+        uploadedPublicId = null;
+      }
       rethrow;
     }
   }
@@ -190,6 +288,7 @@ class MediaService {
     required File file,
     required Map<String, dynamic> uploadParams,
     required String contentType,
+    void Function(double progress)? onProgress,
   }) async {
     try {
       debugPrint('[MediaService] Uploading to Cloudinary with params: $uploadParams');
@@ -213,47 +312,91 @@ class MediaService {
       final uploadUrl = (uploadParams['uploadUrl'] as String?) ??
           'https://api.cloudinary.com/v1_1/${uploadParams['cloudName']}/auto/upload';
       
-      // Create multipart form data
-      FormData formData = FormData.fromMap({
-        'file': await MultipartFile.fromFile(
-          file.path,
-          filename: file.path.split('/').last,
-          contentType: http_parser.MediaType.parse(contentType),
-        ),
-        'api_key': uploadParams['apiKey'],
-        'timestamp': uploadParams['timestamp'].toString(),
-        'signature': uploadParams['signature'],
-        'folder': uploadParams['folder'],
-        'public_id': uploadParams['publicId'],
-      });
+      const maxRetries = 2;
+      var attempt = 0;
 
-      // Upload to Cloudinary
-      final response = await _uploadClient.post(
-        uploadUrl,
-        data: formData,
-        options: Options(contentType: 'multipart/form-data'),
-      );
+      while (true) {
+        try {
+          final formData = FormData.fromMap({
+            'file': await MultipartFile.fromFile(
+              file.path,
+              filename: file.path.split('/').last,
+              contentType: http_parser.MediaType.parse(contentType),
+            ),
+            'api_key': uploadParams['apiKey'],
+            'timestamp': uploadParams['timestamp'].toString(),
+            'signature': uploadParams['signature'],
+            'folder': uploadParams['folder'],
+            'public_id': uploadParams['publicId'],
+          });
 
-      if (response.statusCode == 200 && response.data != null) {
-        final cloudinaryData = Map<String, dynamic>.from(response.data);
-        debugPrint('[MediaService] Cloudinary upload successful');
-        return cloudinaryData;
+          final response = await _uploadClient.post(
+            uploadUrl,
+            data: formData,
+            options: Options(contentType: 'multipart/form-data'),
+            onSendProgress: (sent, total) {
+              if (total > 0) {
+                onProgress?.call(sent / total);
+              }
+            },
+          );
+
+          if (response.statusCode == 200 && response.data != null) {
+            final cloudinaryData = Map<String, dynamic>.from(response.data);
+            debugPrint('[MediaService] Cloudinary upload successful');
+            return cloudinaryData;
+          }
+
+          throw Exception('Cloudinary upload failed: ${response.data}');
+        } on DioException catch (e) {
+          final responseData = e.response?.data;
+          debugPrint(
+              '[MediaService] Error uploading to Cloudinary: ${e.message} | Response data: $responseData');
+          if (attempt >= maxRetries) rethrow;
+          attempt++;
+          await Future.delayed(Duration(milliseconds: 500 * attempt));
+        }
       }
 
-      throw Exception('Cloudinary upload failed: ${response.data}');
-    } on DioException catch (e) {
-      final responseData = e.response?.data;
-      debugPrint(
-          '[MediaService] Error uploading to Cloudinary: ${e.message} | Response data: $responseData');
-      rethrow;
     } catch (e) {
       debugPrint('[MediaService] Error uploading to Cloudinary: $e');
       rethrow;
     }
   }
 
+  Future<void> _cleanupFailedUpload(String publicId) async {
+    try {
+      await _apiService.deleteMediaAsset(publicId);
+    } catch (e) {
+      debugPrint('[MediaService] Cleanup failed for $publicId: $e');
+    }
+  }
+
   /// Get media type from file
   MediaType getMediaType(File file) {
+    try {
+      final randomAccessFile = file.openSync();
+      try {
+        final headerBytes = randomAccessFile.readSync(12);
+        final detectedMime = lookupMimeType(
+          file.path,
+          headerBytes: headerBytes,
+        );
+        if (detectedMime != null) {
+          if (detectedMime.startsWith('image/')) {
+            return MediaType.image;
+          }
+          if (detectedMime.startsWith('video/')) {
+            return MediaType.video;
+          }
+        }
+      } finally {
+        randomAccessFile.closeSync();
+      }
+    } catch (e) {
+      debugPrint('[MediaService] MIME detection failed, falling back to extension: $e');
+    }
+
     final extension = file.path.split('.').last.toLowerCase();
 
     if (['jpg', 'jpeg', 'png', 'gif'].contains(extension)) {

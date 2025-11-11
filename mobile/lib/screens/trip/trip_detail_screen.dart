@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:tripthread/providers/trip_provider.dart';
 import 'package:tripthread/providers/auth_provider.dart';
 import 'package:tripthread/models/trip.dart';
+import 'package:tripthread/utils/cloudinary_utils.dart';
 import 'package:tripthread/widgets/loading_button.dart';
 
 class TripDetailScreen extends StatefulWidget {
@@ -128,7 +129,7 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
                       return _buildDefaultCover();
                     }
                     return Image.network(
-                      coverUrl,
+                      buildOptimizedImageUrl(coverUrl, width: 2048),
                       fit: BoxFit.cover,
                       errorBuilder: (context, error, stackTrace) {
                         return _buildDefaultCover();
@@ -617,6 +618,10 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
 
   Widget _buildThreadMediaThumbnail(String url, MediaType? type) {
     final isVideo = type == MediaType.video;
+    final optimizedUrl = isVideo
+        ? buildVideoThumbnailUrl(url, maxWidth: 480)
+        : buildOptimizedImageUrl(url, width: 480);
+
     return ClipRRect(
       borderRadius: BorderRadius.circular(10),
       child: SizedBox(
@@ -626,7 +631,7 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
           fit: StackFit.expand,
           children: [
             Image.network(
-              url,
+              optimizedUrl,
               fit: BoxFit.cover,
               errorBuilder: (context, error, stackTrace) => Container(
                 color: Colors.grey[300],

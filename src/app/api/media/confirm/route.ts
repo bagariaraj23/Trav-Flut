@@ -61,15 +61,7 @@ async function handler(request: AuthenticatedRequest) {
       request.user!.userId
     );
 
-    if (usage === "trip_cover" && tripId) {
-      await prisma.trip.update({
-        where: { id: tripId },
-        data: {
-          coverMediaId: media.id,
-          coverMediaUrl: media.url,
-        } as any,
-      });
-    }
+    await CloudinaryService.cleanupOrphanedMedia(request.user!.userId);
 
     return ok(media, "Media upload confirmed successfully");
   } catch (error: any) {

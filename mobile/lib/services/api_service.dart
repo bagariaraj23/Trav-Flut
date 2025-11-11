@@ -1231,6 +1231,19 @@ class ApiService {
     }
   }
 
+  Future<void> deleteMediaAsset(String publicId) async {
+    try {
+      debugPrint('[ApiService] Deleting media asset: $publicId');
+      await _dio.post('/media/delete', data: {
+        'publicId': publicId,
+      });
+    } on DioException catch (e) {
+      debugPrint('[ApiService] Delete media asset DioException: ${e.message}');
+    } catch (e) {
+      debugPrint('[ApiService] Delete media asset unexpected error: $e');
+    }
+  }
+
   // Feed endpoints
   Future<ApiResponse<Map<String, dynamic>>> getHomeFeed({
     int page = 1,

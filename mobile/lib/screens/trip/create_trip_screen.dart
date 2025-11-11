@@ -10,6 +10,7 @@ import 'package:tripthread/widgets/loading_button.dart';
 import 'dart:io';
 import 'package:tripthread/services/media_service.dart';
 import 'package:tripthread/widgets/place_autocomplete_field.dart';
+import 'package:tripthread/utils/cloudinary_utils.dart';
 
 class CreateTripScreen extends StatefulWidget {
   const CreateTripScreen({Key? key}) : super(key: key);
@@ -26,6 +27,7 @@ class _CreateTripScreenState extends State<CreateTripScreen> {
   MediaService? _mediaService;
   Media? _selectedCoverMedia;
   bool _isUploadingCover = false;
+  double? _coverUploadProgress;
   final List<Place> _destinations = [];
   DateTime? _startDate;
   DateTime? _endDate;
@@ -89,6 +91,10 @@ class _CreateTripScreenState extends State<CreateTripScreen> {
             type: mediaService.getMediaType(file),
             filename: mediaService.getFileName(file),
             size: fileSize,
+            width: null,
+            height: null,
+            duration: null,
+            processingStatus: MediaProcessingStatus.pending,
             uploadedById: '',
             tripId: null,
             createdAt: DateTime.now(),
@@ -171,28 +177,44 @@ class _CreateTripScreenState extends State<CreateTripScreen> {
 
     if (_selectedCoverMedia != null &&
         !_selectedCoverMedia!.url.startsWith('http')) {
-      setState(() => _isUploadingCover = true);
+      setState(() {
+        _isUploadingCover = true;
+        _coverUploadProgress = 0.0;
+      });
       try {
         final uploadedMedia = await mediaService.uploadMediaToCloudinary(
           file: File(_selectedCoverMedia!.url),
           usage: 'trip_cover',
+          onProgress: (progress) {
+            if (!mounted) return;
+            setState(() {
+              _coverUploadProgress = progress;
+            });
+          },
         );
 
         if (uploadedMedia != null) {
           coverMediaId = uploadedMedia.id;
           setState(() {
             _selectedCoverMedia = uploadedMedia;
+            _coverUploadProgress = 1.0;
           });
         }
       } catch (e) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Failed to upload cover image: $e')),
         );
-        setState(() => _isUploadingCover = false);
+        setState(() {
+          _isUploadingCover = false;
+          _coverUploadProgress = null;
+        });
         return;
       } finally {
         if (mounted) {
-          setState(() => _isUploadingCover = false);
+          setState(() {
+            _isUploadingCover = false;
+            _coverUploadProgress = null;
+          });
         }
       }
     } else if (_selectedCoverMedia != null) {
@@ -341,7 +363,10 @@ class _CreateTripScreenState extends State<CreateTripScreen> {
                         borderRadius: BorderRadius.circular(8),
                         child: _selectedCoverMedia!.url.startsWith('http')
                             ? Image.network(
-                                _selectedCoverMedia!.url,
+                                buildOptimizedImageUrl(
+                                  _selectedCoverMedia!.url,
+                                  width: 1600,
+                                ),
                                 height: 160,
                                 width: double.infinity,
                                 fit: BoxFit.cover,
@@ -360,15 +385,36 @@ class _CreateTripScreenState extends State<CreateTripScreen> {
                               color: Colors.black.withOpacity(0.35),
                               borderRadius: BorderRadius.circular(8),
                             ),
-                            child: const Center(
-                              child: SizedBox(
-                                height: 36,
-                                width: 36,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 3,
-                                  valueColor: AlwaysStoppedAnimation<Color>(
-                                      Colors.white),
-                                ),
+                            child: Center(
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  SizedBox(
+                                    height: 36,
+                                    width: 36,
+                                    child: CircularProgressIndicator(
+                                      value: _coverUploadProgress != null
+                                          ? _coverUploadProgress!.clamp(0.0, 1.0)
+                                          : null,
+                                      strokeWidth: 3,
+                                      backgroundColor: Colors.white24,
+                                      valueColor:
+                                          const AlwaysStoppedAnimation<Color>(
+                                              Colors.white),
+                                    ),
+                                  ),
+                                  if (_coverUploadProgress != null)
+                                    Padding(
+                                      padding: const EdgeInsets.only(top: 8.0),
+                                      child: Text(
+                                        '${(_coverUploadProgress!.clamp(0.0, 1.0) * 100).round()}%',
+                                        style: const TextStyle(
+                                          color: Colors.white,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                    ),
+                                ],
                               ),
                             ),
                           ),

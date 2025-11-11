@@ -7,6 +7,7 @@ import 'package:tripthread/models/place.dart';
 import 'package:tripthread/widgets/map_picker_sheet.dart';
 import 'package:tripthread/widgets/place_search_sheet.dart';
 import 'package:tripthread/services/media_service.dart';
+import 'package:tripthread/utils/cloudinary_utils.dart';
 import 'dart:io';
 import 'package:go_router/go_router.dart';
 import 'package:video_player/video_player.dart';
@@ -58,6 +59,8 @@ class _TripThreadScreenState extends State<TripThreadScreen> {
   MediaService? _mediaService;
   Media? _selectedMediaForEntry;
   bool _isUploadingMedia = false;
+  List<Media> _pendingMediaBatch = [];
+  double? _uploadProgress;
   Place? _selectedPlace;
   VideoPlayerController? _pendingVideoController;
   bool _pendingVideoInitialized = false;
@@ -95,7 +98,9 @@ class _TripThreadScreenState extends State<TripThreadScreen> {
       _disposePendingVideoController();
 
       final controller = media.url.startsWith('http')
-          ? VideoPlayerController.networkUrl(Uri.parse(media.url))
+          ? VideoPlayerController.networkUrl(
+              Uri.parse(buildOptimizedVideoUrl(media.url, maxWidth: 1280)),
+            )
           : VideoPlayerController.file(File(media.url));
 
       setState(() {
@@ -103,6 +108,7 @@ class _TripThreadScreenState extends State<TripThreadScreen> {
         _selectedType = ThreadEntryType.media;
         _pendingVideoController = controller;
         _pendingVideoInitialized = false;
+        _uploadProgress = null;
       });
 
       try {
@@ -129,6 +135,7 @@ class _TripThreadScreenState extends State<TripThreadScreen> {
       setState(() {
         _selectedMediaForEntry = media;
         _selectedType = ThreadEntryType.media;
+        _uploadProgress = null;
       });
     }
   }
@@ -137,6 +144,8 @@ class _TripThreadScreenState extends State<TripThreadScreen> {
     _disposePendingVideoController();
     setState(() {
       _selectedMediaForEntry = null;
+      _uploadProgress = null;
+      _pendingMediaBatch.clear();
     });
   }
 
@@ -203,61 +212,7 @@ class _TripThreadScreenState extends State<TripThreadScreen> {
         }
         break;
       case ThreadEntryType.media:
-        if (_selectedMediaForEntry == null) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Please select a media file first')),
-          );
-          return;
-        }
-
-        setState(() => _isUploadingMedia = true);
-        try {
-          final caption =
-              _textController.text.trim().isNotEmpty ? _textController.text.trim() : null;
-          final mediaService = _mediaService ?? context.read<MediaService>();
-          String? mediaId = _selectedMediaForEntry!.id.isEmpty
-              ? null
-              : _selectedMediaForEntry!.id;
-
-          if (!_selectedMediaForEntry!.url.startsWith('http')) {
-            final uploadedMedia = await mediaService.uploadMediaToCloudinary(
-              file: File(_selectedMediaForEntry!.url),
-              tripId: widget.tripId,
-              usage: 'thread_entry',
-            );
-
-            if (uploadedMedia == null) {
-              throw Exception('Media upload failed');
-            }
-
-            mediaId = uploadedMedia.id;
-            setState(() {
-              _selectedMediaForEntry = uploadedMedia;
-            });
-          }
-
-          if (mediaId == null || mediaId.isEmpty) {
-            throw Exception('Missing media identifier after upload');
-          }
-
-          success = await tripProvider.addMediaEntry(
-            mediaId,
-            caption: caption,
-            tripId: widget.tripId,
-          );
-
-          if (success) {
-            _textController.clear();
-            _clearSelectedMedia();
-          }
-        } catch (e) {
-          debugPrint('[TripThread] Failed to upload media entry: $e');
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Failed to upload media: $e')),
-          );
-        } finally {
-          setState(() => _isUploadingMedia = false);
-        }
+        success = await _handleMediaSubmission(tripProvider);
         break;
       case ThreadEntryType.checkin:
         if (_selectedPlace != null) {
@@ -299,22 +254,103 @@ class _TripThreadScreenState extends State<TripThreadScreen> {
       final file = await mediaService.pickImage(fromCamera: fromCamera);
       if (file != null) {
         final fileSize = await file.length();
-            final media = Media(
-              id: '',
-              url: file.path,
-              publicId: '',
-              type: mediaService.getMediaType(file),
-              filename: mediaService.getFileName(file),
-              size: fileSize,
-              uploadedById: '',
-              tripId: widget.tripId,
-              createdAt: DateTime.now(),
-            );
-            await _setSelectedMedia(media);
+        final media = Media(
+          id: '',
+          url: file.path,
+          publicId: '',
+          type: mediaService.getMediaType(file),
+          filename: mediaService.getFileName(file),
+          size: fileSize,
+          width: null,
+          height: null,
+          duration: null,
+          processingStatus: MediaProcessingStatus.pending,
+          uploadedById: '',
+          tripId: widget.tripId,
+          createdAt: DateTime.now(),
+        );
+        await _setSelectedMedia(media);
+        if (!mounted) return;
+        setState(() {
+          _pendingMediaBatch.clear();
+        });
       }
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Error picking image: $e')),
+      );
+    }
+  }
+
+  Future<void> _pickFromGallery() async {
+    try {
+      final mediaService = _mediaService ?? context.read<MediaService>();
+      final files = await mediaService.pickMultipleMedia();
+      if (files.isEmpty) {
+        return;
+      }
+
+      final newMediaItems = <Media>[];
+
+      for (final file in files) {
+        final fileSize = await file.length();
+        newMediaItems.add(
+          Media(
+            id: '',
+            url: file.path,
+            publicId: '',
+            type: mediaService.getMediaType(file),
+            filename: mediaService.getFileName(file),
+            size: fileSize,
+            width: null,
+            height: null,
+            duration: null,
+            processingStatus: MediaProcessingStatus.pending,
+            uploadedById: '',
+            tripId: widget.tripId,
+            createdAt: DateTime.now(),
+          ),
+        );
+      }
+
+      const maxQueued = 10;
+      final totalCount =
+          (_selectedMediaForEntry == null ? 0 : 1) + _pendingMediaBatch.length + newMediaItems.length;
+      if (totalCount > maxQueued) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('You can queue at most $maxQueued media items at once.'),
+          ),
+        );
+        return;
+      }
+
+      if (newMediaItems.isEmpty) {
+        return;
+      }
+
+      if (_selectedMediaForEntry == null) {
+        final first = newMediaItems.first;
+        final remaining = newMediaItems.length > 1
+            ? newMediaItems.sublist(1)
+            : <Media>[];
+
+        await _setSelectedMedia(first);
+        if (!mounted) return;
+        setState(() {
+          _pendingMediaBatch = remaining;
+        });
+      } else {
+        setState(() {
+          _pendingMediaBatch = [
+            ..._pendingMediaBatch,
+            ...newMediaItems,
+          ];
+        });
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error picking media: $e')),
       );
     }
   }
@@ -332,17 +368,175 @@ class _TripThreadScreenState extends State<TripThreadScreen> {
           type: mediaService.getMediaType(file),
           filename: mediaService.getFileName(file),
           size: fileSize,
+          width: null,
+          height: null,
+          duration: null,
+          processingStatus: MediaProcessingStatus.pending,
           uploadedById: '',
           tripId: widget.tripId,
           createdAt: DateTime.now(),
         );
         await _setSelectedMedia(media);
+        if (!mounted) return;
+        setState(() {
+          _pendingMediaBatch.clear();
+        });
       }
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Error picking video: $e')),
       );
     }
+  }
+
+  Future<bool> _handleMediaSubmission(TripProvider tripProvider) async {
+    if (_selectedMediaForEntry == null && _pendingMediaBatch.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please select at least one media file')),
+      );
+      return false;
+    }
+
+    final caption = _textController.text.trim().isNotEmpty
+        ? _textController.text.trim()
+        : null;
+
+    final allMedia = <Media>[
+      if (_selectedMediaForEntry != null) _selectedMediaForEntry!,
+      ..._pendingMediaBatch,
+    ];
+
+    if (allMedia.isEmpty) {
+      return false;
+    }
+
+    bool allSucceeded = true;
+
+    for (var index = 0; index < allMedia.length; index++) {
+      final media = allMedia[index];
+
+      if (index == 0) {
+        setState(() {
+          _isUploadingMedia = true;
+          _uploadProgress = 0.0;
+          _pendingMediaBatch = allMedia.length > 1
+              ? allMedia.sublist(1)
+              : <Media>[];
+        });
+      } else {
+        await _setSelectedMedia(media);
+        if (!mounted) return false;
+        setState(() {
+          _isUploadingMedia = true;
+          _uploadProgress = 0.0;
+          _pendingMediaBatch = allMedia.sublist(index + 1);
+        });
+      }
+
+      try {
+        final uploadedMedia =
+            await _uploadSingleMediaForEntry(media, caption, tripProvider);
+        allMedia[index] = uploadedMedia;
+        if (mounted) {
+          setState(() {
+            _pendingMediaBatch = allMedia.sublist(index + 1);
+          });
+        }
+      } catch (e) {
+        allSucceeded = false;
+        if (mounted) {
+          debugPrint(
+              '[TripThread] Failed to upload media item ${index + 1}/${allMedia.length}: $e');
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                'Failed to upload media ${index + 1}/${allMedia.length}: $e',
+              ),
+            ),
+          );
+          setState(() {
+            _isUploadingMedia = false;
+            _uploadProgress = null;
+            _pendingMediaBatch = allMedia.sublist(index + 1);
+          });
+        }
+        break;
+      }
+    }
+
+    if (!mounted) {
+      return allSucceeded;
+    }
+
+    if (allSucceeded) {
+      _textController.clear();
+      _clearSelectedMedia();
+      setState(() {
+        _isUploadingMedia = false;
+        _uploadProgress = null;
+        _pendingMediaBatch = [];
+      });
+    }
+
+    return allSucceeded;
+  }
+
+  Future<Media> _uploadSingleMediaForEntry(
+    Media media,
+    String? caption,
+    TripProvider tripProvider,
+  ) async {
+    final mediaService = _mediaService ?? context.read<MediaService>();
+    Media resolvedMedia = media;
+
+    if (!media.url.startsWith('http')) {
+      final uploadedMedia = await mediaService.uploadMediaToCloudinary(
+        file: File(media.url),
+        tripId: widget.tripId,
+        usage: 'thread_entry',
+        onProgress: (progress) {
+          if (!mounted) return;
+          setState(() {
+            _uploadProgress = progress;
+          });
+        },
+      );
+
+      if (uploadedMedia == null) {
+        throw Exception('Media upload failed');
+      }
+
+      resolvedMedia = uploadedMedia;
+    } else {
+      if (mounted) {
+        setState(() {
+          _uploadProgress = 1.0;
+        });
+      }
+    }
+
+    if (resolvedMedia.id.isEmpty) {
+      throw Exception('Missing media identifier after upload');
+    }
+
+    final success = await tripProvider.addMediaEntry(
+      resolvedMedia.id,
+      caption: caption,
+      tripId: widget.tripId,
+    );
+
+    if (!success) {
+      throw Exception('Failed to save media entry');
+    }
+
+    if (mounted) {
+      setState(() {
+        _uploadProgress = 1.0;
+        _selectedMediaForEntry = resolvedMedia;
+      });
+    }
+
+    return resolvedMedia;
   }
 
   @override
@@ -839,11 +1033,18 @@ class _TripThreadScreenState extends State<TripThreadScreen> {
 
     final isVideo = entry.media?.type == MediaType.video;
     final heroTag = 'trip-media-${entry.id}';
-    final previewUrl =
-        isVideo ? _buildVideoThumbnailUrl(mediaUrl) : mediaUrl;
+    final previewUrl = isVideo
+        ? buildVideoThumbnailUrl(mediaUrl, maxWidth: 1280)
+        : buildOptimizedImageUrl(mediaUrl, width: 1600);
 
     return GestureDetector(
-      onTap: () => _openMediaViewer(heroTag, mediaUrl, isVideo),
+      onTap: () => _openMediaViewer(
+        heroTag,
+        isVideo
+            ? buildOptimizedVideoUrl(mediaUrl, maxWidth: 1920)
+            : buildOptimizedImageUrl(mediaUrl, width: 2048),
+        isVideo,
+      ),
       child: Container(
         margin: const EdgeInsets.only(top: 8),
         constraints: const BoxConstraints(
@@ -946,7 +1147,7 @@ class _TripThreadScreenState extends State<TripThreadScreen> {
                         maxScale: 5.0,
                         minScale: 0.5,
                         child: Image.network(
-                          mediaUrl,
+                          buildOptimizedImageUrl(mediaUrl, width: 2400),
                           fit: BoxFit.contain,
                           errorBuilder: (context, error, stackTrace) {
                             return Padding(
@@ -1264,71 +1465,113 @@ class _TripThreadScreenState extends State<TripThreadScreen> {
                                   ),
                                 ],
                               ),
-                              child: Row(
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  _buildPendingMediaThumbnail(),
-                                  const SizedBox(width: 12),
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        Text(
-                                          _selectedMediaForEntry!.filename ??
-                                              'Selected media',
-                                          style: const TextStyle(
-                                            fontWeight: FontWeight.w600,
-                                            fontSize: 14,
-                                            color: Colors.white,
-                                          ),
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
-                                        ),
-                                        const SizedBox(height: 4),
-                                        Text(
-                                          _selectedMediaForEntry!.size != null
-                                              ? '${(_selectedMediaForEntry!.size! / 1024 / 1024).toStringAsFixed(1)} MB'
-                                              : 'Selected',
-                                          style: TextStyle(
-                                            color: Colors.white70,
-                                            fontSize: 12,
-                                          ),
-                                        ),
-                                        if (_selectedMediaForEntry!.type ==
-                                                MediaType.video &&
-                                            _pendingVideoController != null)
-                                          Padding(
-                                            padding:
-                                                const EdgeInsets.only(top: 2.0),
-                                            child: Text(
-                                              _pendingVideoInitialized
-                                                  ? _formatDuration(
-                                                      _pendingVideoController!
-                                                          .value.duration)
-                                                  : 'Loading preview...',
+                                  Row(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      _buildPendingMediaThumbnail(),
+                                      const SizedBox(width: 12),
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Text(
+                                              _selectedMediaForEntry!.filename ??
+                                                  'Selected media',
+                                              style: const TextStyle(
+                                                fontWeight: FontWeight.w600,
+                                                fontSize: 14,
+                                                color: Colors.white,
+                                              ),
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                            ),
+                                            const SizedBox(height: 4),
+                                            Text(
+                                              _selectedMediaForEntry!.size != null
+                                                  ? '${(_selectedMediaForEntry!.size! / 1024 / 1024).toStringAsFixed(1)} MB'
+                                                  : 'Selected',
                                               style: TextStyle(
-                                                color: Colors.white60,
+                                                color: Colors.white70,
                                                 fontSize: 12,
                                               ),
                                             ),
+                                            if (_selectedMediaForEntry!.type ==
+                                                    MediaType.video &&
+                                                _pendingVideoController != null)
+                                              Padding(
+                                                padding: const EdgeInsets.only(
+                                                    top: 2.0),
+                                                child: Text(
+                                                  _pendingVideoInitialized
+                                                      ? _formatDuration(
+                                                          _pendingVideoController!
+                                                              .value.duration)
+                                                      : 'Loading preview...',
+                                                  style: TextStyle(
+                                                    color: Colors.white60,
+                                                    fontSize: 12,
+                                                  ),
+                                                ),
+                                              ),
+                                          ],
+                                        ),
+                                      ),
+                                      IconButton(
+                                        onPressed: _isUploadingMedia
+                                            ? null
+                                            : _clearSelectedMedia,
+                                        icon: const Icon(Icons.close, size: 20),
+                                        style: IconButton.styleFrom(
+                                          backgroundColor: Colors.white12,
+                                          foregroundColor: Colors.white,
+                                          visualDensity: VisualDensity.compact,
+                                          padding: const EdgeInsets.all(8),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  if (_pendingMediaBatch.isNotEmpty)
+                                    Padding(
+                                      padding: const EdgeInsets.only(top: 8.0),
+                                      child: Container(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 10,
+                                          vertical: 4,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: Colors.white12,
+                                          borderRadius: BorderRadius.circular(999),
+                                        ),
+                                        child: Text(
+                                          '${_pendingMediaBatch.length} more ${_pendingMediaBatch.length == 1 ? 'item' : 'items'} queued',
+                                          style: const TextStyle(
+                                            color: Colors.white,
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.w500,
                                           ),
-                                      ],
+                                        ),
+                                      ),
                                     ),
-                                  ),
-                                  IconButton(
-                                    onPressed: _isUploadingMedia
-                                        ? null
-                                        : _clearSelectedMedia,
-                                    icon: const Icon(Icons.close, size: 20),
-                                    style: IconButton.styleFrom(
-                                      backgroundColor: Colors.white12,
-                                      foregroundColor: Colors.white,
-                                      visualDensity: VisualDensity.compact,
-                                      padding: const EdgeInsets.all(8),
+                                  if (_isUploadingMedia)
+                                    Padding(
+                                      padding: const EdgeInsets.only(top: 12.0),
+                                      child: LinearProgressIndicator(
+                                        value: _uploadProgress != null
+                                            ? _uploadProgress!.clamp(0.0, 1.0)
+                                            : null,
+                                        backgroundColor: Colors.white12,
+                                        color: Theme.of(context)
+                                            .colorScheme
+                                            .secondary,
+                                        minHeight: 6,
+                                      ),
                                     ),
-                                  ),
                                 ],
                               ),
                             )
@@ -1344,8 +1587,7 @@ class _TripThreadScreenState extends State<TripThreadScreen> {
                                         child: OutlinedButton.icon(
                                           onPressed: _isUploadingMedia
                                               ? null
-                                              : () => _pickImage(
-                                                    fromCamera: false),
+                                              : _pickFromGallery,
                                           icon: const Icon(Icons.photo_library,
                                               size: 18),
                                           label: const Text('Gallery'),
@@ -1401,8 +1643,9 @@ class _TripThreadScreenState extends State<TripThreadScreen> {
                                       children: [
                                         Expanded(
                                           child: OutlinedButton.icon(
-                                            onPressed: () =>
-                                                _pickImage(fromCamera: false),
+                                            onPressed: _isUploadingMedia
+                                                ? null
+                                                : _pickFromGallery,
                                             icon: const Icon(
                                                 Icons.photo_library,
                                                 size: 18),
@@ -1418,8 +1661,10 @@ class _TripThreadScreenState extends State<TripThreadScreen> {
                                         const SizedBox(width: 8),
                                         Expanded(
                                           child: OutlinedButton.icon(
-                                            onPressed: () =>
-                                                _pickImage(fromCamera: true),
+                                            onPressed: _isUploadingMedia
+                                                ? null
+                                                : () => _pickImage(
+                                                      fromCamera: true),
                                             icon: const Icon(Icons.camera_alt,
                                                 size: 18),
                                             label: const Text('Camera'),
@@ -1437,7 +1682,9 @@ class _TripThreadScreenState extends State<TripThreadScreen> {
                                     SizedBox(
                                       width: double.infinity,
                                       child: OutlinedButton.icon(
-                                        onPressed: _pickVideo,
+                                        onPressed: _isUploadingMedia
+                                            ? null
+                                            : _pickVideo,
                                         icon: const Icon(Icons.video_file,
                                             size: 18),
                                         label: const Text('Video'),
@@ -1619,32 +1866,6 @@ class _TripThreadScreenState extends State<TripThreadScreen> {
     }
   }
 
-  String _buildVideoThumbnailUrl(String videoUrl) {
-    try {
-      final uri = Uri.parse(videoUrl);
-      final segments = List<String>.from(uri.pathSegments);
-      final uploadIndex = segments.indexOf('upload');
-      if (uploadIndex == -1) return videoUrl;
-
-      if (uploadIndex + 1 >= segments.length ||
-          segments[uploadIndex + 1] != 'so_0') {
-        segments.insert(uploadIndex + 1, 'so_0');
-      }
-
-      final lastIndex = segments.length - 1;
-      final filename = segments[lastIndex];
-      final dotIndex = filename.lastIndexOf('.');
-      final baseName =
-          dotIndex != -1 ? filename.substring(0, dotIndex) : filename;
-      segments[lastIndex] = '$baseName.jpg';
-
-      final newUri = uri.replace(pathSegments: segments, queryParameters: null);
-      return newUri.toString();
-    } catch (_) {
-      return videoUrl;
-    }
-  }
-
   Widget _buildPendingMediaThumbnail() {
     final media = _selectedMediaForEntry!;
     final borderRadius = BorderRadius.circular(10);
@@ -1653,7 +1874,7 @@ class _TripThreadScreenState extends State<TripThreadScreen> {
     if (media.type == MediaType.image) {
       final imageWidget = media.url.startsWith('http')
           ? Image.network(
-              media.url,
+              buildOptimizedImageUrl(media.url, width: 360, height: 360),
               fit: BoxFit.cover,
               errorBuilder: (context, error, stackTrace) => Container(
                 color: Colors.grey[300],
@@ -1690,12 +1911,23 @@ class _TripThreadScreenState extends State<TripThreadScreen> {
           ],
         );
       } else {
-        content = Container(
-          color: Colors.black54,
-          child: const Center(
-            child: Icon(Icons.videocam, color: Colors.white, size: 32),
-          ),
-        );
+        content = media.url.startsWith('http')
+            ? Image.network(
+                buildVideoThumbnailUrl(media.url, maxWidth: 360),
+                fit: BoxFit.cover,
+                errorBuilder: (context, error, stackTrace) => Container(
+                  color: Colors.black54,
+                  child: const Center(
+                    child: Icon(Icons.videocam, color: Colors.white, size: 32),
+                  ),
+                ),
+              )
+            : Container(
+                color: Colors.black54,
+                child: const Center(
+                  child: Icon(Icons.videocam, color: Colors.white, size: 32),
+                ),
+              );
       }
     }
 
@@ -1744,7 +1976,9 @@ class _TripVideoViewerState extends State<_TripVideoViewer> {
   @override
   void initState() {
     super.initState();
-    _controller = VideoPlayerController.networkUrl(Uri.parse(widget.mediaUrl))
+    _controller = VideoPlayerController.networkUrl(
+      Uri.parse(buildOptimizedVideoUrl(widget.mediaUrl, maxWidth: 1920)),
+    )
       ..initialize().then((_) {
         if (!mounted) return;
         setState(() {

@@ -310,6 +310,10 @@ model Media {
   type            MediaType
   filename        String?
   size            Int?
+  width           Int?
+  height          Int?
+  duration        Float?
+  processingStatus MediaProcessingStatus @default(COMPLETED)
   uploadedById    String
   tripId          String?
   createdAt       DateTime           @default(now())
@@ -320,6 +324,13 @@ model Media {
   tripCover       Trip[]             @relation("TripCoverMedia")
 
   @@map("media")
+}
+
+enum MediaProcessingStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
 }
 
 model TripJoinRequest {

@@ -344,7 +344,7 @@ export const createThreadEntrySchema = z
         case "TEXT":
           return data.contentText && data.contentText.length > 0;
         case "MEDIA":
-          return (data.mediaUrl && data.mediaUrl.length > 0) || (data.mediaId && data.mediaId.length > 0);
+          return !!data.mediaId;
         case "LOCATION":
           return (
             !!data.placeId ||

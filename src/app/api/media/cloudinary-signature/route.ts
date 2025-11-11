@@ -2,8 +2,9 @@ import { NextRequest } from "next/server";
 import { z } from "zod";
 import { ok, badRequest, serverError } from "@/lib/response-helpers";
 import {
-  withAuth,
   AuthenticatedRequest,
+  withAuth,
+  withRateLimit,
 } from "@/lib/middleware";
 import { prisma } from "@/lib/db";
 import { CloudinaryService } from "@/lib/cloudinary";
@@ -22,16 +23,17 @@ async function handler(request: AuthenticatedRequest) {
     const body = await request.json();
     const { filename, contentType, tripId, usage } =
       signatureSchema.parse(body);
+    const userId = request.user!.userId;
 
     if (tripId) {
       const trip = await prisma.trip.findFirst({
         where: {
           id: tripId,
           OR: [
-            { userId: request.user!.userId },
+            { userId },
             {
               participants: {
-                some: { userId: request.user!.userId },
+                some: { userId },
               },
             },
           ],
@@ -44,10 +46,31 @@ async function handler(request: AuthenticatedRequest) {
       }
     }
 
+    const dailyLimit =
+      Number(process.env.MEDIA_DAILY_UPLOAD_LIMIT ?? 200) || 0;
+
+    if (dailyLimit > 0) {
+      const startOfDay = new Date();
+      startOfDay.setUTCHours(0, 0, 0, 0);
+
+      const dailyUploads = await prisma.media.count({
+        where: {
+          uploadedById: userId,
+          createdAt: { gte: startOfDay },
+        },
+      });
+
+      if (dailyUploads >= dailyLimit) {
+        return badRequest(
+          "Daily media upload limit reached. Try again tomorrow."
+        );
+      }
+    }
+
     const uploadParams = await CloudinaryService.generateUploadSignature({
       filename,
       contentType,
-      userId: request.user!.userId,
+      userId,
       tripId,
       usage,
     });
@@ -72,5 +95,9 @@ async function handler(request: AuthenticatedRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  return withAuth(request, handler);
+  return withRateLimit(
+    request,
+    (rateLimitedReq) => withAuth(rateLimitedReq, handler),
+    { maxRequests: 20, windowMs: 60_000 }
+  );
 }

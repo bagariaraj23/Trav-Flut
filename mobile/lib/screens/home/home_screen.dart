@@ -7,6 +7,7 @@ import 'package:tripthread/providers/feed_provider.dart';
 import 'package:tripthread/providers/user_provider.dart';
 import 'package:tripthread/models/trip.dart';
 import 'package:tripthread/screens/discover/discover_tab.dart';
+import 'package:tripthread/utils/cloudinary_utils.dart';
 
 class HomeScreen extends StatefulWidget {
   final int initialTab;
@@ -390,7 +391,10 @@ class _HomeFeedScreenState extends State<HomeFeedScreen> {
                     child: ClipRRect(
                       borderRadius: BorderRadius.circular(12),
                       child: Image.network(
+                      buildOptimizedImageUrl(
                         post.curatedMedia[index],
+                        width: 1600,
+                      ),
                         fit: BoxFit.cover,
                         errorBuilder: (context, error, stackTrace) {
                           return Container(
@@ -736,7 +740,7 @@ class TripsTab extends StatelessWidget {
                   borderRadius:
                       const BorderRadius.vertical(top: Radius.circular(12)),
                   child: Image.network(
-                    coverUrl,
+                    buildOptimizedImageUrl(coverUrl, width: 1600),
                     width: double.infinity,
                     height: 200,
                     fit: BoxFit.cover,

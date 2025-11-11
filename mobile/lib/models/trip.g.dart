@@ -233,6 +233,12 @@ Media _$MediaFromJson(Map<String, dynamic> json) => Media(
       type: $enumDecode(_$MediaTypeEnumMap, json['type']),
       filename: json['filename'] as String?,
       size: (json['size'] as num?)?.toInt(),
+      width: (json['width'] as num?)?.toInt(),
+      height: (json['height'] as num?)?.toInt(),
+      duration: (json['duration'] as num?)?.toDouble(),
+      processingStatus: $enumDecodeNullable(
+              _$MediaProcessingStatusEnumMap, json['processingStatus']) ??
+          MediaProcessingStatus.completed,
       uploadedById: json['uploadedById'] as String,
       tripId: json['tripId'] as String?,
       createdAt: DateTime.parse(json['createdAt'] as String),
@@ -245,6 +251,11 @@ Map<String, dynamic> _$MediaToJson(Media instance) => <String, dynamic>{
       'type': _$MediaTypeEnumMap[instance.type]!,
       'filename': instance.filename,
       'size': instance.size,
+      'width': instance.width,
+      'height': instance.height,
+      'duration': instance.duration,
+      'processingStatus':
+          _$MediaProcessingStatusEnumMap[instance.processingStatus]!,
       'uploadedById': instance.uploadedById,
       'tripId': instance.tripId,
       'createdAt': instance.createdAt.toIso8601String(),
@@ -253,6 +264,13 @@ Map<String, dynamic> _$MediaToJson(Media instance) => <String, dynamic>{
 const _$MediaTypeEnumMap = {
   MediaType.image: 'IMAGE',
   MediaType.video: 'VIDEO',
+};
+
+const _$MediaProcessingStatusEnumMap = {
+  MediaProcessingStatus.pending: 'PENDING',
+  MediaProcessingStatus.processing: 'PROCESSING',
+  MediaProcessingStatus.completed: 'COMPLETED',
+  MediaProcessingStatus.failed: 'FAILED',
 };
 
 GpsCoordinates _$GpsCoordinatesFromJson(Map<String, dynamic> json) =>
