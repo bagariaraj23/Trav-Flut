@@ -752,8 +752,8 @@ class _TripThreadScreenState extends State<TripThreadScreen> {
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
                 color: isCurrentUser
-                    ? Theme.of(context).colorScheme.primary.withOpacity(0.1)
-                    : Colors.grey[50],
+                    ? Theme.of(context).colorScheme.primary.withOpacity(0.12)
+                    : const Color(0xFFFAF9F6),
                 borderRadius: BorderRadius.circular(16),
                 border: Border.all(
                   color: isCurrentUser
@@ -1034,8 +1034,8 @@ class _TripThreadScreenState extends State<TripThreadScreen> {
     final isVideo = entry.media?.type == MediaType.video;
     final heroTag = 'trip-media-${entry.id}';
     final previewUrl = isVideo
-        ? buildVideoThumbnailUrl(mediaUrl, maxWidth: 1280)
-        : buildOptimizedImageUrl(mediaUrl, width: 1600);
+        ? buildVideoThumbnailUrl(mediaUrl, maxWidth: 960)
+        : buildOptimizedImageUrl(mediaUrl, width: 1080);
 
     return GestureDetector(
       onTap: () => _openMediaViewer(
@@ -1047,9 +1047,9 @@ class _TripThreadScreenState extends State<TripThreadScreen> {
       ),
       child: Container(
         margin: const EdgeInsets.only(top: 8),
-        constraints: const BoxConstraints(
-          maxHeight: 300,
-          minHeight: 180,
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.of(context).size.height * 0.32,
+          minHeight: MediaQuery.of(context).size.height * 0.18,
         ),
         decoration: BoxDecoration(
           color: Colors.black12,
@@ -1220,6 +1220,28 @@ class _TripThreadScreenState extends State<TripThreadScreen> {
   }
 
   Widget _buildAddEntrySection() {
+    final mediaQuery = MediaQuery.of(context);
+    final keyboardInset = mediaQuery.viewInsets.bottom;
+    final screenHeight = mediaQuery.size.height;
+    final safeVerticalPadding =
+        mediaQuery.padding.top + mediaQuery.padding.bottom;
+    final availableHeight = screenHeight - safeVerticalPadding;
+
+    double maxHeight = screenHeight * 0.5;
+
+    if (keyboardInset > 0) {
+      final heightWithoutKeyboard = (availableHeight - keyboardInset)
+          .clamp(availableHeight * 0.25, availableHeight * 0.85);
+      maxHeight = heightWithoutKeyboard * 0.95;
+    } else {
+      maxHeight =
+          maxHeight.clamp(availableHeight * 0.35, availableHeight * 0.6);
+    }
+
+    if (maxHeight <= 0 || maxHeight.isNaN) {
+      maxHeight = availableHeight * 0.5;
+    }
+
     return Container(
       decoration: BoxDecoration(
         color: Theme.of(context).colorScheme.surface,
@@ -1234,7 +1256,7 @@ class _TripThreadScreenState extends State<TripThreadScreen> {
       child: SafeArea(
         child: ConstrainedBox(
           constraints: BoxConstraints(
-            maxHeight: MediaQuery.of(context).size.height * 0.5,
+            maxHeight: maxHeight,
           ),
           child: SingleChildScrollView(
             child: Padding(

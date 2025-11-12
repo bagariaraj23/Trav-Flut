@@ -8,6 +8,7 @@ import 'package:tripthread/providers/user_provider.dart';
 import 'package:tripthread/models/trip.dart';
 import 'package:tripthread/screens/discover/discover_tab.dart';
 import 'package:tripthread/utils/cloudinary_utils.dart';
+import 'package:tripthread/services/media_service.dart';
 
 class HomeScreen extends StatefulWidget {
   final int initialTab;
@@ -1010,22 +1011,161 @@ class ProfileTab extends StatelessWidget {
                   child: Column(
                     children: [
                       // Avatar
-                      CircleAvatar(
-                        radius: 40,
-                        backgroundColor: Theme.of(context).colorScheme.primary,
-                        backgroundImage: user.avatarUrl != null
-                            ? NetworkImage(user.avatarUrl!)
-                            : null,
-                        child: user.avatarUrl == null
-                            ? Text(
-                                user.name?.substring(0, 1).toUpperCase() ?? 'U',
-                                style: const TextStyle(
-                                  fontSize: 24,
-                                  fontWeight: FontWeight.bold,
+                      Stack(
+                        alignment: Alignment.bottomRight,
+                        children: [
+                          GestureDetector(
+                            onTap: user.avatarUrl == null
+                                ? null
+                                : () {
+                                    showDialog(
+                                      context: context,
+                                      barrierColor:
+                                          Colors.black.withOpacity(0.7),
+                                      builder: (dialogContext) {
+                                        return GestureDetector(
+                                          onTap: () =>
+                                              Navigator.of(dialogContext).pop(),
+                                          child: Dialog(
+                                            backgroundColor: Colors.transparent,
+                                            insetPadding:
+                                                const EdgeInsets.all(32),
+                                            child: Container(
+                                              padding: const EdgeInsets.all(16),
+                                              decoration: BoxDecoration(
+                                                color: Colors.black87,
+                                                borderRadius:
+                                                    BorderRadius.circular(24),
+                                                boxShadow: [
+                                                  BoxShadow(
+                                                    color: Colors.black
+                                                        .withOpacity(0.4),
+                                                    blurRadius: 20,
+                                                    offset:
+                                                        const Offset(0, 8),
+                                                  ),
+                                                ],
+                                              ),
+                                              child: CircleAvatar(
+                                                radius: 120,
+                                                backgroundImage: NetworkImage(
+                                                    user.avatarUrl!),
+                                              ),
+                                            ),
+                                          ),
+                                        );
+                                      },
+                                    );
+                                  },
+                            child: CircleAvatar(
+                              radius: 40,
+                              backgroundColor:
+                                  Theme.of(context).colorScheme.primary,
+                              backgroundImage: user.avatarUrl != null
+                                  ? NetworkImage(user.avatarUrl!)
+                                  : null,
+                              child: user.avatarUrl == null
+                                  ? Text(
+                                      user.name
+                                              ?.substring(0, 1)
+                                              .toUpperCase() ??
+                                          'U',
+                                      style: const TextStyle(
+                                        fontSize: 24,
+                                        fontWeight: FontWeight.bold,
+                                        color: Colors.white,
+                                      ),
+                                    )
+                                  : null,
+                            ),
+                          ),
+                          Positioned(
+                            bottom: 0,
+                            right: 0,
+                            child: GestureDetector(
+                              onTap: () async {
+                                final authProvider =
+                                    context.read<AuthProvider>();
+                                final mediaService =
+                                    context.read<MediaService>();
+                                final userProvider =
+                                    context.read<UserProvider>();
+                                final currentUser =
+                                    authProvider.currentUser;
+                                if (currentUser == null) return;
+
+                                try {
+                                  final file =
+                                      await mediaService.pickImage();
+                                  if (file == null) return;
+
+                                  final uploadedMedia =
+                                      await mediaService
+                                          .uploadMediaToCloudinary(
+                                    file: file,
+                                    usage: 'general',
+                                  );
+
+                                  if (uploadedMedia == null) {
+                                    throw Exception(
+                                        'Failed to upload avatar');
+                                  }
+
+                                  final success =
+                                      await userProvider.updateProfile(
+                                    userId: currentUser.id,
+                                    avatarUrl: uploadedMedia.url,
+                                  );
+
+                                  if (!success && context.mounted) {
+                                    ScaffoldMessenger.of(context)
+                                        .showSnackBar(
+                                      const SnackBar(
+                                        content: Text(
+                                            'Failed to update profile photo.'),
+                                      ),
+                                    );
+                                  } else if (success && context.mounted) {
+                                    final updatedUser = userProvider
+                                        .getUser(currentUser.id);
+                                    if (updatedUser != null) {
+                                      authProvider.updateUser(updatedUser);
+                                    }
+                                  }
+                                } catch (e) {
+                                  if (!context.mounted) return;
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text(
+                                          'Error updating profile photo: $e'),
+                                    ),
+                                  );
+                                }
+                              },
+                              child: Container(
+                                padding: const EdgeInsets.all(6),
+                                decoration: BoxDecoration(
+                                  color: Theme.of(context)
+                                      .colorScheme
+                                      .primary,
+                                  shape: BoxShape.circle,
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: Colors.black.withOpacity(0.2),
+                                      blurRadius: 6,
+                                      offset: const Offset(0, 2),
+                                    ),
+                                  ],
+                                ),
+                                child: const Icon(
+                                  Icons.camera_alt,
+                                  size: 18,
                                   color: Colors.white,
                                 ),
-                              )
-                            : null,
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
 
                       const SizedBox(height: 16),
@@ -1179,114 +1319,138 @@ class ProfileTab extends StatelessWidget {
                                 final secondaryText =
                                     primaryText.withOpacity(0.7);
 
-                                return Container(
-                                  margin: const EdgeInsets.only(bottom: 12),
-                                  padding: const EdgeInsets.all(12),
-                                  decoration: BoxDecoration(
-                                    color: cardColor,
-                                    borderRadius: BorderRadius.circular(12),
-                                    border: Border.all(
-                                      color: isDark
-                                          ? theme.dividerColor
-                                              .withOpacity(0.35)
-                                          : Colors.white.withOpacity(0.08),
+                                final coverUrl =
+                                    trip.coverMedia?.url ?? trip.coverMediaUrl;
+
+                                return InkWell(
+                                  borderRadius: BorderRadius.circular(12),
+                                  onTap: () {
+                                    context.go(
+                                      '/trip/${trip.id}',
+                                      extra: {'from': '/home'},
+                                    );
+                                  },
+                                  child: Container(
+                                    margin: const EdgeInsets.only(bottom: 12),
+                                    padding: const EdgeInsets.all(12),
+                                    decoration: BoxDecoration(
+                                      color: cardColor,
+                                      borderRadius: BorderRadius.circular(12),
+                                      border: Border.all(
+                                        color: isDark
+                                            ? theme.dividerColor
+                                                .withOpacity(0.35)
+                                            : Colors.white.withOpacity(0.08),
+                                      ),
+                                      boxShadow: [
+                                        if (!isDark)
+                                          BoxShadow(
+                                            color:
+                                                Colors.black.withOpacity(0.25),
+                                            blurRadius: 12,
+                                            offset: const Offset(0, 5),
+                                          ),
+                                      ],
                                     ),
-                                    boxShadow: [
-                                      if (!isDark)
-                                        BoxShadow(
-                                          color:
-                                              Colors.black.withOpacity(0.25),
-                                          blurRadius: 12,
-                                          offset: const Offset(0, 5),
-                                        ),
-                                    ],
-                                  ),
-                                  child: Row(
-                                    children: [
-                                      Container(
-                                        width: 52,
-                                        height: 52,
-                                        decoration: BoxDecoration(
-                                          color: theme.colorScheme.primary
-                                              .withOpacity(0.18),
+                                    child: Row(
+                                      children: [
+                                        ClipRRect(
                                           borderRadius:
                                               BorderRadius.circular(10),
+                                          child: SizedBox(
+                                            width: 64,
+                                            height: 64,
+                                            child: coverUrl != null
+                                                ? Image.network(
+                                                    buildOptimizedImageUrl(
+                                                      coverUrl,
+                                                      width: 480,
+                                                      height: 480,
+                                                    ),
+                                                    fit: BoxFit.cover,
+                                                    errorBuilder:
+                                                        (context, error,
+                                                            stackTrace) {
+                                                      return _buildRecentTripIcon(
+                                                          primaryText);
+                                                    },
+                                                  )
+                                                : _buildRecentTripIcon(
+                                                    primaryText),
+                                          ),
                                         ),
-                                        child: Icon(
-                                          Icons.travel_explore,
-                                          color: primaryText,
-                                        ),
-                                      ),
-                                      const SizedBox(width: 12),
-                                      Expanded(
-                                        child: Column(
-                                          crossAxisAlignment:
-                                              CrossAxisAlignment.start,
-                                          children: [
-                                            Text(
-                                              trip.title,
-                                              style: theme
-                                                  .textTheme.titleMedium
-                                                  ?.copyWith(
-                                                    color: primaryText,
-                                                    fontWeight: FontWeight.w600,
+                                        const SizedBox(width: 12),
+                                        Expanded(
+                                          child: Column(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
+                                            children: [
+                                              Text(
+                                                trip.title,
+                                                style: theme
+                                                    .textTheme.titleMedium
+                                                    ?.copyWith(
+                                                      color: primaryText,
+                                                      fontWeight:
+                                                          FontWeight.w600,
+                                                    ),
+                                                maxLines: 1,
+                                                overflow: TextOverflow.ellipsis,
+                                              ),
+                                              if (trip.destinations.isNotEmpty)
+                                                Padding(
+                                                  padding:
+                                                      const EdgeInsets.only(
+                                                          top: 2.0),
+                                                  child: Text(
+                                                    trip.destinations
+                                                        .take(3)
+                                                        .join(', '),
+                                                    style: theme
+                                                        .textTheme.bodySmall
+                                                        ?.copyWith(
+                                                          color: secondaryText,
+                                                        ),
+                                                    maxLines: 1,
+                                                    overflow:
+                                                        TextOverflow.ellipsis,
                                                   ),
-                                              maxLines: 1,
-                                              overflow: TextOverflow.ellipsis,
-                                            ),
-                                            if (trip.destinations.isNotEmpty)
+                                                ),
                                               Padding(
                                                 padding:
                                                     const EdgeInsets.only(
-                                                        top: 2.0),
-                                                child: Text(
-                                                  trip.destinations
-                                                      .take(3)
-                                                      .join(', '),
-                                                  style: theme
-                                                      .textTheme.bodySmall
-                                                      ?.copyWith(
-                                                        color: secondaryText,
+                                                        top: 6.0),
+                                                child: Row(
+                                                  children: [
+                                                    Icon(
+                                                      Icons.calendar_today,
+                                                      size: 14,
+                                                      color: secondaryText,
+                                                    ),
+                                                    const SizedBox(width: 6),
+                                                    Expanded(
+                                                      child: Text(
+                                                        '${trip.startDate.day}/${trip.startDate.month}/${trip.startDate.year} - ${trip.endDate.day}/${trip.endDate.month}/${trip.endDate.year}',
+                                                        style: theme.textTheme
+                                                            .bodySmall
+                                                            ?.copyWith(
+                                                              color:
+                                                                  secondaryText,
+                                                            ),
                                                       ),
-                                                  maxLines: 1,
-                                                  overflow:
-                                                      TextOverflow.ellipsis,
+                                                    ),
+                                                  ],
                                                 ),
                                               ),
-                                            Padding(
-                                              padding:
-                                                  const EdgeInsets.only(
-                                                      top: 6.0),
-                                              child: Row(
-                                                children: [
-                                                  Icon(
-                                                    Icons.calendar_today,
-                                                    size: 14,
-                                                    color: secondaryText,
-                                                  ),
-                                                  const SizedBox(width: 6),
-                                                  Expanded(
-                                                    child: Text(
-                                                      '${trip.startDate.day}/${trip.startDate.month}/${trip.startDate.year} - ${trip.endDate.day}/${trip.endDate.month}/${trip.endDate.year}',
-                                                      style: theme.textTheme
-                                                          .bodySmall
-                                                          ?.copyWith(
-                                                            color:
-                                                                secondaryText,
-                                                          ),
-                                                    ),
-                                                  ),
-                                                ],
-                                              ),
-                                            ),
-                                          ],
+                                            ],
+                                          ),
                                         ),
-                                      ),
-                                      Icon(
-                                        Icons.chevron_right,
-                                        color: secondaryText,
-                                      ),
-                                    ],
+                                        Icon(
+                                          Icons.chevron_right,
+                                          color: secondaryText,
+                                        ),
+                                      ],
+                                    ),
                                   ),
                                 );
                               }).toList(),
@@ -1319,6 +1483,18 @@ class ProfileTab extends StatelessWidget {
           style: Theme.of(context).textTheme.bodySmall,
         ),
       ],
+    );
+  }
+
+  Widget _buildRecentTripIcon(Color iconColor) {
+    return Container(
+      color: iconColor.withOpacity(0.12),
+      alignment: Alignment.center,
+      child: Icon(
+        Icons.travel_explore,
+        color: iconColor,
+        size: 28,
+      ),
     );
   }
 }
