@@ -1269,8 +1269,7 @@ class ProfileTab extends StatelessWidget {
                               if (tripProvider.trips.isNotEmpty)
                                 TextButton(
                                   onPressed: () {
-                                    // Switch to trips tab
-                                    // This would need to be handled by the parent widget
+                                    context.go('/trips', extra: {'from': '/home'});
                                   },
                                   child: const Text('View All'),
                                 ),
