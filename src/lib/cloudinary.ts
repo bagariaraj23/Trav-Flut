@@ -151,19 +151,6 @@ export class CloudinaryService {
       throw new ValidationError(validationResult.errors.join(", "));
     }
 
-    if (USER_STORAGE_QUOTA_BYTES > 0) {
-      const currentUsage = await prisma.media.aggregate({
-        _sum: { size: true },
-        where: { uploadedById: userId },
-      });
-      const usedBytes = currentUsage._sum.size ?? 0;
-      if (usedBytes >= USER_STORAGE_QUOTA_BYTES) {
-        throw new ValidationError(
-          "Storage quota exceeded. Delete existing media before uploading new files."
-        );
-      }
-    }
-
     const timestamp = Math.round(Date.now() / 1000);
     const resourceFolderParts = [CLOUDINARY_UPLOAD_FOLDER, userId];
 
@@ -211,107 +198,183 @@ export class CloudinaryService {
   ): Promise<{
     media: Awaited<ReturnType<typeof prisma.media.create>>;
   }> {
-    ensureConfigured();
-
-    if (!data.secure_url || !data.public_id) {
-      throw new ValidationError("Cloudinary response is missing required fields");
-    }
-
-    if (
-      !data.secure_url.startsWith(
-        `https://res.cloudinary.com/${process.env.CLOUDINARY_CLOUD_NAME}/`
-      )
-    ) {
-      throw new ValidationError("Unexpected Cloudinary URL");
-    }
-
-    const mimeType = `${data.resource_type}/${data.format}`;
-    const validationResult = validateFileUpload({
-      name: data.original_filename,
-      type: mimeType,
-      size: data.bytes,
-    });
-
-    if (!validationResult.isValid) {
-      throw new ValidationError(
-        `Upload failed validation: ${validationResult.errors.join(", ")}`
-      );
-    }
-
-    const resourceTypeKey = data.resource_type.toLowerCase();
-    const formatLower = data.format.toLowerCase();
-    const allowedFormats = ALLOWED_FORMATS_BY_RESOURCE_TYPE[resourceTypeKey];
-
-    if (!allowedFormats || !allowedFormats.includes(formatLower)) {
-      throw new ValidationError(
-        `Unsupported media format: ${resourceTypeKey}/${formatLower}`
-      );
-    }
-
-    const mediaType =
-      data.resource_type.toUpperCase() === "VIDEO"
-        ? MediaType.VIDEO
-        : MediaType.IMAGE;
-
-    // Verify reported mime type using magic number
-    let verificationPassed = false;
     try {
-      const response = await fetch(data.secure_url, {
-        method: "GET",
-        headers: { Range: "bytes=0-511" },
-        cache: "no-store",
+      console.log("[Cloudinary] confirmUpload called with:", {
+        publicId: data.public_id,
+        userId,
+        resourceType: data.resource_type,
+        bytes: data.bytes,
+        width: data.width,
+        height: data.height,
+        duration: data.duration,
       });
 
-      if (response.ok) {
-        const buffer = Buffer.from(await response.arrayBuffer());
-        const detected = detectMimeType(buffer);
-        if (detected) {
-          if (detected.toLowerCase() !== mimeType.toLowerCase()) {
-            throw new ValidationError(
-              `File content mismatch. Expected ${mimeType} but received ${detected}.`
+      ensureConfigured();
+
+      if (!data.secure_url || !data.public_id) {
+        throw new ValidationError("Cloudinary response is missing required fields");
+      }
+
+      // Validate file size (e.g., 50MB limit)
+      const maxSize = Number(process.env.MEDIA_MAX_FILE_SIZE_BYTES ?? 50 * 1024 * 1024);
+      if (data.bytes > maxSize) {
+        throw new ValidationError("File size exceeds maximum allowed");
+      }
+
+      // Validate resource type
+      if (!["image", "video"].includes(data.resource_type)) {
+        throw new ValidationError("Invalid resource type");
+      }
+
+      if (
+        !data.secure_url.startsWith(
+          `https://res.cloudinary.com/${process.env.CLOUDINARY_CLOUD_NAME}/`
+        )
+      ) {
+        throw new ValidationError("Unexpected Cloudinary URL");
+      }
+
+      const mimeType = `${data.resource_type}/${data.format}`;
+      const validationResult = validateFileUpload({
+        name: data.original_filename,
+        type: mimeType,
+        size: data.bytes,
+      });
+
+      if (!validationResult.isValid) {
+        throw new ValidationError(
+          `Upload failed validation: ${validationResult.errors.join(", ")}`
+        );
+      }
+
+      const resourceTypeKey = data.resource_type.toLowerCase();
+      const formatLower = data.format.toLowerCase();
+      const allowedFormats = ALLOWED_FORMATS_BY_RESOURCE_TYPE[resourceTypeKey];
+
+      if (!allowedFormats || !allowedFormats.includes(formatLower)) {
+        throw new ValidationError(
+          `Unsupported media format: ${resourceTypeKey}/${formatLower}`
+        );
+      }
+
+      const mediaType =
+        data.resource_type.toUpperCase() === "VIDEO"
+          ? MediaType.VIDEO
+          : MediaType.IMAGE;
+
+      // Verify reported mime type using magic number
+      let verificationPassed = false;
+      try {
+        console.log("[Cloudinary] Verifying file content...");
+
+        const response = await fetch(data.secure_url, {
+          method: "GET",
+          headers: { Range: "bytes=0-511" },
+          cache: "no-store",
+        });
+
+        if (response.ok) {
+          const buffer = Buffer.from(await response.arrayBuffer());
+          const detected = detectMimeType(buffer);
+
+          if (detected) {
+            const normalizeType = (type: string) =>
+              type.toLowerCase().replace('/jpg', '/jpeg');
+
+            const normalizedExpected = normalizeType(mimeType);
+            const normalizedDetected = normalizeType(detected);
+
+            if (normalizedExpected === normalizedDetected) {
+              verificationPassed = true;
+              console.log("[Cloudinary] File content verification PASSED");
+            } else {
+              console.warn(
+                `[Cloudinary] MIME type mismatch: expected ${mimeType}, got ${detected}`
+              );
+
+              const expectedCategory = data.resource_type.toLowerCase();
+              const detectedCategory = detected.split('/')[0].toLowerCase();
+
+              if (expectedCategory !== detectedCategory) {
+                throw new ValidationError(
+                  `File content mismatch. Expected ${expectedCategory} but received ${detectedCategory}.`
+                );
+              }
+
+              console.warn("[Cloudinary] Allowing upload despite format name difference");
+              verificationPassed = true;
+            }
+          } else {
+            console.warn(
+              "[Cloudinary] Unable to determine mime type from file header."
             );
           }
-          verificationPassed = true;
         } else {
           console.warn(
-            "[Cloudinary] Unable to determine mime type from file header."
+            "[Cloudinary] Unable to fetch file head for content verification:",
+            response.status,
+            response.statusText
           );
         }
-      } else {
+      } catch (error) {
+        console.warn("[Cloudinary] Magic number verification failed:", error);
+
+        // Only re-throw ValidationErrors for major mismatches
+        if (error instanceof ValidationError &&
+          error.message.includes("File content mismatch")) {
+          throw error;
+        }
+
+        // Other errors are logged but don't block upload
+        console.warn("[Cloudinary] Proceeding with upload despite verification error");
+      }
+
+      //   if (detected) {
+      //     if (detected.toLowerCase() !== mimeType.toLowerCase()) {
+      //       throw new ValidationError(
+      //         `File content mismatch. Expected ${mimeType} but received ${detected}.`
+      //       );
+      //     }
+      //     verificationPassed = true;
+      //   } else {
+      //     console.warn(
+      //       "[Cloudinary] Unable to determine mime type from file header."
+      //     );
+      //   }
+      // } else {
+      //   console.warn(
+      //     "[Cloudinary] Unable to fetch file head for content verification:",
+      //     response.status,
+      //     response.statusText
+      //   );
+      // }
+      // } catch (error) {
+      //   console.warn("[Cloudinary] Magic number verification failed:", error);
+      //   if (error instanceof ValidationError) {
+      //     throw error;
+      //   }
+      // }
+
+      if (!verificationPassed) {
         console.warn(
-          "[Cloudinary] Unable to fetch file head for content verification:",
-          response.status,
-          response.statusText
+          "[Cloudinary] Proceeding without header verification; ensuring type via Cloudinary metadata."
         );
       }
-    } catch (error) {
-      console.warn("[Cloudinary] Magic number verification failed:", error);
-      if (error instanceof ValidationError) {
-        throw error;
+
+      if (USER_STORAGE_QUOTA_BYTES > 0) {
+        const currentUsage = await prisma.media.aggregate({
+          _sum: { size: true },
+          where: { uploadedById: userId },
+        });
+        const usedBytes = currentUsage._sum.size ?? 0;
+        if (usedBytes + data.bytes > USER_STORAGE_QUOTA_BYTES) {
+          throw new ValidationError(
+            "Storage quota exceeded. Delete existing media before uploading new files."
+          );
+        }
       }
-    }
 
-    if (!verificationPassed) {
-      console.warn(
-        "[Cloudinary] Proceeding without header verification; ensuring type via Cloudinary metadata."
-      );
-    }
-
-    if (USER_STORAGE_QUOTA_BYTES > 0) {
-      const currentUsage = await prisma.media.aggregate({
-        _sum: { size: true },
-        where: { uploadedById: userId },
-      });
-      const usedBytes = currentUsage._sum.size ?? 0;
-      if (usedBytes + data.bytes > USER_STORAGE_QUOTA_BYTES) {
-        throw new ValidationError(
-          "Storage quota exceeded. Delete existing media before uploading new files."
-        );
-      }
-    }
-
-    const media = await prisma.media.create({
-      data: {
+      console.log("[Cloudinary] Creating media record with data:", {
         url: data.secure_url,
         publicId: data.public_id,
         type: mediaType,
@@ -323,10 +386,31 @@ export class CloudinaryService {
         processingStatus: "COMPLETED",
         uploadedById: userId,
         tripId: data.tripId ?? null,
-      } as any,
-    });
+      });
 
-    return { media };
+      const media = await prisma.media.create({
+        data: {
+          url: data.secure_url,
+          publicId: data.public_id,
+          type: mediaType,
+          filename: data.original_filename,
+          size: data.bytes,
+          width: data.width ?? null,
+          height: data.height ?? null,
+          duration: data.duration ?? null,
+          processingStatus: "COMPLETED" as const,
+          uploadedById: userId,
+          tripId: data.tripId ?? null,
+        },
+      });
+
+      console.log("[Cloudinary] Media record created successfully:", media.id);
+
+      return { media };
+    } catch (error) {
+      console.error("[Cloudinary] confirmUpload failed:", error);
+      throw error;
+    }
   }
 
   static async deleteMedia(publicId: string): Promise<void> {

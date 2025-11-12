@@ -4,7 +4,6 @@ import { ok, badRequest, serverError } from "@/lib/response-helpers";
 import {
   AuthenticatedRequest,
   withAuth,
-  withRateLimit,
 } from "@/lib/middleware";
 import { prisma } from "@/lib/db";
 import { CloudinaryService } from "@/lib/cloudinary";
@@ -21,6 +20,11 @@ const signatureSchema = z.object({
 async function handler(request: AuthenticatedRequest) {
   try {
     const body = await request.json();
+
+    console.log("[MEDIA SIGNATURE] ===== NEW REQUEST =====");
+    console.log("[MEDIA SIGNATURE] User:", request.user!.userId);
+    console.log("[MEDIA SIGNATURE] Request body:", body);
+
     const { filename, contentType, tripId, usage } =
       signatureSchema.parse(body);
     const userId = request.user!.userId;
@@ -43,6 +47,19 @@ async function handler(request: AuthenticatedRequest) {
 
       if (!trip) {
         return badRequest("Trip not found or access denied");
+      }
+
+      const perTripLimit = Number(process.env.MEDIA_PER_TRIP_LIMIT ?? 500) || 0;
+      if (perTripLimit > 0) {
+        const tripMediaCount = await prisma.media.count({
+          where: { tripId },
+        });
+
+        if (tripMediaCount >= perTripLimit) {
+          return badRequest(
+            `Trip media limit of ${perTripLimit} reached. Cannot upload more media to this trip.`
+          );
+        }
       }
     }
 
@@ -95,9 +112,5 @@ async function handler(request: AuthenticatedRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  return withRateLimit(
-    request,
-    (rateLimitedReq) => withAuth(rateLimitedReq, handler),
-    { maxRequests: 20, windowMs: 60_000 }
-  );
+  return withAuth(request, handler);
 }

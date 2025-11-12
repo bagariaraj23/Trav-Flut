@@ -28,6 +28,7 @@ const confirmSchema = z.object({
 async function handler(request: AuthenticatedRequest) {
   try {
     const body = await request.json();
+
     const { tripId, usage, ...cloudinaryPayload } =
       confirmSchema.parse(body);
 
@@ -67,12 +68,24 @@ async function handler(request: AuthenticatedRequest) {
   } catch (error: any) {
     console.error("[MEDIA] Confirm upload failed:", error);
 
+    // Log the full error details for debugging
+    if (error.code) {
+      console.error("[MEDIA] Prisma error code:", error.code);
+    }
+    if (error.meta) {
+      console.error("[MEDIA] Prisma error meta:", error.meta);
+    }
+
     if (error.name === "ZodError") {
       return badRequest("Invalid request data", error.errors);
     }
-
     if (error.name === "ValidationError") {
       return badRequest(error.message);
+    }
+
+    // Return more detailed error in development
+    if (process.env.NODE_ENV === "development") {
+      return serverError(`Failed to confirm media upload: ${error.message}`);
     }
 
     return serverError("Failed to confirm media upload");
