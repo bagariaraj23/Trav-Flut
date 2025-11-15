@@ -1447,163 +1447,152 @@ class _TripThreadScreenState extends State<TripThreadScreen> {
                       ],
                     ),
 
-                  // MEDIA SELECTION - Made more compact
+                  // MEDIA SELECTION - Made more compact and flexible
                   if (_selectedType == ThreadEntryType.media)
-                    Container(
-                      padding: const EdgeInsets.all(12),
-                      margin: const EdgeInsets.only(bottom: 12),
-                      decoration: BoxDecoration(
-                        border: Border.all(color: Colors.grey[300]!),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Media',
-                            style: Theme.of(context)
-                                .textTheme
-                                .titleSmall
-                                ?.copyWith(
-                                  fontWeight: FontWeight.w600,
-                                ),
-                          ),
-                          const SizedBox(height: 12),
-                          if (_selectedMediaForEntry != null)
-                            Container(
-                              padding: const EdgeInsets.all(12),
-                              decoration: BoxDecoration(
-                                color: Colors.grey[900],
-                                borderRadius: BorderRadius.circular(12),
-                                border: Border.all(
-                                  color: Colors.white.withOpacity(0.15),
-                                ),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: Colors.black.withOpacity(0.25),
-                                    blurRadius: 12,
-                                    offset: const Offset(0, 4),
-                                  ),
-                                ],
+                    Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Media preview section - wrapped in Flexible to prevent overflow
+                        if (_selectedMediaForEntry != null)
+                          Container(
+                            padding: const EdgeInsets.all(12),
+                            margin: const EdgeInsets.only(bottom: 12),
+                            decoration: BoxDecoration(
+                              color: Colors.grey[900],
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(
+                                color: Colors.white.withOpacity(0.15),
                               ),
-                              child: Column(
-                                mainAxisSize: MainAxisSize.min,
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Row(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      _buildPendingMediaThumbnail(),
-                                      const SizedBox(width: 12),
-                                      Expanded(
-                                        child: Column(
-                                          crossAxisAlignment:
-                                              CrossAxisAlignment.start,
-                                          mainAxisSize: MainAxisSize.min,
-                                          children: [
-                                            Text(
-                                              _selectedMediaForEntry!
-                                                      .filename ??
-                                                  'Selected media',
-                                              style: const TextStyle(
-                                                fontWeight: FontWeight.w600,
-                                                fontSize: 14,
-                                                color: Colors.white,
-                                              ),
-                                              maxLines: 1,
-                                              overflow: TextOverflow.ellipsis,
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withOpacity(0.25),
+                                  blurRadius: 12,
+                                  offset: const Offset(0, 4),
+                                ),
+                              ],
+                            ),
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    _buildPendingMediaThumbnail(),
+                                    const SizedBox(width: 12),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Text(
+                                            _selectedMediaForEntry!.filename ??
+                                                'Selected media',
+                                            style: const TextStyle(
+                                              fontWeight: FontWeight.w600,
+                                              fontSize: 14,
+                                              color: Colors.white,
                                             ),
-                                            const SizedBox(height: 4),
-                                            Text(
-                                              _selectedMediaForEntry!.size !=
-                                                      null
-                                                  ? '${(_selectedMediaForEntry!.size! / 1024 / 1024).toStringAsFixed(1)} MB'
-                                                  : 'Selected',
-                                              style: TextStyle(
-                                                color: Colors.white70,
-                                                fontSize: 12,
-                                              ),
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                          const SizedBox(height: 4),
+                                          Text(
+                                            _selectedMediaForEntry!.size != null
+                                                ? '${(_selectedMediaForEntry!.size! / 1024 / 1024).toStringAsFixed(1)} MB'
+                                                : 'Selected',
+                                            style: const TextStyle(
+                                              color: Colors.white70,
+                                              fontSize: 12,
                                             ),
-                                            if (_selectedMediaForEntry!.type ==
-                                                    MediaType.video &&
-                                                _pendingVideoController != null)
-                                              Padding(
-                                                padding: const EdgeInsets.only(
-                                                    top: 2.0),
-                                                child: Text(
-                                                  _pendingVideoInitialized
-                                                      ? _formatDuration(
-                                                          _pendingVideoController!
-                                                              .value.duration)
-                                                      : 'Loading preview...',
-                                                  style: TextStyle(
-                                                    color: Colors.white60,
-                                                    fontSize: 12,
-                                                  ),
+                                          ),
+                                          if (_selectedMediaForEntry!.type ==
+                                                  MediaType.video &&
+                                              _pendingVideoController != null)
+                                            Padding(
+                                              padding: const EdgeInsets.only(
+                                                  top: 2.0),
+                                              child: Text(
+                                                _pendingVideoInitialized
+                                                    ? _formatDuration(
+                                                        _pendingVideoController!
+                                                            .value.duration)
+                                                    : 'Loading preview...',
+                                                style: const TextStyle(
+                                                  color: Colors.white60,
+                                                  fontSize: 12,
                                                 ),
                                               ),
-                                          ],
-                                        ),
-                                      ),
-                                      IconButton(
-                                        onPressed: _isUploadingMedia
-                                            ? null
-                                            : _clearSelectedMedia,
-                                        icon: const Icon(Icons.close, size: 20),
-                                        style: IconButton.styleFrom(
-                                          backgroundColor: Colors.white12,
-                                          foregroundColor: Colors.white,
-                                          visualDensity: VisualDensity.compact,
-                                          padding: const EdgeInsets.all(8),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                  if (_pendingMediaBatch.isNotEmpty)
-                                    Padding(
-                                      padding: const EdgeInsets.only(top: 8.0),
-                                      child: Container(
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 10,
-                                          vertical: 4,
-                                        ),
-                                        decoration: BoxDecoration(
-                                          color: Colors.white12,
-                                          borderRadius:
-                                              BorderRadius.circular(999),
-                                        ),
-                                        child: Text(
-                                          '${_pendingMediaBatch.length} more ${_pendingMediaBatch.length == 1 ? 'item' : 'items'} queued',
-                                          style: const TextStyle(
-                                            color: Colors.white,
-                                            fontSize: 12,
-                                            fontWeight: FontWeight.w500,
-                                          ),
-                                        ),
+                                            ),
+                                        ],
                                       ),
                                     ),
-                                  if (_isUploadingMedia)
-                                    Padding(
-                                      padding: const EdgeInsets.only(top: 12.0),
-                                      child: LinearProgressIndicator(
-                                        value: _uploadProgress != null
-                                            ? _uploadProgress!.clamp(0.0, 1.0)
-                                            : null,
+                                    IconButton(
+                                      onPressed: _isUploadingMedia
+                                          ? null
+                                          : _clearSelectedMedia,
+                                      icon: const Icon(Icons.close, size: 20),
+                                      style: IconButton.styleFrom(
                                         backgroundColor: Colors.white12,
-                                        color: Theme.of(context)
-                                            .colorScheme
-                                            .secondary,
-                                        minHeight: 6,
+                                        foregroundColor: Colors.white,
+                                        visualDensity: VisualDensity.compact,
+                                        padding: const EdgeInsets.all(8),
                                       ),
                                     ),
-                                ],
-                              ),
-                            )
-                          else
-                            // RESPONSIVE MEDIA BUTTONS
-                            LayoutBuilder(
+                                  ],
+                                ),
+                                if (_pendingMediaBatch.isNotEmpty)
+                                  Padding(
+                                    padding: const EdgeInsets.only(top: 8.0),
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 10,
+                                        vertical: 4,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: Colors.white12,
+                                        borderRadius:
+                                            BorderRadius.circular(999),
+                                      ),
+                                      child: Text(
+                                        '${_pendingMediaBatch.length} more ${_pendingMediaBatch.length == 1 ? 'item' : 'items'} queued',
+                                        style: const TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w500,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                if (_isUploadingMedia)
+                                  Padding(
+                                    padding: const EdgeInsets.only(top: 12.0),
+                                    child: LinearProgressIndicator(
+                                      value: _uploadProgress != null
+                                          ? _uploadProgress!.clamp(0.0, 1.0)
+                                          : null,
+                                      backgroundColor: Colors.white12,
+                                      color: Theme.of(context)
+                                          .colorScheme
+                                          .secondary,
+                                      minHeight: 6,
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          )
+                        else
+                          // RESPONSIVE MEDIA BUTTONS - More compact
+                          Container(
+                            padding: const EdgeInsets.all(8),
+                            margin: const EdgeInsets.only(bottom: 12),
+                            decoration: BoxDecoration(
+                              border: Border.all(color: Colors.grey[300]!),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: LayoutBuilder(
                               builder: (context, constraints) {
                                 final isWide = constraints.maxWidth > 400;
                                 if (isWide) {
@@ -1619,12 +1608,12 @@ class _TripThreadScreenState extends State<TripThreadScreen> {
                                           label: const Text('Gallery'),
                                           style: OutlinedButton.styleFrom(
                                             padding: const EdgeInsets.symmetric(
-                                              vertical: 10,
+                                              vertical: 8,
                                             ),
                                           ),
                                         ),
                                       ),
-                                      const SizedBox(width: 8),
+                                      const SizedBox(width: 6),
                                       Expanded(
                                         child: OutlinedButton.icon(
                                           onPressed: _isUploadingMedia
@@ -1636,12 +1625,12 @@ class _TripThreadScreenState extends State<TripThreadScreen> {
                                           label: const Text('Camera'),
                                           style: OutlinedButton.styleFrom(
                                             padding: const EdgeInsets.symmetric(
-                                              vertical: 10,
+                                              vertical: 8,
                                             ),
                                           ),
                                         ),
                                       ),
-                                      const SizedBox(width: 8),
+                                      const SizedBox(width: 6),
                                       Expanded(
                                         child: OutlinedButton.icon(
                                           onPressed: _isUploadingMedia
@@ -1652,7 +1641,7 @@ class _TripThreadScreenState extends State<TripThreadScreen> {
                                           label: const Text('Video'),
                                           style: OutlinedButton.styleFrom(
                                             padding: const EdgeInsets.symmetric(
-                                              vertical: 10,
+                                              vertical: 8,
                                             ),
                                           ),
                                         ),
@@ -1679,12 +1668,12 @@ class _TripThreadScreenState extends State<TripThreadScreen> {
                                             style: OutlinedButton.styleFrom(
                                               padding:
                                                   const EdgeInsets.symmetric(
-                                                vertical: 10,
+                                                vertical: 8,
                                               ),
                                             ),
                                           ),
                                         ),
-                                        const SizedBox(width: 8),
+                                        const SizedBox(width: 6),
                                         Expanded(
                                           child: OutlinedButton.icon(
                                             onPressed: _isUploadingMedia
@@ -1697,14 +1686,14 @@ class _TripThreadScreenState extends State<TripThreadScreen> {
                                             style: OutlinedButton.styleFrom(
                                               padding:
                                                   const EdgeInsets.symmetric(
-                                                vertical: 10,
+                                                vertical: 8,
                                               ),
                                             ),
                                           ),
                                         ),
                                       ],
                                     ),
-                                    const SizedBox(height: 8),
+                                    const SizedBox(height: 6),
                                     SizedBox(
                                       width: double.infinity,
                                       child: OutlinedButton.icon(
@@ -1716,7 +1705,7 @@ class _TripThreadScreenState extends State<TripThreadScreen> {
                                         label: const Text('Video'),
                                         style: OutlinedButton.styleFrom(
                                           padding: const EdgeInsets.symmetric(
-                                            vertical: 10,
+                                            vertical: 8,
                                           ),
                                         ),
                                       ),
@@ -1725,8 +1714,8 @@ class _TripThreadScreenState extends State<TripThreadScreen> {
                                 );
                               },
                             ),
-                        ],
-                      ),
+                          ),
+                      ],
                     ),
 
                   // TEXT INPUT + SEND BUTTON - Compact and responsive
@@ -1747,7 +1736,7 @@ class _TripThreadScreenState extends State<TripThreadScreen> {
                             ),
                             isDense: true,
                           ),
-                          maxLines: 3,
+                          maxLines: 2,
                           minLines: 1,
                           textCapitalization: TextCapitalization.sentences,
                         ),
@@ -1827,20 +1816,19 @@ class _TripThreadScreenState extends State<TripThreadScreen> {
     switch (type) {
       case ThreadEntryType.text:
         icon = Icons.text_fields;
-        color = Colors.blue[700]!; // Darker blue for better contrast
+        color = Colors.blue[700]!;
         break;
       case ThreadEntryType.media:
         icon = Icons.photo_camera;
-        color = Colors
-            .purple[700]!; // Changed from green to purple for better visibility
+        color = Colors.purple[700]!;
         break;
       case ThreadEntryType.location:
         icon = Icons.location_on;
-        color = Colors.red[700]!; // Darker red for better contrast
+        color = Colors.red[700]!;
         break;
       case ThreadEntryType.checkin:
         icon = Icons.check_circle;
-        color = Colors.orange[700]!; // Darker orange for better contrast
+        color = Colors.orange[700]!;
         break;
     }
 
