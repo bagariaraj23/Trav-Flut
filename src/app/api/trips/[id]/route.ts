@@ -167,7 +167,6 @@ export async function GET(
       endDate: trip.endDate?.toISOString() || undefined,
       entryCount: trip.entryCount,
       participantCount: trip.participantCount,
-      coverMediaUrl: trip.coverMediaUrl ?? undefined,
       coverMediaId: trip.coverMediaId ?? undefined,
       createdAt: trip.createdAt.toISOString(),
       updatedAt: trip.updatedAt.toISOString(),

@@ -80,8 +80,8 @@ export async function POST(request: NextRequest) {
               JSON.stringify(validatedData, null, 2)
             );
             console.log(
-              "[DEBUG] coverMediaUrl after validation:",
-              validatedData.coverMediaUrl
+              "[DEBUG] coverMediaId after validation:",
+              validatedData.coverMediaId
             );
             console.log(
               "[DEBUG] description after validation:",
@@ -116,14 +116,13 @@ export async function POST(request: NextRequest) {
                   : destinationPlaceIds[0];
             }
 
-            let coverMediaUrl: string | null = tripData.coverMediaUrl ?? null;
             const coverMediaId = tripData.coverMediaId ?? null;
 
-            // Validate cover media ownership and fetch URL if provided
+            // Validate cover media ownership if provided
             if (coverMediaId) {
               const mediaRecord = await prisma.media.findUnique({
                 where: { id: coverMediaId },
-                select: { id: true, url: true, uploadedById: true, tripId: true },
+                select: { id: true, uploadedById: true, tripId: true },
               });
 
               if (!mediaRecord) {
@@ -133,8 +132,6 @@ export async function POST(request: NextRequest) {
               if (mediaRecord.uploadedById !== userId) {
                 throw new ValidationError("You do not have permission to use this media");
               }
-
-              coverMediaUrl = mediaRecord.url;
             }
 
             // Create trip with transaction for data consistency
@@ -158,7 +155,6 @@ export async function POST(request: NextRequest) {
                   description: tripData.description ?? null,
                   type: tripData.type ?? null,
                   mood: tripData.mood ?? null,
-                  coverMediaUrl,
                   coverMediaId,
                   startLocationId: startLocationId ?? null,
                   endLocationId: endLocationId ?? null,
@@ -225,7 +221,6 @@ export async function POST(request: NextRequest) {
                 : undefined,
               endDate: trip.endDate ? trip.endDate.toISOString() : undefined,
               description: trip.description ?? undefined,
-              coverMediaUrl: trip.coverMediaUrl ?? undefined,
               coverMediaId: trip.coverMediaId ?? undefined,
               type: trip.type ?? undefined,
               mood: trip.mood ?? undefined,
@@ -258,8 +253,8 @@ export async function POST(request: NextRequest) {
               JSON.stringify(tripResponse, null, 2)
             );
             console.log(
-              "[DEBUG] coverMediaUrl in response:",
-              tripResponse.coverMediaUrl
+              "[DEBUG] coverMediaId in response:",
+              tripResponse.coverMediaId
             );
             console.log(
               "[DEBUG] description in response:",
@@ -399,7 +394,6 @@ export async function GET(request: NextRequest) {
               : undefined,
             endDate: trip.endDate ? trip.endDate.toISOString() : undefined,
             createdAt: trip.createdAt.toISOString(),
-            coverMediaUrl: trip.coverMediaUrl ?? undefined,
             coverMediaId: trip.coverMediaId ?? undefined,
             type: trip.type ?? undefined,
             mood: trip.mood ?? undefined,

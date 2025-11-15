@@ -5,7 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:tripthread/providers/auth_provider.dart';
 import 'package:tripthread/providers/trip_provider.dart';
 import 'package:tripthread/models/trip.dart';
-import 'package:tripthread/models/user.dart';
+// import 'package:tripthread/models/user.dart';
 import 'package:tripthread/services/api_service.dart';
 
 class TripParticipantsScreen extends StatefulWidget {
@@ -24,7 +24,7 @@ class _TripParticipantsScreenState extends State<TripParticipantsScreen> {
   final _searchController = TextEditingController();
   Timer? _debounceTimer;
   List<TripParticipant> _participants = [];
-  List<User> _searchResults = [];
+  List<Map<String, dynamic>> _searchResults = [];
   bool _isSearching = false;
   @override
   void initState() {
@@ -53,7 +53,7 @@ class _TripParticipantsScreenState extends State<TripParticipantsScreen> {
       if (!mounted) return;
       if (response.success && response.data != null) {
         setState(() {
-          _searchResults = response.data!.map((u) => User.fromJson(u)).toList();
+          _searchResults = response.data!;
           _isSearching = false;
         });
       } else {
@@ -152,8 +152,8 @@ class _TripParticipantsScreenState extends State<TripParticipantsScreen> {
     );
   }
 
-  Widget _getInvitationButton(User user) {
-    final hasInvitationBeenSent = _hasInvitationBeenSent(user.id);
+  Widget _getInvitationButtonForSearch(String userId) {
+    final hasInvitationBeenSent = _hasInvitationBeenSent(userId);
 
     if (hasInvitationBeenSent) {
       return Container(
@@ -185,7 +185,7 @@ class _TripParticipantsScreenState extends State<TripParticipantsScreen> {
     }
 
     return IconButton(
-      onPressed: () => _sendInvitation(user.id),
+      onPressed: () => _sendInvitation(userId),
       icon: const Icon(Icons.person_add),
       color: Theme.of(context).colorScheme.primary,
     );
@@ -237,7 +237,12 @@ class _TripParticipantsScreenState extends State<TripParticipantsScreen> {
     }
   }
 
-  Widget _buildUserSearchResult(User user) {
+  Widget _buildUserSearchResult(Map<String, dynamic> user) {
+    final avatarUrl = user['avatarUrl'] as String?;
+    final name = user['name'] ?? 'Unknown User';
+    final username = user['username'] ?? 'No username';
+    final userId = user['id'] as String;
+
     return Container(
       width: 200,
       margin: const EdgeInsets.only(right: 12),
@@ -249,10 +254,9 @@ class _TripParticipantsScreenState extends State<TripParticipantsScreen> {
               CircleAvatar(
                 radius: 20,
                 backgroundColor: Theme.of(context).colorScheme.primary,
-                backgroundImage: user.avatarUrl != null
-                    ? NetworkImage(user.avatarUrl!)
-                    : null,
-                child: user.avatarUrl == null
+                backgroundImage: 
+                avatarUrl != null ? NetworkImage(avatarUrl) : null,
+                child: avatarUrl == null
                     ? Icon(
                         Icons.person,
                         color: Colors.white,
@@ -267,16 +271,15 @@ class _TripParticipantsScreenState extends State<TripParticipantsScreen> {
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     Text(
-                      user.name ?? 'Unknown User',
+                      name,
                       style: const TextStyle(
                         fontWeight: FontWeight.w600,
                       ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
-                    if (user.username != null)
                       Text(
-                        '@${user.username}',
+                        '@$username',
                         style: TextStyle(
                           color: Colors.grey[600],
                           fontSize: 12,
@@ -287,7 +290,7 @@ class _TripParticipantsScreenState extends State<TripParticipantsScreen> {
                   ],
                 ),
               ),
-              _getInvitationButton(user),
+              _getInvitationButtonForSearch(userId),
             ],
           ),
         ),

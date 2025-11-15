@@ -175,19 +175,6 @@ export const createTripSchema = z
         );
         return val;
       }),
-    coverMediaUrl: z
-      .union([
-        z.string().url("Please enter a valid URL").max(2048, "URL is too long"),
-        z.null(),
-        z.undefined(),
-      ])
-      .optional()
-      .transform((val) => {
-        console.log(
-          `[DEBUG] coverMediaUrl validation - received: ${val}, type: ${typeof val}`
-        );
-        return val;
-      }),
     coverMediaId: z
       .union([
         z.string().uuid("Invalid media ID format"),
@@ -242,22 +229,6 @@ export const createThreadEntrySchema = z
       .transform((val) => {
         console.log(
           `[DEBUG] contentText validation - received: ${val}, type: ${typeof val}`
-        );
-        return val;
-      }),
-    mediaUrl: z
-      .union([
-        z
-          .string()
-          .url("Please enter a valid media URL")
-          .max(2048, "URL is too long"),
-        z.null(),
-        z.undefined(),
-      ])
-      .optional()
-      .transform((val) => {
-        console.log(
-          `[DEBUG] mediaUrl validation - received: ${val}, type: ${typeof val}`
         );
         return val;
       }),

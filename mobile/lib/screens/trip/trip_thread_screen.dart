@@ -821,8 +821,7 @@ class _TripThreadScreenState extends State<TripThreadScreen> {
                     Text(
                       entry.contentText!,
                       style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                            color:
-                                isCurrentUser ? Colors.black87 : Colors.black87,
+                            color: Colors.grey[100], // Off-white text color
                             height: 1.5,
                           ),
                       overflow: TextOverflow.visible,

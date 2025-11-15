@@ -164,7 +164,7 @@ export async function GET(request: NextRequest) {
             description: trip.description ?? undefined,
             mood: trip.mood ?? undefined,
             type: trip.type ?? undefined,
-            coverMediaUrl: trip.coverMediaUrl ?? undefined,
+            coverMediaId: trip.coverMediaId ?? undefined,
             createdAt: trip.createdAt.toISOString(),
             updatedAt: trip.updatedAt.toISOString(),
             user: trip.user

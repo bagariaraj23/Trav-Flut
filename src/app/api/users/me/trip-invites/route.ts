@@ -27,7 +27,7 @@ export async function GET(request: NextRequest) {
               ? {
                   id: invite.trip.id,
                   title: invite.trip.title,
-                  coverMediaUrl: invite.trip.coverMediaUrl ?? undefined,
+                  coverMediaId: invite.trip.coverMediaId ?? undefined,
                   userId: invite.trip.userId,
                   destinations: invite.trip.destinations,
                   status: invite.trip.status,

@@ -93,7 +93,6 @@ export interface TripResponse {
   | "MIXED"
   | null;
   type?: "SOLO" | "GROUP" | "COUPLE" | "FAMILY" | null;
-  coverMediaUrl?: string | null;
   coverMediaId?: string | null;
   status: "UPCOMING" | "ONGOING" | "ENDED";
   createdAt: string;
@@ -127,7 +126,6 @@ export interface TripThreadEntryResponse {
   authorId: string;
   type: "TEXT" | "MEDIA" | "LOCATION" | "CHECKIN";
   contentText?: string | null;
-  mediaUrl?: string | null;
   locationName?: string | null;
   gpsCoordinates?: { lat: number | null; lng: number | null } | null;
   placeId?: string | null;
@@ -190,14 +188,12 @@ export interface CreateTripRequest {
   | "MIXED"
   | null;
   type?: "SOLO" | "GROUP" | "COUPLE" | "FAMILY" | null;
-  coverMediaUrl?: string | null;
   coverMediaId?: string | null;
 }
 
 export interface CreateThreadEntryRequest {
   type: "TEXT" | "MEDIA" | "LOCATION" | "CHECKIN";
   contentText?: string | null;
-  mediaUrl?: string | null;
   mediaId?: string | null;
   locationName?: string | null;
   gpsCoordinates?: { lat: number | null; lng: number | null } | null;

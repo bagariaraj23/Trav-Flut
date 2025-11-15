@@ -129,8 +129,7 @@ model Trip {
   destinations     String[]
   mood             TripMood?
   type             TripType?
-  coverMediaUrl    String?           // DEPRECATED: Keep for backward compatibility
-  coverMediaId     String?           // NEW: Link to Media model
+  coverMediaId     String?
   status           TripStatus        @default(UPCOMING)
   entryCount       Int               @default(0)
   participantCount Int               @default(1)
@@ -183,8 +182,7 @@ model TripThreadEntry {
   authorId       String
   type           ThreadEntryType
   contentText    String?
-  mediaUrl       String?         // DEPRECATED: Keep for backward compatibility
-  mediaId        String?         // NEW: Link to Media model
+  mediaId        String?         // Link to Media model
   locationName   String?
   gpsCoordinates Json?
   createdAt      DateTime        @default(now())

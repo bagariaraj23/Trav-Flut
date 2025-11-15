@@ -94,7 +94,7 @@ export class TripInvitationService {
           select: {
             id: true,
             title: true,
-            coverMediaUrl: true,
+            coverMediaId: true,
             userId: true,
             destinations: true,
             status: true,

@@ -43,8 +43,17 @@ export async function POST(
       where: { id: tripId },
       include: {
         threadEntries: {
+          where: {
+            type: "MEDIA",
+            mediaId: { not: null },
+          },
           include: {
-            media: true,
+            media: {
+              select: {
+                id: true,
+                url: true,
+              },
+            },
           },
           orderBy: { createdAt: "asc" },
         },
@@ -86,7 +95,7 @@ export async function POST(
       (entry) => entry.type === "TEXT" && entry.contentText
     );
     const mediaEntries = trip.threadEntries.filter(
-      (entry) => entry.type === "MEDIA" && entry.mediaUrl
+      (entry) => entry.type === "MEDIA" && entry.mediaId
     );
     const locationEntries = trip.threadEntries.filter(
       (entry) => entry.type === "LOCATION" && entry.locationName
@@ -107,11 +116,11 @@ export async function POST(
       summaryText += `Captured ${mediaEntries.length} beautiful memories.`;
     }
 
-    // Get curated media (first 6 media entries)
+    // Get curated media (first 6 media entries) - use media relation to get URLs
     const curatedMedia = mediaEntries
       .slice(0, 6)
-      .map((entry) => entry.mediaUrl!)
-      .filter(Boolean);
+      .map((entry) => entry.media?.url)
+      .filter((url): url is string => Boolean(url));
 
     // Update trip status and create final post
     const [updatedTrip, finalPost] = await prisma.$transaction([
@@ -195,7 +204,7 @@ export async function POST(
       description: updatedTrip.description ?? undefined,
       mood: updatedTrip.mood ?? undefined,
       type: updatedTrip.type ?? undefined,
-      coverMediaUrl: updatedTrip.coverMediaUrl ?? undefined,
+      coverMediaId: updatedTrip.coverMediaId ?? undefined,
       status: updatedTrip.status,
       participants: updatedTrip.participants.map((p: any) => ({
         ...p,

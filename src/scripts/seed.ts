@@ -87,8 +87,7 @@ async function main() {
       status: "ENDED",
       mood: "CULTURAL",
       type: "SOLO",
-      coverMediaUrl:
-        "https://images.pexels.com/photos/2506923/pexels-photo-2506923.jpeg?auto=compress&cs=tinysrgb&w=600",
+      coverMediaId: null,
       description:
         "Exploring the vibrant culture, incredible food, and modern marvels of Tokyo",
     },
@@ -104,8 +103,7 @@ async function main() {
       status: "ENDED",
       mood: "RELAXED",
       type: "SOLO",
-      coverMediaUrl:
-        "https://images.pexels.com/photos/3073666/pexels-photo-3073666.jpeg?auto=compress&cs=tinysrgb&w=600",
+      coverMediaId: null,
       description: "Island paradise, temples, and incredible sunsets",
     },
   });
@@ -120,8 +118,7 @@ async function main() {
       status: "ONGOING",
       mood: "CULTURAL",
       type: "COUPLE",
-      coverMediaUrl:
-        "https://images.pexels.com/photos/338515/pexels-photo-338515.jpeg?auto=compress&cs=tinysrgb&w=600",
+      coverMediaId: null,
       description: "Romantic weekend in the City of Light",
     },
   });

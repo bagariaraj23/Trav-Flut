@@ -202,9 +202,8 @@ export async function POST(
           authorId: userId,
           type: validatedData.type,
           contentText: validatedData.contentText,
-          mediaUrl: mediaRecord ? undefined : validatedData.mediaUrl ?? undefined,
           locationName: locationName ?? undefined,
-          mediaId: validatedData.mediaId ?? undefined,
+          mediaId: mediaRecord ? mediaRecord.id : (validatedData.mediaId ?? undefined),
           gpsCoordinates: validatedData.gpsCoordinates
             ? JSON.stringify(validatedData.gpsCoordinates)
             : undefined,

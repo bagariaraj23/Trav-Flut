@@ -254,6 +254,30 @@ class ApiService {
     }
   }
 
+  Future<ApiResponse<void>> deleteAccount() async {
+    try {
+      debugPrint('[ApiService] Delete account called');
+      final response = await _dio.delete('/users/me');
+      debugPrint('[ApiService] Delete account response: ${response.statusCode}');
+      return ApiResponse<void>(
+        success: response.data['success'],
+        message: response.data['message'],
+      );
+    } on DioException catch (e) {
+      debugPrint('[ApiService] Delete account DioException: ${e.message}');
+      return ApiResponse<void>(
+        success: false,
+        error: e.response?.data['error'] ?? 'Network error occurred',
+      );
+    } catch (e) {
+      debugPrint('[ApiService] Delete account unexpected error: $e');
+      return ApiResponse<void>(
+        success: false,
+        error: 'An unexpected error occurred',
+      );
+    }
+  }
+
   Future<ApiResponse<void>> forgotPassword({
     required String email,
   }) async {

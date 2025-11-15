@@ -198,3 +198,53 @@ export async function PUT(request: NextRequest) {
     });
   })(request);
 }
+
+// Delete current user account (soft delete)
+export async function DELETE(request: NextRequest) {
+  return withLogging(async (req) => {
+    return withRateLimit(req, async (rateLimitedReq) => {
+      return withAuth(rateLimitedReq, async (authenticatedReq) => {
+        try {
+          const currentUserId = authenticatedReq.user!.userId;
+          console.log(`[API] DELETE /users/me - User: ${currentUserId}`);
+
+          // Soft delete the user account
+          await prisma.user.update({
+            where: { id: currentUserId },
+            data: {
+              deletedAt: new Date(),
+              deleteMeta: {
+                deletedAt: new Date().toISOString(),
+                reason: "User initiated account deletion",
+              },
+              // Clear sensitive data
+              email: `deleted_${currentUserId}_${Date.now()}@deleted.local`,
+              username: null,
+              password: null,
+              avatarUrl: null,
+              bio: null,
+            },
+          });
+
+          console.log(
+            `[API] DELETE /users/me - Account deleted successfully: ${currentUserId}`
+          );
+
+          return NextResponse.json<ApiResponse>({
+            success: true,
+            message: "Account deleted successfully",
+          });
+        } catch (error: any) {
+          console.error(`[API] DELETE /users/me - Error:`, error);
+          return NextResponse.json<ApiResponse>(
+            {
+              success: false,
+              error: "Internal server error",
+            },
+            { status: 500 }
+          );
+        }
+      });
+    });
+  })(request);
+}
