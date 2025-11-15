@@ -1161,13 +1161,15 @@ class ApiService {
         if (tripId != null) 'tripId': tripId,
         'usage': usage,
       });
-      debugPrint('[ApiService] Get Cloudinary signature response: ${response.statusCode}');
+      debugPrint(
+          '[ApiService] Get Cloudinary signature response: ${response.statusCode}');
       return ApiResponse<Map<String, dynamic>>(
         success: response.data['success'],
         data: response.data['data'],
       );
     } on DioException catch (e) {
-      debugPrint('[ApiService] Get Cloudinary signature DioException: ${e.message}');
+      debugPrint(
+          '[ApiService] Get Cloudinary signature DioException: ${e.message}');
       return ApiResponse<Map<String, dynamic>>(
         success: false,
         error: e.response?.data['error'] ?? 'Network error occurred',
@@ -1211,13 +1213,15 @@ class ApiService {
         if (tripId != null) 'tripId': tripId,
         'usage': usage,
       });
-      debugPrint('[ApiService] Confirm media upload response: ${response.statusCode}');
+      debugPrint(
+          '[ApiService] Confirm media upload response: ${response.statusCode}');
       return ApiResponse<Media>(
         success: response.data['success'],
         data: Media.fromJson(response.data['data']),
       );
     } on DioException catch (e) {
-      debugPrint('[ApiService] Confirm media upload DioException: ${e.message}');
+      debugPrint(
+          '[ApiService] Confirm media upload DioException: ${e.message}');
       return ApiResponse<Media>(
         success: false,
         error: e.response?.data['error'] ?? 'Network error occurred',

@@ -85,6 +85,7 @@ class _TripThreadScreenState extends State<TripThreadScreen> {
     _disposePendingVideoController();
     super.dispose();
   }
+
   void _disposePendingVideoController() {
     _pendingVideoController?.dispose();
     _pendingVideoController = null;
@@ -148,7 +149,6 @@ class _TripThreadScreenState extends State<TripThreadScreen> {
       _pendingMediaBatch.clear();
     });
   }
-
 
   Future<void> _loadTrip() async {
     final tripProvider = context.read<TripProvider>();
@@ -314,12 +314,14 @@ class _TripThreadScreenState extends State<TripThreadScreen> {
       }
 
       const maxQueued = 10;
-      final totalCount =
-          (_selectedMediaForEntry == null ? 0 : 1) + _pendingMediaBatch.length + newMediaItems.length;
+      final totalCount = (_selectedMediaForEntry == null ? 0 : 1) +
+          _pendingMediaBatch.length +
+          newMediaItems.length;
       if (totalCount > maxQueued) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('You can queue at most $maxQueued media items at once.'),
+            content:
+                Text('You can queue at most $maxQueued media items at once.'),
           ),
         );
         return;
@@ -331,9 +333,8 @@ class _TripThreadScreenState extends State<TripThreadScreen> {
 
       if (_selectedMediaForEntry == null) {
         final first = newMediaItems.first;
-        final remaining = newMediaItems.length > 1
-            ? newMediaItems.sublist(1)
-            : <Media>[];
+        final remaining =
+            newMediaItems.length > 1 ? newMediaItems.sublist(1) : <Media>[];
 
         await _setSelectedMedia(first);
         if (!mounted) return;
@@ -419,9 +420,8 @@ class _TripThreadScreenState extends State<TripThreadScreen> {
         setState(() {
           _isUploadingMedia = true;
           _uploadProgress = 0.0;
-          _pendingMediaBatch = allMedia.length > 1
-              ? allMedia.sublist(1)
-              : <Media>[];
+          _pendingMediaBatch =
+              allMedia.length > 1 ? allMedia.sublist(1) : <Media>[];
         });
       } else {
         await _setSelectedMedia(media);
@@ -460,7 +460,7 @@ class _TripThreadScreenState extends State<TripThreadScreen> {
             _pendingMediaBatch = allMedia.sublist(index + 1);
           });
         }
-        break;
+        continue;
       }
     }
 
@@ -1492,7 +1492,8 @@ class _TripThreadScreenState extends State<TripThreadScreen> {
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Row(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
                                     children: [
                                       _buildPendingMediaThumbnail(),
                                       const SizedBox(width: 12),
@@ -1503,7 +1504,8 @@ class _TripThreadScreenState extends State<TripThreadScreen> {
                                           mainAxisSize: MainAxisSize.min,
                                           children: [
                                             Text(
-                                              _selectedMediaForEntry!.filename ??
+                                              _selectedMediaForEntry!
+                                                      .filename ??
                                                   'Selected media',
                                               style: const TextStyle(
                                                 fontWeight: FontWeight.w600,
@@ -1515,7 +1517,8 @@ class _TripThreadScreenState extends State<TripThreadScreen> {
                                             ),
                                             const SizedBox(height: 4),
                                             Text(
-                                              _selectedMediaForEntry!.size != null
+                                              _selectedMediaForEntry!.size !=
+                                                      null
                                                   ? '${(_selectedMediaForEntry!.size! / 1024 / 1024).toStringAsFixed(1)} MB'
                                                   : 'Selected',
                                               style: TextStyle(
@@ -1568,7 +1571,8 @@ class _TripThreadScreenState extends State<TripThreadScreen> {
                                         ),
                                         decoration: BoxDecoration(
                                           color: Colors.white12,
-                                          borderRadius: BorderRadius.circular(999),
+                                          borderRadius:
+                                              BorderRadius.circular(999),
                                         ),
                                         child: Text(
                                           '${_pendingMediaBatch.length} more ${_pendingMediaBatch.length == 1 ? 'item' : 'items'} queued',
@@ -1686,7 +1690,7 @@ class _TripThreadScreenState extends State<TripThreadScreen> {
                                             onPressed: _isUploadingMedia
                                                 ? null
                                                 : () => _pickImage(
-                                                      fromCamera: true),
+                                                    fromCamera: true),
                                             icon: const Icon(Icons.camera_alt,
                                                 size: 18),
                                             label: const Text('Camera'),
@@ -1927,8 +1931,8 @@ class _TripThreadScreenState extends State<TripThreadScreen> {
             ),
             const Align(
               alignment: Alignment.center,
-              child: Icon(Icons.play_circle_fill,
-                  color: Colors.white, size: 36),
+              child:
+                  Icon(Icons.play_circle_fill, color: Colors.white, size: 36),
             ),
           ],
         );
@@ -1966,12 +1970,15 @@ class _TripThreadScreenState extends State<TripThreadScreen> {
   String _formatDuration(Duration duration) {
     if (duration.inHours >= 1) {
       final hours = duration.inHours;
-      final minutes = duration.inMinutes.remainder(60).toString().padLeft(2, '0');
-      final seconds = duration.inSeconds.remainder(60).toString().padLeft(2, '0');
+      final minutes =
+          duration.inMinutes.remainder(60).toString().padLeft(2, '0');
+      final seconds =
+          duration.inSeconds.remainder(60).toString().padLeft(2, '0');
       return '$hours:$minutes:$seconds';
     } else {
       final minutes = duration.inMinutes.toString().padLeft(2, '0');
-      final seconds = duration.inSeconds.remainder(60).toString().padLeft(2, '0');
+      final seconds =
+          duration.inSeconds.remainder(60).toString().padLeft(2, '0');
       return '$minutes:$seconds';
     }
   }
@@ -2000,8 +2007,7 @@ class _TripVideoViewerState extends State<_TripVideoViewer> {
     super.initState();
     _controller = VideoPlayerController.networkUrl(
       Uri.parse(buildOptimizedVideoUrl(widget.mediaUrl, maxWidth: 1920)),
-    )
-      ..initialize().then((_) {
+    )..initialize().then((_) {
         if (!mounted) return;
         setState(() {
           _isInitialized = true;

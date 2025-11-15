@@ -98,6 +98,8 @@ async function handler(request: AuthenticatedRequest) {
     );
   } catch (error: any) {
     console.error("[MEDIA] Signature generation failed:", error);
+    console.error(error.stack);
+    console.error("[MEDIA] Error details:", JSON.stringify(error, null, 2));
 
     if (error.name === "ZodError") {
       return badRequest("Invalid request data", error.errors);

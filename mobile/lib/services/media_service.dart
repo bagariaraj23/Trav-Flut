@@ -55,7 +55,7 @@ class MediaService {
     try {
       final XFile? pickedFile = await _imagePicker.pickVideo(
         source: ImageSource.gallery,
-        maxDuration: const Duration(minutes: 10), // 10 minute limit
+        maxDuration: const Duration(minutes: 10),
       );
 
       if (pickedFile != null) {
@@ -85,8 +85,6 @@ class MediaService {
     bool allowMultiple = false,
   }) async {
     try {
-      // For simplicity, we'll use image picker for both images and videos
-      // This avoids the file_picker compatibility issues
       final XFile? pickedFile = await _imagePicker.pickMedia(
         imageQuality: 85,
       );
@@ -94,7 +92,6 @@ class MediaService {
       if (pickedFile != null) {
         final file = File(pickedFile.path);
 
-        // Validate the file
         final validation = Validators.validateFile(
           pickedFile.name,
           await file.length(),
@@ -117,7 +114,15 @@ class MediaService {
       final result = await FilePicker.platform.pickFiles(
         allowMultiple: true,
         type: FileType.custom,
-        allowedExtensions: const ['jpg', 'jpeg', 'png', 'gif', 'mp4', 'mov', 'avi'],
+        allowedExtensions: const [
+          'jpg',
+          'jpeg',
+          'png',
+          'gif',
+          'mp4',
+          'mov',
+          'avi'
+        ],
       );
 
       if (result == null || result.files.isEmpty) {
@@ -171,9 +176,17 @@ class MediaService {
         ));
   }
 
+  int _activeUploads = 0;
+  static const maxConcurrentUploads = 3;
+
   Future<T> _enqueueUpload<T>(Future<T> Function() task) {
     final completer = Completer<T>();
     _uploadQueue = _uploadQueue.then((_) async {
+      while (_activeUploads >= maxConcurrentUploads) {
+        await Future.delayed(Duration(milliseconds: 100));
+      }
+
+      _activeUploads++;
       try {
         final result = await task();
         if (!completer.isCompleted) completer.complete(result);
@@ -181,6 +194,8 @@ class MediaService {
         if (!completer.isCompleted) {
           completer.completeError(error, stackTrace);
         }
+      } finally {
+        _activeUploads--;
       }
     });
     return completer.future;
@@ -194,7 +209,8 @@ class MediaService {
   }) async {
     String? uploadedPublicId;
     try {
-      debugPrint('[MediaService] Starting Cloudinary upload for file: ${file.path}');
+      debugPrint(
+          '[MediaService] Starting Cloudinary upload for file: ${file.path}');
 
       final filename = file.path.split('/').last;
       final mediaType = getMediaType(file);
@@ -212,7 +228,8 @@ class MediaService {
       );
 
       if (!signatureResponse.success || signatureResponse.data == null) {
-        throw Exception(signatureResponse.error ?? 'Failed to get Cloudinary signature');
+        throw Exception(
+            signatureResponse.error ?? 'Failed to get Cloudinary signature');
       }
 
       final uploadParams = Map<String, dynamic>.from(signatureResponse.data!);
@@ -250,7 +267,8 @@ class MediaService {
         url: (cloudinaryData['url'] as String?) ?? secureUrl,
         secureUrl: secureUrl,
         publicId: uploadedPublicId ?? uploadParams['publicId'],
-        format: (cloudinaryData['format'] as String?) ?? contentType.split('/').last,
+        format: (cloudinaryData['format'] as String?) ??
+            contentType.split('/').last,
         resourceType: (cloudinaryData['resource_type'] as String?) ??
             (mediaType == MediaType.image ? 'image' : 'video'),
         bytes: (cloudinaryData['bytes'] as int?) ?? await file.length(),
@@ -267,7 +285,8 @@ class MediaService {
           await _cleanupFailedUpload(uploadedPublicId);
           uploadedPublicId = null;
         }
-        throw Exception(confirmResponse.error ?? 'Failed to confirm media upload');
+        throw Exception(
+            confirmResponse.error ?? 'Failed to confirm media upload');
       }
 
       debugPrint('[MediaService] Upload confirmation successful');
@@ -291,13 +310,16 @@ class MediaService {
     void Function(double progress)? onProgress,
   }) async {
     try {
-      debugPrint('[MediaService] Uploading to Cloudinary with params: $uploadParams');
-      
+      debugPrint(
+          '[MediaService] Uploading to Cloudinary with params: $uploadParams');
+
       // Check if this is a mock response
-      if (uploadParams['cloudName'] == 'test_cloud' || 
+      if (uploadParams['cloudName'] == 'test_cloud' ||
           uploadParams['apiKey'] == 'test_key') {
-        debugPrint('[MediaService] Mock mode detected, returning placeholder image');
-        final placeholderUrl = 'https://via.placeholder.com/400x300/007bff/ffffff?text=Test+Image';
+        debugPrint(
+            '[MediaService] Mock mode detected, returning placeholder image');
+        final placeholderUrl =
+            'https://via.placeholder.com/400x300/007bff/ffffff?text=Test+Image';
         return {
           'secure_url': placeholderUrl,
           'url': placeholderUrl,
@@ -311,7 +333,7 @@ class MediaService {
 
       final uploadUrl = (uploadParams['uploadUrl'] as String?) ??
           'https://api.cloudinary.com/v1_1/${uploadParams['cloudName']}/auto/upload';
-      
+
       const maxRetries = 2;
       var attempt = 0;
 
@@ -357,7 +379,6 @@ class MediaService {
           await Future.delayed(Duration(milliseconds: 500 * attempt));
         }
       }
-
     } catch (e) {
       debugPrint('[MediaService] Error uploading to Cloudinary: $e');
       rethrow;
@@ -394,7 +415,8 @@ class MediaService {
         randomAccessFile.closeSync();
       }
     } catch (e) {
-      debugPrint('[MediaService] MIME detection failed, falling back to extension: $e');
+      debugPrint(
+          '[MediaService] MIME detection failed, falling back to extension: $e');
     }
 
     final extension = file.path.split('.').last.toLowerCase();

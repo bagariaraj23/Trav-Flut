@@ -39,7 +39,7 @@ const ALLOWED_FORMATS_BY_RESOURCE_TYPE: Record<string, string[]> = {
 };
 
 const USER_STORAGE_QUOTA_BYTES =
-  Number(process.env.MEDIA_TOTAL_STORAGE_LIMIT_BYTES ?? 3 * 1024 * 1024 * 1024) ||
+  Number(process.env.MEDIA_TOTAL_STORAGE_LIMIT_BYTES ?? 5 * 1024 * 1024 * 1024) ||
   0;
 
 function detectMimeType(buffer: Buffer): string | null {
@@ -151,19 +151,6 @@ export class CloudinaryService {
       throw new ValidationError(validationResult.errors.join(", "));
     }
 
-    if (USER_STORAGE_QUOTA_BYTES > 0) {
-      const currentUsage = await prisma.media.aggregate({
-        _sum: { size: true },
-        where: { uploadedById: userId },
-      });
-      const usedBytes = currentUsage._sum.size ?? 0;
-      if (usedBytes >= USER_STORAGE_QUOTA_BYTES) {
-        throw new ValidationError(
-          "Storage quota exceeded. Delete existing media before uploading new files."
-        );
-      }
-    }
-
     const timestamp = Math.round(Date.now() / 1000);
     const resourceFolderParts = [CLOUDINARY_UPLOAD_FOLDER, userId];
 
@@ -175,8 +162,12 @@ export class CloudinaryService {
 
     const folder = resourceFolderParts.join("/");
     const baseName = filename.replace(/\.[^/.]+$/, "");
-    const sanitizedBaseName =
-      baseName.length > 60 ? baseName.slice(0, 60) : baseName;
+    const sanitizedBaseName = baseName
+      .replace(/[\s()[\]{}'"]/g, "_")
+      .replace(/[^a-zA-Z0-9_-]/g, "")
+      .replace(/_{2,}/g, "_")
+      .replace(/^_+|_+$/g, "")
+      .slice(0, 60);
     const uniqueSlug = `${timestamp}_${randomUUID()}_${sanitizedBaseName}`;
 
     const paramsToSign: Record<string, string | number> = {
