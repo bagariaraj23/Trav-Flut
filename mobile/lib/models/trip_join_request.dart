@@ -47,7 +47,7 @@ class TripJoinRequest {
 class TripJoinRequestTrip {
   final String id;
   final String title;
-  final String? coverMediaUrl;
+  final String? coverMediaId;
   final String userId;
   final List<String> destinations;
   final String status;
@@ -57,7 +57,7 @@ class TripJoinRequestTrip {
   const TripJoinRequestTrip({
     required this.id,
     required this.title,
-    this.coverMediaUrl,
+    this.coverMediaId,
     required this.userId,
     required this.destinations,
     required this.status,

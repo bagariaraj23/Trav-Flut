@@ -391,10 +391,10 @@ class _HomeFeedScreenState extends State<HomeFeedScreen> {
                     child: ClipRRect(
                       borderRadius: BorderRadius.circular(12),
                       child: Image.network(
-                      buildOptimizedImageUrl(
-                        post.curatedMedia[index],
-                        width: 1600,
-                      ),
+                        buildOptimizedImageUrl(
+                          post.curatedMedia[index],
+                          width: 1600,
+                        ),
                         fit: BoxFit.cover,
                         errorBuilder: (context, error, stackTrace) {
                           return Container(
@@ -732,7 +732,7 @@ class TripsTab extends StatelessWidget {
                 color: Colors.grey[200],
               ),
               child: () {
-                final coverUrl = trip.coverMedia?.url ?? trip.coverMediaUrl;
+                final coverUrl = trip.coverMedia?.url;
                 if (coverUrl == null) {
                   return _buildPlaceholderImage(context, trip);
                 }
@@ -1017,8 +1017,7 @@ class ProfileTab extends StatelessWidget {
                               : () {
                                   showDialog(
                                     context: context,
-                                    barrierColor:
-                                        Colors.black.withOpacity(0.7),
+                                    barrierColor: Colors.black.withOpacity(0.7),
                                     builder: (dialogContext) {
                                       return GestureDetector(
                                         onTap: () =>
@@ -1038,15 +1037,14 @@ class ProfileTab extends StatelessWidget {
                                                   color: Colors.black
                                                       .withOpacity(0.4),
                                                   blurRadius: 20,
-                                                  offset:
-                                                      const Offset(0, 8),
+                                                  offset: const Offset(0, 8),
                                                 ),
                                               ],
                                             ),
                                             child: CircleAvatar(
                                               radius: 120,
-                                              backgroundImage: NetworkImage(
-                                                  user.avatarUrl!),
+                                              backgroundImage:
+                                                  NetworkImage(user.avatarUrl!),
                                             ),
                                           ),
                                         ),
@@ -1063,9 +1061,7 @@ class ProfileTab extends StatelessWidget {
                                 : null,
                             child: user.avatarUrl == null
                                 ? Text(
-                                    user.name
-                                            ?.substring(0, 1)
-                                            .toUpperCase() ??
+                                    user.name?.substring(0, 1).toUpperCase() ??
                                         'U',
                                     style: const TextStyle(
                                       fontSize: 24,
@@ -1179,7 +1175,8 @@ class ProfileTab extends StatelessWidget {
                               if (tripProvider.trips.isNotEmpty)
                                 TextButton(
                                   onPressed: () {
-                                    context.go('/trips', extra: {'from': '/home'});
+                                    context
+                                        .go('/trips', extra: {'from': '/home'});
                                   },
                                   child: const Text('View All'),
                                 ),
@@ -1228,8 +1225,7 @@ class ProfileTab extends StatelessWidget {
                                 final secondaryText =
                                     primaryText.withOpacity(0.7);
 
-                                final coverUrl =
-                                    trip.coverMedia?.url ?? trip.coverMediaUrl;
+                                final coverUrl = trip.coverMedia?.url;
 
                                 return InkWell(
                                   borderRadius: BorderRadius.circular(12),
@@ -1277,9 +1273,8 @@ class ProfileTab extends StatelessWidget {
                                                       height: 480,
                                                     ),
                                                     fit: BoxFit.cover,
-                                                    errorBuilder:
-                                                        (context, error,
-                                                            stackTrace) {
+                                                    errorBuilder: (context,
+                                                        error, stackTrace) {
                                                       return _buildRecentTripIcon(
                                                           primaryText);
                                                     },
@@ -1299,10 +1294,9 @@ class ProfileTab extends StatelessWidget {
                                                 style: theme
                                                     .textTheme.titleMedium
                                                     ?.copyWith(
-                                                      color: primaryText,
-                                                      fontWeight:
-                                                          FontWeight.w600,
-                                                    ),
+                                                  color: primaryText,
+                                                  fontWeight: FontWeight.w600,
+                                                ),
                                                 maxLines: 1,
                                                 overflow: TextOverflow.ellipsis,
                                               ),
@@ -1318,17 +1312,16 @@ class ProfileTab extends StatelessWidget {
                                                     style: theme
                                                         .textTheme.bodySmall
                                                         ?.copyWith(
-                                                          color: secondaryText,
-                                                        ),
+                                                      color: secondaryText,
+                                                    ),
                                                     maxLines: 1,
                                                     overflow:
                                                         TextOverflow.ellipsis,
                                                   ),
                                                 ),
                                               Padding(
-                                                padding:
-                                                    const EdgeInsets.only(
-                                                        top: 6.0),
+                                                padding: const EdgeInsets.only(
+                                                    top: 6.0),
                                                 child: Row(
                                                   children: [
                                                     Icon(
@@ -1340,12 +1333,11 @@ class ProfileTab extends StatelessWidget {
                                                     Expanded(
                                                       child: Text(
                                                         '${trip.startDate.day}/${trip.startDate.month}/${trip.startDate.year} - ${trip.endDate.day}/${trip.endDate.month}/${trip.endDate.year}',
-                                                        style: theme.textTheme
-                                                            .bodySmall
+                                                        style: theme
+                                                            .textTheme.bodySmall
                                                             ?.copyWith(
-                                                              color:
-                                                                  secondaryText,
-                                                            ),
+                                                          color: secondaryText,
+                                                        ),
                                                       ),
                                                     ),
                                                   ],

@@ -5,7 +5,6 @@ import 'package:go_router/go_router.dart';
 import 'package:tripthread/providers/auth_provider.dart';
 import 'package:tripthread/providers/trip_provider.dart';
 import 'package:tripthread/models/trip.dart';
-// import 'package:tripthread/models/user.dart';
 import 'package:tripthread/services/api_service.dart';
 
 class TripParticipantsScreen extends StatefulWidget {
@@ -112,7 +111,6 @@ class _TripParticipantsScreenState extends State<TripParticipantsScreen> {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text('Invitation sent successfully!')),
           );
-          // Clear search results after sending invitation
           _searchController.clear();
           setState(() {
             _searchResults = [];
@@ -254,8 +252,8 @@ class _TripParticipantsScreenState extends State<TripParticipantsScreen> {
               CircleAvatar(
                 radius: 20,
                 backgroundColor: Theme.of(context).colorScheme.primary,
-                backgroundImage: 
-                avatarUrl != null ? NetworkImage(avatarUrl) : null,
+                backgroundImage:
+                    avatarUrl != null ? NetworkImage(avatarUrl) : null,
                 child: avatarUrl == null
                     ? Icon(
                         Icons.person,
@@ -278,15 +276,15 @@ class _TripParticipantsScreenState extends State<TripParticipantsScreen> {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
-                      Text(
-                        '@$username',
-                        style: TextStyle(
-                          color: Colors.grey[600],
-                          fontSize: 12,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
+                    Text(
+                      '@$username',
+                      style: TextStyle(
+                        color: Colors.grey[600],
+                        fontSize: 12,
                       ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   ],
                 ),
               ),

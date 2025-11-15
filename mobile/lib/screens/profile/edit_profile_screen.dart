@@ -83,7 +83,6 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
           ),
         );
       } else if (success && mounted) {
-        // Update auth provider with new user data
         final updatedUser = userProvider.getUser(currentUser.id);
         if (updatedUser != null) {
           authProvider.updateUser(updatedUser);
@@ -135,7 +134,6 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     );
 
     if (success && mounted) {
-      // Update auth provider with new user data
       final updatedUser = userProvider.getUser(currentUser.id);
       if (updatedUser != null) {
         authProvider.updateUser(updatedUser);
@@ -159,7 +157,6 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
 
   @override
   Widget build(BuildContext context) {
-
     return Scaffold(
       appBar: AppBar(
         title: const Text('Edit Profile'),
@@ -236,8 +233,8 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                                   height: 20,
                                   child: CircularProgressIndicator(
                                     strokeWidth: 2,
-                                    valueColor:
-                                        AlwaysStoppedAnimation<Color>(Colors.white),
+                                    valueColor: AlwaysStoppedAnimation<Color>(
+                                        Colors.white),
                                   ),
                                 )
                               : const Icon(
@@ -245,9 +242,8 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                                   color: Colors.white,
                                   size: 20,
                                 ),
-                          onPressed: _isUploadingPhoto
-                              ? null
-                              : _handlePhotoUpdate,
+                          onPressed:
+                              _isUploadingPhoto ? null : _handlePhotoUpdate,
                           padding: EdgeInsets.zero,
                           constraints: const BoxConstraints(),
                         ),

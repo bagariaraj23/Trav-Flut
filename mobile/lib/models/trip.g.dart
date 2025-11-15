@@ -19,7 +19,6 @@ Trip _$TripFromJson(Map<String, dynamic> json) => Trip(
           [],
       mood: $enumDecodeNullable(_$TripMoodEnumMap, json['mood']),
       type: $enumDecodeNullable(_$TripTypeEnumMap, json['type']),
-      coverMediaUrl: json['coverMediaUrl'] as String?,
       coverMediaId: json['coverMediaId'] as String?,
       coverMedia: json['coverMedia'] == null
           ? null
@@ -67,7 +66,6 @@ Map<String, dynamic> _$TripToJson(Trip instance) => <String, dynamic>{
       'destinations': instance.destinations,
       'mood': _$TripMoodEnumMap[instance.mood],
       'type': _$TripTypeEnumMap[instance.type],
-      'coverMediaUrl': instance.coverMediaUrl,
       'coverMediaId': instance.coverMediaId,
       'coverMedia': instance.coverMedia,
       'status': _$TripStatusEnumMap[instance.status]!,
@@ -151,7 +149,6 @@ TripThreadEntry _$TripThreadEntryFromJson(Map<String, dynamic> json) =>
       authorId: json['authorId'] as String,
       type: $enumDecode(_$ThreadEntryTypeEnumMap, json['type']),
       contentText: json['contentText'] as String?,
-      mediaUrl: json['mediaUrl'] as String?,
       mediaId: json['mediaId'] as String?,
       locationName: json['locationName'] as String?,
       gpsCoordinates: json['gpsCoordinates'] == null
@@ -179,7 +176,6 @@ Map<String, dynamic> _$TripThreadEntryToJson(TripThreadEntry instance) =>
       'authorId': instance.authorId,
       'type': _$ThreadEntryTypeEnumMap[instance.type]!,
       'contentText': instance.contentText,
-      'mediaUrl': instance.mediaUrl,
       'mediaId': instance.mediaId,
       'locationName': instance.locationName,
       'gpsCoordinates': instance.gpsCoordinates,
@@ -303,7 +299,6 @@ CreateTripRequest _$CreateTripRequestFromJson(Map<String, dynamic> json) =>
           .toList(),
       mood: $enumDecodeNullable(_$TripMoodEnumMap, json['mood']),
       type: $enumDecodeNullable(_$TripTypeEnumMap, json['type']),
-      coverMediaUrl: json['coverMediaUrl'] as String?,
       coverMediaId: json['coverMediaId'] as String?,
     );
 
@@ -317,7 +312,6 @@ Map<String, dynamic> _$CreateTripRequestToJson(CreateTripRequest instance) =>
       'destinationPlaceIds': instance.destinationPlaceIds,
       'mood': _$TripMoodEnumMap[instance.mood],
       'type': _$TripTypeEnumMap[instance.type],
-      'coverMediaUrl': instance.coverMediaUrl,
       'coverMediaId': instance.coverMediaId,
     };
 
@@ -326,7 +320,6 @@ CreateThreadEntryRequest _$CreateThreadEntryRequestFromJson(
     CreateThreadEntryRequest(
       type: $enumDecode(_$ThreadEntryTypeEnumMap, json['type']),
       contentText: json['contentText'] as String?,
-      mediaUrl: json['mediaUrl'] as String?,
       mediaId: json['mediaId'] as String?,
       locationName: json['locationName'] as String?,
       gpsCoordinates: json['gpsCoordinates'] == null
@@ -344,7 +337,6 @@ Map<String, dynamic> _$CreateThreadEntryRequestToJson(
     <String, dynamic>{
       'type': _$ThreadEntryTypeEnumMap[instance.type]!,
       'contentText': instance.contentText,
-      'mediaUrl': instance.mediaUrl,
       'mediaId': instance.mediaId,
       'locationName': instance.locationName,
       'gpsCoordinates': instance.gpsCoordinates,

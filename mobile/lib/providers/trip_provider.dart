@@ -243,7 +243,6 @@ class TripProvider extends ChangeNotifier {
     required String tripId,
     required ThreadEntryType type,
     String? contentText,
-    String? mediaUrl,
     String? placeId,
     List<String>? taggedUserIds,
   }) async {
@@ -260,7 +259,7 @@ class TripProvider extends ChangeNotifier {
       final request = CreateThreadEntryRequest(
         type: type,
         contentText: contentText,
-        mediaUrl: mediaUrl,
+        mediaId: null,
         placeId: placeId,
         taggedUserIds: taggedUserIds,
       );

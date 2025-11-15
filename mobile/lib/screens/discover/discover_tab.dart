@@ -498,7 +498,7 @@ class _DiscoverTabState extends State<DiscoverTab> {
             Expanded(
               flex: 5,
               child: () {
-                final coverUrl = trip.coverMedia?.url ?? trip.coverMediaUrl;
+                final coverUrl = trip.coverMedia?.url;
                 if (coverUrl == null) {
                   return _buildTripPlaceholder(context, trip);
                 }

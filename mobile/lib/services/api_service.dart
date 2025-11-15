@@ -141,9 +141,7 @@ class ApiService {
               debugPrint('[ApiService] No unauthorized callback set!');
             }
             return handler.reject(error);
-          }
-          // ignore: unused_catch_clause
-          catch (e) {
+          } catch (e) {
             debugPrint('[ApiService] Token refresh error: $e');
             await _storageService!.clearTokens();
             if (_onUnauthorized != null) {
@@ -157,7 +155,6 @@ class ApiService {
           }
         }
 
-        // Pass through other errors
         handler.next(error);
       },
     ));
@@ -258,7 +255,8 @@ class ApiService {
     try {
       debugPrint('[ApiService] Delete account called');
       final response = await _dio.delete('/users/me');
-      debugPrint('[ApiService] Delete account response: ${response.statusCode}');
+      debugPrint(
+          '[ApiService] Delete account response: ${response.statusCode}');
       return ApiResponse<void>(
         success: response.data['success'],
         message: response.data['message'],
@@ -1130,8 +1128,7 @@ class ApiService {
     required List<String> destinations,
     String? mood,
     String? type,
-    String? coverMediaUrl, // DEPRECATED: Keep for backward compatibility
-    String? coverMediaId, // NEW: Link to Media model
+    String? coverMediaId, // Link to Media model
   }) async {
     try {
       debugPrint(
@@ -1144,7 +1141,6 @@ class ApiService {
         'destinations': destinations,
         if (mood != null) 'mood': mood,
         if (type != null) 'type': type,
-        if (coverMediaUrl != null) 'coverMediaUrl': coverMediaUrl,
         if (coverMediaId != null) 'coverMediaId': coverMediaId,
       };
 
@@ -1510,7 +1506,6 @@ class ApiService {
     }
   }
 
-  // Add this method for manual refresh
   Future<ApiResponse<Map<String, dynamic>>> refreshAccessToken(
       String refreshToken) async {
     try {
@@ -1622,7 +1617,6 @@ class ApiService {
     } on DioException catch (e) {
       debugPrint('[ApiService] Send follow request DioException: ${e.message}');
 
-      // Handle the case where follow request already exists
       if (e.response?.statusCode == 400 &&
           e.response?.data['error'] == 'Follow request already pending') {
         return ApiResponse<void>(

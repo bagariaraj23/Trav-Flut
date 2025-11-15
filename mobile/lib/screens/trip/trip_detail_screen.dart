@@ -69,7 +69,7 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Trip ended successfully! 🎉')),
         );
-        await _loadTrip(); // Reload to get updated trip
+        await _loadTrip();
       }
     }
   }
@@ -82,15 +82,14 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
       );
     }
 
-    // Use a single, unified Scaffold for both success and error states.
     return Scaffold(
       body: CustomScrollView(
         slivers: [
           SliverAppBar(
             expandedHeight:
                 MediaQuery.of(context).orientation == Orientation.landscape
-                    ? 150 // ← Smaller in landscape
-                    : 250, // ← Larger in portrait
+                    ? 150
+                    : 250,
             pinned: true,
             leading: IconButton(
               icon: const Icon(Icons.arrow_back, color: Colors.white),
@@ -104,7 +103,6 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
             ),
             flexibleSpace: FlexibleSpaceBar(
               title: Text(
-                // The title changes based on whether the trip was found.
                 _trip?.title ?? 'Trip Not Found',
                 style: const TextStyle(
                   color: Colors.white,
@@ -121,10 +119,8 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
               background: Stack(
                 fit: StackFit.expand,
                 children: [
-                  // Conditionally show the trip's cover image or the default cover.
                   () {
-                    final coverUrl =
-                        _trip?.coverMedia?.url ?? _trip?.coverMediaUrl;
+                    final coverUrl = _trip?.coverMedia?.url;
                     if (coverUrl == null) {
                       return _buildDefaultCover();
                     }
@@ -152,7 +148,6 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
               ),
             ),
             actions: [
-              // Actions are only built if the trip exists and meets the criteria.
               if (_trip != null &&
                   _trip!.userId ==
                       context.read<AuthProvider>().currentUser?.id &&
@@ -166,13 +161,7 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
                 ),
             ],
           ),
-
-          // --- CONDITIONAL BODY ---
-          // We use a Sliver widget to place content in the scroll view.
-
           if (_trip == null)
-            // If the trip is not found, show a centered error message
-            // that fills the rest of the available screen space.
             SliverFillRemaining(
               child: Center(
                 child: Padding(
@@ -203,7 +192,6 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
               ),
             )
           else
-            // If the trip IS found, show the normal trip content.
             SliverToBoxAdapter(
               child: Padding(
                 padding: const EdgeInsets.all(16),
@@ -356,7 +344,7 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
                   '/trip/${widget.tripId}/map',
                   extra: {
                     'tripTitle': _trip!.title,
-                    'places': _trip!.placeVisits, // Optional prefetch
+                    'places': _trip!.placeVisits,
                   },
                 );
               },
@@ -489,7 +477,7 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
   Widget _buildThreadEntryPreview(TripThreadEntry entry) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
-    final mediaUrl = entry.media?.url ?? entry.mediaUrl;
+    final mediaUrl = entry.media?.url;
     final hasMedia = entry.type == ThreadEntryType.media &&
         mediaUrl != null &&
         mediaUrl.isNotEmpty;

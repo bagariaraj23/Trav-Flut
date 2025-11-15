@@ -1004,7 +1004,7 @@ class _TripThreadScreenState extends State<TripThreadScreen> {
   }
 
   Widget _buildMediaPreview(TripThreadEntry entry) {
-    final mediaUrl = entry.media?.url ?? entry.mediaUrl;
+    final mediaUrl = entry.media?.url;
     if (mediaUrl == null || mediaUrl.isEmpty) {
       return Container(
         margin: const EdgeInsets.only(top: 8),

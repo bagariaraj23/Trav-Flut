@@ -35,7 +35,6 @@ class SettingsScreen extends StatelessWidget {
             leading: const Icon(Icons.lock_outline),
             title: const Text('Change Password'),
             onTap: () {
-              // Show confirmation dialog
               showDialog(
                 context: context,
                 builder: (BuildContext context) {
@@ -123,7 +122,6 @@ class SettingsScreen extends StatelessWidget {
               style: TextStyle(color: Colors.red),
             ),
             onTap: () {
-              // Show confirmation dialog with warning
               showDialog(
                 context: context,
                 builder: (BuildContext context) {
@@ -148,7 +146,6 @@ class SettingsScreen extends StatelessWidget {
                         onPressed: () async {
                           Navigator.of(context).pop();
 
-                          // Show loading dialog
                           showDialog(
                             context: context,
                             barrierDismissible: false,
@@ -163,10 +160,9 @@ class SettingsScreen extends StatelessWidget {
                           final success = await authProvider.deleteAccount();
 
                           if (context.mounted) {
-                            Navigator.of(context).pop(); // Close loading dialog
+                            Navigator.of(context).pop();
 
                             if (success) {
-                              // Navigate to login screen
                               if (context.mounted) {
                                 context.go('/login');
                                 ScaffoldMessenger.of(context).showSnackBar(
