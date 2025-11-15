@@ -8,7 +8,6 @@ import 'package:tripthread/providers/user_provider.dart';
 import 'package:tripthread/models/trip.dart';
 import 'package:tripthread/screens/discover/discover_tab.dart';
 import 'package:tripthread/utils/cloudinary_utils.dart';
-import 'package:tripthread/services/media_service.dart';
 
 class HomeScreen extends StatefulWidget {
   final int initialTab;
@@ -1011,161 +1010,72 @@ class ProfileTab extends StatelessWidget {
                   child: Column(
                     children: [
                       // Avatar
-                      Stack(
-                        alignment: Alignment.bottomRight,
-                        children: [
-                          GestureDetector(
-                            onTap: user.avatarUrl == null
-                                ? null
-                                : () {
-                                    showDialog(
-                                      context: context,
-                                      barrierColor:
-                                          Colors.black.withOpacity(0.7),
-                                      builder: (dialogContext) {
-                                        return GestureDetector(
-                                          onTap: () =>
-                                              Navigator.of(dialogContext).pop(),
-                                          child: Dialog(
-                                            backgroundColor: Colors.transparent,
-                                            insetPadding:
-                                                const EdgeInsets.all(32),
-                                            child: Container(
-                                              padding: const EdgeInsets.all(16),
-                                              decoration: BoxDecoration(
-                                                color: Colors.black87,
-                                                borderRadius:
-                                                    BorderRadius.circular(24),
-                                                boxShadow: [
-                                                  BoxShadow(
-                                                    color: Colors.black
-                                                        .withOpacity(0.4),
-                                                    blurRadius: 20,
-                                                    offset:
-                                                        const Offset(0, 8),
-                                                  ),
-                                                ],
-                                              ),
-                                              child: CircleAvatar(
-                                                radius: 120,
-                                                backgroundImage: NetworkImage(
-                                                    user.avatarUrl!),
-                                              ),
+                      Center(
+                        child: GestureDetector(
+                          onTap: user.avatarUrl == null
+                              ? null
+                              : () {
+                                  showDialog(
+                                    context: context,
+                                    barrierColor:
+                                        Colors.black.withOpacity(0.7),
+                                    builder: (dialogContext) {
+                                      return GestureDetector(
+                                        onTap: () =>
+                                            Navigator.of(dialogContext).pop(),
+                                        child: Dialog(
+                                          backgroundColor: Colors.transparent,
+                                          insetPadding:
+                                              const EdgeInsets.all(32),
+                                          child: Container(
+                                            padding: const EdgeInsets.all(16),
+                                            decoration: BoxDecoration(
+                                              color: Colors.black87,
+                                              borderRadius:
+                                                  BorderRadius.circular(24),
+                                              boxShadow: [
+                                                BoxShadow(
+                                                  color: Colors.black
+                                                      .withOpacity(0.4),
+                                                  blurRadius: 20,
+                                                  offset:
+                                                      const Offset(0, 8),
+                                                ),
+                                              ],
+                                            ),
+                                            child: CircleAvatar(
+                                              radius: 120,
+                                              backgroundImage: NetworkImage(
+                                                  user.avatarUrl!),
                                             ),
                                           ),
-                                        );
-                                      },
-                                    );
-                                  },
-                            child: CircleAvatar(
-                              radius: 40,
-                              backgroundColor:
-                                  Theme.of(context).colorScheme.primary,
-                              backgroundImage: user.avatarUrl != null
-                                  ? NetworkImage(user.avatarUrl!)
-                                  : null,
-                              child: user.avatarUrl == null
-                                  ? Text(
-                                      user.name
-                                              ?.substring(0, 1)
-                                              .toUpperCase() ??
-                                          'U',
-                                      style: const TextStyle(
-                                        fontSize: 24,
-                                        fontWeight: FontWeight.bold,
-                                        color: Colors.white,
-                                      ),
-                                    )
-                                  : null,
-                            ),
-                          ),
-                          Positioned(
-                            bottom: 0,
-                            right: 0,
-                            child: GestureDetector(
-                              onTap: () async {
-                                final authProvider =
-                                    context.read<AuthProvider>();
-                                final mediaService =
-                                    context.read<MediaService>();
-                                final userProvider =
-                                    context.read<UserProvider>();
-                                final currentUser =
-                                    authProvider.currentUser;
-                                if (currentUser == null) return;
-
-                                try {
-                                  final file =
-                                      await mediaService.pickImage();
-                                  if (file == null) return;
-
-                                  final uploadedMedia =
-                                      await mediaService
-                                          .uploadMediaToCloudinary(
-                                    file: file,
-                                    usage: 'general',
+                                        ),
+                                      );
+                                    },
                                   );
-
-                                  if (uploadedMedia == null) {
-                                    throw Exception(
-                                        'Failed to upload avatar');
-                                  }
-
-                                  final success =
-                                      await userProvider.updateProfile(
-                                    userId: currentUser.id,
-                                    avatarUrl: uploadedMedia.url,
-                                  );
-
-                                  if (!success && context.mounted) {
-                                    ScaffoldMessenger.of(context)
-                                        .showSnackBar(
-                                      const SnackBar(
-                                        content: Text(
-                                            'Failed to update profile photo.'),
-                                      ),
-                                    );
-                                  } else if (success && context.mounted) {
-                                    final updatedUser = userProvider
-                                        .getUser(currentUser.id);
-                                    if (updatedUser != null) {
-                                      authProvider.updateUser(updatedUser);
-                                    }
-                                  }
-                                } catch (e) {
-                                  if (!context.mounted) return;
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    SnackBar(
-                                      content: Text(
-                                          'Error updating profile photo: $e'),
+                                },
+                          child: CircleAvatar(
+                            radius: 40,
+                            backgroundColor:
+                                Theme.of(context).colorScheme.primary,
+                            backgroundImage: user.avatarUrl != null
+                                ? NetworkImage(user.avatarUrl!)
+                                : null,
+                            child: user.avatarUrl == null
+                                ? Text(
+                                    user.name
+                                            ?.substring(0, 1)
+                                            .toUpperCase() ??
+                                        'U',
+                                    style: const TextStyle(
+                                      fontSize: 24,
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.white,
                                     ),
-                                  );
-                                }
-                              },
-                              child: Container(
-                                padding: const EdgeInsets.all(6),
-                                decoration: BoxDecoration(
-                                  color: Theme.of(context)
-                                      .colorScheme
-                                      .primary,
-                                  shape: BoxShape.circle,
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: Colors.black.withOpacity(0.2),
-                                      blurRadius: 6,
-                                      offset: const Offset(0, 2),
-                                    ),
-                                  ],
-                                ),
-                                child: const Icon(
-                                  Icons.camera_alt,
-                                  size: 18,
-                                  color: Colors.white,
-                                ),
-                              ),
-                            ),
+                                  )
+                                : null,
                           ),
-                        ],
+                        ),
                       ),
 
                       const SizedBox(height: 16),
