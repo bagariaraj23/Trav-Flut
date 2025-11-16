@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { withAuth, withRateLimit, withLogging } from "@/lib/middleware";
 import { ApiResponse, UserProfile } from "@/types/api";
+import { CloudinaryService } from '@/lib/cloudinary';
 
 // Get current user profile
 export async function GET(request: NextRequest) {
@@ -208,23 +209,54 @@ export async function DELETE(request: NextRequest) {
           const currentUserId = authenticatedReq.user!.userId;
           console.log(`[API] DELETE /users/me - User: ${currentUserId}`);
 
-          // Soft delete the user account
-          await prisma.user.update({
-            where: { id: currentUserId },
-            data: {
-              deletedAt: new Date(),
-              deleteMeta: {
-                deletedAt: new Date().toISOString(),
-                reason: "User initiated account deletion",
-              },
-              // Clear sensitive data
-              email: `deleted_${currentUserId}_${Date.now()}@deleted.local`,
-              username: null,
-              password: null,
-              avatarUrl: null,
-              bio: null,
-            },
+          // Erase user and related personal data in a single transaction.
+          // Collect media publicIds to optionally delete remote assets after the DB transaction.
+          const mediaToDelete = await prisma.media.findMany({
+            where: { uploadedById: currentUserId },
+            select: { publicId: true },
           });
+
+          await prisma.$transaction(async (tx) => {
+            const t = tx as any;
+            // Revoke tokens, sessions, and auth providers
+            await t.jwtRefreshToken.deleteMany({ where: { userId: currentUserId } });
+            await t.oAuthAccount.deleteMany({ where: { userId: currentUserId } });
+            await t.passwordReset.deleteMany({ where: { userId: currentUserId } });
+            await t.securityEvent.deleteMany({ where: { userId: currentUserId } });
+
+            // Remove follow relations and requests
+            await t.follow.deleteMany({ where: { OR: [{ followerId: currentUserId }, { followeeId: currentUserId }] } });
+            await t.followRequest.deleteMany({ where: { OR: [{ followerId: currentUserId }, { followeeId: currentUserId }] } });
+
+            // Remove trip-related links where user is directly referenced
+            await t.tripParticipant.deleteMany({ where: { userId: currentUserId } });
+            await t.tripThreadTag.deleteMany({ where: { taggedUserId: currentUserId } });
+            await t.tripJoinRequest.deleteMany({ where: { OR: [{ senderId: currentUserId }, { receiverId: currentUserId }] } });
+            await t.placeShare.deleteMany({ where: { createdById: currentUserId } });
+
+            // Delete thread entries and media uploaded by the user
+            await t.tripThreadEntry.deleteMany({ where: { authorId: currentUserId } });
+            await t.media.deleteMany({ where: { uploadedById: currentUserId } });
+
+            // Finally delete the user record itself (will cascade to many owned records per schema)
+            await t.user.delete({ where: { id: currentUserId } });
+          });
+
+          // Optionally attempt to remove remote Cloudinary assets (best-effort).
+          // Deleting remote assets is not part of the DB transaction (external IO).
+          const deleteRemote = process.env.DELETE_REMOTE_MEDIA === 'true';
+          if (deleteRemote && mediaToDelete.length > 0) {
+            (async () => {
+              for (const m of mediaToDelete) {
+                try {
+                  await CloudinaryService.deleteMedia(m.publicId);
+                  console.log(`[API] DELETE /users/me - Deleted remote media ${m.publicId}`);
+                } catch (err) {
+                  console.error(`[API] DELETE /users/me - Failed to delete remote media ${m.publicId}:`, err);
+                }
+              }
+            })();
+          }
 
           console.log(
             `[API] DELETE /users/me - Account deleted successfully: ${currentUserId}`
