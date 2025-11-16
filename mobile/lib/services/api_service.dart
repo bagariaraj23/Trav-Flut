@@ -141,9 +141,7 @@ class ApiService {
               debugPrint('[ApiService] No unauthorized callback set!');
             }
             return handler.reject(error);
-          }
-          // ignore: unused_catch_clause
-          catch (e) {
+          } catch (e) {
             debugPrint('[ApiService] Token refresh error: $e');
             await _storageService!.clearTokens();
             if (_onUnauthorized != null) {
@@ -157,7 +155,6 @@ class ApiService {
           }
         }
 
-        // Pass through other errors
         handler.next(error);
       },
     ));
@@ -247,6 +244,31 @@ class ApiService {
       );
     } catch (e) {
       debugPrint('[ApiService] Logout unexpected error: $e');
+      return ApiResponse<void>(
+        success: false,
+        error: 'An unexpected error occurred',
+      );
+    }
+  }
+
+  Future<ApiResponse<void>> deleteAccount() async {
+    try {
+      debugPrint('[ApiService] Delete account called');
+      final response = await _dio.delete('/users/me');
+      debugPrint(
+          '[ApiService] Delete account response: ${response.statusCode}');
+      return ApiResponse<void>(
+        success: response.data['success'],
+        message: response.data['message'],
+      );
+    } on DioException catch (e) {
+      debugPrint('[ApiService] Delete account DioException: ${e.message}');
+      return ApiResponse<void>(
+        success: false,
+        error: e.response?.data['error'] ?? 'Network error occurred',
+      );
+    } catch (e) {
+      debugPrint('[ApiService] Delete account unexpected error: $e');
       return ApiResponse<void>(
         success: false,
         error: 'An unexpected error occurred',
@@ -1106,7 +1128,7 @@ class ApiService {
     required List<String> destinations,
     String? mood,
     String? type,
-    String? coverMediaUrl,
+    String? coverMediaId, // Link to Media model
   }) async {
     try {
       debugPrint(
@@ -1119,7 +1141,7 @@ class ApiService {
         'destinations': destinations,
         if (mood != null) 'mood': mood,
         if (type != null) 'type': type,
-        if (coverMediaUrl != null) 'coverMediaUrl': coverMediaUrl,
+        if (coverMediaId != null) 'coverMediaId': coverMediaId,
       };
 
       final response = await _dio.post('/trips', data: data);
@@ -1140,6 +1162,109 @@ class ApiService {
         success: false,
         error: 'An unexpected error occurred',
       );
+    }
+  }
+
+  // Media endpoints
+  Future<ApiResponse<Map<String, dynamic>>> getCloudinarySignature({
+    required String filename,
+    required String contentType,
+    String? tripId,
+    String usage = 'general',
+  }) async {
+    try {
+      debugPrint(
+          '[ApiService] Getting Cloudinary signature for file: $filename, contentType: $contentType, tripId: $tripId, usage: $usage');
+      final response = await _dio.post('/media/cloudinary-signature', data: {
+        'filename': filename,
+        'contentType': contentType,
+        if (tripId != null) 'tripId': tripId,
+        'usage': usage,
+      });
+      debugPrint(
+          '[ApiService] Get Cloudinary signature response: ${response.statusCode}');
+      return ApiResponse<Map<String, dynamic>>(
+        success: response.data['success'],
+        data: response.data['data'],
+      );
+    } on DioException catch (e) {
+      debugPrint(
+          '[ApiService] Get Cloudinary signature DioException: ${e.message}');
+      return ApiResponse<Map<String, dynamic>>(
+        success: false,
+        error: e.response?.data['error'] ?? 'Network error occurred',
+      );
+    } catch (e) {
+      debugPrint('[ApiService] Get Cloudinary signature unexpected error: $e');
+      return ApiResponse<Map<String, dynamic>>(
+        success: false,
+        error: 'An unexpected error occurred',
+      );
+    }
+  }
+
+  Future<ApiResponse<Media>> confirmMediaUpload({
+    required String url,
+    required String secureUrl,
+    required String publicId,
+    required String format,
+    required String resourceType,
+    required int bytes,
+    required String originalFilename,
+    String? tripId,
+    String usage = 'general',
+    int? width,
+    int? height,
+    num? duration,
+  }) async {
+    try {
+      debugPrint('[ApiService] Confirming media upload: $publicId');
+      final response = await _dio.post('/media/confirm', data: {
+        'url': url,
+        'secure_url': secureUrl,
+        'public_id': publicId,
+        'format': format,
+        'resource_type': resourceType,
+        'bytes': bytes,
+        'original_filename': originalFilename,
+        if (width != null) 'width': width,
+        if (height != null) 'height': height,
+        if (duration != null) 'duration': duration,
+        if (tripId != null) 'tripId': tripId,
+        'usage': usage,
+      });
+      debugPrint(
+          '[ApiService] Confirm media upload response: ${response.statusCode}');
+      return ApiResponse<Media>(
+        success: response.data['success'],
+        data: Media.fromJson(response.data['data']),
+      );
+    } on DioException catch (e) {
+      debugPrint(
+          '[ApiService] Confirm media upload DioException: ${e.message}');
+      return ApiResponse<Media>(
+        success: false,
+        error: e.response?.data['error'] ?? 'Network error occurred',
+      );
+    } catch (e) {
+      debugPrint('[ApiService] Confirm media upload unexpected error: $e');
+      return ApiResponse<Media>(
+        success: false,
+        error: 'An unexpected error occurred',
+      );
+    }
+  }
+
+  Future<void> deleteMediaAsset(String publicId) async {
+    try {
+      debugPrint('[ApiService] Deleting media asset: $publicId');
+      await _dio.post('/media/delete', data: {
+        'publicId': publicId,
+      });
+    } on DioException catch (e) {
+      debugPrint('[ApiService] Delete media asset DioException: ${e.message}');
+    } catch (e) {
+      debugPrint('[ApiService] Delete media asset unexpected error: $e');
     }
   }
 
@@ -1381,7 +1506,6 @@ class ApiService {
     }
   }
 
-  // Add this method for manual refresh
   Future<ApiResponse<Map<String, dynamic>>> refreshAccessToken(
       String refreshToken) async {
     try {
@@ -1493,7 +1617,6 @@ class ApiService {
     } on DioException catch (e) {
       debugPrint('[ApiService] Send follow request DioException: ${e.message}');
 
-      // Handle the case where follow request already exists
       if (e.response?.statusCode == 400 &&
           e.response?.data['error'] == 'Follow request already pending') {
         return ApiResponse<void>(

@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
 import 'package:tripthread/providers/auth_provider.dart';
 import 'package:tripthread/providers/user_provider.dart';
+import 'package:tripthread/services/media_service.dart';
 import 'package:tripthread/widgets/custom_text_field.dart';
 import 'package:tripthread/widgets/loading_button.dart';
 
@@ -19,6 +20,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   late final TextEditingController _usernameController;
   late final TextEditingController _bioController;
   bool? _isPrivate;
+  bool _isUploadingPhoto = false;
 
   @override
   void initState() {
@@ -36,6 +38,78 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     _usernameController.dispose();
     _bioController.dispose();
     super.dispose();
+  }
+
+  Future<void> _handlePhotoUpdate() async {
+    final authProvider = context.read<AuthProvider>();
+    final mediaService = context.read<MediaService>();
+    final userProvider = context.read<UserProvider>();
+    final currentUser = authProvider.currentUser;
+
+    if (currentUser == null) return;
+
+    setState(() {
+      _isUploadingPhoto = true;
+    });
+
+    try {
+      final file = await mediaService.pickImage();
+      if (file == null) {
+        setState(() {
+          _isUploadingPhoto = false;
+        });
+        return;
+      }
+
+      final uploadedMedia = await mediaService.uploadMediaToCloudinary(
+        file: file,
+        usage: 'general',
+      );
+
+      if (uploadedMedia == null) {
+        throw Exception('Failed to upload avatar');
+      }
+
+      final success = await userProvider.updateProfile(
+        userId: currentUser.id,
+        avatarUrl: uploadedMedia.url,
+      );
+
+      if (!success && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Failed to update profile photo.'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      } else if (success && mounted) {
+        final updatedUser = userProvider.getUser(currentUser.id);
+        if (updatedUser != null) {
+          authProvider.updateUser(updatedUser);
+        }
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Profile photo updated successfully'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error updating profile photo: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isUploadingPhoto = false;
+        });
+      }
+    }
   }
 
   Future<void> _handleSave() async {
@@ -60,7 +134,6 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     );
 
     if (success && mounted) {
-      // Update auth provider with new user data
       final updatedUser = userProvider.getUser(currentUser.id);
       if (updatedUser != null) {
         authProvider.updateUser(updatedUser);
@@ -76,18 +149,14 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
           ? extra['from'] as String
           : '/home';
 
-      context.go(from);
+      if (mounted) {
+        context.go(from);
+      }
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final extra = GoRouterState.of(context).extra;
-    final authProvider = context.read<AuthProvider>();
-    final from = (extra is Map && extra['from'] != null)
-        ? extra['from'] as String
-        : '/profile/${authProvider.currentUser?.id}';
-
     return Scaffold(
       appBar: AppBar(
         title: const Text('Edit Profile'),
@@ -149,21 +218,34 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                         decoration: BoxDecoration(
                           color: Theme.of(context).colorScheme.primary,
                           shape: BoxShape.circle,
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withOpacity(0.2),
+                              blurRadius: 6,
+                              offset: const Offset(0, 2),
+                            ),
+                          ],
                         ),
                         child: IconButton(
-                          icon: const Icon(
-                            Icons.camera_alt,
-                            color: Colors.white,
-                            size: 20,
-                          ),
-                          onPressed: () {
-                            // TODO: Implement image picker
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text('Image upload coming soon'),
-                              ),
-                            );
-                          },
+                          icon: _isUploadingPhoto
+                              ? const SizedBox(
+                                  width: 20,
+                                  height: 20,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    valueColor: AlwaysStoppedAnimation<Color>(
+                                        Colors.white),
+                                  ),
+                                )
+                              : const Icon(
+                                  Icons.camera_alt,
+                                  color: Colors.white,
+                                  size: 20,
+                                ),
+                          onPressed:
+                              _isUploadingPhoto ? null : _handlePhotoUpdate,
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(),
                         ),
                       ),
                     ),

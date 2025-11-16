@@ -10,6 +10,7 @@ import 'package:tripthread/widgets/loading_button.dart';
 import 'dart:io';
 import 'package:tripthread/services/media_service.dart';
 import 'package:tripthread/widgets/place_autocomplete_field.dart';
+import 'package:tripthread/utils/cloudinary_utils.dart';
 
 class CreateTripScreen extends StatefulWidget {
   const CreateTripScreen({Key? key}) : super(key: key);
@@ -23,8 +24,10 @@ class _CreateTripScreenState extends State<CreateTripScreen> {
   final _titleController = TextEditingController();
   final _descriptionController = TextEditingController();
   final _destinationController = TextEditingController();
-  final MediaService _mediaService = MediaService();
-  File? _selectedCoverFile;
+  MediaService? _mediaService;
+  Media? _selectedCoverMedia;
+  bool _isUploadingCover = false;
+  double? _coverUploadProgress;
   final List<Place> _destinations = [];
   DateTime? _startDate;
   DateTime? _endDate;
@@ -37,6 +40,12 @@ class _CreateTripScreenState extends State<CreateTripScreen> {
     _descriptionController.dispose();
     _destinationController.dispose();
     super.dispose();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _mediaService ??= context.read<MediaService>();
   }
 
   Future<void> _selectDate(BuildContext context, bool isStartDate) async {
@@ -70,10 +79,26 @@ class _CreateTripScreenState extends State<CreateTripScreen> {
 
   Future<void> _pickCoverImage({bool fromCamera = false}) async {
     try {
-      final file = await _mediaService.pickImage(fromCamera: fromCamera);
+      final mediaService = _mediaService ?? context.read<MediaService>();
+      final file = await mediaService.pickImage(fromCamera: fromCamera);
       if (file != null) {
+        final fileSize = await file.length();
         setState(() {
-          _selectedCoverFile = file;
+          _selectedCoverMedia = Media(
+            id: '',
+            url: file.path,
+            publicId: '',
+            type: mediaService.getMediaType(file),
+            filename: mediaService.getFileName(file),
+            size: fileSize,
+            width: null,
+            height: null,
+            duration: null,
+            processingStatus: MediaProcessingStatus.pending,
+            uploadedById: '',
+            tripId: null,
+            createdAt: DateTime.now(),
+          );
         });
       }
     } catch (e) {
@@ -147,6 +172,57 @@ class _CreateTripScreenState extends State<CreateTripScreen> {
       }
     }
 
+    String? coverMediaId;
+    final mediaService = _mediaService ?? context.read<MediaService>();
+
+    if (_selectedCoverMedia != null &&
+        !_selectedCoverMedia!.url.startsWith('http')) {
+      setState(() {
+        _isUploadingCover = true;
+        _coverUploadProgress = 0.0;
+      });
+      try {
+        final uploadedMedia = await mediaService.uploadMediaToCloudinary(
+          file: File(_selectedCoverMedia!.url),
+          usage: 'trip_cover',
+          onProgress: (progress) {
+            if (!mounted) return;
+            setState(() {
+              _coverUploadProgress = progress;
+            });
+          },
+        );
+
+        if (uploadedMedia != null) {
+          coverMediaId = uploadedMedia.id;
+          setState(() {
+            _selectedCoverMedia = uploadedMedia;
+            _coverUploadProgress = 1.0;
+          });
+        }
+      } catch (e) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to upload cover image: $e')),
+        );
+        setState(() {
+          _isUploadingCover = false;
+          _coverUploadProgress = null;
+        });
+        return;
+      } finally {
+        if (mounted) {
+          setState(() {
+            _isUploadingCover = false;
+            _coverUploadProgress = null;
+          });
+        }
+      }
+    } else if (_selectedCoverMedia != null) {
+      coverMediaId = _selectedCoverMedia!.id.isEmpty
+          ? null
+          : _selectedCoverMedia!.id;
+    }
+
     final request = CreateTripRequest(
       title: _titleController.text.trim(),
       description: _descriptionController.text.trim().isEmpty
@@ -158,9 +234,7 @@ class _CreateTripScreenState extends State<CreateTripScreen> {
       destinationPlaceIds: _destinations.map((e) => e.id).toList(),
       mood: _selectedMood,
       type: _selectedType,
-      coverMediaUrl: _selectedCoverFile != null
-          ? 'https://example.com/placeholder-cover.jpg'
-          : null,
+      coverMediaId: coverMediaId,
     );
 
     print('[DEBUG] CreateTripRequest created:');
@@ -282,18 +356,69 @@ class _CreateTripScreenState extends State<CreateTripScreen> {
                       ),
                 ),
                 const SizedBox(height: 8),
-                if (_selectedCoverFile != null)
+                if (_selectedCoverMedia != null)
                   Stack(
                     children: [
                       ClipRRect(
                         borderRadius: BorderRadius.circular(8),
-                        child: Image.file(
-                          _selectedCoverFile!,
-                          height: 160,
-                          width: double.infinity,
-                          fit: BoxFit.cover,
-                        ),
+                        child: _selectedCoverMedia!.url.startsWith('http')
+                            ? Image.network(
+                                buildOptimizedImageUrl(
+                                  _selectedCoverMedia!.url,
+                                  width: 1600,
+                                ),
+                                height: 160,
+                                width: double.infinity,
+                                fit: BoxFit.cover,
+                              )
+                            : Image.file(
+                                File(_selectedCoverMedia!.url),
+                                height: 160,
+                                width: double.infinity,
+                                fit: BoxFit.cover,
+                              ),
                       ),
+                      if (_isUploadingCover)
+                        Positioned.fill(
+                          child: Container(
+                            decoration: BoxDecoration(
+                              color: Colors.black.withOpacity(0.35),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Center(
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  SizedBox(
+                                    height: 36,
+                                    width: 36,
+                                    child: CircularProgressIndicator(
+                                      value: _coverUploadProgress != null
+                                          ? _coverUploadProgress!.clamp(0.0, 1.0)
+                                          : null,
+                                      strokeWidth: 3,
+                                      backgroundColor: Colors.white24,
+                                      valueColor:
+                                          const AlwaysStoppedAnimation<Color>(
+                                              Colors.white),
+                                    ),
+                                  ),
+                                  if (_coverUploadProgress != null)
+                                    Padding(
+                                      padding: const EdgeInsets.only(top: 8.0),
+                                      child: Text(
+                                        '${(_coverUploadProgress!.clamp(0.0, 1.0) * 100).round()}%',
+                                        style: const TextStyle(
+                                          color: Colors.white,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                    ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
                       Positioned(
                         top: 8,
                         right: 8,
@@ -301,9 +426,11 @@ class _CreateTripScreenState extends State<CreateTripScreen> {
                           backgroundColor: Colors.black54,
                           child: IconButton(
                             icon: const Icon(Icons.close, color: Colors.white),
-                            onPressed: () {
+                            onPressed: _isUploadingCover
+                                ? null
+                                : () {
                               setState(() {
-                                _selectedCoverFile = null;
+                                      _selectedCoverMedia = null;
                               });
                             },
                           ),
@@ -319,8 +446,10 @@ class _CreateTripScreenState extends State<CreateTripScreen> {
                           children: [
                             Expanded(
                               child: OutlinedButton.icon(
-                                onPressed: () =>
-                                    _pickCoverImage(fromCamera: false),
+                                onPressed: _isUploadingCover
+                                    ? null
+                                    : () =>
+                                        _pickCoverImage(fromCamera: false),
                                 icon: const Icon(Icons.photo_library),
                                 label: const Text('Gallery'),
                                 style: OutlinedButton.styleFrom(
@@ -332,8 +461,9 @@ class _CreateTripScreenState extends State<CreateTripScreen> {
                             const SizedBox(width: 8),
                             Expanded(
                               child: OutlinedButton.icon(
-                                onPressed: () =>
-                                    _pickCoverImage(fromCamera: true),
+                                onPressed: _isUploadingCover
+                                    ? null
+                                    : () => _pickCoverImage(fromCamera: true),
                                 icon: const Icon(Icons.camera_alt),
                                 label: const Text('Camera'),
                                 style: OutlinedButton.styleFrom(
@@ -350,8 +480,9 @@ class _CreateTripScreenState extends State<CreateTripScreen> {
                           SizedBox(
                             width: double.infinity,
                             child: OutlinedButton.icon(
-                              onPressed: () =>
-                                  _pickCoverImage(fromCamera: false),
+                              onPressed: _isUploadingCover
+                                  ? null
+                                  : () => _pickCoverImage(fromCamera: false),
                               icon: const Icon(Icons.photo_library),
                               label: const Text('Gallery'),
                               style: OutlinedButton.styleFrom(
@@ -364,8 +495,9 @@ class _CreateTripScreenState extends State<CreateTripScreen> {
                           SizedBox(
                             width: double.infinity,
                             child: OutlinedButton.icon(
-                              onPressed: () =>
-                                  _pickCoverImage(fromCamera: true),
+                              onPressed: _isUploadingCover
+                                  ? null
+                                  : () => _pickCoverImage(fromCamera: true),
                               icon: const Icon(Icons.camera_alt),
                               label: const Text('Camera'),
                               style: OutlinedButton.styleFrom(

@@ -7,6 +7,7 @@ import 'package:tripthread/providers/feed_provider.dart';
 import 'package:tripthread/providers/user_provider.dart';
 import 'package:tripthread/models/trip.dart';
 import 'package:tripthread/screens/discover/discover_tab.dart';
+import 'package:tripthread/utils/cloudinary_utils.dart';
 
 class HomeScreen extends StatefulWidget {
   final int initialTab;
@@ -390,7 +391,10 @@ class _HomeFeedScreenState extends State<HomeFeedScreen> {
                     child: ClipRRect(
                       borderRadius: BorderRadius.circular(12),
                       child: Image.network(
-                        post.curatedMedia[index],
+                        buildOptimizedImageUrl(
+                          post.curatedMedia[index],
+                          width: 1600,
+                        ),
                         fit: BoxFit.cover,
                         errorBuilder: (context, error, stackTrace) {
                           return Container(
@@ -727,21 +731,25 @@ class TripsTab extends StatelessWidget {
                     const BorderRadius.vertical(top: Radius.circular(12)),
                 color: Colors.grey[200],
               ),
-              child: trip.coverMediaUrl != null
-                  ? ClipRRect(
-                      borderRadius:
-                          const BorderRadius.vertical(top: Radius.circular(12)),
-                      child: Image.network(
-                        trip.coverMediaUrl!,
-                        width: double.infinity,
-                        height: 200,
-                        fit: BoxFit.cover,
-                        errorBuilder: (context, error, stackTrace) {
-                          return _buildPlaceholderImage(context, trip);
-                        },
-                      ),
-                    )
-                  : _buildPlaceholderImage(context, trip),
+              child: () {
+                final coverUrl = trip.coverMedia?.url;
+                if (coverUrl == null) {
+                  return _buildPlaceholderImage(context, trip);
+                }
+                return ClipRRect(
+                  borderRadius:
+                      const BorderRadius.vertical(top: Radius.circular(12)),
+                  child: Image.network(
+                    buildOptimizedImageUrl(coverUrl, width: 1600),
+                    width: double.infinity,
+                    height: 200,
+                    fit: BoxFit.cover,
+                    errorBuilder: (context, error, stackTrace) {
+                      return _buildPlaceholderImage(context, trip);
+                    },
+                  ),
+                );
+              }(),
             ),
             // Trip info
             Padding(
@@ -799,11 +807,10 @@ class TripsTab extends StatelessWidget {
                       _buildStatChip(
                         context,
                         Icons.timeline,
-                        '${trip.entryCount ?? 0} entries',
+                        '${trip.entryCount} entries',
                       ),
                       const SizedBox(width: 8),
-                      if (trip.participantCount != null &&
-                          trip.participantCount! > 0)
+                      if (trip.participantCount > 0)
                         _buildStatChip(
                           context,
                           Icons.people,
@@ -1003,22 +1010,68 @@ class ProfileTab extends StatelessWidget {
                   child: Column(
                     children: [
                       // Avatar
-                      CircleAvatar(
-                        radius: 40,
-                        backgroundColor: Theme.of(context).colorScheme.primary,
-                        backgroundImage: user.avatarUrl != null
-                            ? NetworkImage(user.avatarUrl!)
-                            : null,
-                        child: user.avatarUrl == null
-                            ? Text(
-                                user.name?.substring(0, 1).toUpperCase() ?? 'U',
-                                style: const TextStyle(
-                                  fontSize: 24,
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.white,
-                                ),
-                              )
-                            : null,
+                      Center(
+                        child: GestureDetector(
+                          onTap: user.avatarUrl == null
+                              ? null
+                              : () {
+                                  showDialog(
+                                    context: context,
+                                    barrierColor: Colors.black.withOpacity(0.7),
+                                    builder: (dialogContext) {
+                                      return GestureDetector(
+                                        onTap: () =>
+                                            Navigator.of(dialogContext).pop(),
+                                        child: Dialog(
+                                          backgroundColor: Colors.transparent,
+                                          insetPadding:
+                                              const EdgeInsets.all(32),
+                                          child: Container(
+                                            padding: const EdgeInsets.all(16),
+                                            decoration: BoxDecoration(
+                                              color: Colors.black87,
+                                              borderRadius:
+                                                  BorderRadius.circular(24),
+                                              boxShadow: [
+                                                BoxShadow(
+                                                  color: Colors.black
+                                                      .withOpacity(0.4),
+                                                  blurRadius: 20,
+                                                  offset: const Offset(0, 8),
+                                                ),
+                                              ],
+                                            ),
+                                            child: CircleAvatar(
+                                              radius: 120,
+                                              backgroundImage:
+                                                  NetworkImage(user.avatarUrl!),
+                                            ),
+                                          ),
+                                        ),
+                                      );
+                                    },
+                                  );
+                                },
+                          child: CircleAvatar(
+                            radius: 40,
+                            backgroundColor:
+                                Theme.of(context).colorScheme.primary,
+                            backgroundImage: user.avatarUrl != null
+                                ? NetworkImage(user.avatarUrl!)
+                                : null,
+                            child: user.avatarUrl == null
+                                ? Text(
+                                    user.name?.substring(0, 1).toUpperCase() ??
+                                        'U',
+                                    style: const TextStyle(
+                                      fontSize: 24,
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.white,
+                                    ),
+                                  )
+                                : null,
+                          ),
+                        ),
                       ),
 
                       const SizedBox(height: 16),
@@ -1122,8 +1175,8 @@ class ProfileTab extends StatelessWidget {
                               if (tripProvider.trips.isNotEmpty)
                                 TextButton(
                                   onPressed: () {
-                                    // Switch to trips tab
-                                    // This would need to be handled by the parent widget
+                                    context
+                                        .go('/trips', extra: {'from': '/home'});
                                   },
                                   child: const Text('View All'),
                                 ),
@@ -1160,71 +1213,145 @@ class ProfileTab extends StatelessWidget {
                           else
                             Column(
                               children: recentTrips.map((trip) {
-                                return Container(
-                                  margin: const EdgeInsets.only(bottom: 12),
-                                  padding: const EdgeInsets.all(12),
-                                  decoration: BoxDecoration(
-                                    color: Colors.grey[50],
-                                    borderRadius: BorderRadius.circular(8),
-                                    border:
-                                        Border.all(color: Colors.grey[200]!),
-                                  ),
-                                  child: Row(
-                                    children: [
-                                      Container(
-                                        width: 48,
-                                        height: 48,
-                                        decoration: BoxDecoration(
-                                          color: Theme.of(context)
-                                              .colorScheme
-                                              .primary
-                                              .withOpacity(0.1),
+                                final theme = Theme.of(context);
+                                final isDark =
+                                    theme.brightness == Brightness.dark;
+                                final cardColor = isDark
+                                    ? theme.colorScheme.surfaceVariant
+                                        .withOpacity(0.65)
+                                    : const Color(0xFF1A1F2B);
+                                final primaryText =
+                                    isDark ? Colors.white : Colors.white;
+                                final secondaryText =
+                                    primaryText.withOpacity(0.7);
+
+                                final coverUrl = trip.coverMedia?.url;
+
+                                return InkWell(
+                                  borderRadius: BorderRadius.circular(12),
+                                  onTap: () {
+                                    context.go(
+                                      '/trip/${trip.id}',
+                                      extra: {'from': '/home'},
+                                    );
+                                  },
+                                  child: Container(
+                                    margin: const EdgeInsets.only(bottom: 12),
+                                    padding: const EdgeInsets.all(12),
+                                    decoration: BoxDecoration(
+                                      color: cardColor,
+                                      borderRadius: BorderRadius.circular(12),
+                                      border: Border.all(
+                                        color: isDark
+                                            ? theme.dividerColor
+                                                .withOpacity(0.35)
+                                            : Colors.white.withOpacity(0.08),
+                                      ),
+                                      boxShadow: [
+                                        if (!isDark)
+                                          BoxShadow(
+                                            color:
+                                                Colors.black.withOpacity(0.25),
+                                            blurRadius: 12,
+                                            offset: const Offset(0, 5),
+                                          ),
+                                      ],
+                                    ),
+                                    child: Row(
+                                      children: [
+                                        ClipRRect(
                                           borderRadius:
-                                              BorderRadius.circular(8),
+                                              BorderRadius.circular(10),
+                                          child: SizedBox(
+                                            width: 64,
+                                            height: 64,
+                                            child: coverUrl != null
+                                                ? Image.network(
+                                                    buildOptimizedImageUrl(
+                                                      coverUrl,
+                                                      width: 480,
+                                                      height: 480,
+                                                    ),
+                                                    fit: BoxFit.cover,
+                                                    errorBuilder: (context,
+                                                        error, stackTrace) {
+                                                      return _buildRecentTripIcon(
+                                                          primaryText);
+                                                    },
+                                                  )
+                                                : _buildRecentTripIcon(
+                                                    primaryText),
+                                          ),
                                         ),
-                                        child: Icon(
-                                          Icons.travel_explore,
-                                          color: Theme.of(context)
-                                              .colorScheme
-                                              .primary,
-                                        ),
-                                      ),
-                                      const SizedBox(width: 12),
-                                      Expanded(
-                                        child: Column(
-                                          crossAxisAlignment:
-                                              CrossAxisAlignment.start,
-                                          children: [
-                                            Text(
-                                              trip.title,
-                                              style: Theme.of(context)
-                                                  .textTheme
-                                                  .titleSmall
-                                                  ?.copyWith(
-                                                    fontWeight: FontWeight.w600,
+                                        const SizedBox(width: 12),
+                                        Expanded(
+                                          child: Column(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
+                                            children: [
+                                              Text(
+                                                trip.title,
+                                                style: theme
+                                                    .textTheme.titleMedium
+                                                    ?.copyWith(
+                                                  color: primaryText,
+                                                  fontWeight: FontWeight.w600,
+                                                ),
+                                                maxLines: 1,
+                                                overflow: TextOverflow.ellipsis,
+                                              ),
+                                              if (trip.destinations.isNotEmpty)
+                                                Padding(
+                                                  padding:
+                                                      const EdgeInsets.only(
+                                                          top: 2.0),
+                                                  child: Text(
+                                                    trip.destinations
+                                                        .take(3)
+                                                        .join(', '),
+                                                    style: theme
+                                                        .textTheme.bodySmall
+                                                        ?.copyWith(
+                                                      color: secondaryText,
+                                                    ),
+                                                    maxLines: 1,
+                                                    overflow:
+                                                        TextOverflow.ellipsis,
                                                   ),
-                                              overflow: TextOverflow.ellipsis,
-                                              maxLines: 1,
-                                            ),
-                                            Text(
-                                              trip.destinations.join(', '),
-                                              style: Theme.of(context)
-                                                  .textTheme
-                                                  .bodySmall
-                                                  ?.copyWith(
-                                                    color: Colors.grey[600],
-                                                  ),
-                                              overflow: TextOverflow.ellipsis,
-                                              maxLines: 1,
-                                            ),
-                                          ],
+                                                ),
+                                              Padding(
+                                                padding: const EdgeInsets.only(
+                                                    top: 6.0),
+                                                child: Row(
+                                                  children: [
+                                                    Icon(
+                                                      Icons.calendar_today,
+                                                      size: 14,
+                                                      color: secondaryText,
+                                                    ),
+                                                    const SizedBox(width: 6),
+                                                    Expanded(
+                                                      child: Text(
+                                                        '${trip.startDate.day}/${trip.startDate.month}/${trip.startDate.year} - ${trip.endDate.day}/${trip.endDate.month}/${trip.endDate.year}',
+                                                        style: theme
+                                                            .textTheme.bodySmall
+                                                            ?.copyWith(
+                                                          color: secondaryText,
+                                                        ),
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ),
+                                              ),
+                                            ],
+                                          ),
                                         ),
-                                      ),
-                                      Icon(
-                                        Icons.chevron_right,
-                                        color: Colors.grey[400],
-                                      ),
-                                    ],
+                                        Icon(
+                                          Icons.chevron_right,
+                                          color: secondaryText,
+                                        ),
+                                      ],
+                                    ),
                                   ),
                                 );
                               }).toList(),
@@ -1257,6 +1384,18 @@ class ProfileTab extends StatelessWidget {
           style: Theme.of(context).textTheme.bodySmall,
         ),
       ],
+    );
+  }
+
+  Widget _buildRecentTripIcon(Color iconColor) {
+    return Container(
+      color: iconColor.withOpacity(0.12),
+      alignment: Alignment.center,
+      child: Icon(
+        Icons.travel_explore,
+        color: iconColor,
+        size: 28,
+      ),
     );
   }
 }

@@ -2,9 +2,6 @@ import 'package:flutter/foundation.dart';
 import 'package:tripthread/models/user.dart';
 import 'package:tripthread/services/api_service.dart';
 import 'package:tripthread/services/storage_service.dart';
-import 'package:provider/provider.dart'; // Needed for context.read
-
-// If you want to access the UserProvider using context, you may need context.
 
 class AuthProvider extends ChangeNotifier {
   final ApiService _apiService;
@@ -177,6 +174,35 @@ class AuthProvider extends ChangeNotifier {
       _setError('Network error. Please check your connection and try again.');
       _setLoadingState(false);
       debugPrint('Login error: $e');
+      return false;
+    }
+  }
+
+  Future<bool> deleteAccount() async {
+    try {
+      debugPrint('[AuthProvider] Delete account called');
+      final response = await _apiService.deleteAccount();
+      
+      if (response.success) {
+        // Clear local storage and state
+        await _storageService.clearTokens();
+        _currentUser = null;
+        _error = null;
+        _isLoading = false;
+        notifyListeners();
+        routingNotifier.notifyListeners();
+        debugPrint('[AuthProvider] Account deleted successfully');
+        return true;
+      } else {
+        _error = response.error ?? 'Failed to delete account';
+        notifyListeners();
+        debugPrint('[AuthProvider] Delete account error: $_error');
+        return false;
+      }
+    } catch (e) {
+      _error = 'An unexpected error occurred while deleting account';
+      notifyListeners();
+      debugPrint('Delete account error: $e');
       return false;
     }
   }

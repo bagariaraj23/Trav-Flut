@@ -93,7 +93,7 @@ export interface TripResponse {
   | "MIXED"
   | null;
   type?: "SOLO" | "GROUP" | "COUPLE" | "FAMILY" | null;
-  coverMediaUrl?: string | null;
+  coverMediaId?: string | null;
   status: "UPCOMING" | "ONGOING" | "ENDED";
   createdAt: string;
   updatedAt: string;
@@ -103,6 +103,7 @@ export interface TripResponse {
   participants?: TripParticipantResponse[] | null;
   threadEntries?: TripThreadEntryResponse[] | null;
   finalPost?: TripFinalPostResponse | null;
+  coverMedia?: MediaResponse | null;
   _count?: {
     threadEntries: number | null;
     media: number | null;
@@ -125,7 +126,6 @@ export interface TripThreadEntryResponse {
   authorId: string;
   type: "TEXT" | "MEDIA" | "LOCATION" | "CHECKIN";
   contentText?: string | null;
-  mediaUrl?: string | null;
   locationName?: string | null;
   gpsCoordinates?: { lat: number | null; lng: number | null } | null;
   placeId?: string | null;
@@ -169,6 +169,7 @@ export interface MediaResponse {
   uploadedById: string;
   tripId?: string | null;
   createdAt: string;
+  publicId?: string;
 }
 
 // Request DTOs
@@ -187,17 +188,18 @@ export interface CreateTripRequest {
   | "MIXED"
   | null;
   type?: "SOLO" | "GROUP" | "COUPLE" | "FAMILY" | null;
-  coverMediaUrl?: string | null;
+  coverMediaId?: string | null;
 }
 
 export interface CreateThreadEntryRequest {
   type: "TEXT" | "MEDIA" | "LOCATION" | "CHECKIN";
   contentText?: string | null;
-  mediaUrl?: string | null;
+  mediaId?: string | null;
   locationName?: string | null;
   gpsCoordinates?: { lat: number | null; lng: number | null } | null;
   placeId?: string | null;
   taggedUsernames?: string[] | null;
+  taggedUserIds?: string[] | null;
 }
 
 export interface AddParticipantRequest {

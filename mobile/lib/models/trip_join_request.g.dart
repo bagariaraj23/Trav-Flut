@@ -50,7 +50,7 @@ TripJoinRequestTrip _$TripJoinRequestTripFromJson(Map<String, dynamic> json) =>
     TripJoinRequestTrip(
       id: json['id'] as String,
       title: json['title'] as String,
-      coverMediaUrl: json['coverMediaUrl'] as String?,
+      coverMediaId: json['coverMediaId'] as String?,
       userId: json['userId'] as String,
       destinations: (json['destinations'] as List<dynamic>)
           .map((e) => e as String)
@@ -69,7 +69,7 @@ Map<String, dynamic> _$TripJoinRequestTripToJson(
     <String, dynamic>{
       'id': instance.id,
       'title': instance.title,
-      'coverMediaUrl': instance.coverMediaUrl,
+      'coverMediaId': instance.coverMediaId,
       'userId': instance.userId,
       'destinations': instance.destinations,
       'status': instance.status,

@@ -129,7 +129,7 @@ model Trip {
   destinations     String[]
   mood             TripMood?
   type             TripType?
-  coverMediaUrl    String?
+  coverMediaId     String?
   status           TripStatus        @default(UPCOMING)
   entryCount       Int               @default(0)
   participantCount Int               @default(1)
@@ -140,6 +140,7 @@ model Trip {
   joinRequests     TripJoinRequest[]
   participants     TripParticipant[]
   threadEntries    TripThreadEntry[]
+  coverMedia       Media?            @relation("TripCoverMedia", fields: [coverMediaId], references: [id], onDelete: SetNull)
   user             User              @relation(fields: [userId], references: [id], onDelete: Cascade)
   placeShares      PlaceShare[]
 
@@ -181,13 +182,12 @@ model TripThreadEntry {
   authorId       String
   type           ThreadEntryType
   contentText    String?
-  mediaUrl       String?
+  mediaId        String?         // Link to Media model
   locationName   String?
   gpsCoordinates Json?
   createdAt      DateTime        @default(now())
-  mediaId        String?
   author         User            @relation(fields: [authorId], references: [id], onDelete: Cascade)
-  media          Media?          @relation(fields: [mediaId], references: [id])
+  media           Media?             @relation(fields: [mediaId], references: [id], onDelete: SetNull)
   trip           Trip            @relation(fields: [tripId], references: [id], onDelete: Cascade)
   taggedUsers    TripThreadTag[]
 
@@ -302,19 +302,33 @@ model TripFinalPost {
 }
 
 model Media {
-  id            String            @id @default(uuid())
-  url           String
-  type          MediaType
-  filename      String?
-  size          Int?
-  uploadedById  String
-  tripId        String?
-  createdAt     DateTime          @default(now())
-  trip          Trip?             @relation(fields: [tripId], references: [id], onDelete: Cascade)
-  uploadedBy    User              @relation(fields: [uploadedById], references: [id], onDelete: Cascade)
-  threadEntries TripThreadEntry[]
+  id              String             @id @default(uuid())
+  url             String
+  publicId        String             @unique // Cloudinary public_id for management
+  type            MediaType
+  filename        String?
+  size            Int?
+  width           Int?
+  height          Int?
+  duration        Float?
+  processingStatus MediaProcessingStatus @default(COMPLETED)
+  uploadedById    String
+  tripId          String?
+  createdAt       DateTime           @default(now())
+
+  uploadedBy      User               @relation(fields: [uploadedById], references: [id], onDelete: Cascade)
+  trip            Trip?              @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  threadEntries   TripThreadEntry[]
+  tripCover       Trip[]             @relation("TripCoverMedia")
 
   @@map("media")
+}
+
+enum MediaProcessingStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
 }
 
 model TripJoinRequest {

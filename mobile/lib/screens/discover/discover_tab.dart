@@ -6,6 +6,7 @@ import 'package:tripthread/providers/feed_provider.dart';
 import 'package:tripthread/providers/auth_provider.dart';
 import 'package:tripthread/models/trip.dart';
 import 'package:go_router/go_router.dart';
+import 'package:tripthread/utils/cloudinary_utils.dart';
 
 class DiscoverTab extends StatefulWidget {
   const DiscoverTab({super.key});
@@ -496,15 +497,19 @@ class _DiscoverTabState extends State<DiscoverTab> {
             // Cover image
             Expanded(
               flex: 5,
-              child: trip.coverMediaUrl != null
-                  ? Image.network(
-                      trip.coverMediaUrl!,
-                      fit: BoxFit.cover,
-                      errorBuilder: (context, error, stackTrace) {
-                        return _buildTripPlaceholder(context, trip);
-                      },
-                    )
-                  : _buildTripPlaceholder(context, trip),
+              child: () {
+                final coverUrl = trip.coverMedia?.url;
+                if (coverUrl == null) {
+                  return _buildTripPlaceholder(context, trip);
+                }
+                return Image.network(
+                  buildOptimizedImageUrl(coverUrl, width: 1600),
+                  fit: BoxFit.cover,
+                  errorBuilder: (context, error, stackTrace) {
+                    return _buildTripPlaceholder(context, trip);
+                  },
+                );
+              }(),
             ),
             Padding(
               padding: const EdgeInsets.all(10),

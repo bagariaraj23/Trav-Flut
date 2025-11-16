@@ -80,8 +80,8 @@ export async function POST(request: NextRequest) {
               JSON.stringify(validatedData, null, 2)
             );
             console.log(
-              "[DEBUG] coverMediaUrl after validation:",
-              validatedData.coverMediaUrl
+              "[DEBUG] coverMediaId after validation:",
+              validatedData.coverMediaId
             );
             console.log(
               "[DEBUG] description after validation:",
@@ -116,6 +116,24 @@ export async function POST(request: NextRequest) {
                   : destinationPlaceIds[0];
             }
 
+            const coverMediaId = tripData.coverMediaId ?? null;
+
+            // Validate cover media ownership if provided
+            if (coverMediaId) {
+              const mediaRecord = await prisma.media.findUnique({
+                where: { id: coverMediaId },
+                select: { id: true, uploadedById: true, tripId: true },
+              });
+
+              if (!mediaRecord) {
+                throw new ValidationError("Cover media not found");
+              }
+
+              if (mediaRecord.uploadedById !== userId) {
+                throw new ValidationError("You do not have permission to use this media");
+              }
+            }
+
             // Create trip with transaction for data consistency
             const trip = await prisma.$transaction(async (tx) => {
               // Calculate trip status based on start date
@@ -137,7 +155,7 @@ export async function POST(request: NextRequest) {
                   description: tripData.description ?? null,
                   type: tripData.type ?? null,
                   mood: tripData.mood ?? null,
-                  coverMediaUrl: tripData.coverMediaUrl ?? null,
+                  coverMediaId,
                   startLocationId: startLocationId ?? null,
                   endLocationId: endLocationId ?? null,
                 },
@@ -155,6 +173,7 @@ export async function POST(request: NextRequest) {
                       updatedAt: true,
                     },
                   },
+                  coverMedia: true,
                   _count: {
                     select: {
                       threadEntries: true,
@@ -164,6 +183,13 @@ export async function POST(request: NextRequest) {
                   },
                 },
               }) as any; // Type assertion needed due to complex response type
+
+              if (coverMediaId) {
+                await tx.media.update({
+                  where: { id: coverMediaId },
+                  data: { tripId: newTrip.id },
+                });
+              }
 
               // Create place associations if destinationPlaceIds are provided
               if (destinationPlaceIds && destinationPlaceIds.length > 0) {
@@ -195,11 +221,20 @@ export async function POST(request: NextRequest) {
                 : undefined,
               endDate: trip.endDate ? trip.endDate.toISOString() : undefined,
               description: trip.description ?? undefined,
-              coverMediaUrl: trip.coverMediaUrl ?? undefined,
+              coverMediaId: trip.coverMediaId ?? undefined,
               type: trip.type ?? undefined,
               mood: trip.mood ?? undefined,
               createdAt: trip.createdAt.toISOString(),
               updatedAt: trip.updatedAt.toISOString(),
+              coverMedia: trip.coverMedia
+                ? {
+                    ...trip.coverMedia,
+                    filename: trip.coverMedia.filename ?? undefined,
+                    size: trip.coverMedia.size ?? undefined,
+                    tripId: trip.coverMedia.tripId ?? undefined,
+                    createdAt: trip.coverMedia.createdAt.toISOString(),
+                  }
+                : undefined,
               user: trip.user
                 ? {
                   ...trip.user,
@@ -218,8 +253,8 @@ export async function POST(request: NextRequest) {
               JSON.stringify(tripResponse, null, 2)
             );
             console.log(
-              "[DEBUG] coverMediaUrl in response:",
-              tripResponse.coverMediaUrl
+              "[DEBUG] coverMediaId in response:",
+              tripResponse.coverMediaId
             );
             console.log(
               "[DEBUG] description in response:",
@@ -338,6 +373,7 @@ export async function GET(request: NextRequest) {
                   updatedAt: true,
                 },
               },
+              coverMedia: true,
               _count: {
                 select: {
                   threadEntries: true,
@@ -358,7 +394,7 @@ export async function GET(request: NextRequest) {
               : undefined,
             endDate: trip.endDate ? trip.endDate.toISOString() : undefined,
             createdAt: trip.createdAt.toISOString(),
-            coverMediaUrl: trip.coverMediaUrl ?? undefined,
+            coverMediaId: trip.coverMediaId ?? undefined,
             type: trip.type ?? undefined,
             mood: trip.mood ?? undefined,
             description: trip.description ?? undefined,
@@ -373,6 +409,15 @@ export async function GET(request: NextRequest) {
                 createdAt: trip.user.createdAt.toISOString(),
                 updatedAt: trip.user.updatedAt.toISOString(),
               }
+              : undefined,
+            coverMedia: trip.coverMedia
+              ? {
+                  ...trip.coverMedia,
+                  filename: trip.coverMedia.filename ?? undefined,
+                  size: trip.coverMedia.size ?? undefined,
+                  tripId: trip.coverMedia.tripId ?? undefined,
+                  createdAt: trip.coverMedia.createdAt.toISOString(),
+                }
               : undefined,
           }));
 

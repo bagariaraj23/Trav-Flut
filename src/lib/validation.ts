@@ -175,16 +175,16 @@ export const createTripSchema = z
         );
         return val;
       }),
-    coverMediaUrl: z
+    coverMediaId: z
       .union([
-        z.string().url("Please enter a valid URL").max(2048, "URL is too long"),
+        z.string().uuid("Invalid media ID format"),
         z.null(),
         z.undefined(),
       ])
       .optional()
       .transform((val) => {
         console.log(
-          `[DEBUG] coverMediaUrl validation - received: ${val}, type: ${typeof val}`
+          `[DEBUG] coverMediaId validation - received: ${val}, type: ${typeof val}`
         );
         return val;
       }),
@@ -232,19 +232,16 @@ export const createThreadEntrySchema = z
         );
         return val;
       }),
-    mediaUrl: z
+    mediaId: z
       .union([
-        z
-          .string()
-          .url("Please enter a valid media URL")
-          .max(2048, "URL is too long"),
+        z.string().uuid("Invalid media ID format"),
         z.null(),
         z.undefined(),
       ])
       .optional()
       .transform((val) => {
         console.log(
-          `[DEBUG] mediaUrl validation - received: ${val}, type: ${typeof val}`
+          `[DEBUG] mediaId validation - received: ${val}, type: ${typeof val}`
         );
         return val;
       }),
@@ -318,7 +315,7 @@ export const createThreadEntrySchema = z
         case "TEXT":
           return data.contentText && data.contentText.length > 0;
         case "MEDIA":
-          return data.mediaUrl && data.mediaUrl.length > 0;
+          return !!data.mediaId;
         case "LOCATION":
           return (
             !!data.placeId ||

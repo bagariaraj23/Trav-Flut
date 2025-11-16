@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:go_router/go_router.dart';
 
 class ResetSuccessScreen extends StatelessWidget {
   const ResetSuccessScreen({Key? key}) : super(key: key);
@@ -7,10 +6,10 @@ class ResetSuccessScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return WillPopScope(
-      onWillPop: () async => false, // Prevent back button
+      onWillPop: () async => false,
       child: Scaffold(
         appBar: AppBar(
-          automaticallyImplyLeading: false, // Remove back button
+          automaticallyImplyLeading: false,
           title: const Text('Password Reset'),
         ),
         body: SafeArea(

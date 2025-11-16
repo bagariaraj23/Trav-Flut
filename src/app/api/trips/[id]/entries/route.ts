@@ -139,16 +139,71 @@ export async function POST(
       );
     }
 
-    // Create thread entry
-    const [threadEntry, updatedTrip] = await prisma.$transaction([
-      prisma.tripThreadEntry.create({
+    if (validatedData.type === "MEDIA" && !validatedData.mediaId) {
+      return NextResponse.json<ApiResponse>(
+        {
+          success: false,
+          error: "mediaId is required for media entries",
+        },
+        { status: 400 }
+      );
+    }
+
+    let mediaRecord: { id: string; uploadedById: string; tripId: string | null } | null = null;
+
+    if (validatedData.mediaId) {
+      mediaRecord = await prisma.media.findUnique({
+        where: { id: validatedData.mediaId },
+        select: { id: true, uploadedById: true, tripId: true },
+      });
+
+      if (!mediaRecord) {
+        return NextResponse.json<ApiResponse>(
+          {
+            success: false,
+            error: "Media not found",
+          },
+          { status: 404 }
+        );
+      }
+
+      if (mediaRecord.uploadedById !== userId) {
+        return NextResponse.json<ApiResponse>(
+          {
+            success: false,
+            error: "You do not have permission to use this media",
+          },
+          { status: 403 }
+        );
+      }
+
+      if (mediaRecord.tripId && mediaRecord.tripId !== tripId) {
+        return NextResponse.json<ApiResponse>(
+          {
+            success: false,
+            error: "Media is already attached to another trip",
+          },
+          { status: 400 }
+        );
+      }
+    }
+
+    const createdEntry = await prisma.$transaction(async (tx) => {
+      if (mediaRecord && mediaRecord.tripId !== tripId) {
+        await tx.media.update({
+          where: { id: mediaRecord.id },
+          data: { tripId },
+        });
+      }
+
+      const entry = await tx.tripThreadEntry.create({
         data: {
           tripId,
           authorId: userId,
           type: validatedData.type,
           contentText: validatedData.contentText,
-          mediaUrl: validatedData.mediaUrl,
           locationName: locationName ?? undefined,
+          mediaId: mediaRecord ? mediaRecord.id : (validatedData.mediaId ?? undefined),
           gpsCoordinates: validatedData.gpsCoordinates
             ? JSON.stringify(validatedData.gpsCoordinates)
             : undefined,
@@ -170,22 +225,24 @@ export async function POST(
           },
           media: true,
         },
-      }),
-      // Increment entry count
-      prisma.trip.update({
+      });
+
+      await tx.trip.update({
         where: { id: tripId },
         data: {
           entryCount: { increment: 1 },
           updatedAt: new Date(),
         },
-      }),
-    ]);
+      });
+
+      return entry;
+    });
 
     // Add tags if provided
     if (taggedUserIds.length > 0) {
       await prisma.tripThreadTag.createMany({
         data: taggedUserIds.map((taggedUserId) => ({
-          threadEntryId: threadEntry.id,
+          threadEntryId: createdEntry.id,
           taggedUserId,
         })),
         skipDuplicates: true,
@@ -194,7 +251,7 @@ export async function POST(
 
     // Fetch the complete entry with tags and place
     const completeEntry = await prisma.tripThreadEntry.findUnique({
-      where: { id: threadEntry.id },
+      where: { id: createdEntry.id },
       include: {
         author: {
           select: {
@@ -227,7 +284,7 @@ export async function POST(
           },
         },
         media: true,
-        place: true, // Include place relation
+        place: true,
       },
     });
 
@@ -413,7 +470,7 @@ export async function GET(
           },
         },
         media: true,
-        place: true, // Include place relation
+        place: true,
       },
       orderBy: { createdAt: "asc" },
     });

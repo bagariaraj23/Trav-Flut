@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:tripthread/providers/trip_provider.dart';
 import 'package:tripthread/providers/auth_provider.dart';
 import 'package:tripthread/models/trip.dart';
+import 'package:tripthread/utils/cloudinary_utils.dart';
 import 'package:tripthread/widgets/loading_button.dart';
 
 class TripDetailScreen extends StatefulWidget {
@@ -68,7 +69,7 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Trip ended successfully! 🎉')),
         );
-        await _loadTrip(); // Reload to get updated trip
+        await _loadTrip();
       }
     }
   }
@@ -81,15 +82,14 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
       );
     }
 
-    // Use a single, unified Scaffold for both success and error states.
     return Scaffold(
       body: CustomScrollView(
         slivers: [
           SliverAppBar(
             expandedHeight:
                 MediaQuery.of(context).orientation == Orientation.landscape
-                    ? 150 // ← Smaller in landscape
-                    : 250, // ← Larger in portrait
+                    ? 150
+                    : 250,
             pinned: true,
             leading: IconButton(
               icon: const Icon(Icons.arrow_back, color: Colors.white),
@@ -103,7 +103,6 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
             ),
             flexibleSpace: FlexibleSpaceBar(
               title: Text(
-                // The title changes based on whether the trip was found.
                 _trip?.title ?? 'Trip Not Found',
                 style: const TextStyle(
                   color: Colors.white,
@@ -120,16 +119,19 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
               background: Stack(
                 fit: StackFit.expand,
                 children: [
-                  // Conditionally show the trip's cover image or the default cover.
-                  _trip?.coverMediaUrl != null
-                      ? Image.network(
-                          _trip!.coverMediaUrl!,
-                          fit: BoxFit.cover,
-                          errorBuilder: (context, error, stackTrace) {
-                            return _buildDefaultCover();
-                          },
-                        )
-                      : _buildDefaultCover(),
+                  () {
+                    final coverUrl = _trip?.coverMedia?.url;
+                    if (coverUrl == null) {
+                      return _buildDefaultCover();
+                    }
+                    return Image.network(
+                      buildOptimizedImageUrl(coverUrl, width: 2048),
+                      fit: BoxFit.cover,
+                      errorBuilder: (context, error, stackTrace) {
+                        return _buildDefaultCover();
+                      },
+                    );
+                  }(),
                   Container(
                     decoration: BoxDecoration(
                       gradient: LinearGradient(
@@ -146,7 +148,6 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
               ),
             ),
             actions: [
-              // Actions are only built if the trip exists and meets the criteria.
               if (_trip != null &&
                   _trip!.userId ==
                       context.read<AuthProvider>().currentUser?.id &&
@@ -160,13 +161,7 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
                 ),
             ],
           ),
-
-          // --- CONDITIONAL BODY ---
-          // We use a Sliver widget to place content in the scroll view.
-
           if (_trip == null)
-            // If the trip is not found, show a centered error message
-            // that fills the rest of the available screen space.
             SliverFillRemaining(
               child: Center(
                 child: Padding(
@@ -197,7 +192,6 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
               ),
             )
           else
-            // If the trip IS found, show the normal trip content.
             SliverToBoxAdapter(
               child: Padding(
                 padding: const EdgeInsets.all(16),
@@ -287,17 +281,16 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
             const SizedBox(height: 12),
 
             // Dates
-            if (_trip!.startDate != null || _trip!.endDate != null)
-              Row(
-                children: [
-                  Icon(Icons.calendar_today, color: Colors.grey[600], size: 20),
-                  const SizedBox(width: 8),
-                  Text(
-                    _formatDateRange(_trip!.startDate, _trip!.endDate),
-                    style: Theme.of(context).textTheme.bodyMedium,
-                  ),
-                ],
-              ),
+            Row(
+              children: [
+                Icon(Icons.calendar_today, color: Colors.grey[600], size: 20),
+                const SizedBox(width: 8),
+                Text(
+                  _formatDateRange(_trip!.startDate, _trip!.endDate),
+                  style: Theme.of(context).textTheme.bodyMedium,
+                ),
+              ],
+            ),
 
             const SizedBox(height: 12),
 
@@ -351,7 +344,7 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
                   '/trip/${widget.tripId}/map',
                   extra: {
                     'tripTitle': _trip!.title,
-                    'places': _trip!.placeVisits, // Optional prefetch
+                    'places': _trip!.placeVisits,
                   },
                 );
               },
@@ -482,43 +475,88 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
   }
 
   Widget _buildThreadEntryPreview(TripThreadEntry entry) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final mediaUrl = entry.media?.url;
+    final hasMedia = entry.type == ThreadEntryType.media &&
+        mediaUrl != null &&
+        mediaUrl.isNotEmpty;
+
+    final String? previewUrl = hasMedia ? mediaUrl : null;
+
+    final cardColor = isDark
+        ? theme.colorScheme.surfaceVariant.withOpacity(0.65)
+        : const Color(0xFF12161D);
+    final primaryTextColor =
+        isDark ? theme.colorScheme.onSurface : Colors.white;
+    final secondaryTextColor = primaryTextColor.withOpacity(0.7);
+
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: Colors.grey[50],
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: Colors.grey[200]!),
+        color: cardColor,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: isDark
+              ? theme.dividerColor.withOpacity(0.35)
+              : Colors.white.withOpacity(0.08),
+        ),
+        boxShadow: [
+          if (!isDark)
+            BoxShadow(
+              color: Colors.black.withOpacity(0.35),
+              blurRadius: 14,
+              offset: const Offset(0, 6),
+            ),
+        ],
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _buildEntryTypeIcon(entry.type),
+          if (hasMedia && previewUrl != null)
+            _buildThreadMediaThumbnail(previewUrl, entry.media?.type)
+          else
+            _buildEntryTypeIcon(
+              entry.type,
+              accentOverride: primaryTextColor,
+            ),
           const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                if (entry.contentText != null)
+                if (entry.contentText != null &&
+                    entry.contentText!.trim().isNotEmpty)
                   Text(
                     entry.contentText!,
-                    style: Theme.of(context).textTheme.bodyMedium,
-                    maxLines: 2,
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: primaryTextColor,
+                      fontWeight: FontWeight.w500,
+                      height: 1.35,
+                    ),
+                    maxLines: 3,
                     overflow: TextOverflow.ellipsis,
                   ),
                 if (entry.locationName != null)
-                  Text(
-                    '📍 ${entry.locationName}',
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: Theme.of(context).colorScheme.primary,
-                        ),
-                  ),
-                const SizedBox(height: 4),
-                Text(
-                  _formatDateTime(entry.createdAt),
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: Colors.grey[600],
+                  Padding(
+                    padding: const EdgeInsets.only(top: 4.0),
+                    child: Text(
+                      '📍 ${entry.locationName}',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: secondaryTextColor,
+                        fontWeight: FontWeight.w600,
                       ),
+                    ),
+                  ),
+                Padding(
+                  padding: const EdgeInsets.only(top: 6.0),
+                  child: Text(
+                    _formatDateTime(entry.createdAt),
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: secondaryTextColor,
+                    ),
+                  ),
                 ),
               ],
             ),
@@ -528,36 +566,84 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
     );
   }
 
-  Widget _buildEntryTypeIcon(ThreadEntryType type) {
+  Widget _buildEntryTypeIcon(ThreadEntryType type,
+      {Color? accentOverride, bool compact = false}) {
     IconData icon;
-    Color color;
+    Color accent;
 
     switch (type) {
       case ThreadEntryType.text:
         icon = Icons.text_fields;
-        color = Colors.blue;
+        accent = accentOverride ?? Colors.blueAccent;
         break;
       case ThreadEntryType.media:
         icon = Icons.photo_camera;
-        color = Colors.green;
+        accent = accentOverride ?? Colors.lightGreenAccent.shade200;
         break;
       case ThreadEntryType.location:
         icon = Icons.location_on;
-        color = Colors.red;
+        accent = accentOverride ?? Colors.redAccent;
         break;
       case ThreadEntryType.checkin:
         icon = Icons.check_circle;
-        color = Colors.orange;
+        accent = accentOverride ?? Colors.orangeAccent;
         break;
     }
 
     return Container(
-      padding: const EdgeInsets.all(8),
+      padding: EdgeInsets.all(compact ? 6 : 8),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
+        color: accent.withOpacity(0.18),
         borderRadius: BorderRadius.circular(8),
       ),
-      child: Icon(icon, color: color, size: 20),
+      child: Icon(
+        icon,
+        color: accentOverride != null ? accentOverride : accent,
+        size: compact ? 16 : 20,
+      ),
+    );
+  }
+
+  Widget _buildThreadMediaThumbnail(String url, MediaType? type) {
+    final isVideo = type == MediaType.video;
+    final optimizedUrl = isVideo
+        ? buildVideoThumbnailUrl(url, maxWidth: 480)
+        : buildOptimizedImageUrl(url, width: 480);
+
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(10),
+      child: SizedBox(
+        width: 72,
+        height: 72,
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            Image.network(
+              optimizedUrl,
+              fit: BoxFit.cover,
+              errorBuilder: (context, error, stackTrace) => Container(
+                color: Colors.grey[300],
+                alignment: Alignment.center,
+                child: Icon(
+                  Icons.broken_image,
+                  color: Colors.grey[600],
+                  size: 28,
+                ),
+              ),
+            ),
+            if (isVideo)
+              Container(
+                color: Colors.black38,
+                alignment: Alignment.center,
+                child: const Icon(
+                  Icons.play_circle_fill,
+                  color: Colors.white,
+                  size: 32,
+                ),
+              ),
+          ],
+        ),
+      ),
     );
   }
 

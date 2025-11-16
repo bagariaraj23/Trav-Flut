@@ -16,7 +16,6 @@ class ForgotPasswordScreen extends StatefulWidget {
 class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
   final _formKey = GlobalKey<FormState>();
   final _emailController = TextEditingController();
-  bool _obscurePassword = true;
 
   @override
   void dispose() {
@@ -36,7 +35,8 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
       // Show success message and navigate back to login
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('If an account exists for this email, a reset link has been sent.'),
+          content: Text(
+              'If an account exists for this email, a reset link has been sent.'),
           backgroundColor: Colors.green,
         ),
       );

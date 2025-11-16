@@ -16,7 +16,8 @@ class Trip {
   final List<String> destinations;
   final TripMood? mood;
   final TripType? type;
-  final String? coverMediaUrl;
+  final String? coverMediaId;
+  final Media? coverMedia;
   final TripStatus status;
   @JsonKey(defaultValue: 0)
   final int entryCount;
@@ -45,7 +46,8 @@ class Trip {
     required this.destinations,
     this.mood,
     this.type,
-    this.coverMediaUrl,
+    this.coverMediaId,
+    this.coverMedia,
     required this.status,
     required this.entryCount,
     required this.participantCount,
@@ -76,7 +78,8 @@ class Trip {
     List<String>? destinations,
     TripMood? mood,
     TripType? type,
-    String? coverMediaUrl,
+    String? coverMediaId,
+    Media? coverMedia,
     TripStatus? status,
     DateTime? createdAt,
     DateTime? updatedAt,
@@ -98,7 +101,8 @@ class Trip {
       destinations: destinations ?? this.destinations,
       mood: mood ?? this.mood,
       type: type ?? this.type,
-      coverMediaUrl: coverMediaUrl ?? this.coverMediaUrl,
+      coverMediaId: coverMediaId ?? this.coverMediaId,
+      coverMedia: coverMedia ?? this.coverMedia,
       status: status ?? this.status,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
@@ -160,7 +164,7 @@ class TripThreadEntry {
   final String authorId;
   final ThreadEntryType type;
   final String? contentText;
-  final String? mediaUrl;
+  final String? mediaId;
   final String? locationName;
   final GpsCoordinates? gpsCoordinates;
   final String? placeId;
@@ -176,7 +180,7 @@ class TripThreadEntry {
     required this.authorId,
     required this.type,
     this.contentText,
-    this.mediaUrl,
+    this.mediaId,
     this.locationName,
     this.gpsCoordinates,
     this.placeId,
@@ -223,9 +227,14 @@ class TripFinalPost {
 class Media {
   final String id;
   final String url;
+  final String publicId;
   final MediaType type;
   final String? filename;
   final int? size;
+  final int? width;
+  final int? height;
+  final double? duration;
+  final MediaProcessingStatus processingStatus;
   final String uploadedById;
   final String? tripId;
   final DateTime createdAt;
@@ -233,9 +242,14 @@ class Media {
   const Media({
     required this.id,
     required this.url,
+    required this.publicId,
     required this.type,
     this.filename,
     this.size,
+    this.width,
+    this.height,
+    this.duration,
+    this.processingStatus = MediaProcessingStatus.completed,
     required this.uploadedById,
     this.tripId,
     required this.createdAt,
@@ -313,6 +327,17 @@ enum MediaType {
   video,
 }
 
+enum MediaProcessingStatus {
+  @JsonValue('PENDING')
+  pending,
+  @JsonValue('PROCESSING')
+  processing,
+  @JsonValue('COMPLETED')
+  completed,
+  @JsonValue('FAILED')
+  failed,
+}
+
 // Request DTOs
 @JsonSerializable()
 class CreateTripRequest {
@@ -324,7 +349,7 @@ class CreateTripRequest {
   final List<String> destinationPlaceIds;
   final TripMood? mood;
   final TripType? type;
-  final String? coverMediaUrl;
+  final String? coverMediaId;
 
   const CreateTripRequest({
     required this.title,
@@ -335,7 +360,7 @@ class CreateTripRequest {
     required this.destinationPlaceIds,
     this.mood,
     this.type,
-    this.coverMediaUrl,
+    this.coverMediaId,
   });
 
   factory CreateTripRequest.fromJson(Map<String, dynamic> json) =>
@@ -347,7 +372,7 @@ class CreateTripRequest {
 class CreateThreadEntryRequest {
   final ThreadEntryType type;
   final String? contentText;
-  final String? mediaUrl;
+  final String? mediaId;
   final String? locationName;
   final GpsCoordinates? gpsCoordinates;
   final String? placeId;
@@ -356,7 +381,7 @@ class CreateThreadEntryRequest {
   const CreateThreadEntryRequest({
     required this.type,
     this.contentText,
-    this.mediaUrl,
+    this.mediaId,
     this.locationName,
     this.gpsCoordinates,
     this.placeId,

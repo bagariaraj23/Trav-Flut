@@ -77,7 +77,7 @@ export async function GET(request: NextRequest) {
       ...trip,
       startDate: trip.startDate?.toISOString() || undefined,
       endDate: trip.endDate?.toISOString() || undefined,
-      coverMediaUrl: trip.coverMediaUrl ?? undefined,
+      coverMediaId: trip.coverMediaId ?? undefined,
       createdAt: trip.createdAt.toISOString(),
       updatedAt: trip.updatedAt.toISOString(),
       user: trip.user

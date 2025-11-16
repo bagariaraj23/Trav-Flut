@@ -23,8 +23,7 @@ export const mockTrips: TripResponse[] = [
     status: "ENDED",
     mood: "CULTURAL",
     type: "SOLO",
-    coverMediaUrl:
-      "https://images.pexels.com/photos/2506923/pexels-photo-2506923.jpeg?auto=compress&cs=tinysrgb&w=600",
+    coverMediaId: null,
     description:
       "Exploring the vibrant culture, incredible food, and modern marvels of Tokyo",
     createdAt: new Date("2024-01-10").toISOString(),
@@ -51,8 +50,7 @@ export const mockTrips: TripResponse[] = [
         type: "MEDIA",
         contentText:
           "Lunch at this hidden ramen shop recommended by a local. The broth is absolutely divine!",
-        mediaUrl:
-          "https://images.pexels.com/photos/1907228/pexels-photo-1907228.jpeg?auto=compress&cs=tinysrgb&w=600",
+        mediaId: "1",
         locationName: "Menya Saimi",
         gpsCoordinates: { lat: 35.658, lng: 139.7016 },
         createdAt: new Date("2024-01-15T14:20:00").toISOString(),
@@ -97,8 +95,7 @@ export const mockTrips: TripResponse[] = [
     status: "ENDED",
     mood: "RELAXED",
     type: "SOLO",
-    coverMediaUrl:
-      "https://images.pexels.com/photos/3073666/pexels-photo-3073666.jpeg?auto=compress&cs=tinysrgb&w=600",
+    coverMediaId: null,
     description: "Island paradise, temples, and incredible sunsets",
     createdAt: new Date("2024-02-05").toISOString(),
     updatedAt: new Date("2024-02-17").toISOString(),
@@ -112,8 +109,7 @@ export const mockTrips: TripResponse[] = [
         type: "MEDIA",
         contentText:
           "Sunset at Tanah Lot Temple. No words can describe this beauty.",
-        mediaUrl:
-          "https://images.pexels.com/photos/2161449/pexels-photo-2161449.jpeg?auto=compress&cs=tinysrgb&w=600",
+        mediaId: "2",
         locationName: "Tanah Lot Temple",
         gpsCoordinates: { lat: -8.6211, lng: 115.0864 },
         createdAt: new Date("2024-02-10T16:45:00").toISOString(),
@@ -145,8 +141,7 @@ export const mockTrips: TripResponse[] = [
     status: "UPCOMING",
     mood: "ADVENTURE",
     type: "SOLO",
-    coverMediaUrl:
-      "https://images.pexels.com/photos/1586298/pexels-photo-1586298.jpeg?auto=compress&cs=tinysrgb&w=600",
+    coverMediaId: null,
     description: "Chasing waterfalls and northern lights on the Ring Road",
     createdAt: new Date("2024-02-20").toISOString(),
     updatedAt: new Date("2024-02-20").toISOString(),

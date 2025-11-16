@@ -19,7 +19,10 @@ Trip _$TripFromJson(Map<String, dynamic> json) => Trip(
           [],
       mood: $enumDecodeNullable(_$TripMoodEnumMap, json['mood']),
       type: $enumDecodeNullable(_$TripTypeEnumMap, json['type']),
-      coverMediaUrl: json['coverMediaUrl'] as String?,
+      coverMediaId: json['coverMediaId'] as String?,
+      coverMedia: json['coverMedia'] == null
+          ? null
+          : Media.fromJson(json['coverMedia'] as Map<String, dynamic>),
       status: $enumDecode(_$TripStatusEnumMap, json['status']),
       entryCount: (json['entryCount'] as num?)?.toInt() ?? 0,
       participantCount: (json['participantCount'] as num?)?.toInt() ?? 1,
@@ -63,7 +66,8 @@ Map<String, dynamic> _$TripToJson(Trip instance) => <String, dynamic>{
       'destinations': instance.destinations,
       'mood': _$TripMoodEnumMap[instance.mood],
       'type': _$TripTypeEnumMap[instance.type],
-      'coverMediaUrl': instance.coverMediaUrl,
+      'coverMediaId': instance.coverMediaId,
+      'coverMedia': instance.coverMedia,
       'status': _$TripStatusEnumMap[instance.status]!,
       'entryCount': instance.entryCount,
       'participantCount': instance.participantCount,
@@ -145,7 +149,7 @@ TripThreadEntry _$TripThreadEntryFromJson(Map<String, dynamic> json) =>
       authorId: json['authorId'] as String,
       type: $enumDecode(_$ThreadEntryTypeEnumMap, json['type']),
       contentText: json['contentText'] as String?,
-      mediaUrl: json['mediaUrl'] as String?,
+      mediaId: json['mediaId'] as String?,
       locationName: json['locationName'] as String?,
       gpsCoordinates: json['gpsCoordinates'] == null
           ? null
@@ -172,7 +176,7 @@ Map<String, dynamic> _$TripThreadEntryToJson(TripThreadEntry instance) =>
       'authorId': instance.authorId,
       'type': _$ThreadEntryTypeEnumMap[instance.type]!,
       'contentText': instance.contentText,
-      'mediaUrl': instance.mediaUrl,
+      'mediaId': instance.mediaId,
       'locationName': instance.locationName,
       'gpsCoordinates': instance.gpsCoordinates,
       'placeId': instance.placeId,
@@ -221,9 +225,16 @@ Map<String, dynamic> _$TripFinalPostToJson(TripFinalPost instance) =>
 Media _$MediaFromJson(Map<String, dynamic> json) => Media(
       id: json['id'] as String,
       url: json['url'] as String,
+      publicId: json['publicId'] as String,
       type: $enumDecode(_$MediaTypeEnumMap, json['type']),
       filename: json['filename'] as String?,
       size: (json['size'] as num?)?.toInt(),
+      width: (json['width'] as num?)?.toInt(),
+      height: (json['height'] as num?)?.toInt(),
+      duration: (json['duration'] as num?)?.toDouble(),
+      processingStatus: $enumDecodeNullable(
+              _$MediaProcessingStatusEnumMap, json['processingStatus']) ??
+          MediaProcessingStatus.completed,
       uploadedById: json['uploadedById'] as String,
       tripId: json['tripId'] as String?,
       createdAt: DateTime.parse(json['createdAt'] as String),
@@ -232,9 +243,15 @@ Media _$MediaFromJson(Map<String, dynamic> json) => Media(
 Map<String, dynamic> _$MediaToJson(Media instance) => <String, dynamic>{
       'id': instance.id,
       'url': instance.url,
+      'publicId': instance.publicId,
       'type': _$MediaTypeEnumMap[instance.type]!,
       'filename': instance.filename,
       'size': instance.size,
+      'width': instance.width,
+      'height': instance.height,
+      'duration': instance.duration,
+      'processingStatus':
+          _$MediaProcessingStatusEnumMap[instance.processingStatus]!,
       'uploadedById': instance.uploadedById,
       'tripId': instance.tripId,
       'createdAt': instance.createdAt.toIso8601String(),
@@ -243,6 +260,13 @@ Map<String, dynamic> _$MediaToJson(Media instance) => <String, dynamic>{
 const _$MediaTypeEnumMap = {
   MediaType.image: 'IMAGE',
   MediaType.video: 'VIDEO',
+};
+
+const _$MediaProcessingStatusEnumMap = {
+  MediaProcessingStatus.pending: 'PENDING',
+  MediaProcessingStatus.processing: 'PROCESSING',
+  MediaProcessingStatus.completed: 'COMPLETED',
+  MediaProcessingStatus.failed: 'FAILED',
 };
 
 GpsCoordinates _$GpsCoordinatesFromJson(Map<String, dynamic> json) =>
@@ -275,7 +299,7 @@ CreateTripRequest _$CreateTripRequestFromJson(Map<String, dynamic> json) =>
           .toList(),
       mood: $enumDecodeNullable(_$TripMoodEnumMap, json['mood']),
       type: $enumDecodeNullable(_$TripTypeEnumMap, json['type']),
-      coverMediaUrl: json['coverMediaUrl'] as String?,
+      coverMediaId: json['coverMediaId'] as String?,
     );
 
 Map<String, dynamic> _$CreateTripRequestToJson(CreateTripRequest instance) =>
@@ -288,7 +312,7 @@ Map<String, dynamic> _$CreateTripRequestToJson(CreateTripRequest instance) =>
       'destinationPlaceIds': instance.destinationPlaceIds,
       'mood': _$TripMoodEnumMap[instance.mood],
       'type': _$TripTypeEnumMap[instance.type],
-      'coverMediaUrl': instance.coverMediaUrl,
+      'coverMediaId': instance.coverMediaId,
     };
 
 CreateThreadEntryRequest _$CreateThreadEntryRequestFromJson(
@@ -296,7 +320,7 @@ CreateThreadEntryRequest _$CreateThreadEntryRequestFromJson(
     CreateThreadEntryRequest(
       type: $enumDecode(_$ThreadEntryTypeEnumMap, json['type']),
       contentText: json['contentText'] as String?,
-      mediaUrl: json['mediaUrl'] as String?,
+      mediaId: json['mediaId'] as String?,
       locationName: json['locationName'] as String?,
       gpsCoordinates: json['gpsCoordinates'] == null
           ? null
@@ -313,7 +337,7 @@ Map<String, dynamic> _$CreateThreadEntryRequestToJson(
     <String, dynamic>{
       'type': _$ThreadEntryTypeEnumMap[instance.type]!,
       'contentText': instance.contentText,
-      'mediaUrl': instance.mediaUrl,
+      'mediaId': instance.mediaId,
       'locationName': instance.locationName,
       'gpsCoordinates': instance.gpsCoordinates,
       'placeId': instance.placeId,
