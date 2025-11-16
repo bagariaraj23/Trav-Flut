@@ -217,29 +217,44 @@ export async function DELETE(request: NextRequest) {
           });
 
           await prisma.$transaction(async (tx) => {
-            const t = tx as any;
             // Revoke tokens, sessions, and auth providers
-            await t.jwtRefreshToken.deleteMany({ where: { userId: currentUserId } });
-            await t.oAuthAccount.deleteMany({ where: { userId: currentUserId } });
-            await t.passwordReset.deleteMany({ where: { userId: currentUserId } });
-            await t.securityEvent.deleteMany({ where: { userId: currentUserId } });
+            await tx.jWTRefreshToken.deleteMany({ where: { userId: currentUserId } });
+            await tx.oAuthAccount.deleteMany({ where: { userId: currentUserId } });
+            await tx.passwordReset.deleteMany({ where: { userId: currentUserId } });
+            await tx.securityEvent.deleteMany({ where: { userId: currentUserId } });
 
             // Remove follow relations and requests
-            await t.follow.deleteMany({ where: { OR: [{ followerId: currentUserId }, { followeeId: currentUserId }] } });
-            await t.followRequest.deleteMany({ where: { OR: [{ followerId: currentUserId }, { followeeId: currentUserId }] } });
+            await tx.follow.deleteMany({ where: { OR: [{ followerId: currentUserId }, { followeeId: currentUserId }] } });
+            await tx.followRequest.deleteMany({ where: { OR: [{ followerId: currentUserId }, { followeeId: currentUserId }] } });
 
             // Remove trip-related links where user is directly referenced
-            await t.tripParticipant.deleteMany({ where: { userId: currentUserId } });
-            await t.tripThreadTag.deleteMany({ where: { taggedUserId: currentUserId } });
-            await t.tripJoinRequest.deleteMany({ where: { OR: [{ senderId: currentUserId }, { receiverId: currentUserId }] } });
-            await t.placeShare.deleteMany({ where: { createdById: currentUserId } });
+            await tx.tripParticipant.deleteMany({ where: { userId: currentUserId } });
+            await tx.tripThreadTag.deleteMany({ where: { taggedUserId: currentUserId } });
+            await tx.tripJoinRequest.deleteMany({ where: { OR: [{ senderId: currentUserId }, { receiverId: currentUserId }] } });
+            await tx.placeShare.deleteMany({ where: { createdById: currentUserId } });
 
             // Delete thread entries and media uploaded by the user
-            await t.tripThreadEntry.deleteMany({ where: { authorId: currentUserId } });
-            await t.media.deleteMany({ where: { uploadedById: currentUserId } });
+            await tx.tripThreadEntry.deleteMany({ where: { authorId: currentUserId } });
+            await tx.media.deleteMany({ where: { uploadedById: currentUserId } });
 
-            // Finally delete the user record itself (will cascade to many owned records per schema)
-            await t.user.delete({ where: { id: currentUserId } });
+            // Soft delete the user record itself
+            await tx.user.update({
+              where: { id: currentUserId },
+              data: {
+                deletedAt: new Date(),
+                deleteMeta: {
+                  deletedAt: new Date().toISOString(),
+                  reason: "User initiated account deletion",
+                },
+                email: `deleted_${currentUserId}_${Date.now()}@deleted.local`,
+                username: null,
+                password: null,
+                avatarUrl: null,
+                bio: null,
+              },
+            });
+
+            console.log(`[API] DELETE /users/me - User record soft deleted: ${currentUserId}`);
           });
 
           // Optionally attempt to remove remote Cloudinary assets (best-effort).
