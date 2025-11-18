@@ -6,6 +6,7 @@ import 'package:tripthread/config/app_config.dart';
 import 'package:tripthread/models/place.dart';
 import 'package:tripthread/providers/auth_provider.dart';
 import 'package:tripthread/providers/place_provider.dart';
+import 'package:tripthread/providers/final_post_provider.dart';
 import 'package:tripthread/providers/user_provider.dart';
 import 'package:tripthread/providers/trip_provider.dart';
 import 'package:tripthread/providers/feed_provider.dart';
@@ -29,6 +30,7 @@ import 'package:tripthread/screens/trip/create_trip_screen.dart';
 import 'package:tripthread/screens/trip/trip_detail_screen.dart';
 import 'package:tripthread/screens/trip/trip_thread_screen.dart';
 import 'package:tripthread/screens/trip/trip_participants_screen.dart';
+import 'package:tripthread/screens/trip/final_post_edit_screen.dart';
 import 'package:tripthread/screens/profile/follow_requests_screen.dart';
 import 'package:tripthread/screens/profile/trip_invitations_screen.dart';
 import 'package:tripthread/screens/settings/settings_screen.dart';
@@ -412,6 +414,22 @@ class _TripThreadAppRouterState extends State<TripThreadAppRouter> {
             builder: (context, state) {
               final tripId = state.pathParameters['tripId']!;
               return TripParticipantsScreen(tripId: tripId);
+            },
+          ),
+          GoRoute(
+            path: '/trip/:tripId/final-post',
+            builder: (context, state) {
+              final tripId = state.pathParameters['tripId']!;
+              return ChangeNotifierProvider<FinalPostProvider>(
+                create: (context) {
+                  final provider = FinalPostProvider(
+                    tripService: context.read<TripService>(),
+                  );
+                  provider.loadDraft(tripId);
+                  return provider;
+                },
+                child: FinalPostEditScreen(tripId: tripId),
+              );
             },
           ),
           GoRoute(

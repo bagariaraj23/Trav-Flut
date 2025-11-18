@@ -142,8 +142,14 @@ export async function GET(request: NextRequest) {
               summaryText: post.summaryText,
               curatedMedia: post.curatedMedia,
               caption: post.caption ?? undefined,
+              coverMediaUrl: post.coverMediaUrl ?? undefined,
+              generationStatus: post.generationStatus,
               isPublished: post.isPublished,
+              publishedAt: post.publishedAt
+                ? post.publishedAt.toISOString()
+                : undefined,
               createdAt: post.createdAt.toISOString(),
+              updatedAt: post.updatedAt.toISOString(),
               trip: {
                 ...post.trip,
                 startDate: post.trip.startDate?.toISOString() || undefined,

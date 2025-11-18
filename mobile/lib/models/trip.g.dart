@@ -203,8 +203,16 @@ TripFinalPost _$TripFinalPostFromJson(Map<String, dynamic> json) =>
           .map((e) => e as String)
           .toList(),
       caption: json['caption'] as String?,
+      coverMediaUrl: json['coverMediaUrl'] as String?,
+      generationStatus: $enumDecodeNullable(
+              _$GenerationStatusEnumMap, json['generationStatus']) ??
+          GenerationStatus.draft,
       isPublished: json['isPublished'] as bool,
+      publishedAt: json['publishedAt'] == null
+          ? null
+          : DateTime.parse(json['publishedAt'] as String),
       createdAt: DateTime.parse(json['createdAt'] as String),
+      updatedAt: DateTime.parse(json['updatedAt'] as String),
       trip: json['trip'] == null
           ? null
           : Trip.fromJson(json['trip'] as Map<String, dynamic>),
@@ -217,10 +225,22 @@ Map<String, dynamic> _$TripFinalPostToJson(TripFinalPost instance) =>
       'summaryText': instance.summaryText,
       'curatedMedia': instance.curatedMedia,
       'caption': instance.caption,
+      'coverMediaUrl': instance.coverMediaUrl,
+      'generationStatus': _$GenerationStatusEnumMap[instance.generationStatus]!,
       'isPublished': instance.isPublished,
+      'publishedAt': instance.publishedAt?.toIso8601String(),
       'createdAt': instance.createdAt.toIso8601String(),
+      'updatedAt': instance.updatedAt.toIso8601String(),
       'trip': instance.trip,
     };
+
+const _$GenerationStatusEnumMap = {
+  GenerationStatus.draft: 'DRAFT',
+  GenerationStatus.generating: 'GENERATING',
+  GenerationStatus.ready: 'READY',
+  GenerationStatus.published: 'PUBLISHED',
+  GenerationStatus.failed: 'FAILED',
+};
 
 Media _$MediaFromJson(Map<String, dynamic> json) => Media(
       id: json['id'] as String,

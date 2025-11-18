@@ -63,13 +63,14 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
 
     if (confirmed == true && mounted) {
       final tripProvider = context.read<TripProvider>();
-      final success = await tripProvider.endTrip();
+      final success = await tripProvider.endTrip(tripId: widget.tripId);
 
       if (success && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Trip ended successfully! 🎉')),
         );
         await _loadTrip();
+        context.go('/trip/${widget.tripId}/final-post');
       }
     }
   }
@@ -390,11 +391,7 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
                 _trip!.finalPost != null) ...[
               ElevatedButton.icon(
                 onPressed: () {
-                  // TODO: Navigate to final post screen
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                        content: Text('Final post feature coming soon!')),
-                  );
+                  context.go('/trip/${widget.tripId}/final-post');
                 },
                 icon: const Icon(Icons.auto_awesome),
                 label: const Text('View Final Post'),

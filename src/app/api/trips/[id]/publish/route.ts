@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { prisma } from '@/lib/prisma'
 import { AuthService } from '@/lib/auth'
-import { ApiResponse } from '@/types/api'
+import { prisma } from '@/lib/prisma'
+import { ApiResponse, TripFinalPostResponse } from '@/types/api'
+import { TripFinalizerService } from '@/lib/services/tripFinalizer'
+import { handleError } from '@/lib/errors'
 
 // Publish final post
 export async function POST(
@@ -68,25 +70,29 @@ export async function POST(
       }, { status: 400 })
     }
 
-    // Publish final post
-    await prisma.tripFinalPost.update({
-      where: { tripId },
-      data: {
-        isPublished: true
-      }
-    })
+    const published = await TripFinalizerService.publishFinalPost(tripId, userId)
+    const response: TripFinalPostResponse = {
+      ...published,
+      caption: published.caption ?? undefined,
+      coverMediaUrl: published.coverMediaUrl ?? undefined,
+      publishedAt: published.publishedAt ? published.publishedAt.toISOString() : undefined,
+      createdAt: published.createdAt.toISOString(),
+      updatedAt: published.updatedAt.toISOString(),
+      generationStatus: published.generationStatus
+    }
 
-    return NextResponse.json<ApiResponse>({
+    return NextResponse.json<ApiResponse<TripFinalPostResponse>>({
       success: true,
+      data: response,
       message: 'Final post published successfully'
     })
 
   } catch (error: any) {
-    console.error('Publish final post error:', error)
-    
+    const appError = handleError(error)
+
     return NextResponse.json<ApiResponse>({
       success: false,
-      error: 'Internal server error'
-    }, { status: 500 })
+      error: appError.message
+    }, { status: appError.statusCode })
   }
 }

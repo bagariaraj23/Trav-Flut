@@ -1,7 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { AuthService } from "@/lib/auth";
-import { ApiResponse, TripResponse } from "@/types/api";
+import {
+  ApiResponse,
+  TripFinalPostResponse,
+  TripResponse,
+} from "@/types/api";
+import { TripFinalizerService } from "@/lib/services/tripFinalizer";
 
 // End a trip
 export async function POST(
@@ -41,22 +46,10 @@ export async function POST(
     // Check if trip exists and user is owner
     const trip = await prisma.trip.findUnique({
       where: { id: tripId },
-      include: {
-        threadEntries: {
-          where: {
-            type: "MEDIA",
-            mediaId: { not: null },
-          },
-          include: {
-            media: {
-              select: {
-                id: true,
-                url: true,
-              },
-            },
-          },
-          orderBy: { createdAt: "asc" },
-        },
+      select: {
+        id: true,
+        userId: true,
+        status: true,
       },
     });
 
@@ -90,94 +83,67 @@ export async function POST(
       );
     }
 
-    // Generate final post summary
-    const textEntries = trip.threadEntries.filter(
-      (entry) => entry.type === "TEXT" && entry.contentText
-    );
-    const mediaEntries = trip.threadEntries.filter(
-      (entry) => entry.type === "MEDIA" && entry.mediaId
-    );
-    const locationEntries = trip.threadEntries.filter(
-      (entry) => entry.type === "LOCATION" && entry.locationName
-    );
-
-    // Create a simple summary (in production, this would use AI)
-    let summaryText = `Amazing trip to ${trip.destinations.join(", ")}! `;
-
-    if (locationEntries.length > 0) {
-      summaryText += `Visited ${locationEntries.length} amazing places. `;
-    }
-
-    if (textEntries.length > 0) {
-      summaryText += `Shared ${textEntries.length} memorable moments. `;
-    }
-
-    if (mediaEntries.length > 0) {
-      summaryText += `Captured ${mediaEntries.length} beautiful memories.`;
-    }
-
-    // Get curated media (first 6 media entries) - use media relation to get URLs
-    const curatedMedia = mediaEntries
-      .slice(0, 6)
-      .map((entry) => entry.media?.url)
-      .filter((url): url is string => Boolean(url));
-
-    // Update trip status and create final post
-    const [updatedTrip, finalPost] = await prisma.$transaction([
-      prisma.trip.update({
-        where: { id: tripId },
-        data: {
-          status: "ENDED",
-          endDate: new Date(),
-          updatedAt: new Date(),
-        },
-        include: {
-          user: {
-            select: {
-              id: true,
-              email: true,
-              username: true,
-              name: true,
-              avatarUrl: true,
-              bio: true,
-              isPrivate: true,
-              createdAt: true,
-              updatedAt: true,
-            },
-          },
-          _count: {
-            select: {
-              threadEntries: true,
-              media: true,
-              participants: true,
-            },
-          },
-          participants: {
-            include: {
-              user: true,
-            },
-          },
-          threadEntries: {
-            include: {
-              media: true,
-              taggedUsers: true,
-              author: true,
-            },
-            orderBy: { createdAt: "asc" },
+    // Update trip status
+    const updatedTrip = await prisma.trip.update({
+      where: { id: tripId },
+      data: {
+        status: "ENDED",
+        endDate: new Date(),
+        updatedAt: new Date(),
+      },
+      include: {
+        user: {
+          select: {
+            id: true,
+            email: true,
+            username: true,
+            name: true,
+            avatarUrl: true,
+            bio: true,
+            isPrivate: true,
+            createdAt: true,
+            updatedAt: true,
           },
         },
-      }),
-      prisma.tripFinalPost.create({
-        data: {
-          tripId,
-          summaryText,
-          curatedMedia,
-          caption: `My trip to ${trip.destinations.join(
-            ", "
-          )} was incredible! 🌟`,
+        _count: {
+          select: {
+            threadEntries: true,
+            media: true,
+            participants: true,
+          },
         },
-      }),
-    ]);
+        participants: {
+          include: {
+            user: true,
+          },
+        },
+        threadEntries: {
+          include: {
+            media: true,
+            taggedUsers: true,
+            author: true,
+          },
+          orderBy: { createdAt: "asc" },
+        },
+      },
+    });
+
+    const finalPost = await TripFinalizerService.generateFinalPost(
+      tripId,
+      userId
+    );
+
+    const finalPostResponse: TripFinalPostResponse = {
+      ...finalPost,
+      caption: finalPost.caption ?? undefined,
+      coverMediaUrl: finalPost.coverMediaUrl ?? undefined,
+      generationStatus: finalPost.generationStatus,
+      publishedAt: finalPost.publishedAt
+        ? finalPost.publishedAt.toISOString()
+        : undefined,
+      createdAt: finalPost.createdAt.toISOString(),
+      updatedAt: finalPost.updatedAt.toISOString(),
+    };
 
     const tripResponse: TripResponse = {
       ...updatedTrip,
@@ -192,15 +158,11 @@ export async function POST(
             name: updatedTrip.user.name ?? undefined,
             avatarUrl: updatedTrip.user.avatarUrl ?? undefined,
             bio: updatedTrip.user.bio ?? undefined,
-            createdAt: updatedTrip.user.createdAt.toISOString() ,
+            createdAt: updatedTrip.user.createdAt.toISOString(),
             updatedAt: updatedTrip.user.updatedAt.toISOString(),
           }
         : undefined,
-      finalPost: {
-        ...finalPost,
-        caption: finalPost.caption ?? undefined,
-        createdAt: finalPost.createdAt.toISOString(),
-      },
+      finalPost: finalPostResponse,
       description: updatedTrip.description ?? undefined,
       mood: updatedTrip.mood ?? undefined,
       type: updatedTrip.type ?? undefined,
@@ -216,8 +178,8 @@ export async function POST(
           avatarUrl: p.user.avatarUrl ?? undefined,
           bio: p.user.bio ?? undefined,
           createdAt: p.user.createdAt.toISOString(),
-          updatedAt: p.user.updatedAt.toISOString()
-        }
+          updatedAt: p.user.updatedAt.toISOString(),
+        },
       })),
       threadEntries: updatedTrip.threadEntries.map((entry: any) => ({
         ...entry,
@@ -225,14 +187,15 @@ export async function POST(
         author: {
           ...entry.author,
           createdAt: entry.author.createdAt.toISOString(),
-          updatedAt: entry.author.updatedAt.toISOString()
+          updatedAt: entry.author.updatedAt.toISOString(),
         },
         taggedUsers: entry.taggedUsers.map((tag: any) => ({
           ...tag.taggedUser,
           createdAt: tag.taggedUser.createdAt.toISOString(),
-          updatedAt: tag.taggedUser.updatedAt.toISOString()
+          updatedAt: tag.taggedUser.updatedAt.toISOString(),
         })),
-        media: entry.media ? {
+        media: entry.media
+          ? {
               ...entry.media,
               createdAt: entry.media.createdAt.toISOString(),
             }
