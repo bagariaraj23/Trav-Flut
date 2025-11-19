@@ -2,6 +2,9 @@
 require('dotenv').config();
 
 const nextConfig = {
+  experimental: {
+    instrumentationHook: true,
+  },
   env: {
     ENABLE_SCHEDULER: process.env.ENABLE_SCHEDULER,
     NEXT_PUBLIC_API_BASE_URL: process.env.NEXT_PUBLIC_API_BASE_URL

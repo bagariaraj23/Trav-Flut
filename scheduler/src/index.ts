@@ -4,12 +4,21 @@ import { updateTripStatuses } from "./tripStatus";
 import { Queue, Worker, Job } from "bullmq";
 import { Redis } from "ioredis";
 import { createLogger, format, transports } from "winston";
+import { logSchedulerStartupInfo } from "./startup-logger";
 
 // Configure logger
 const logger = createLogger({
   format: format.combine(format.timestamp(), format.json()),
   transports: [
-    new transports.Console(),
+    new transports.Console({
+      format: format.combine(
+        format.colorize(),
+        format.printf(({ level, message, timestamp, ...meta }) => {
+          const metaStr = Object.keys(meta).length ? JSON.stringify(meta) : '';
+          return `${timestamp} [${level}]: ${message} ${metaStr}`;
+        })
+      ),
+    }),
     new transports.File({ filename: "scheduler.log" }),
   ],
 });
@@ -88,13 +97,24 @@ async function shutdown() {
 async function start() {
   try {
     logger.info("Starting scheduler service...");
+    
+    // Log comprehensive startup information
+    await logSchedulerStartupInfo(prisma, redisConnection);
+    
+    // Test connections before proceeding
+    await prisma.$connect();
+    await redisConnection.ping();
+    
+    logger.info("All connections verified, scheduling jobs...");
     await scheduleJobs();
     logger.info("Scheduler service started successfully");
   } catch (error) {
     logger.error("Failed to start scheduler", {
       error: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : undefined,
     });
     await shutdown();
+    process.exit(1);
   }
 }
 
