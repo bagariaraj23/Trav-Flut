@@ -24,9 +24,29 @@ const logger = createLogger({
 });
 
 // Initialize Redis connection
-const redisConnection = new Redis(
-  process.env.REDIS_URL || "redis://localhost:6379"
-);
+const redisUrl = process.env.REDIS_URL;
+if (!redisUrl) {
+  logger.error("REDIS_URL environment variable is not set!");
+  logger.error("Please set REDIS_URL in your Railway service variables.");
+  logger.error("Example: redis://default:password@redis.railway.internal:6379");
+  process.exit(1);
+}
+
+logger.info("Connecting to Redis...", { redisUrl: redisUrl.replace(/:[^:@]+@/, ':****@') }); // Mask password in logs
+const redisConnection = new Redis(redisUrl);
+
+// Handle Redis connection errors
+redisConnection.on('error', (error) => {
+  logger.error("Redis connection error:", {
+    error: error.message,
+    code: (error as any).code,
+    syscall: (error as any).syscall,
+  });
+});
+
+redisConnection.on('connect', () => {
+  logger.info("Redis connection established");
+});
 
 // Initialize Prisma
 const prisma = new PrismaClient();

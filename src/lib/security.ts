@@ -121,10 +121,24 @@ export function validateFileUpload(file: {
     errors.push('Invalid file name format')
   }
 
-  // Check for double extensions
-  const extensionCount = (file.name.match(/\./g) || []).length
-  if (extensionCount > 1) {
-    errors.push('Multiple file extensions not allowed')
+  // Check for multiple file extensions at the END of filename
+  // This allows dots in the filename (e.g., "my.file.name.jpg" is valid)
+  // But rejects suspicious double extensions (e.g., "image.jpg.exe")
+  const parts = file.name.split('.')
+  if (parts.length >= 3) {
+    const lastExt = parts[parts.length - 1].toLowerCase()
+    const secondLastExt = parts[parts.length - 2].toLowerCase()
+    
+    // Known safe double extensions (allowed)
+    const safeDoubleExtensions = ['tar.gz', 'tar.bz2', 'tar.xz']
+    const isSafeDoubleExt = safeDoubleExtensions.includes(`${secondLastExt}.${lastExt}`)
+    
+    // Reject if it looks like a malicious double extension (e.g., .jpg.exe, .png.bat)
+    // Only check if the last extension is suspicious
+    const suspiciousExtensions = ['exe', 'bat', 'cmd', 'com', 'scr', 'vbs', 'js', 'jar', 'sh', 'dll']
+    if (!isSafeDoubleExt && suspiciousExtensions.includes(lastExt)) {
+      errors.push('Multiple file extensions not allowed')
+    }
   }
 
   return {
