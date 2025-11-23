@@ -217,23 +217,25 @@ class TripProvider extends ChangeNotifier {
   }
 
   // Add text entry
-  Future<bool> addTextEntry(String text, {String? tripId}) async {
+  Future<bool> addTextEntry(String text, {String? tripId, List<String>? taggedUsernames}) async {
     return await addThreadEntry(
         CreateThreadEntryRequest(
           type: ThreadEntryType.text,
           contentText: text,
+          taggedUsernames: taggedUsernames,
         ),
         tripId: tripId);
   }
 
   // Add media entry
   Future<bool> addMediaEntry(String mediaId,
-      {String? caption, String? tripId}) async {
+      {String? caption, String? tripId, List<String>? taggedUsernames}) async {
     return await addThreadEntry(
         CreateThreadEntryRequest(
           type: ThreadEntryType.media,
           mediaId: mediaId,
           contentText: caption,
+          taggedUsernames: taggedUsernames,
         ),
         tripId: tripId);
   }
@@ -245,6 +247,7 @@ class TripProvider extends ChangeNotifier {
     String? contentText,
     String? placeId,
     List<String>? taggedUserIds,
+    List<String>? taggedUsernames,
   }) async {
     try {
       debugPrint(
@@ -262,6 +265,7 @@ class TripProvider extends ChangeNotifier {
         mediaId: null,
         placeId: placeId,
         taggedUserIds: taggedUserIds,
+        taggedUsernames: taggedUsernames,
       );
 
       final response = await _tripService.createThreadEntry(

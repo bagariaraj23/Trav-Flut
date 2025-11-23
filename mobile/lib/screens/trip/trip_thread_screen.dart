@@ -7,6 +7,7 @@ import 'package:tripthread/models/place.dart';
 import 'package:tripthread/widgets/map_picker_sheet.dart';
 import 'package:tripthread/widgets/place_search_sheet.dart';
 import 'package:tripthread/services/media_service.dart';
+import 'package:tripthread/services/api_service.dart';
 import 'package:tripthread/utils/cloudinary_utils.dart';
 import 'dart:io';
 import 'package:go_router/go_router.dart';
@@ -65,11 +66,20 @@ class _TripThreadScreenState extends State<TripThreadScreen> {
   VideoPlayerController? _pendingVideoController;
   bool _pendingVideoInitialized = false;
   bool _isSubmitting = false;
+  
+  // Mention/tagging state
+  List<TripParticipant> _tripParticipants = [];
+  String? _mentionQuery;
+  int? _mentionStartPosition;
+  final GlobalKey _textFieldKey = GlobalKey();
+  final GlobalKey _stackKey = GlobalKey();
 
   @override
   void initState() {
     super.initState();
     _loadTrip();
+    _loadTripParticipants();
+    _textController.addListener(_onTextChanged);
   }
 
   @override
@@ -80,6 +90,7 @@ class _TripThreadScreenState extends State<TripThreadScreen> {
 
   @override
   void dispose() {
+    _textController.removeListener(_onTextChanged);
     _textController.dispose();
     _locationController.dispose();
     _scrollController.dispose();
@@ -151,6 +162,99 @@ class _TripThreadScreenState extends State<TripThreadScreen> {
     });
   }
 
+  Future<void> _loadTripParticipants() async {
+    try {
+      final apiService = context.read<ApiService>();
+      final participants = await apiService.getTripParticipants(widget.tripId);
+      if (mounted) {
+        setState(() {
+          _tripParticipants = participants;
+        });
+      }
+    } catch (e) {
+      debugPrint('[TripThread] Failed to load participants: $e');
+    }
+  }
+
+  void _onTextChanged() {
+    final text = _textController.text;
+    final selection = _textController.selection;
+    final cursorPosition = selection.baseOffset;
+
+    // Find the last @ mention before cursor
+    final textBeforeCursor = text.substring(0, cursorPosition);
+    final lastAtIndex = textBeforeCursor.lastIndexOf('@');
+
+    if (lastAtIndex != -1) {
+      // Check if there's a space after @ (meaning mention is complete)
+      final textAfterAt = textBeforeCursor.substring(lastAtIndex + 1);
+      if (textAfterAt.contains(' ')) {
+        // Mention is complete (space found), clear mention state
+        if (mounted) {
+          setState(() {
+            _mentionQuery = null;
+            _mentionStartPosition = null;
+          });
+        }
+        return;
+      }
+
+      // Extract the query after @ (can be empty if just '@')
+      final query = textAfterAt.toLowerCase();
+      debugPrint('[MentionMenu] Detected @ mention: query="$query", position=$lastAtIndex');
+      _mentionQuery = query;
+      _mentionStartPosition = lastAtIndex;
+
+      // Show autocomplete menu
+      _showMentionMenu();
+    } else {
+      // No @ found, clear mention state
+      if (mounted) {
+        setState(() {
+          _mentionQuery = null;
+          _mentionStartPosition = null;
+        });
+      }
+    }
+  }
+
+  void _showMentionMenu() {
+    // Trigger rebuild to show mention menu
+    if (mounted) {
+      setState(() {});
+    }
+  }
+
+  void _selectMention(TripParticipant participant) {
+    if (_mentionStartPosition == null || participant.user?.username == null) {
+      _mentionQuery = null;
+      _mentionStartPosition = null;
+      return;
+    }
+
+    final username = participant.user!.username!;
+    final text = _textController.text;
+    final beforeAt = text.substring(0, _mentionStartPosition!);
+    final afterCursor = text.substring(_textController.selection.baseOffset);
+    final newText = '$beforeAt@$username $afterCursor';
+    final newCursorPosition = _mentionStartPosition! + username.length + 2; // +2 for @ and space
+
+    _textController.value = TextEditingValue(
+      text: newText,
+      selection: TextSelection.collapsed(offset: newCursorPosition),
+    );
+
+    // Clear mention state
+    _mentionQuery = null;
+    _mentionStartPosition = null;
+  }
+
+  List<String> _extractTaggedUsernames(String text) {
+    final regex = RegExp(r'@(\w+)');
+    final matches = regex.allMatches(text);
+    return matches.map((m) => m.group(1)!).toList();
+  }
+
   Future<void> _loadTrip() async {
     final tripProvider = context.read<TripProvider>();
     final trip = await tripProvider.getTrip(widget.tripId);
@@ -184,9 +288,18 @@ class _TripThreadScreenState extends State<TripThreadScreen> {
       switch (_selectedType) {
       case ThreadEntryType.text:
         if (_textController.text.trim().isNotEmpty) {
-          success = await tripProvider.addTextEntry(_textController.text.trim(),
-              tripId: widget.tripId);
-          if (success) _textController.clear();
+          final text = _textController.text.trim();
+          final taggedUsernames = _extractTaggedUsernames(text);
+          success = await tripProvider.addTextEntry(
+            text,
+            tripId: widget.tripId,
+            taggedUsernames: taggedUsernames.isNotEmpty ? taggedUsernames : null,
+          );
+          if (success) {
+            _textController.clear();
+            _mentionQuery = null;
+            _mentionStartPosition = null;
+          }
         }
         break;
       case ThreadEntryType.location:
@@ -194,13 +307,15 @@ class _TripThreadScreenState extends State<TripThreadScreen> {
           debugPrint(
               '[TripThread] Adding location entry with placeId: ${_selectedPlace!.id}');
 
+          final text = _textController.text.trim();
+          final taggedUsernames = text.isNotEmpty ? _extractTaggedUsernames(text) : <String>[];
+          final usernamesToSend = taggedUsernames.isNotEmpty ? taggedUsernames : null;
           success = await tripProvider.addThreadEntryWithPlace(
             tripId: widget.tripId,
             type: ThreadEntryType.location,
-            contentText: _textController.text.trim().isNotEmpty
-                ? _textController.text.trim()
-                : null,
+            contentText: text.isNotEmpty ? text : null,
             placeId: _selectedPlace!.id,
+            taggedUsernames: usernamesToSend,
           );
           if (success) {
             setState(() {
@@ -208,6 +323,8 @@ class _TripThreadScreenState extends State<TripThreadScreen> {
               _locationController.clear();
               _textController.clear();
             });
+            _mentionQuery = null;
+            _mentionStartPosition = null;
           } else {
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
@@ -227,13 +344,15 @@ class _TripThreadScreenState extends State<TripThreadScreen> {
         break;
       case ThreadEntryType.checkin:
         if (_selectedPlace != null) {
+          final text = _textController.text.trim();
+          final taggedUsernames = text.isNotEmpty ? _extractTaggedUsernames(text) : <String>[];
+          final usernamesToSend = taggedUsernames.isNotEmpty ? taggedUsernames : null;
           success = await tripProvider.addThreadEntryWithPlace(
             tripId: widget.tripId,
             type: ThreadEntryType.checkin,
-            contentText: _textController.text.trim().isNotEmpty
-                ? _textController.text.trim()
-                : null,
+            contentText: text.isNotEmpty ? text : null,
             placeId: _selectedPlace!.id,
+            taggedUsernames: usernamesToSend,
           );
           if (success) {
             setState(() {
@@ -241,6 +360,8 @@ class _TripThreadScreenState extends State<TripThreadScreen> {
               _locationController.clear();
               _textController.clear();
             });
+            _mentionQuery = null;
+            _mentionStartPosition = null;
           }
         }
         break;
@@ -416,9 +537,10 @@ class _TripThreadScreenState extends State<TripThreadScreen> {
       return false;
     }
 
-    final caption = _textController.text.trim().isNotEmpty
-        ? _textController.text.trim()
-        : null;
+    final captionText = _textController.text.trim();
+    final caption = captionText.isNotEmpty ? captionText : null;
+    final taggedUsernames = captionText.isNotEmpty ? _extractTaggedUsernames(captionText) : <String>[];
+    final usernamesToSend = taggedUsernames.isNotEmpty ? taggedUsernames : null;
 
     final allMedia = <Media>[
       if (_selectedMediaForEntry != null) _selectedMediaForEntry!,
@@ -453,7 +575,7 @@ class _TripThreadScreenState extends State<TripThreadScreen> {
 
       try {
         final uploadedMedia =
-            await _uploadSingleMediaForEntry(media, caption, tripProvider);
+            await _uploadSingleMediaForEntry(media, caption, usernamesToSend, tripProvider);
         allMedia[index] = uploadedMedia;
         if (mounted) {
           setState(() {
@@ -489,6 +611,8 @@ class _TripThreadScreenState extends State<TripThreadScreen> {
     if (allSucceeded) {
       _textController.clear();
       _clearSelectedMedia();
+      _mentionQuery = null;
+      _mentionStartPosition = null;
       setState(() {
         _isUploadingMedia = false;
         _uploadProgress = null;
@@ -502,6 +626,7 @@ class _TripThreadScreenState extends State<TripThreadScreen> {
   Future<Media> _uploadSingleMediaForEntry(
     Media media,
     String? caption,
+    List<String>? taggedUsernames,
     TripProvider tripProvider,
   ) async {
     final mediaService = _mediaService ?? context.read<MediaService>();
@@ -541,6 +666,7 @@ class _TripThreadScreenState extends State<TripThreadScreen> {
       resolvedMedia.id,
       caption: caption,
       tripId: widget.tripId,
+      taggedUsernames: taggedUsernames,
     );
 
     if (!success) {
@@ -597,131 +723,271 @@ class _TripThreadScreenState extends State<TripThreadScreen> {
           },
         ),
       ),
-      body: Column(
+      body: Stack(
+        key: _stackKey,
         children: [
-          // Thread entries
-          Expanded(
-            child: Consumer<TripProvider>(
-              builder: (context, tripProvider, child) {
-                final entries = tripProvider.currentTripEntries;
+          Column(
+            children: [
+              // Thread entries
+              Expanded(
+                child: Consumer<TripProvider>(
+                  builder: (context, tripProvider, child) {
+                    final entries = tripProvider.currentTripEntries;
 
-                if (entries.isEmpty) {
-                  return CustomScrollView(
-                    slivers: [
-                      SliverFillRemaining(
-                        hasScrollBody: false,
-                        child: Center(
-                          child: Padding(
-                            padding: const EdgeInsets.all(32),
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Container(
-                                  padding: const EdgeInsets.all(24),
-                                  decoration: BoxDecoration(
-                                    color: Theme.of(context)
-                                        .colorScheme
-                                        .primaryContainer
-                                        .withOpacity(0.3),
-                                    shape: BoxShape.circle,
-                                    boxShadow: [
-                                      BoxShadow(
+                    if (entries.isEmpty) {
+                      return CustomScrollView(
+                        slivers: [
+                          SliverFillRemaining(
+                            hasScrollBody: false,
+                            child: Center(
+                              child: Padding(
+                                padding: const EdgeInsets.all(32),
+                                child: Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Container(
+                                      padding: const EdgeInsets.all(24),
+                                      decoration: BoxDecoration(
                                         color: Theme.of(context)
                                             .colorScheme
-                                            .primary
-                                            .withOpacity(0.1),
-                                        blurRadius: 20,
-                                        spreadRadius: 5,
+                                            .primaryContainer
+                                            .withOpacity(0.3),
+                                        shape: BoxShape.circle,
+                                        boxShadow: [
+                                          BoxShadow(
+                                            color: Theme.of(context)
+                                                .colorScheme
+                                                .primary
+                                                .withOpacity(0.1),
+                                            blurRadius: 20,
+                                            spreadRadius: 5,
+                                          ),
+                                        ],
                                       ),
-                                    ],
-                                  ),
-                                  child: Icon(
-                                    Icons.timeline,
-                                    size: 64,
-                                    color:
-                                        Theme.of(context).colorScheme.primary,
-                                  ),
-                                ),
-                                const SizedBox(height: 24),
-                                Text(
-                                  'No entries yet',
-                                  style: Theme.of(context)
-                                      .textTheme
-                                      .headlineSmall
-                                      ?.copyWith(
-                                        color: Theme.of(context)
-                                            .colorScheme
-                                            .onSurface,
-                                        fontWeight: FontWeight.w600,
-                                      ),
-                                ),
-                                const SizedBox(height: 12),
-                                Text(
-                                  canAddEntries
-                                      ? 'Start documenting your journey!\nShare your experiences, photos, and locations.'
-                                      : 'This trip has no entries yet.\nCheck back later for updates.',
-                                  style: Theme.of(context)
-                                      .textTheme
-                                      .bodyMedium
-                                      ?.copyWith(
-                                        color: Theme.of(context)
-                                            .colorScheme
-                                            .onSurface
-                                            .withOpacity(0.7),
-                                        height: 1.5,
-                                      ),
-                                  textAlign: TextAlign.center,
-                                ),
-                                if (canAddEntries) ...[
-                                  const SizedBox(height: 24),
-                                  ElevatedButton.icon(
-                                    onPressed: () {
-                                      ScaffoldMessenger.of(context)
-                                          .showSnackBar(
-                                        const SnackBar(
-                                          content: Text(
-                                              'Ready to share! Start typing below.'),
-                                          duration: Duration(seconds: 2),
-                                        ),
-                                      );
-                                    },
-                                    icon: const Icon(Icons.add),
-                                    label: const Text('Add First Entry'),
-                                    style: ElevatedButton.styleFrom(
-                                      backgroundColor:
-                                          Theme.of(context).colorScheme.primary,
-                                      foregroundColor: Colors.white,
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 24,
-                                        vertical: 12,
+                                      child: Icon(
+                                        Icons.timeline,
+                                        size: 64,
+                                        color:
+                                            Theme.of(context).colorScheme.primary,
                                       ),
                                     ),
-                                  ),
-                                ],
-                              ],
+                                    const SizedBox(height: 24),
+                                    Text(
+                                      'No entries yet',
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .headlineSmall
+                                          ?.copyWith(
+                                            color: Theme.of(context)
+                                                .colorScheme
+                                                .onSurface,
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                    ),
+                                    const SizedBox(height: 12),
+                                    Text(
+                                      canAddEntries
+                                          ? 'Start documenting your journey!\nShare your experiences, photos, and locations.'
+                                          : 'This trip has no entries yet.\nCheck back later for updates.',
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .bodyMedium
+                                          ?.copyWith(
+                                            color: Theme.of(context)
+                                                .colorScheme
+                                                .onSurface
+                                                .withOpacity(0.7),
+                                            height: 1.5,
+                                          ),
+                                      textAlign: TextAlign.center,
+                                    ),
+                                    if (canAddEntries) ...[
+                                      const SizedBox(height: 24),
+                                      ElevatedButton.icon(
+                                        onPressed: () {
+                                          ScaffoldMessenger.of(context)
+                                              .showSnackBar(
+                                            const SnackBar(
+                                              content: Text(
+                                                  'Ready to share! Start typing below.'),
+                                              duration: Duration(seconds: 2),
+                                            ),
+                                          );
+                                        },
+                                        icon: const Icon(Icons.add),
+                                        label: const Text('Add First Entry'),
+                                        style: ElevatedButton.styleFrom(
+                                          backgroundColor:
+                                              Theme.of(context).colorScheme.primary,
+                                          foregroundColor: Colors.white,
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 24,
+                                            vertical: 12,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ],
+                                ),
+                              ),
                             ),
                           ),
-                        ),
-                      ),
-                    ],
-                  );
-                }
+                        ],
+                      );
+                    }
 
-                return ListView.builder(
-                  controller: _scrollController,
-                  padding: const EdgeInsets.all(16),
-                  itemCount: entries.length,
-                  itemBuilder: (context, index) {
-                    return _buildThreadEntry(entries[index]);
+                    return ListView.builder(
+                      controller: _scrollController,
+                      padding: const EdgeInsets.all(16),
+                      itemCount: entries.length,
+                      itemBuilder: (context, index) {
+                        return _buildThreadEntry(entries[index]);
+                      },
+                    );
                   },
-                );
-              },
-            ),
-          ),
+                ),
+              ),
 
-          // Add entry section
-          if (canAddEntries) _buildAddEntrySection(),
+              // Add entry section
+              if (canAddEntries) _buildAddEntrySection(),
+            ],
+          ),
+          // Mention autocomplete menu - positioned relative to text field
+          if (_mentionQuery != null)
+            Builder(
+              builder: (context) => _buildMentionMenu(context),
+            ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildMentionMenu(BuildContext context) {
+    final currentUserId = context.read<AuthProvider>().currentUser?.id;
+
+    // Filter participants by query, excluding current user
+    final query = _mentionQuery?.toLowerCase() ?? '';
+    final filtered = _tripParticipants.where((p) {
+      if (p.userId == currentUserId) return false;
+      
+      if (query.isEmpty) return true;
+      
+      final username = p.user?.username?.toLowerCase() ?? '';
+      final name = p.user?.name?.toLowerCase() ?? '';
+      return username.startsWith(query) || name.startsWith(query);
+    }).toList();
+
+    if (filtered.isEmpty) return const SizedBox.shrink();
+
+    final renderBox = _textFieldKey.currentContext?.findRenderObject() as RenderBox?;
+    if (renderBox == null || !renderBox.attached) {
+      debugPrint('[MentionMenu] Text field render box not available');
+      return const SizedBox.shrink();
+    }
+
+    final stackRenderBox = _stackKey.currentContext?.findRenderObject() as RenderBox?;
+    if (stackRenderBox == null || !stackRenderBox.attached) {
+      debugPrint('[MentionMenu] Stack render box not available');
+      return const SizedBox.shrink();
+    }
+
+    final globalPosition = renderBox.localToGlobal(Offset.zero);
+    final stackGlobalPosition = stackRenderBox.localToGlobal(Offset.zero);
+    final relativePosition = globalPosition - stackGlobalPosition;
+    
+    final size = renderBox.size;
+    final keyboardHeight = MediaQuery.of(context).viewInsets.bottom;
+    final stackSize = stackRenderBox.size;
+
+    final hasKeyboard = keyboardHeight > 100;
+    final menuLeft = relativePosition.dx.clamp(0.0, stackSize.width - 200.0);
+    final menuWidth = size.width.clamp(200.0, 400.0);
+    
+    double menuTop;
+    if (hasKeyboard) {
+      menuTop = (relativePosition.dy - 8).clamp(0.0, stackSize.height - 100.0);
+    } else {
+      menuTop = (relativePosition.dy + size.height + 8).clamp(0.0, stackSize.height - 100.0);
+    }
+    
+    final spaceAbove = menuTop;
+    final spaceBelow = stackSize.height - menuTop;
+    final availableHeight = hasKeyboard ? spaceAbove : spaceBelow;
+    const itemHeight = 56.0;
+    final maxItems = (availableHeight / itemHeight).floor().clamp(1, 5);
+    final menuHeight = (filtered.length > maxItems ? maxItems : filtered.length) * itemHeight;
+    
+    debugPrint('[MentionMenu] Showing menu: query="$query", filtered=${filtered.length}, position=($menuLeft, $menuTop), width=$menuWidth, keyboard=$hasKeyboard');
+
+    return Positioned(
+      left: menuLeft,
+      top: menuTop,
+      width: menuWidth,
+      child: Material(
+        elevation: 8,
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          constraints: BoxConstraints(
+            maxHeight: menuHeight,
+            minHeight: itemHeight,
+          ),
+          decoration: BoxDecoration(
+            color: Theme.of(context).colorScheme.surface,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: Theme.of(context).colorScheme.outline.withOpacity(0.2),
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.1),
+                blurRadius: 8,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          child: ListView.builder(
+            shrinkWrap: true,
+            padding: const EdgeInsets.symmetric(vertical: 4),
+            itemCount: filtered.length > maxItems ? maxItems : filtered.length,
+            itemBuilder: (context, index) {
+              final participant = filtered[index];
+              final user = participant.user;
+              return ListTile(
+                dense: true,
+                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
+                leading: CircleAvatar(
+                  radius: 16,
+                  backgroundColor: Theme.of(context).colorScheme.primary,
+                  backgroundImage: user?.avatarUrl != null
+                      ? NetworkImage(user!.avatarUrl!)
+                      : null,
+                  child: user?.avatarUrl == null
+                      ? Text(
+                          user?.name?.substring(0, 1).toUpperCase() ?? 'U',
+                          style: const TextStyle(fontSize: 12, color: Colors.white),
+                        )
+                      : null,
+                ),
+                title: Text(
+                  user?.name ?? 'User',
+                  style: const TextStyle(fontSize: 14),
+                  overflow: TextOverflow.ellipsis,
+                ),
+                subtitle: user?.username != null
+                    ? Text(
+                        '@${user!.username}',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Theme.of(context).colorScheme.primary,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      )
+                    : null,
+                onTap: () => _selectMention(participant),
+              );
+            },
+          ),
+        ),
       ),
     );
   }
@@ -1739,6 +2005,7 @@ class _TripThreadScreenState extends State<TripThreadScreen> {
                     children: [
                       Expanded(
                         child: TextField(
+                          key: _textFieldKey,
                           controller: _textController,
                           decoration: InputDecoration(
                             hintText: _getInputHint(),
