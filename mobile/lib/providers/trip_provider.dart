@@ -369,6 +369,36 @@ class TripProvider extends ChangeNotifier {
     }
   }
 
+  Future<bool> cancelTripInvitation(String tripId, String inviteId) async {
+    try {
+      _isLoading = true;
+      _error = null;
+      notifyListeners();
+
+      final response =
+          await _tripService.cancelTripInvitation(tripId, inviteId);
+
+      if (response.success) {
+        // Remove the cancelled invitation from the list
+        _sentTripInvitations.removeWhere((invite) => invite.id == inviteId);
+        _isLoading = false;
+        notifyListeners();
+        return true;
+      } else {
+        _error = response.error ?? 'Failed to cancel invitation';
+        _isLoading = false;
+        notifyListeners();
+        return false;
+      }
+    } catch (e) {
+      _error = 'An unexpected error occurred';
+      _isLoading = false;
+      notifyListeners();
+      debugPrint('Cancel trip invitation error: $e');
+      return false;
+    }
+  }
+
   Future<void> loadPendingTripInvitations() async {
     _isTripInvitesLoading = true;
     _tripInvitesError = null;

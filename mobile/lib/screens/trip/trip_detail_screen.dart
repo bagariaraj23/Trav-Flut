@@ -149,9 +149,8 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
             ),
             actions: [
               if (_trip != null &&
-                  _trip!.userId ==
-                      context.read<AuthProvider>().currentUser?.id &&
-                  _trip!.status == TripStatus.ongoing)
+                  _trip!.status == TripStatus.ongoing &&
+                  _isOwnerOrParticipant())
                 IconButton(
                   icon: const Icon(Icons.add),
                   onPressed: () {
@@ -200,9 +199,8 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
                   children: [
                     _buildTripInfoCard(),
                     const SizedBox(height: 16),
-                    if (_trip!.userId ==
-                        context.read<AuthProvider>().currentUser?.id)
-                      _buildOwnerActions(),
+                    if (_isOwnerOrParticipant())
+                      _buildTripActions(),
                     const SizedBox(height: 16),
                     _buildThreadSection(),
                   ],
@@ -324,7 +322,24 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
     );
   }
 
-  Widget _buildOwnerActions() {
+  bool _isOwner() {
+    final currentUser = context.read<AuthProvider>().currentUser;
+    return _trip != null && currentUser != null && _trip!.userId == currentUser.id;
+  }
+
+  bool _isParticipant() {
+    final currentUser = context.read<AuthProvider>().currentUser;
+    if (_trip == null || currentUser == null) return false;
+    return _trip!.participants?.any((p) => p.userId == currentUser.id) == true;
+  }
+
+  bool _isOwnerOrParticipant() {
+    return _isOwner() || _isParticipant();
+  }
+
+  Widget _buildTripActions() {
+    final isOwner = _isOwner();
+    
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -364,28 +379,31 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
                 icon: const Icon(Icons.add),
                 label: const Text('Add Entry'),
               ),
-              const SizedBox(height: 8),
-              ElevatedButton.icon(
-                onPressed: () {
-                  context.go('/trip/${widget.tripId}/participants',
-                      extra: {'from': '/trip/${widget.tripId}'});
-                },
-                icon: const Icon(Icons.people),
-                label: const Text('Manage Participants'),
-              ),
-              const SizedBox(height: 8),
-              Consumer<TripProvider>(
-                builder: (context, tripProvider, child) {
-                  return LoadingButton(
-                    onPressed: _endTrip,
-                    isLoading: tripProvider.isLoading,
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: Theme.of(context).colorScheme.error,
-                    ),
-                    child: const Text('End Trip'),
-                  );
-                },
-              ),
+              // Owner-only actions
+              if (isOwner) ...[
+                const SizedBox(height: 8),
+                ElevatedButton.icon(
+                  onPressed: () {
+                    context.go('/trip/${widget.tripId}/participants',
+                        extra: {'from': '/trip/${widget.tripId}'});
+                  },
+                  icon: const Icon(Icons.people),
+                  label: const Text('Manage Participants'),
+                ),
+                const SizedBox(height: 8),
+                Consumer<TripProvider>(
+                  builder: (context, tripProvider, child) {
+                    return LoadingButton(
+                      onPressed: _endTrip,
+                      isLoading: tripProvider.isLoading,
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: Theme.of(context).colorScheme.error,
+                      ),
+                      child: const Text('End Trip'),
+                    );
+                  },
+                ),
+              ],
             ] else if (_trip!.status == TripStatus.ended &&
                 _trip!.finalPost != null) ...[
               ElevatedButton.icon(

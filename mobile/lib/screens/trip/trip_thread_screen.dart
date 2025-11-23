@@ -64,6 +64,7 @@ class _TripThreadScreenState extends State<TripThreadScreen> {
   Place? _selectedPlace;
   VideoPlayerController? _pendingVideoController;
   bool _pendingVideoInitialized = false;
+  bool _isSubmitting = false;
 
   @override
   void initState() {
@@ -167,10 +168,20 @@ class _TripThreadScreenState extends State<TripThreadScreen> {
   }
 
   Future<void> _addEntry() async {
+    if (_isSubmitting) {
+      debugPrint('[TripThread] Submission already in progress, ignoring duplicate call');
+      return;
+    }
+
+    setState(() {
+      _isSubmitting = true;
+    });
+
     final tripProvider = context.read<TripProvider>();
     bool success = false;
 
-    switch (_selectedType) {
+    try {
+      switch (_selectedType) {
       case ThreadEntryType.text:
         if (_textController.text.trim().isNotEmpty) {
           success = await tripProvider.addTextEntry(_textController.text.trim(),
@@ -233,18 +244,25 @@ class _TripThreadScreenState extends State<TripThreadScreen> {
           }
         }
         break;
-    }
+      }
 
-    if (success) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (_scrollController.hasClients) {
-          _scrollController.animateTo(
-            _scrollController.position.maxScrollExtent,
-            duration: const Duration(milliseconds: 300),
-            curve: Curves.easeOut,
-          );
-        }
-      });
+      if (success) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (_scrollController.hasClients) {
+            _scrollController.animateTo(
+              _scrollController.position.maxScrollExtent,
+              duration: const Duration(milliseconds: 300),
+              curve: Curves.easeOut,
+            );
+          }
+        });
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isSubmitting = false;
+        });
+      }
     }
   }
 
@@ -821,7 +839,7 @@ class _TripThreadScreenState extends State<TripThreadScreen> {
                     Text(
                       entry.contentText!,
                       style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                            color: Colors.grey[100], // Off-white text color
+                            color: Colors.black87,
                             height: 1.5,
                           ),
                       overflow: TextOverflow.visible,
@@ -1583,7 +1601,6 @@ class _TripThreadScreenState extends State<TripThreadScreen> {
                             ),
                           )
                         else
-                          // RESPONSIVE MEDIA BUTTONS - More compact
                           Container(
                             padding: const EdgeInsets.all(8),
                             margin: const EdgeInsets.only(bottom: 12),
@@ -1649,7 +1666,6 @@ class _TripThreadScreenState extends State<TripThreadScreen> {
                                   );
                                 }
 
-                                // Narrow layout - Stack buttons vertically
                                 return Column(
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
@@ -1746,12 +1762,13 @@ class _TripThreadScreenState extends State<TripThreadScreen> {
                           return IconButton(
                             onPressed: (tripProvider.isLoading ||
                                     _isUploadingMedia ||
+                                    _isSubmitting ||
                                     (_selectedType ==
                                             ThreadEntryType.location &&
                                         _selectedPlace == null))
                                 ? null
                                 : _addEntry,
-                            icon: (tripProvider.isLoading || _isUploadingMedia)
+                            icon: (tripProvider.isLoading || _isUploadingMedia || _isSubmitting)
                                 ? const SizedBox(
                                     width: 20,
                                     height: 20,

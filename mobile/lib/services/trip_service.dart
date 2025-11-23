@@ -447,4 +447,25 @@ class TripService {
       );
     }
   }
+
+  Future<ApiResponse<void>> cancelTripInvitation(
+      String tripId, String inviteId) async {
+    try {
+      final response = await _dio.delete(
+        '/trips/$tripId/invites',
+        queryParameters: {'inviteId': inviteId},
+      );
+
+      return ApiResponse<void>(
+        success: response.data['success'],
+        error: response.data['error'],
+        message: response.data['message'],
+      );
+    } on DioException catch (e) {
+      return ApiResponse<void>(
+        success: false,
+        error: e.response?.data['error'] ?? 'Network error occurred',
+      );
+    }
+  }
 }
