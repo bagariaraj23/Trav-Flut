@@ -330,6 +330,9 @@ CreateThreadEntryRequest _$CreateThreadEntryRequestFromJson(
       taggedUserIds: (json['taggedUserIds'] as List<dynamic>?)
           ?.map((e) => e as String)
           .toList(),
+      taggedUsernames: (json['taggedUsernames'] as List<dynamic>?)
+          ?.map((e) => e as String)
+          .toList(),
     );
 
 Map<String, dynamic> _$CreateThreadEntryRequestToJson(
@@ -342,4 +345,5 @@ Map<String, dynamic> _$CreateThreadEntryRequestToJson(
       'gpsCoordinates': instance.gpsCoordinates,
       'placeId': instance.placeId,
       'taggedUserIds': instance.taggedUserIds,
+      'taggedUsernames': instance.taggedUsernames,
     };

@@ -217,23 +217,25 @@ class TripProvider extends ChangeNotifier {
   }
 
   // Add text entry
-  Future<bool> addTextEntry(String text, {String? tripId}) async {
+  Future<bool> addTextEntry(String text, {String? tripId, List<String>? taggedUsernames}) async {
     return await addThreadEntry(
         CreateThreadEntryRequest(
           type: ThreadEntryType.text,
           contentText: text,
+          taggedUsernames: taggedUsernames,
         ),
         tripId: tripId);
   }
 
   // Add media entry
   Future<bool> addMediaEntry(String mediaId,
-      {String? caption, String? tripId}) async {
+      {String? caption, String? tripId, List<String>? taggedUsernames}) async {
     return await addThreadEntry(
         CreateThreadEntryRequest(
           type: ThreadEntryType.media,
           mediaId: mediaId,
           contentText: caption,
+          taggedUsernames: taggedUsernames,
         ),
         tripId: tripId);
   }
@@ -245,6 +247,7 @@ class TripProvider extends ChangeNotifier {
     String? contentText,
     String? placeId,
     List<String>? taggedUserIds,
+    List<String>? taggedUsernames,
   }) async {
     try {
       debugPrint(
@@ -262,6 +265,7 @@ class TripProvider extends ChangeNotifier {
         mediaId: null,
         placeId: placeId,
         taggedUserIds: taggedUserIds,
+        taggedUsernames: taggedUsernames,
       );
 
       final response = await _tripService.createThreadEntry(
@@ -365,6 +369,36 @@ class TripProvider extends ChangeNotifier {
       _isLoading = false;
       notifyListeners();
       debugPrint('Send trip invitation error: $e');
+      return false;
+    }
+  }
+
+  Future<bool> cancelTripInvitation(String tripId, String inviteId) async {
+    try {
+      _isLoading = true;
+      _error = null;
+      notifyListeners();
+
+      final response =
+          await _tripService.cancelTripInvitation(tripId, inviteId);
+
+      if (response.success) {
+        // Remove the cancelled invitation from the list
+        _sentTripInvitations.removeWhere((invite) => invite.id == inviteId);
+        _isLoading = false;
+        notifyListeners();
+        return true;
+      } else {
+        _error = response.error ?? 'Failed to cancel invitation';
+        _isLoading = false;
+        notifyListeners();
+        return false;
+      }
+    } catch (e) {
+      _error = 'An unexpected error occurred';
+      _isLoading = false;
+      notifyListeners();
+      debugPrint('Cancel trip invitation error: $e');
       return false;
     }
   }

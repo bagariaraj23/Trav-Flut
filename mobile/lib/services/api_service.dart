@@ -44,6 +44,28 @@ class ApiService {
     _onUnauthorized = callback;
   }
 
+  // Helper method to sanitize sensitive data from logs
+  dynamic _sanitizeRequestData(dynamic data) {
+    if (data == null) return null;
+    
+    if (data is Map) {
+      final sanitized = Map<String, dynamic>.from(data);
+      // Remove or mask sensitive fields
+      if (sanitized.containsKey('password')) {
+        sanitized['password'] = '***REDACTED***';
+      }
+      if (sanitized.containsKey('newPassword')) {
+        sanitized['newPassword'] = '***REDACTED***';
+      }
+      if (sanitized.containsKey('currentPassword')) {
+        sanitized['currentPassword'] = '***REDACTED***';
+      }
+      return sanitized;
+    }
+    
+    return data;
+  }
+
   void _setupInterceptors() {
     debugPrint('[ApiService] Setting up interceptors');
 
@@ -53,7 +75,8 @@ class ApiService {
         debugPrint('[ApiService] Request: ${options.method} ${options.path}');
         debugPrint('[ApiService] Request headers: ${options.headers}');
         if (options.data != null) {
-          debugPrint('[ApiService] Request data: ${options.data}');
+          final sanitizedData = _sanitizeRequestData(options.data);
+          debugPrint('[ApiService] Request data: $sanitizedData');
         }
 
         if (_storageService != null) {
@@ -2020,6 +2043,39 @@ class ApiService {
     } catch (e) {
       debugPrint('[ApiService] Get sent trip invitations unexpected error: $e');
       return ApiResponse<List<TripJoinRequest>>(
+        success: false,
+        error: 'An unexpected error occurred',
+      );
+    }
+  }
+
+  Future<ApiResponse<void>> cancelTripInvitation(
+      String tripId, String inviteId) async {
+    try {
+      debugPrint(
+          '[ApiService] Cancelling trip invitation $inviteId for trip: $tripId');
+      final response = await _dio.delete(
+        '/trips/$tripId/invites',
+        queryParameters: {'inviteId': inviteId},
+      );
+      debugPrint(
+          '[ApiService] Cancel trip invitation response: ${response.statusCode}');
+
+      return ApiResponse<void>(
+        success: response.data['success'],
+        error: response.data['error'],
+        message: response.data['message'],
+      );
+    } on DioException catch (e) {
+      debugPrint(
+          '[ApiService] Cancel trip invitation DioException: ${e.message}');
+      return ApiResponse<void>(
+        success: false,
+        error: e.response?.data['error'] ?? 'Network error occurred',
+      );
+    } catch (e) {
+      debugPrint('[ApiService] Cancel trip invitation unexpected error: $e');
+      return ApiResponse<void>(
         success: false,
         error: 'An unexpected error occurred',
       );

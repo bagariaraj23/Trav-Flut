@@ -108,13 +108,12 @@ class _TripParticipantsScreenState extends State<TripParticipantsScreen> {
 
       if (mounted) {
         if (success) {
+          await tripProvider.loadSentTripInvitations(widget.tripId);
+          setState(() {
+          });
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text('Invitation sent successfully!')),
           );
-          _searchController.clear();
-          setState(() {
-            _searchResults = [];
-          });
         } else {
           final error = tripProvider.error ?? '';
           if (error.contains('Unique constraint failed') ||
@@ -142,49 +141,97 @@ class _TripParticipantsScreenState extends State<TripParticipantsScreen> {
     }
   }
 
-  bool _hasInvitationBeenSent(String userId) {
-    final tripProvider = context.read<TripProvider>();
-    return tripProvider.sentTripInvitations.any(
-      (invitation) =>
-          invitation.receiverId == userId && invitation.tripId == widget.tripId,
-    );
+  Future<void> _cancelInvitation(String inviteId) async {
+    try {
+      final tripProvider = context.read<TripProvider>();
+      final success =
+          await tripProvider.cancelTripInvitation(widget.tripId, inviteId);
+
+      if (mounted) {
+        if (success) {
+          await tripProvider.loadSentTripInvitations(widget.tripId);
+          setState(() {
+          });
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Invitation cancelled successfully!')),
+          );
+        } else {
+          final error = tripProvider.error ?? '';
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+                content: Text(
+                    error.isNotEmpty ? error : 'Failed to cancel invitation')),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e')),
+        );
+      }
+    }
   }
 
-  Widget _getInvitationButtonForSearch(String userId) {
-    final hasInvitationBeenSent = _hasInvitationBeenSent(userId);
 
-    if (hasInvitationBeenSent) {
-      return Container(
-        padding: const EdgeInsets.all(8),
-        decoration: BoxDecoration(
-          color: Colors.grey[200],
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              Icons.check_circle_outline,
-              color: Colors.grey[600],
-              size: 16,
-            ),
-            const SizedBox(width: 4),
-            Text(
-              'Sent',
-              style: TextStyle(
-                color: Colors.grey[600],
-                fontSize: 12,
-                fontWeight: FontWeight.w500,
+  Widget _getInvitationButtonForSearch(String userId) {
+    final tripProvider = context.watch<TripProvider>();
+    final matchingInvitations = tripProvider.sentTripInvitations.where(
+      (invitation) =>
+          invitation.receiverId == userId && invitation.tripId == widget.tripId,
+    ).toList();
+
+    if (matchingInvitations.isNotEmpty) {
+      final invitation = matchingInvitations.first;
+      return InkWell(
+        onTap: tripProvider.isLoading
+            ? null
+            : () => _cancelInvitation(invitation.id),
+        borderRadius: BorderRadius.circular(8),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          decoration: BoxDecoration(
+            color: Colors.amber.shade50,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: Colors.amber.shade200, width: 1),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Icons.access_time,
+                color: Colors.amber.shade700,
+                size: 16,
               ),
-            ),
-          ],
+              const SizedBox(width: 4),
+              Text(
+                'Pending',
+                style: TextStyle(
+                  color: Colors.amber.shade900,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ],
+          ),
         ),
       );
     }
 
     return IconButton(
-      onPressed: () => _sendInvitation(userId),
-      icon: const Icon(Icons.person_add),
+      onPressed: tripProvider.isLoading
+          ? null
+          : () => _sendInvitation(userId),
+      icon: tripProvider.isLoading
+          ? SizedBox(
+              width: 20,
+              height: 20,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                color: Theme.of(context).colorScheme.primary,
+              ),
+            )
+          : const Icon(Icons.person_add),
       color: Theme.of(context).colorScheme.primary,
     );
   }
@@ -241,6 +288,8 @@ class _TripParticipantsScreenState extends State<TripParticipantsScreen> {
     final username = user['username'] ?? 'No username';
     final userId = user['id'] as String;
 
+    final isParticipant = _participants.any((p) => p.userId == userId);
+
     return Container(
       width: 200,
       margin: const EdgeInsets.only(right: 12),
@@ -288,7 +337,36 @@ class _TripParticipantsScreenState extends State<TripParticipantsScreen> {
                   ],
                 ),
               ),
-              _getInvitationButtonForSearch(userId),
+              if (isParticipant)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: Colors.green.shade50,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.green.shade200, width: 1),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.check_circle,
+                        color: Colors.green.shade700,
+                        size: 16,
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        'Member',
+                        style: TextStyle(
+                          color: Colors.green.shade900,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ),
+                )
+              else
+                _getInvitationButtonForSearch(userId),
             ],
           ),
         ),

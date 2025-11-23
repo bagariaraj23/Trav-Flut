@@ -377,6 +377,7 @@ class CreateThreadEntryRequest {
   final GpsCoordinates? gpsCoordinates;
   final String? placeId;
   final List<String>? taggedUserIds;
+  final List<String>? taggedUsernames;
 
   const CreateThreadEntryRequest({
     required this.type,
@@ -386,6 +387,7 @@ class CreateThreadEntryRequest {
     this.gpsCoordinates,
     this.placeId,
     this.taggedUserIds,
+    this.taggedUsernames,
   });
 
   factory CreateThreadEntryRequest.fromJson(Map<String, dynamic> json) =>
