@@ -219,11 +219,13 @@ export async function GET(
           createdAt: entry.author.createdAt.toISOString(),
           updatedAt: entry.author.updatedAt.toISOString(),
         },
-        taggedUsers: entry.taggedUsers.map((tag) => ({
-          ...tag.taggedUser,
-          createdAt: tag.taggedUser.createdAt.toISOString(),
-          updatedAt: tag.taggedUser.updatedAt.toISOString(),
-        })),
+        taggedUsers: entry.taggedUsers && entry.taggedUsers.length > 0
+          ? entry.taggedUsers.map((tag) => ({
+              ...tag.taggedUser,
+              createdAt: tag.taggedUser.createdAt.toISOString(),
+              updatedAt: tag.taggedUser.updatedAt.toISOString(),
+            }))
+          : [],
         media: entry.media
           ? {
               ...entry.media,
