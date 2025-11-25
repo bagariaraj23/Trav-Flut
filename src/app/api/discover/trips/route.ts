@@ -134,6 +134,7 @@ export async function GET(request: NextRequest) {
                   updatedAt: true,
                 },
               },
+              coverMedia: true,
               _count: {
                 select: {
                   threadEntries: true,
@@ -176,6 +177,18 @@ export async function GET(request: NextRequest) {
                   bio: trip.user.bio ?? undefined,
                   createdAt: trip.user.createdAt.toISOString(),
                   updatedAt: trip.user.updatedAt.toISOString(),
+                }
+              : undefined,
+            coverMedia: trip.coverMedia
+              ? {
+                  ...trip.coverMedia,
+                  filename: trip.coverMedia.filename ?? undefined,
+                  size: trip.coverMedia.size ?? undefined,
+                  width: trip.coverMedia.width ?? undefined,
+                  height: trip.coverMedia.height ?? undefined,
+                  duration: trip.coverMedia.duration ?? undefined,
+                  tripId: trip.coverMedia.tripId ?? undefined,
+                  createdAt: trip.coverMedia.createdAt.toISOString(),
                 }
               : undefined,
           }));
