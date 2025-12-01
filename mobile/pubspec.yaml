@@ -5,7 +5,7 @@ publish_to: "none"
 version: 1.0.0+1
 
 environment:
-  sdk: '>=3.3.0 <4.0.0'
+  sdk: '>=3.8.0 <4.0.0'
   flutter: ">=3.10.0"
 
 dependencies:
@@ -50,7 +50,7 @@ dependencies:
   # Maps & Location
   mapbox_maps_flutter: ^2.9.1
   geolocator: ^10.1.0
-  geocoding: ^2.1.1
+  geocoding: ^3.0.0
 
   # Connectivity
   connectivity_plus: ^6.1.4

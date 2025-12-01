@@ -66,12 +66,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
       actionMessage =
           success ? 'Successfully unfollowed user' : 'Failed to unfollow user';
     } else if (detailedStatus.isRequestPending) {
-      success = await userProvider.cancelFollowRequest(widget.userId);
+      success = await userProvider.cancelFollowRequest(
+        widget.userId,
+        currentUserId: authProvider.currentUser!.id,
+      );
       actionMessage = success
           ? 'Follow request cancelled'
           : 'Failed to cancel follow request';
     } else {
-      success = await userProvider.sendFollowRequest(widget.userId);
+      success = await userProvider.sendFollowRequest(
+        widget.userId,
+        currentUserId: authProvider.currentUser!.id,
+      );
       actionMessage =
           success ? 'Follow request sent' : 'Failed to send follow request';
     }
@@ -355,17 +361,69 @@ class _ProfileScreenState extends State<ProfileScreen> {
           const SizedBox(height: 20),
 
           // Stats Row
-          if (stats != null)
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-              children: [
-                _buildStatColumn(context, stats.tripCount.toString(), 'Trips'),
-                _buildStatColumn(
-                    context, stats.followerCount.toString(), 'Followers'),
-                _buildStatColumn(
-                    context, stats.followingCount.toString(), 'Following'),
-              ],
-            ),
+          Builder(
+            builder: (context) {
+              debugPrint('[ProfileScreen] Building stats row - stats: ${stats != null}, isOwnProfile: $isOwnProfile');
+              if (stats != null) {
+                debugPrint('[ProfileScreen] Stats values - trips: ${stats.tripCount}, followers: ${stats.followerCount}, following: ${stats.followingCount}');
+                return Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  children: [
+                    _buildStatColumn(context, stats.tripCount.toString(), 'Trips'),
+                    _buildStatColumn(
+                      context,
+                      stats.followerCount.toString(),
+                      'Followers',
+                      onTap: () {
+                        debugPrint('[ProfileScreen] Navigating to followers for user: ${widget.userId}, isOwnProfile: $isOwnProfile');
+                        debugPrint('[ProfileScreen] Stats - followerCount: ${stats.followerCount}');
+                        try {
+                          context.push(
+                            '/profile/${widget.userId}/followers',
+                            extra: {'from': '/profile/${widget.userId}'},
+                          );
+                          debugPrint('[ProfileScreen] Navigation to followers successful');
+                        } catch (e, stackTrace) {
+                          debugPrint('[ProfileScreen] Navigation to followers failed: $e');
+                          debugPrint('[ProfileScreen] Stack trace: $stackTrace');
+                        }
+                      },
+                    ),
+                    _buildStatColumn(
+                      context,
+                      stats.followingCount.toString(),
+                      'Following',
+                      onTap: () {
+                        debugPrint('[ProfileScreen] Navigating to following for user: ${widget.userId}, isOwnProfile: $isOwnProfile');
+                        debugPrint('[ProfileScreen] Stats - followingCount: ${stats.followingCount}');
+                        try {
+                          context.push(
+                            '/profile/${widget.userId}/following',
+                            extra: {'from': '/profile/${widget.userId}'},
+                          );
+                          debugPrint('[ProfileScreen] Navigation to following successful');
+                        } catch (e, stackTrace) {
+                          debugPrint('[ProfileScreen] Navigation to following failed: $e');
+                          debugPrint('[ProfileScreen] Stack trace: $stackTrace');
+                        }
+                      },
+                    ),
+                  ],
+                );
+              } else {
+                debugPrint('[ProfileScreen] Stats is null, showing placeholder');
+                // Show placeholder stats if not loaded yet
+                return Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  children: [
+                    _buildStatColumn(context, '0', 'Trips'),
+                    _buildStatColumn(context, '0', 'Followers'),
+                    _buildStatColumn(context, '0', 'Following'),
+                  ],
+                );
+              }
+            },
+          ),
 
           const SizedBox(height: 20),
 
@@ -551,17 +609,27 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  Widget _buildStatColumn(BuildContext context, String count, String label) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12),
+  Widget _buildStatColumn(
+    BuildContext context,
+    String count,
+    String label, {
+    VoidCallback? onTap,
+  }) {
+    debugPrint('[ProfileScreen] _buildStatColumn - label: $label, count: $count, onTap: ${onTap != null}');
+    
+    final content = Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
           Text(
             count,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 18,
               fontWeight: FontWeight.bold,
+              color: onTap != null
+                  ? Theme.of(context).colorScheme.primary
+                  : null,
             ),
           ),
           const SizedBox(height: 4),
@@ -573,6 +641,33 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ),
           ),
         ],
+      ),
+    );
+
+    if (onTap == null) {
+      return content;
+    }
+
+    VoidCallback tapHandler = () {
+      debugPrint('[ProfileScreen] StatColumn tapped - label: $label, count: $count');
+      try {
+        onTap();
+        debugPrint('[ProfileScreen] StatColumn onTap executed successfully');
+      } catch (e, stackTrace) {
+        debugPrint('[ProfileScreen] StatColumn onTap error: $e');
+        debugPrint('[ProfileScreen] Stack trace: $stackTrace');
+      }
+    };
+
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: tapHandler,
+          borderRadius: BorderRadius.circular(8),
+          child: content,
+        ),
       ),
     );
   }

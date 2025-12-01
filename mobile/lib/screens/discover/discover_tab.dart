@@ -125,7 +125,10 @@ class _DiscoverTabState extends State<DiscoverTab> {
         success = await userProvider.unfollowUser(userId,
             currentUserId: currentUserId);
       } else if (isRequestPending) {
-        success = await userProvider.cancelFollowRequest(userId);
+        success = await userProvider.cancelFollowRequest(
+          userId,
+          currentUserId: currentUserId,
+        );
       } else {
         success =
             await userProvider.followUser(userId, currentUserId: currentUserId);
