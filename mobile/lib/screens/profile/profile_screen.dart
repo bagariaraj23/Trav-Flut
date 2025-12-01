@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/gestures.dart';
 import 'package:provider/provider.dart';
 import 'package:tripthread/providers/auth_provider.dart';
 import 'package:tripthread/providers/user_provider.dart';
@@ -143,9 +144,30 @@ class _ProfileScreenState extends State<ProfileScreen> {
             '[ProfileScreen] isOwnProfile: $isOwnProfile (currentUserId: ${currentUser?.id})');
         // debugPrint('[ProfileScreen] pendingRequests: ${}');
 
-        return Scaffold(
+        return PopScope(
+          canPop: true,
+          onPopInvoked: (didPop) {
+            if (!didPop) {
+              if (context.canPop()) {
+                context.pop();
+              } else {
+                context.go('/home');
+              }
+            }
+          },
+          child: Scaffold(
             appBar: AppBar(
               title: Text(user.username ?? 'Profile'),
+              leading: IconButton(
+                icon: const Icon(Icons.arrow_back),
+                onPressed: () {
+                  if (context.canPop()) {
+                    context.pop();
+                  } else {
+                    context.go('/home');
+                  }
+                },
+              ),
               actions: _buildAppBarActions(
                 context,
                 isOwnProfile,
@@ -176,7 +198,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   ],
                 ),
               ),
-            ));
+            ),
+          ),
+        );
       },
     );
   }

@@ -492,7 +492,7 @@ class _DiscoverTabState extends State<DiscoverTab> {
       ),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
-        onTap: () => context.go('/trip/${trip.id}',
+        onTap: () => context.push('/trip/${trip.id}',
             extra: {'from': '/home', 'tab': 'discover'}),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -515,7 +515,7 @@ class _DiscoverTabState extends State<DiscoverTab> {
               }(),
             ),
             Padding(
-              padding: const EdgeInsets.all(10),
+              padding: const EdgeInsets.all(8),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisSize: MainAxisSize.min,
@@ -529,38 +529,38 @@ class _DiscoverTabState extends State<DiscoverTab> {
                       if (trip.mood != null)
                         Text(
                           _getTripMoodEmoji(trip.mood!),
-                          style: const TextStyle(fontSize: 14),
+                          style: const TextStyle(fontSize: 12),
                         ),
                     ],
                   ),
-                  const SizedBox(height: 6),
+                  const SizedBox(height: 4),
                   if (trip.title.isNotEmpty)
                     Text(
                       trip.title,
                       style: Theme.of(context).textTheme.titleSmall?.copyWith(
                             fontWeight: FontWeight.bold,
-                            fontSize: 13,
+                            fontSize: 12,
                           ),
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                     ),
-                  const SizedBox(height: 4),
+                  const SizedBox(height: 3),
                   if (trip.destinations.isNotEmpty)
                     Text(
                       trip.destinations.first,
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
                             color: Colors.grey[600],
-                            fontSize: 11,
+                            fontSize: 10,
                           ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
-                  const SizedBox(height: 6),
+                  const SizedBox(height: 4),
                   if (trip.user != null)
                     Row(
                       children: [
                         CircleAvatar(
-                          radius: 8,
+                          radius: 7,
                           backgroundColor:
                               Theme.of(context).colorScheme.primary,
                           backgroundImage: trip.user!.avatarUrl != null
@@ -573,21 +573,21 @@ class _DiscoverTabState extends State<DiscoverTab> {
                                           .toUpperCase() ??
                                       'U',
                                   style: const TextStyle(
-                                    fontSize: 8,
+                                    fontSize: 7,
                                     fontWeight: FontWeight.bold,
                                     color: Colors.white,
                                   ),
                                 )
                               : null,
                         ),
-                        const SizedBox(width: 6),
+                        const SizedBox(width: 5),
                         Expanded(
                           child: Text(
                             trip.user!.name ?? 'Unknown',
                             style:
                                 Theme.of(context).textTheme.bodySmall?.copyWith(
                                       fontWeight: FontWeight.w500,
-                                      fontSize: 11,
+                                      fontSize: 10,
                                     ),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
@@ -619,27 +619,30 @@ class _DiscoverTabState extends State<DiscoverTab> {
       child: Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
+          mainAxisSize: MainAxisSize.min,
           children: [
             const Icon(
               Icons.travel_explore,
-              size: 28,
+              size: 24,
               color: Colors.white,
             ),
-            const SizedBox(height: 6),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 8),
-              child: Text(
-                trip.destinations.isNotEmpty
-                    ? trip.destinations.first
-                    : 'Unknown',
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 11,
-                  fontWeight: FontWeight.bold,
+            const SizedBox(height: 4),
+            Flexible(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 6),
+                child: Text(
+                  trip.destinations.isNotEmpty
+                      ? trip.destinations.first
+                      : 'Unknown',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
+                  ),
+                  textAlign: TextAlign.center,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
                 ),
-                textAlign: TextAlign.center,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
               ),
             ),
           ],

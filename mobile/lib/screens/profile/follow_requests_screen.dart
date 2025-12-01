@@ -86,24 +86,31 @@ class _FollowRequestsScreenState extends State<FollowRequestsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Follow Requests'),
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
-          onPressed: () {
-            // This is the standard and most reliable way to navigate back.
-            // It preserves the state of the previous screen, including the selected tab.
-            if (context.canPop()) {
-              context.pop();
-            } else {
-              // This is a fallback in case there's no screen to pop to,
-              // which is unlikely in this flow but good practice to have.
-              context.go('/home');
-            }
-          },
+    return PopScope(
+      canPop: true,
+      onPopInvoked: (didPop) {
+        if (!didPop) {
+          if (context.canPop()) {
+            context.pop();
+          } else {
+            context.go('/home');
+          }
+        }
+      },
+      child: Scaffold(
+        appBar: AppBar(
+          title: const Text('Follow Requests'),
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back),
+            onPressed: () {
+              if (context.canPop()) {
+                context.pop();
+              } else {
+                context.go('/home');
+              }
+            },
+          ),
         ),
-      ),
       body: Consumer<UserProvider>(
         builder: (context, userProvider, child) {
           if (userProvider.isFollowRequestsLoading &&
@@ -192,6 +199,7 @@ class _FollowRequestsScreenState extends State<FollowRequestsScreen> {
             ),
           );
         },
+      ),
       ),
     );
   }

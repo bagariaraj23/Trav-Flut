@@ -5,6 +5,7 @@ import 'package:tripthread/models/place.dart';
 import 'package:tripthread/providers/place_provider.dart';
 import 'package:tripthread/config/app_config.dart';
 import 'package:provider/provider.dart';
+import 'package:go_router/go_router.dart';
 
 class TripMapScreen extends StatefulWidget {
   final String tripId;
@@ -139,22 +140,43 @@ class _TripMapScreenState extends State<TripMapScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(widget.tripTitle),
-        actions: [
-          // Legend button
-          IconButton(
-            icon: const Icon(Icons.info_outline),
+    return PopScope(
+      canPop: true,
+      onPopInvoked: (didPop) {
+        if (!didPop) {
+          if (context.canPop()) {
+            context.pop();
+          } else {
+            context.go('/home');
+          }
+        }
+      },
+      child: Scaffold(
+        appBar: AppBar(
+          title: Text(widget.tripTitle),
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back),
             onPressed: () {
-              showDialog(
-                context: context,
-                builder: (context) => _buildLegendDialog(),
-              );
+              if (context.canPop()) {
+                context.pop();
+              } else {
+                context.go('/home');
+              }
             },
           ),
-        ],
-      ),
+          actions: [
+            // Legend button
+            IconButton(
+              icon: const Icon(Icons.info_outline),
+              onPressed: () {
+                showDialog(
+                  context: context,
+                  builder: (context) => _buildLegendDialog(),
+                );
+              },
+            ),
+          ],
+        ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : _error != null
@@ -226,6 +248,7 @@ class _TripMapScreenState extends State<TripMapScreen> {
                         ),
                       ],
                     ),
+      ),
     );
   }
 

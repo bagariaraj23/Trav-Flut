@@ -464,7 +464,7 @@ class _HomeFeedScreenState extends State<HomeFeedScreen> {
                     const Spacer(),
                     TextButton(
                       onPressed: () {
-                        context.go('/trip/${post.tripId}',
+                        context.push('/trip/${post.tripId}',
                             extra: {'from': '/home'});
                       },
                       child: const Text('View Trip'),
@@ -674,7 +674,7 @@ class TripsTab extends StatelessWidget {
             children: [
               Expanded(
                 child: ElevatedButton.icon(
-                  onPressed: () => context.go('/trip/${trip.id}/thread',
+                  onPressed: () => context.push('/trip/${trip.id}/thread',
                       extra: {'from': '/trip/${trip.id}'}),
                   icon: Icon(Icons.add, size: isLandscape ? 16 : 18),
                   label: Text(
@@ -693,7 +693,7 @@ class TripsTab extends StatelessWidget {
               const SizedBox(width: 12),
               OutlinedButton(
                 onPressed: () =>
-                    context.go('/trip/${trip.id}', extra: {'from': '/trips'}),
+                    context.push('/trip/${trip.id}', extra: {'from': '/trips'}),
                 style: OutlinedButton.styleFrom(
                   side: const BorderSide(color: Colors.white),
                   foregroundColor: Colors.white,
@@ -718,7 +718,7 @@ class TripsTab extends StatelessWidget {
     return Card(
       margin: const EdgeInsets.only(bottom: 16),
       child: InkWell(
-        onTap: () => context.go('/trip/${trip.id}', extra: {'from': '/trips'}),
+        onTap: () => context.push('/trip/${trip.id}', extra: {'from': '/trips'}),
         borderRadius: BorderRadius.circular(12),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -1250,7 +1250,7 @@ class ProfileTab extends StatelessWidget {
                                 return InkWell(
                                   borderRadius: BorderRadius.circular(12),
                                   onTap: () {
-                                    context.go(
+                                    context.push(
                                       '/trip/${trip.id}',
                                       extra: {'from': '/home'},
                                     );

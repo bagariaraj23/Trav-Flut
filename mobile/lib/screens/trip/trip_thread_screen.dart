@@ -686,16 +686,38 @@ class _TripThreadScreenState extends State<TripThreadScreen> {
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
-      return const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
+      return PopScope(
+        canPop: false, // Prevent system from handling back gesture
+        onPopInvoked: (didPop) {
+          // Always handle navigation ourselves
+          if (context.canPop()) {
+            context.pop();
+          } else {
+            context.go('/home');
+          }
+        },
+        child: const Scaffold(
+          body: Center(child: CircularProgressIndicator()),
+        ),
       );
     }
 
     if (_trip == null) {
-      return Scaffold(
-        appBar: AppBar(title: const Text('Trip Thread')),
-        body: const Center(
-          child: Text('Trip not found'),
+      return PopScope(
+        canPop: false, // Prevent system from handling back gesture
+        onPopInvoked: (didPop) {
+          // Always handle navigation ourselves
+          if (context.canPop()) {
+            context.pop();
+          } else {
+            context.go('/home');
+          }
+        },
+        child: Scaffold(
+          appBar: AppBar(title: const Text('Trip Thread')),
+          body: const Center(
+            child: Text('Trip not found'),
+          ),
         ),
       );
     }
@@ -706,23 +728,41 @@ class _TripThreadScreenState extends State<TripThreadScreen> {
             _trip!.participants?.any((p) => p.userId == currentUser?.id) ==
                 true);
 
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(_trip?.title ?? 'Trip Thread'),
-        backgroundColor: Theme.of(context).colorScheme.primary,
-        foregroundColor: Colors.white,
-        elevation: 2,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Colors.white),
-          onPressed: () {
-            final extra = GoRouterState.of(context).extra;
-            final from = (extra is Map && extra['from'] != null)
-                ? extra['from'] as String
-                : '/trip/${widget.tripId}';
-            context.go(from);
-          },
+    return PopScope(
+      canPop: false, // Prevent system from handling back gesture
+      onPopInvoked: (didPop) {
+        // Always handle navigation ourselves
+        if (context.canPop()) {
+          context.pop();
+        } else {
+          final extra = GoRouterState.of(context).extra;
+          final from = (extra is Map && extra['from'] != null)
+              ? extra['from'] as String
+              : '/trip/${widget.tripId}';
+          context.go(from);
+        }
+      },
+      child: Scaffold(
+        appBar: AppBar(
+          title: Text(_trip?.title ?? 'Trip Thread'),
+          backgroundColor: Theme.of(context).colorScheme.primary,
+          foregroundColor: Colors.white,
+          elevation: 2,
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back, color: Colors.white),
+            onPressed: () {
+              if (context.canPop()) {
+                context.pop();
+              } else {
+                final extra = GoRouterState.of(context).extra;
+                final from = (extra is Map && extra['from'] != null)
+                    ? extra['from'] as String
+                    : '/trip/${widget.tripId}';
+                context.go(from);
+              }
+            },
+          ),
         ),
-      ),
       body: Stack(
         key: _stackKey,
         children: [
@@ -858,6 +898,7 @@ class _TripThreadScreenState extends State<TripThreadScreen> {
               builder: (context) => _buildMentionMenu(context),
             ),
         ],
+      ),
       ),
     );
   }

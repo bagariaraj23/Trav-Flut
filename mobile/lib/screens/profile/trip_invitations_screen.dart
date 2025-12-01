@@ -51,20 +51,31 @@ class _TripInvitationsScreenState extends State<TripInvitationsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Trip Invitations'),
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
-          onPressed: () {
-            if (context.canPop()) {
-              context.pop();
-            } else {
-              context.go('/home');
-            }
-          },
+    return PopScope(
+      canPop: true,
+      onPopInvoked: (didPop) {
+        if (!didPop) {
+          if (context.canPop()) {
+            context.pop();
+          } else {
+            context.go('/home');
+          }
+        }
+      },
+      child: Scaffold(
+        appBar: AppBar(
+          title: const Text('Trip Invitations'),
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back),
+            onPressed: () {
+              if (context.canPop()) {
+                context.pop();
+              } else {
+                context.go('/home');
+              }
+            },
+          ),
         ),
-      ),
       body: Consumer<TripProvider>(
         builder: (context, tripProvider, child) {
           if (tripProvider.isTripInvitesLoading &&
@@ -153,6 +164,7 @@ class _TripInvitationsScreenState extends State<TripInvitationsScreen> {
             ),
           );
         },
+      ),
       ),
     );
   }
