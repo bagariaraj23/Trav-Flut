@@ -4,7 +4,6 @@
  */
 
 import { PrismaClient } from "@prisma/client";
-import { Redis } from "ioredis";
 
 interface ServiceStatus {
   name: string;
@@ -69,32 +68,6 @@ async function testDatabaseConnection(prisma: PrismaClient): Promise<ServiceStat
   }
 }
 
-/**
- * Tests Redis connection
- */
-async function testRedisConnection(redis: Redis): Promise<ServiceStatus> {
-  try {
-    const result = await redis.ping();
-    if (result === 'PONG') {
-      return {
-        name: 'Redis',
-        status: 'connected',
-        details: 'Connection successful',
-      };
-    }
-    return {
-      name: 'Redis',
-      status: 'error',
-      error: 'Unexpected response from Redis',
-    };
-  } catch (error) {
-    return {
-      name: 'Redis',
-      status: 'error',
-      error: error instanceof Error ? error.message : String(error),
-    };
-  }
-}
 
 /**
  * Collects all configuration information
@@ -115,17 +88,12 @@ function collectConfigInfo(): Record<string, Record<string, string | number | bo
     'Database Connected': 'Testing...',
   };
 
-  // Redis Configuration
-  configs['Redis Configuration'] = {
-    REDIS_URL: maskUrl(process.env.REDIS_URL),
-    'Redis Connected': 'Testing...',
-  };
-
   // Scheduler Configuration
   configs['Scheduler Configuration'] = {
-    'Cron Schedule': process.env.CRON_SCHEDULE || '0 1 * * * (1:00 AM daily)',
-    'Job Repeat Interval': '60 minutes (3600000 ms)',
-    'Concurrency': 1,
+    'Execution Mode': 'Cron (single execution)',
+    'Cron Schedule': process.env.CRON_SCHEDULE || '0 * * * * (every hour)',
+    'Retry Attempts': 3,
+    'Retry Strategy': 'Exponential backoff',
   };
 
   return configs;
@@ -135,8 +103,7 @@ function collectConfigInfo(): Record<string, Record<string, string | number | bo
  * Logs startup information comprehensively
  */
 export async function logSchedulerStartupInfo(
-  prisma: PrismaClient,
-  redis: Redis
+  prisma: PrismaClient
 ): Promise<void> {
   const separator = '='.repeat(80);
   const line = '-'.repeat(80);
@@ -180,11 +147,6 @@ export async function logSchedulerStartupInfo(
   console.log('Testing database connection...');
   const dbStatus = await testDatabaseConnection(prisma);
   services.push(dbStatus);
-
-  // Test Redis
-  console.log('Testing Redis connection...');
-  const redisStatus = await testRedisConnection(redis);
-  services.push(redisStatus);
 
   // Log service statuses
   console.log('\n');
@@ -232,26 +194,25 @@ export async function logSchedulerStartupInfo(
     console.log(`Failed to check Prisma schema: ${error instanceof Error ? error.message : String(error)}`);
   }
 
-  // BullMQ Queue Information
-  console.log('\n\nBULLMQ QUEUE CONFIGURATION');
+  // Execution Mode Information
+  console.log('\n\nEXECUTION MODE');
   console.log(line);
-  console.log('Queue Name: tripStatus');
-  console.log('Worker Concurrency: 1');
-  console.log('Job Repeat Interval: Every 60 minutes');
-  console.log('Job ID: updateTripStatus:repeat:hourly');
+  console.log('Mode: Cron-based (single execution per invocation)');
+  console.log('No Redis dependency - runs independently');
+  console.log('Retry Logic: 3 attempts with exponential backoff');
+  console.log('Recommended Schedule: Every hour (0 * * * *)');
 
   // Environment Variable Summary
   console.log('\n\nENVIRONMENT VARIABLE SUMMARY');
   console.log(line);
   const allEnvVars = Object.keys(process.env).filter((key) =>
     key.includes('DATABASE') ||
-    key.includes('REDIS') ||
     key.includes('NODE') ||
     key.includes('CRON')
   );
   console.log(`Total relevant environment variables: ${allEnvVars.length}`);
   const missingVars: string[] = [];
-  const criticalVars = ['DATABASE_URL', 'REDIS_URL'];
+  const criticalVars = ['DATABASE_URL'];
   for (const varName of criticalVars) {
     if (!process.env[varName]) {
       missingVars.push(varName);
