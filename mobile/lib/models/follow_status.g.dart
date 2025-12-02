@@ -7,22 +7,22 @@ part of 'follow_status.dart';
 // **************************************************************************
 
 FollowStatusResponse _$FollowStatusResponseFromJson(
-        Map<String, dynamic> json) =>
-    FollowStatusResponse(
-      isFollowing: json['isFollowing'] as bool,
-      isFollowedBy: json['isFollowedBy'] as bool,
-      isRequestPending: json['isRequestPending'] as bool,
-      isPrivate: json['isPrivate'] as bool,
-    );
+  Map<String, dynamic> json,
+) => FollowStatusResponse(
+  isFollowing: json['isFollowing'] as bool,
+  isFollowedBy: json['isFollowedBy'] as bool,
+  isRequestPending: json['isRequestPending'] as bool,
+  isPrivate: json['isPrivate'] as bool,
+);
 
 Map<String, dynamic> _$FollowStatusResponseToJson(
-        FollowStatusResponse instance) =>
-    <String, dynamic>{
-      'isFollowing': instance.isFollowing,
-      'isFollowedBy': instance.isFollowedBy,
-      'isRequestPending': instance.isRequestPending,
-      'isPrivate': instance.isPrivate,
-    };
+  FollowStatusResponse instance,
+) => <String, dynamic>{
+  'isFollowing': instance.isFollowing,
+  'isFollowedBy': instance.isFollowedBy,
+  'isRequestPending': instance.isRequestPending,
+  'isPrivate': instance.isPrivate,
+};
 
 FollowRequestDto _$FollowRequestDtoFromJson(Map<String, dynamic> json) =>
     FollowRequestDto(
@@ -31,8 +31,9 @@ FollowRequestDto _$FollowRequestDtoFromJson(Map<String, dynamic> json) =>
       followeeId: json['followeeId'] as String,
       status: json['status'] as String,
       createdAt: DateTime.parse(json['createdAt'] as String),
-      follower:
-          UserFollowDto.fromJson(json['follower'] as Map<String, dynamic>),
+      follower: UserFollowDto.fromJson(
+        json['follower'] as Map<String, dynamic>,
+      ),
     );
 
 Map<String, dynamic> _$FollowRequestDtoToJson(FollowRequestDto instance) =>
