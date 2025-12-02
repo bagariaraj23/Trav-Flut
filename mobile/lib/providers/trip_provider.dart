@@ -191,6 +191,10 @@ class TripProvider extends ChangeNotifier {
     final id = tripId ?? _currentTrip?.id;
     if (id == null) return;
 
+    // Clear entries immediately to prevent showing old trip's entries
+    _currentTripEntries = [];
+    notifyListeners();
+
     try {
       final response = await _tripService.getThreadEntries(id);
 
@@ -206,6 +210,12 @@ class TripProvider extends ChangeNotifier {
       notifyListeners();
       debugPrint('Load trip entries error: $e');
     }
+  }
+
+  // Clear current trip entries (useful when switching trips)
+  void clearCurrentTripEntries() {
+    _currentTripEntries = [];
+    notifyListeners();
   }
 
   // Add thread entry
