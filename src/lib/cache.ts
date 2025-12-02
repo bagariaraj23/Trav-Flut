@@ -177,12 +177,21 @@ export class LRUCache<K, V> {
 // Global memory cache instance
 const memoryCache = new LRUCache<string, { value: string; expiresAt: number }>(DEFAULT_MAX_SIZE);
 
+// Track if Upstash is rate-limited to avoid unnecessary requests
+let upstashRateLimited = false;
+let upstashRateLimitResetTime = 0;
+
 // Simple Upstash REST client (lazy) to avoid bringing redis client
 async function upstashFetch<T = unknown>(
   path: string,
   body: unknown
 ): Promise<T | null> {
   if (!ENV.REDIS_REST_URL || !ENV.REDIS_REST_TOKEN) return null;
+
+  // Check if we're rate-limited and should skip requests
+  if (upstashRateLimited && Date.now() < upstashRateLimitResetTime) {
+    return null;
+  }
 
   try {
     const res = await fetch(`${ENV.REDIS_REST_URL}/${path}`, {
@@ -196,14 +205,36 @@ async function upstashFetch<T = unknown>(
     });
 
     if (!res.ok) {
+      // Check for rate limit errors
+      if (res.status === 400 || res.status === 429) {
+        const text = await res.text();
+        if (text.includes('max requests limit exceeded') || text.includes('rate limit')) {
+          upstashRateLimited = true;
+          // Reset after 1 hour (conservative estimate)
+          upstashRateLimitResetTime = Date.now() + 60 * 60 * 1000;
+          console.warn(`[Cache] Upstash rate limit detected. Disabling Upstash for 1 hour.`);
+        }
+      }
       console.warn(`[Cache] Upstash request failed: ${res.status} ${res.statusText}`);
       return null;
+    }
+
+    // Success - reset rate limit flag if it was set
+    if (upstashRateLimited) {
+      upstashRateLimited = false;
+      upstashRateLimitResetTime = 0;
     }
 
     const json = await res.json();
     // Upstash REST returns { result: ... }
     return (json?.result ?? null) as T | null;
   } catch (error) {
+    // Check if error message indicates rate limit
+    if (error instanceof Error && error.message.includes('max requests limit exceeded')) {
+      upstashRateLimited = true;
+      upstashRateLimitResetTime = Date.now() + 60 * 60 * 1000;
+      console.warn(`[Cache] Upstash rate limit detected from error. Disabling Upstash for 1 hour.`);
+    }
     console.error('[Cache] Upstash request error:', error);
     return null;
   }
@@ -243,6 +274,75 @@ export async function cacheGetJson<T = JsonValue>(
   } catch {
     return null;
   }
+}
+
+/**
+ * Batch get multiple cache keys in a single Upstash request
+ * Returns a map of key -> value (or null if not found)
+ */
+export async function cacheGetJsonBatch<T = JsonValue>(
+  keys: string[]
+): Promise<Map<string, T | null>> {
+  const results = new Map<string, T | null>();
+  
+  // Check memory cache first for all keys
+  const keysToFetch: string[] = [];
+  for (const key of keys) {
+    const memEntry = memoryCache.get(key);
+    if (memEntry && Date.now() < memEntry.expiresAt) {
+      try {
+        results.set(key, JSON.parse(memEntry.value) as T);
+      } catch {
+        memoryCache.delete(key);
+        keysToFetch.push(key);
+      }
+    } else {
+      if (memEntry) memoryCache.delete(key);
+      keysToFetch.push(key);
+    }
+  }
+
+  // If all keys were in memory cache, return early
+  if (keysToFetch.length === 0) {
+    return results;
+  }
+
+  // Batch fetch remaining keys from Redis using MGET
+  if (keysToFetch.length > 0) {
+    const pipeline = keysToFetch.map(key => ["get", key] as [string, string]);
+    const redisResults = await upstashFetch<(string | null)[]>("pipeline", pipeline);
+    
+    if (redisResults && Array.isArray(redisResults)) {
+      for (let i = 0; i < keysToFetch.length; i++) {
+        const key = keysToFetch[i];
+        const value = redisResults[i];
+        
+        if (value) {
+          try {
+            const parsed = JSON.parse(value) as T;
+            results.set(key, parsed);
+            
+            // Update memory cache
+            memoryCache.set(key, {
+              value: value,
+              expiresAt: Date.now() + DEFAULT_MEMORY_TTL
+            });
+          } catch {
+            results.set(key, null);
+          }
+        } else {
+          results.set(key, null);
+        }
+      }
+    } else {
+      // If batch fetch failed, mark all as null
+      for (const key of keysToFetch) {
+        results.set(key, null);
+      }
+    }
+  }
+
+  return results;
 }
 
 export async function cacheSetJson<T = any>(

@@ -3,6 +3,7 @@ import { Place, PlaceType, PlaceSource } from "@prisma/client";
 import { MapboxPlacesAdapter } from "@/lib/mapProviders/mapbox";
 import {
   cacheGetJson,
+  cacheGetJsonBatch,
   cacheSetJson,
   bucketCoord,
   cacheDelete,
@@ -451,20 +452,44 @@ export async function resolvePlace(input: PlaceInput) {
     `place:name:${input.name.toLowerCase()}:${spatialKey}`,
   ].filter(Boolean) as string[];
 
-  // 1. Try cache first with two-step lookup
-  for (const key of cacheKeys) {
-    // First lookup: get the primary key reference
-    const ref = await cacheGetJson<string>(key);
-
+  // 1. Try cache first with batched lookup (reduces Upstash requests)
+  // Batch fetch all reference keys in a single request
+  const refResults = await cacheGetJsonBatch<string>(cacheKeys);
+  
+  // Check each reference and batch fetch place data
+  const placeIdsToFetch: string[] = [];
+  const refKeyMap = new Map<string, string>(); // Map place ID -> ref key for logging
+  
+  for (const refKey of cacheKeys) {
+    const ref = refResults.get(refKey);
     if (ref && typeof ref === "string" && ref.length > 0) {
-      const cachedPlace = await cacheGetJson<any>(`place:${ref}`);
-      if (cachedPlace) {
-        console.log(`[Cache] Hit for key: ${key} -> place:${ref}`);
-        return deserializePlace(cachedPlace);
-      } else {
-        // Reference exists but data missing - clean up the dangling reference
-        console.warn(`[Cache] Dangling reference at ${key}, cleaning up`);
-        await cacheDelete(key);
+      placeIdsToFetch.push(`place:${ref}`);
+      refKeyMap.set(`place:${ref}`, refKey);
+    }
+  }
+
+  // Batch fetch all place data in a single request
+  if (placeIdsToFetch.length > 0) {
+    const placeResults = await cacheGetJsonBatch<any>(placeIdsToFetch);
+    
+    for (const placeKey of placeIdsToFetch) {
+      const place = placeResults.get(placeKey);
+      if (place) {
+        const refKey = refKeyMap.get(placeKey);
+        console.log(`[Cache] Hit for key: ${refKey} -> ${placeKey}`);
+        return deserializePlace(place);
+      }
+    }
+    
+    // Clean up dangling references (references exist but place data missing)
+    for (const refKey of cacheKeys) {
+      const ref = refResults.get(refKey);
+      if (ref && typeof ref === "string" && ref.length > 0) {
+        const placeKey = `place:${ref}`;
+        if (!placeResults.get(placeKey)) {
+          console.warn(`[Cache] Dangling reference at ${refKey}, cleaning up`);
+          await cacheDelete(refKey);
+        }
       }
     }
   }
