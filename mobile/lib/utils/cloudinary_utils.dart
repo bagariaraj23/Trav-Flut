@@ -53,8 +53,14 @@ String buildOptimizedVideoUrl(
   String url, {
   int? maxWidth,
 }) {
+  // For videos, use video-specific transformations
+  // f_auto: auto format, q_auto: auto quality, vc_auto: auto video codec
+  // w_* with c_limit maintains aspect ratio
   final transformations = <String>["f_auto", "q_auto", "vc_auto"];
-  if (maxWidth != null) transformations.add("w_$maxWidth");
+  if (maxWidth != null) {
+    transformations.add("w_$maxWidth");
+    transformations.add("c_limit");
+  }
   return _injectTransformations(url, transformations: transformations);
 }
 

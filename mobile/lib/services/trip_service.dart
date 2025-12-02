@@ -196,6 +196,95 @@ class TripService {
     }
   }
 
+  Future<ApiResponse<Media?>> updateTripCover(
+    String tripId,
+    String coverMediaId,
+  ) async {
+    try {
+      final response = await _dio.patch(
+        '/trips/$tripId/cover',
+        data: {'coverMediaId': coverMediaId},
+      );
+
+      Media? media;
+      try {
+        final responseData = response.data;
+        if (responseData is Map<String, dynamic>) {
+          final data = responseData['data'];
+          if (data != null && data is Map<String, dynamic>) {
+            final coverMediaData = data['coverMedia'];
+            if (coverMediaData != null && coverMediaData is Map<String, dynamic>) {
+              media = Media.fromJson(coverMediaData);
+            } else {
+              debugPrint('[TripService] CoverMedia is null or not a Map');
+            }
+          } else {
+            debugPrint('[TripService] Response data.data is null or not a Map');
+          }
+        } else {
+          debugPrint('[TripService] Response data is not a Map: ${responseData.runtimeType}');
+        }
+      } catch (e, stackTrace) {
+        debugPrint('[TripService] Error parsing coverMedia: $e');
+        debugPrint('[TripService] Stack trace: $stackTrace');
+        debugPrint('[TripService] Response data: ${response.data}');
+        // Continue without media, will use fallbackMedia
+      }
+
+      final responseData = response.data;
+      final success = responseData is Map<String, dynamic> 
+          ? (responseData['success'] as bool? ?? false)
+          : false;
+      final error = responseData is Map<String, dynamic>
+          ? (responseData['error'] as String?)
+          : null;
+      final message = responseData is Map<String, dynamic>
+          ? (responseData['message'] as String?)
+          : null;
+
+      return ApiResponse<Media?>(
+        success: success,
+        data: media,
+        error: error,
+        message: message,
+      );
+    } on DioException catch (e) {
+      debugPrint('[TripService] DioException in updateTripCover: $e');
+      debugPrint('[TripService] Status code: ${e.response?.statusCode}');
+      debugPrint('[TripService] Response data: ${e.response?.data}');
+      
+      String errorMessage = 'Network error occurred';
+      if (e.response != null) {
+        if (e.response!.statusCode == 404) {
+          errorMessage = 'Trip cover endpoint not found. Please check if the backend is updated.';
+        } else if (e.response!.data != null) {
+          try {
+            final responseData = e.response!.data;
+            if (responseData is Map<String, dynamic> && responseData.containsKey('error')) {
+              errorMessage = responseData['error'] as String? ?? errorMessage;
+            } else if (responseData is String) {
+              errorMessage = responseData;
+            }
+          } catch (_) {
+            // If parsing fails, use default message
+          }
+        }
+      }
+      
+      return ApiResponse<Media?>(
+        success: false,
+        error: errorMessage,
+      );
+    } catch (e, stackTrace) {
+      debugPrint('[TripService] Unexpected error in updateTripCover: $e');
+      debugPrint('[TripService] Stack trace: $stackTrace');
+      return ApiResponse<Media?>(
+        success: false,
+        error: 'An unexpected error occurred: $e',
+      );
+    }
+  }
+
   // Thread entries
   Future<ApiResponse<TripThreadEntry>> createThreadEntry({
       required String tripId,
