@@ -448,21 +448,32 @@ class _TripParticipantsScreenState extends State<TripParticipantsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      resizeToAvoidBottomInset: true,
-      appBar: AppBar(
-        title: const Text('Manage Participants'),
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
-          onPressed: () {
-            if (context.canPop()) {
-              context.pop();
-            } else {
-              context.go('/trip/${widget.tripId}');
-            }
-          },
+    return PopScope(
+      canPop: true,
+      onPopInvoked: (didPop) {
+        if (!didPop) {
+          if (context.canPop()) {
+            context.pop();
+          } else {
+            context.go('/trip/${widget.tripId}');
+          }
+        }
+      },
+      child: Scaffold(
+        resizeToAvoidBottomInset: true,
+        appBar: AppBar(
+          title: const Text('Manage Participants'),
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back),
+            onPressed: () {
+              if (context.canPop()) {
+                context.pop();
+              } else {
+                context.go('/trip/${widget.tripId}');
+              }
+            },
+          ),
         ),
-      ),
       body: SafeArea(
         child: Column(
           children: [
@@ -579,6 +590,7 @@ class _TripParticipantsScreenState extends State<TripParticipantsScreen> {
             ),
           ],
         ),
+      ),
       ),
     );
   }

@@ -222,13 +222,17 @@ class UserProvider extends ChangeNotifier {
   }
 
   // --- ACTIONS (Follow, Unfollow, Requests) ---
-  Future<bool> sendFollowRequest(String userId) async {
+  Future<bool> sendFollowRequest(String userId, {String? currentUserId}) async {
     try {
       _isLoading = true;
       notifyListeners();
       final response = await _apiService.followUser(userId);
       if (response.success) {
         await fetchDetailedFollowStatus(userId);
+        // Refresh current user's stats to update following count
+        if (currentUserId != null) {
+          await fetchUserStats(currentUserId);
+        }
         notifyListeners();
         return true;
       } else {
@@ -246,7 +250,7 @@ class UserProvider extends ChangeNotifier {
   }
 
   Future<bool> followUser(String userId, {String? currentUserId}) async {
-    return sendFollowRequest(userId);
+    return sendFollowRequest(userId, currentUserId: currentUserId);
   }
 
   Future<bool> unfollowUser(String userId, {String? currentUserId}) async {
@@ -277,7 +281,7 @@ class UserProvider extends ChangeNotifier {
     }
   }
 
-  Future<bool> cancelFollowRequest(String userId) async {
+  Future<bool> cancelFollowRequest(String userId, {String? currentUserId}) async {
     try {
       _isLoading = true;
       _error = null;
@@ -285,6 +289,10 @@ class UserProvider extends ChangeNotifier {
       final response = await _apiService.unfollowUser(userId);
       if (response.success) {
         await fetchDetailedFollowStatus(userId);
+        // Refresh current user's stats to update following count
+        if (currentUserId != null) {
+          await fetchUserStats(currentUserId);
+        }
         notifyListeners();
         return true;
       }

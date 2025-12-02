@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
 import 'package:another_flushbar/flushbar.dart';
@@ -25,6 +26,7 @@ import 'package:tripthread/screens/auth/reset_password_success_screen.dart';
 import 'package:tripthread/screens/home/home_screen.dart';
 import 'package:tripthread/screens/profile/profile_screen.dart';
 import 'package:tripthread/screens/profile/edit_profile_screen.dart';
+import 'package:tripthread/screens/profile/followers_following_screen.dart';
 import 'package:tripthread/screens/trip/create_trip_screen.dart';
 import 'package:tripthread/screens/trip/trip_detail_screen.dart';
 import 'package:tripthread/screens/trip/trip_thread_screen.dart';
@@ -370,6 +372,28 @@ class _TripThreadAppRouterState extends State<TripThreadAppRouter> {
             builder: (context, state) {
               final userId = state.pathParameters['userId']!;
               return ProfileScreen(userId: userId);
+            },
+          ),
+          GoRoute(
+            path: '/profile/:userId/followers',
+            builder: (context, state) {
+              final userId = state.pathParameters['userId']!;
+              debugPrint('[GoRouter] Building FollowersFollowingScreen - followers for user: $userId');
+              return FollowersFollowingScreen(
+                userId: userId,
+                showFollowers: true,
+              );
+            },
+          ),
+          GoRoute(
+            path: '/profile/:userId/following',
+            builder: (context, state) {
+              final userId = state.pathParameters['userId']!;
+              debugPrint('[GoRouter] Building FollowersFollowingScreen - following for user: $userId');
+              return FollowersFollowingScreen(
+                userId: userId,
+                showFollowers: false,
+              );
             },
           ),
           GoRoute(

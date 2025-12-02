@@ -464,7 +464,7 @@ class _HomeFeedScreenState extends State<HomeFeedScreen> {
                     const Spacer(),
                     TextButton(
                       onPressed: () {
-                        context.go('/trip/${post.tripId}',
+                        context.push('/trip/${post.tripId}',
                             extra: {'from': '/home'});
                       },
                       child: const Text('View Trip'),
@@ -674,7 +674,7 @@ class TripsTab extends StatelessWidget {
             children: [
               Expanded(
                 child: ElevatedButton.icon(
-                  onPressed: () => context.go('/trip/${trip.id}/thread',
+                  onPressed: () => context.push('/trip/${trip.id}/thread',
                       extra: {'from': '/trip/${trip.id}'}),
                   icon: Icon(Icons.add, size: isLandscape ? 16 : 18),
                   label: Text(
@@ -693,7 +693,7 @@ class TripsTab extends StatelessWidget {
               const SizedBox(width: 12),
               OutlinedButton(
                 onPressed: () =>
-                    context.go('/trip/${trip.id}', extra: {'from': '/trips'}),
+                    context.push('/trip/${trip.id}', extra: {'from': '/trips'}),
                 style: OutlinedButton.styleFrom(
                   side: const BorderSide(color: Colors.white),
                   foregroundColor: Colors.white,
@@ -718,7 +718,7 @@ class TripsTab extends StatelessWidget {
     return Card(
       margin: const EdgeInsets.only(bottom: 16),
       child: InkWell(
-        onTap: () => context.go('/trip/${trip.id}', extra: {'from': '/trips'}),
+        onTap: () => context.push('/trip/${trip.id}', extra: {'from': '/trips'}),
         borderRadius: BorderRadius.circular(12),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -1116,9 +1116,29 @@ class ProfileTab extends StatelessWidget {
                               _buildStatColumn(
                                   context, tripCount.toString(), 'Trips'),
                               _buildStatColumn(
-                                  context, '$followerCount', 'Followers'),
+                                context, 
+                                '$followerCount', 
+                                'Followers',
+                                onTap: () {
+                                  debugPrint('[ProfileTab] Navigating to followers for user: ${user.id}');
+                                  context.push(
+                                    '/profile/${user.id}/followers',
+                                    extra: {'from': '/home'},
+                                  );
+                                },
+                              ),
                               _buildStatColumn(
-                                  context, '$followingCount', 'Following'),
+                                context, 
+                                '$followingCount', 
+                                'Following',
+                                onTap: () {
+                                  debugPrint('[ProfileTab] Navigating to following for user: ${user.id}');
+                                  context.push(
+                                    '/profile/${user.id}/following',
+                                    extra: {'from': '/home'},
+                                  );
+                                },
+                              ),
                             ],
                           );
                         },
@@ -1230,7 +1250,7 @@ class ProfileTab extends StatelessWidget {
                                 return InkWell(
                                   borderRadius: BorderRadius.circular(12),
                                   onTap: () {
-                                    context.go(
+                                    context.push(
                                       '/trip/${trip.id}',
                                       extra: {'from': '/home'},
                                     );
@@ -1369,13 +1389,21 @@ class ProfileTab extends StatelessWidget {
     );
   }
 
-  Widget _buildStatColumn(BuildContext context, String count, String label) {
-    return Column(
+  Widget _buildStatColumn(
+    BuildContext context, 
+    String count, 
+    String label, {
+    VoidCallback? onTap,
+  }) {
+    final content = Column(
       children: [
         Text(
           count,
           style: Theme.of(context).textTheme.headlineMedium?.copyWith(
                 fontWeight: FontWeight.bold,
+                color: onTap != null
+                    ? Theme.of(context).colorScheme.primary
+                    : null,
               ),
         ),
         const SizedBox(height: 4),
@@ -1384,6 +1412,25 @@ class ProfileTab extends StatelessWidget {
           style: Theme.of(context).textTheme.bodySmall,
         ),
       ],
+    );
+
+    if (onTap == null) {
+      return content;
+    }
+
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(8),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            child: content,
+          ),
+        ),
+      ),
     );
   }
 

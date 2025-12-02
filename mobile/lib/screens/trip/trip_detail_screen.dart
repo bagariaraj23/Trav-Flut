@@ -82,8 +82,19 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
       );
     }
 
-    return Scaffold(
-      body: CustomScrollView(
+    return PopScope(
+      canPop: true,
+      onPopInvoked: (didPop) {
+        if (!didPop) {
+          if (context.canPop()) {
+            context.pop();
+          } else {
+            context.go('/home');
+          }
+        }
+      },
+      child: Scaffold(
+        body: CustomScrollView(
         slivers: [
           SliverAppBar(
             expandedHeight:
@@ -102,6 +113,11 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
               },
             ),
             flexibleSpace: FlexibleSpaceBar(
+              titlePadding: const EdgeInsets.only(
+                left: 16,
+                right: 16,
+                bottom: 16,
+              ),
               title: Text(
                 _trip?.title ?? 'Trip Not Found',
                 style: const TextStyle(
@@ -115,35 +131,89 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
                     ),
                   ],
                 ),
+                overflow: TextOverflow.ellipsis,
+                maxLines: 1,
               ),
               background: Stack(
                 fit: StackFit.expand,
                 children: [
-                  () {
-                    final coverUrl = _trip?.coverMedia?.url;
-                    if (coverUrl == null) {
-                      return _buildDefaultCover();
-                    }
-                    return Image.network(
-                      buildOptimizedImageUrl(coverUrl, width: 2048),
-                      fit: BoxFit.cover,
-                      errorBuilder: (context, error, stackTrace) {
-                        return _buildDefaultCover();
-                      },
-                    );
-                  }(),
-                  Container(
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.topCenter,
-                        end: Alignment.bottomCenter,
-                        colors: [
-                          Colors.transparent,
-                          Colors.black.withOpacity(0.7),
-                        ],
-                      ),
+                  GestureDetector(
+                    onTap: _canEditCover && !_isUpdatingCover
+                        ? _showCoverOptions
+                        : null,
+                    child: Stack(
+                      fit: StackFit.expand,
+                      children: [
+                        () {
+                          final coverUrl = _trip?.coverMedia?.url;
+                          if (coverUrl == null) {
+                            return _buildDefaultCover();
+                          }
+                          return Image.network(
+                            buildOptimizedImageUrl(coverUrl, width: 2048),
+                            fit: BoxFit.cover,
+                            errorBuilder: (context, error, stackTrace) {
+                              return _buildDefaultCover();
+                            },
+                          );
+                        }(),
+                        Container(
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              begin: Alignment.topCenter,
+                              end: Alignment.bottomCenter,
+                              colors: [
+                                Colors.transparent,
+                                Colors.black.withOpacity(0.7),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
+                  if (_isUpdatingCover)
+                    Positioned.fill(
+                      child: Container(
+                        color: Colors.black45,
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            SizedBox(
+                              height: 56,
+                              width: 56,
+                              child: CircularProgressIndicator(
+                                value: _coverUploadProgress != null
+                                    ? _coverUploadProgress!.clamp(0.0, 1.0)
+                                    : null,
+                                valueColor:
+                                    const AlwaysStoppedAnimation<Color>(
+                                        Colors.white),
+                              ),
+                            ),
+                            if (_coverUploadProgress != null)
+                              Padding(
+                                padding: const EdgeInsets.only(top: 12.0),
+                                child: Text(
+                                  '${(_coverUploadProgress!.clamp(0.0, 1.0) * 100).round()}%',
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ),
+                            const SizedBox(height: 12),
+                            const Text(
+                              'Updating cover photo...',
+                              style: TextStyle(
+                                color: Colors.white70,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
                 ],
               ),
             ),
@@ -153,8 +223,9 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
                   _isOwnerOrParticipant())
                 IconButton(
                   icon: const Icon(Icons.add),
+                  tooltip: 'Add Entry',
                   onPressed: () {
-                    context.go('/trip/${widget.tripId}/thread',
+                    context.push('/trip/${widget.tripId}/thread',
                         extra: {'from': '/trip/${widget.tripId}'});
                   },
                 ),
@@ -208,6 +279,7 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
               ),
             ),
         ],
+      ),
       ),
     );
   }
@@ -384,7 +456,7 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
                 const SizedBox(height: 8),
                 ElevatedButton.icon(
                   onPressed: () {
-                    context.go('/trip/${widget.tripId}/participants',
+                    context.push('/trip/${widget.tripId}/participants',
                         extra: {'from': '/trip/${widget.tripId}'});
                   },
                   icon: const Icon(Icons.people),

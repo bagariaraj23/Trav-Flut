@@ -612,14 +612,20 @@ class ApiService {
       debugPrint('[ApiService] Getting followers for user: $userId');
       final response =
           await _dio.get('/users/$userId/followers', queryParameters: {
-        'page': page,
-        'limit': limit,
+        'page': page.toString(),
+        'limit': limit.toString(),
       });
       debugPrint('[ApiService] Get followers response: ${response.statusCode}');
+      debugPrint('[ApiService] Get followers response data: ${response.data}');
 
       if (response.data['success'] && response.data['data'] != null) {
         final data = response.data['data'];
-        final users = (data['followers'] as List<dynamic>)
+        debugPrint('[ApiService] Followers data keys: ${data.keys}');
+        debugPrint('[ApiService] Followers array: ${data['followers']}');
+        
+        // Handle both 'followers' and 'items' keys for compatibility
+        final followersList = data['followers'] ?? data['items'] ?? [];
+        final users = (followersList as List<dynamic>)
             .map((follower) => User.fromJson(follower))
             .toList();
 
@@ -672,10 +678,16 @@ class ApiService {
         'limit': limit.toString(),
       });
       debugPrint('[ApiService] Get following response: ${response.statusCode}');
+      debugPrint('[ApiService] Get following response data: ${response.data}');
 
       if (response.data['success'] && response.data['data'] != null) {
         final data = response.data['data'];
-        final users = (data['following'] as List<dynamic>)
+        debugPrint('[ApiService] Following data keys: ${data.keys}');
+        debugPrint('[ApiService] Following array: ${data['following']}');
+        
+        // Handle both 'following' and 'items' keys for compatibility
+        final followingList = data['following'] ?? data['items'] ?? [];
+        final users = (followingList as List<dynamic>)
             .map((user) => User.fromJson(user))
             .toList();
 
