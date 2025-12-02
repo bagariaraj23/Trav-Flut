@@ -342,6 +342,72 @@ class TripProvider extends ChangeNotifier {
     }
   }
 
+  Future<bool> updateTripCover({
+    required String tripId,
+    required String coverMediaId,
+    Media? fallbackMedia,
+  }) async {
+    try {
+      final response = await _tripService.updateTripCover(
+        tripId,
+        coverMediaId,
+      );
+
+      if (!response.success) {
+        _error = response.error ?? 'Failed to update trip cover';
+        notifyListeners();
+        return false;
+      }
+
+      final media = response.data ?? fallbackMedia;
+      if (media == null) {
+        _error = 'Trip cover updated but media payload was missing';
+        notifyListeners();
+        return false;
+      }
+
+      try {
+        if (_currentTrip?.id == tripId) {
+          _currentTrip = _currentTrip!.copyWith(
+            coverMediaId: media.id,
+            coverMedia: media,
+          );
+        }
+
+        // Update trips list safely
+        final updatedTrips = <Trip>[];
+        for (final trip in _trips) {
+          if (trip.id == tripId) {
+            updatedTrips.add(
+              trip.copyWith(
+                coverMediaId: media.id,
+                coverMedia: media,
+              ),
+            );
+          } else {
+            updatedTrips.add(trip);
+          }
+        }
+        _trips = updatedTrips;
+
+        notifyListeners();
+        return true;
+      } catch (e, stackTrace) {
+        debugPrint('Update trip cover error updating state: $e');
+        debugPrint('Stack trace: $stackTrace');
+        _error = 'Failed to update trip cover state: $e';
+        notifyListeners();
+        return false;
+      }
+    } catch (e, stackTrace) {
+      _error = 'Failed to update trip cover';
+      notifyListeners();
+      debugPrint('Update trip cover error: $e');
+      debugPrint('Stack trace: $stackTrace');
+      return false;
+    }
+  }
+
   // Trip invitation methods
   Future<bool> sendTripInvitation(String tripId, String receiverId) async {
     try {

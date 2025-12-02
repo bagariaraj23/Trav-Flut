@@ -6,6 +6,7 @@ import 'package:tripthread/providers/auth_provider.dart';
 import 'package:tripthread/models/trip.dart';
 import 'package:tripthread/utils/cloudinary_utils.dart';
 import 'package:tripthread/widgets/loading_button.dart';
+import 'package:tripthread/services/media_service.dart';
 
 class TripDetailScreen extends StatefulWidget {
   final String tripId;
@@ -22,11 +23,20 @@ class TripDetailScreen extends StatefulWidget {
 class _TripDetailScreenState extends State<TripDetailScreen> {
   Trip? _trip;
   bool _isLoading = true;
+  MediaService? _mediaService;
+  bool _isUpdatingCover = false;
+  double? _coverUploadProgress;
 
   @override
   void initState() {
     super.initState();
     _loadTrip();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _mediaService ??= context.read<MediaService>();
   }
 
   Future<void> _loadTrip() async {
@@ -218,6 +228,14 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
               ),
             ),
             actions: [
+              if (_canEditCover)
+                IconButton(
+                  icon: const Icon(Icons.photo_camera_back_outlined),
+                  tooltip: _trip?.coverMedia == null
+                      ? 'Add Cover Photo'
+                      : 'Change Cover Photo',
+                  onPressed: _isUpdatingCover ? null : _showCoverOptions,
+                ),
               if (_trip != null &&
                   _trip!.status == TripStatus.ongoing &&
                   _isOwnerOrParticipant())
@@ -304,6 +322,111 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
         ),
       ),
     );
+  }
+
+  bool get _canEditCover =>
+      _trip != null &&
+      _trip!.status == TripStatus.ongoing &&
+      _isOwnerOrParticipant();
+
+  void _showCoverOptions() {
+    if (!_canEditCover || _isUpdatingCover) return;
+    showModalBottomSheet<void>(
+      context: context,
+      builder: (context) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                leading: const Icon(Icons.photo_library_outlined),
+                title: const Text('Choose from gallery'),
+                onTap: () {
+                  Navigator.of(context).pop();
+                  _changeCover(fromCamera: false);
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.photo_camera_outlined),
+                title: const Text('Take a photo'),
+                onTap: () {
+                  Navigator.of(context).pop();
+                  _changeCover(fromCamera: true);
+                },
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _changeCover({required bool fromCamera}) async {
+    final mediaService = _mediaService ?? context.read<MediaService>();
+    try {
+      final file = await mediaService.pickImage(fromCamera: fromCamera);
+      if (file == null) return;
+
+      if (!mounted) return;
+      setState(() {
+        _isUpdatingCover = true;
+        _coverUploadProgress = 0.0;
+      });
+
+      final uploadedMedia = await mediaService.uploadMediaToCloudinary(
+        file: file,
+        tripId: widget.tripId,
+        usage: 'trip_cover',
+        onProgress: (progress) {
+          if (!mounted) return;
+          setState(() {
+            _coverUploadProgress = progress;
+          });
+        },
+      );
+
+      if (uploadedMedia == null) {
+        throw Exception('Upload failed');
+      }
+
+      final tripProvider = context.read<TripProvider>();
+      final success = await tripProvider.updateTripCover(
+        tripId: widget.tripId,
+        coverMediaId: uploadedMedia.id,
+        fallbackMedia: uploadedMedia,
+      );
+
+      if (!success) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              tripProvider.error ?? 'Failed to update cover photo',
+            ),
+          ),
+        );
+      } else {
+        await _loadTrip();
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Trip cover updated')),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to update cover photo: $e')),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isUpdatingCover = false;
+          _coverUploadProgress = null;
+        });
+      }
+    }
   }
 
   Widget _buildTripInfoCard() {

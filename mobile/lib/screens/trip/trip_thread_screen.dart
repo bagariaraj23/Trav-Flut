@@ -1364,9 +1364,7 @@ class _TripThreadScreenState extends State<TripThreadScreen> {
     return GestureDetector(
       onTap: () => _openMediaViewer(
         heroTag,
-        isVideo
-            ? buildOptimizedVideoUrl(mediaUrl, maxWidth: 1920)
-            : buildOptimizedImageUrl(mediaUrl, width: 2048),
+        mediaUrl,
         isVideo,
       ),
       child: Container(
@@ -2310,43 +2308,85 @@ class _TripVideoViewer extends StatefulWidget {
 }
 
 class _TripVideoViewerState extends State<_TripVideoViewer> {
-  late final VideoPlayerController _controller;
+  VideoPlayerController? _controller;
   bool _isInitialized = false;
   bool _isPlaying = true;
+  String? _errorMessage;
 
   @override
   void initState() {
     super.initState();
-    _controller = VideoPlayerController.networkUrl(
-      Uri.parse(buildOptimizedVideoUrl(widget.mediaUrl, maxWidth: 1920)),
-    )..initialize().then((_) {
-        if (!mounted) return;
-        setState(() {
-          _isInitialized = true;
-        });
-        _controller
-          ..setLooping(true)
-          ..play();
+    _initializeVideo();
+  }
+
+  Future<void> _initializeVideo() async {
+    try {
+      // Use original URL directly for videos - Cloudinary serves videos as-is
+      // Only apply transformations if needed for bandwidth optimization
+      final videoUrl = widget.mediaUrl.contains('/upload/')
+          ? buildOptimizedVideoUrl(widget.mediaUrl, maxWidth: 1920)
+          : widget.mediaUrl;
+
+      debugPrint('[TripVideoViewer] Initializing video: $videoUrl');
+
+      _controller = VideoPlayerController.networkUrl(
+        Uri.parse(videoUrl),
+      );
+
+      await _controller!.initialize();
+      
+      if (!mounted) {
+        _controller?.dispose();
+        return;
+      }
+
+      setState(() {
+        _isInitialized = true;
       });
+
+      _controller!
+        ..setLooping(true)
+        ..play();
+    } catch (e, stackTrace) {
+      debugPrint('[TripVideoViewer] Failed to initialize video: $e');
+      debugPrint('[TripVideoViewer] Stack trace: $stackTrace');
+      
+      if (mounted) {
+        setState(() {
+          _errorMessage = 'Failed to load video. Please try again.';
+        });
+      }
+      
+      _controller?.dispose();
+      _controller = null;
+    }
   }
 
   @override
   void dispose() {
-    _controller.dispose();
+    _controller?.dispose();
     super.dispose();
   }
 
   void _togglePlayback() {
-    if (!_isInitialized) return;
+    if (!_isInitialized || _controller == null) return;
     setState(() {
-      if (_controller.value.isPlaying) {
-        _controller.pause();
+      if (_controller!.value.isPlaying) {
+        _controller!.pause();
         _isPlaying = false;
       } else {
-        _controller.play();
+        _controller!.play();
         _isPlaying = true;
       }
     });
+  }
+
+  void _retry() {
+    setState(() {
+      _errorMessage = null;
+      _isInitialized = false;
+    });
+    _initializeVideo();
   }
 
   @override
@@ -2359,15 +2399,50 @@ class _TripVideoViewerState extends State<_TripVideoViewer> {
             Center(
               child: Hero(
                 tag: widget.heroTag,
-                child: _isInitialized
-                    ? GestureDetector(
-                        onTap: _togglePlayback,
-                        child: AspectRatio(
-                          aspectRatio: _controller.value.aspectRatio,
-                          child: VideoPlayer(_controller),
+                child: _errorMessage != null
+                    ? Padding(
+                        padding: const EdgeInsets.all(24.0),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(
+                              Icons.error_outline,
+                              color: Colors.white70,
+                              size: 64,
+                            ),
+                            const SizedBox(height: 16),
+                            Text(
+                              _errorMessage!,
+                              style: const TextStyle(
+                                color: Colors.white70,
+                                fontSize: 16,
+                              ),
+                              textAlign: TextAlign.center,
+                            ),
+                            const SizedBox(height: 24),
+                            ElevatedButton.icon(
+                              onPressed: _retry,
+                              icon: const Icon(Icons.refresh),
+                              label: const Text('Retry'),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.white,
+                                foregroundColor: Colors.black,
+                              ),
+                            ),
+                          ],
                         ),
                       )
-                    : const CircularProgressIndicator(),
+                    : _isInitialized && _controller != null
+                        ? GestureDetector(
+                            onTap: _togglePlayback,
+                            child: AspectRatio(
+                              aspectRatio: _controller!.value.aspectRatio,
+                              child: VideoPlayer(_controller!),
+                            ),
+                          )
+                        : const CircularProgressIndicator(
+                            color: Colors.white,
+                          ),
               ),
             ),
             Positioned(
