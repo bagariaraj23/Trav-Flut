@@ -394,3 +394,43 @@ class CreateThreadEntryRequest {
       _$CreateThreadEntryRequestFromJson(json);
   Map<String, dynamic> toJson() => _$CreateThreadEntryRequestToJson(this);
 }
+
+@JsonSerializable()
+class TripConflictInfo {
+  final bool hasOngoingTrip;
+  final bool hasFutureTrip;
+  final TripConflictTrip? ongoingTrip;
+  final TripConflictTrip? futureTrip;
+
+  const TripConflictInfo({
+    required this.hasOngoingTrip,
+    required this.hasFutureTrip,
+    this.ongoingTrip,
+    this.futureTrip,
+  });
+
+  factory TripConflictInfo.fromJson(Map<String, dynamic> json) =>
+      _$TripConflictInfoFromJson(json);
+  Map<String, dynamic> toJson() => _$TripConflictInfoToJson(this);
+}
+
+@JsonSerializable()
+class TripConflictTrip {
+  final String id;
+  final String title;
+  final DateTime startDate;
+  final DateTime? endDate;
+  final TripStatus status;
+
+  const TripConflictTrip({
+    required this.id,
+    required this.title,
+    required this.startDate,
+    this.endDate,
+    required this.status,
+  });
+
+  factory TripConflictTrip.fromJson(Map<String, dynamic> json) =>
+      _$TripConflictTripFromJson(json);
+  Map<String, dynamic> toJson() => _$TripConflictTripToJson(this);
+}

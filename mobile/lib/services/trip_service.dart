@@ -1,5 +1,6 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/foundation.dart';
 import 'package:tripthread/models/api_response.dart';
 import 'package:tripthread/models/trip.dart';
 import 'package:tripthread/models/trip_join_request.dart';
@@ -77,14 +78,55 @@ class TripService {
     ));
   }
 
+  // Check for trip conflicts (ongoing/future trips)
+  Future<ApiResponse<TripConflictInfo>> checkTripConflicts() async {
+    try {
+      final response = await _dio.get('/trips/check-conflicts');
+      
+      if (response.data['success'] && response.data['data'] != null) {
+        final data = response.data['data'];
+        final conflictInfo = TripConflictInfo.fromJson(data as Map<String, dynamic>);
+        
+        return ApiResponse<TripConflictInfo>(
+          success: true,
+          data: conflictInfo,
+        );
+      }
+      
+      return ApiResponse<TripConflictInfo>(
+        success: false,
+        error: response.data['error'] ?? 'Failed to check trip conflicts',
+      );
+    } on DioException catch (e) {
+      return ApiResponse<TripConflictInfo>(
+        success: false,
+        error: e.response?.data['error'] ?? 'Network error occurred',
+      );
+    } catch (e) {
+      return ApiResponse<TripConflictInfo>(
+        success: false,
+        error: 'An unexpected error occurred',
+      );
+    }
+  }
+
   // Trip CRUD operations
-  Future<ApiResponse<Trip>> createTrip(CreateTripRequest request) async {
+  Future<ApiResponse<Trip>> createTrip(
+    CreateTripRequest request, {
+    bool replaceExisting = false,
+  }) async {
     try {
       print('[DEBUG] TripService.createTrip called');
       print('[DEBUG] Request data: ${request.toJson()}');
       print('[DEBUG] Request JSON: ${jsonEncode(request.toJson())}');
+      print('[DEBUG] Replace existing: $replaceExisting');
 
-      final response = await _dio.post('/trips', data: request.toJson());
+      final requestData = request.toJson();
+      if (replaceExisting) {
+        requestData['replaceExisting'] = true;
+      }
+
+      final response = await _dio.post('/trips', data: requestData);
 
       print('[DEBUG] HTTP response received:');
       print('[DEBUG] Status code: ${response.statusCode}');

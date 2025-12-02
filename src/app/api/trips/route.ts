@@ -93,13 +93,48 @@ export async function POST(request: NextRequest) {
             const userId = authenticatedReq.user!.userId;
             console.log("[DEBUG] User ID:", userId);
 
+            // Check if user wants to replace existing trip
+            const replaceExisting = body.replaceExisting === true;
+            
             // Validate trip status
-            const { hasOngoingTrip } = await validateTripStatus(userId);
+            const tripConflict = await validateTripStatus(userId);
 
-            if (hasOngoingTrip) {
+            // If user hasn't explicitly chosen to replace, block creation
+            if (!replaceExisting && (tripConflict.hasOngoingTrip || tripConflict.hasFutureTrip)) {
+              const conflictType = tripConflict.hasOngoingTrip ? 'ongoing' : 'future';
+              const tripInfo = tripConflict.hasOngoingTrip 
+                ? tripConflict.ongoingTrip 
+                : tripConflict.futureTrip;
+              
               throw new ConflictError(
-                "You already have an ongoing trip. Please end it before starting a new one."
+                `You already have an ${conflictType} trip${tripInfo ? `: "${tripInfo.title}"` : ''}. Please end it before starting a new one, or set replaceExisting=true to replace it.`
               );
+            }
+
+            // If user chose to replace, end the existing trip(s)
+            if (replaceExisting) {
+              const tripsToEnd: string[] = [];
+              if (tripConflict.ongoingTrip) {
+                tripsToEnd.push(tripConflict.ongoingTrip.id);
+              }
+              if (tripConflict.futureTrip && tripConflict.futureTrip.id !== tripConflict.ongoingTrip?.id) {
+                tripsToEnd.push(tripConflict.futureTrip.id);
+              }
+
+              // End all conflicting trips
+              if (tripsToEnd.length > 0) {
+                await prisma.trip.updateMany({
+                  where: {
+                    id: { in: tripsToEnd },
+                    userId,
+                  },
+                  data: {
+                    status: TripStatus.ENDED,
+                    updatedAt: new Date(),
+                  },
+                });
+                console.log(`[DEBUG] Ended ${tripsToEnd.length} existing trip(s) to allow new trip creation`);
+              }
             }
 
             // Extract destinationPlaceIds from validated data
