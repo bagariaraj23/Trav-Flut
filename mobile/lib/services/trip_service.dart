@@ -339,6 +339,7 @@ class TripService {
           await _dio.post('/trips/$tripId/entries', data: request.toJson());
 
       debugPrint('[TripService] Create entry response: ${response.statusCode}');
+      debugPrint('[TripService] Create entry response data: ${response.data}');
 
       if (response.statusCode == 201 && response.data['success']) {
         return ApiResponse<TripThreadEntry>(
@@ -347,21 +348,44 @@ class TripService {
         );
       }
       
+      // Handle non-201 responses that still return data
+      final errorMessage = response.data['error'] ?? 
+                          response.data['message'] ?? 
+                          'Failed to create entry';
+      debugPrint('[TripService] Create entry failed: $errorMessage');
       return ApiResponse<TripThreadEntry>(
         success: false,
-        error: response.data['error'] ?? 'Failed to create entry',
+        error: errorMessage,
       );
     } on DioException catch (e) {
-      debugPrint('[TripService] Create entry error: ${e.message}');
+      debugPrint('[TripService] Create entry DioException: ${e.message}');
+      debugPrint('[TripService] Create entry response status: ${e.response?.statusCode}');
+      debugPrint('[TripService] Create entry response data: ${e.response?.data}');
+      
+      // Extract error message from response
+      String errorMessage = 'Network error occurred';
+      if (e.response?.data != null) {
+        if (e.response!.data is Map) {
+          errorMessage = e.response!.data['error'] ?? 
+                        e.response!.data['message'] ?? 
+                        'Failed to create entry';
+        } else if (e.response!.data is String) {
+          errorMessage = e.response!.data;
+        }
+      } else if (e.message != null) {
+        errorMessage = e.message!;
+      }
+      
       return ApiResponse<TripThreadEntry>(
         success: false,
-        error: e.response?.data['error'] ?? 'Network error occurred',
+        error: errorMessage,
       );
-    } catch (e) {
+    } catch (e, stackTrace) {
       debugPrint('[TripService] Create entry unexpected error: $e');
+      debugPrint('[TripService] Stack trace: $stackTrace');
       return ApiResponse<TripThreadEntry>(
         success: false,
-        error: 'An unexpected error occurred',
+        error: 'An unexpected error occurred: ${e.toString()}',
       );
     }
   }
