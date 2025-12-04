@@ -46,8 +46,6 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // 1. Search with caching
-    console.log(`[Search] Query: "${q}" from ${userId ? 'user:' + userId : 'anon'}`);
     const normalizedResults = await searchPlaces({
       q,
       lat: lat ? parseFloat(lat) : undefined,
@@ -57,12 +55,9 @@ export async function GET(request: NextRequest) {
     });
 
     if (normalizedResults.length === 0) {
-      console.log("[Search] No results found");
       return NextResponse.json<ApiResponse>({ success: true, data: [] });
     }
 
-    // 2. Resolve places in parallel with optimized caching
-    console.log(`[Search] Resolving ${normalizedResults.length} places`);
     const resolvedPlacesPromises = normalizedResults.map(async (result) => {
       try {
         // Ensure all fields match expected types
@@ -89,13 +84,12 @@ export async function GET(request: NextRequest) {
       (place): place is Place => place !== null
     );
 
-    console.log("[DEBUG] /api/places/search - Returning resolved places:", JSON.stringify(resolvedPlaces, null, 2));
     return NextResponse.json<ApiResponse<Place[]>>({
       success: true,
       data: resolvedPlaces,
     });
   } catch (error) {
-    console.error("[Search] Unexpected error:", error);
+    console.error("[Search] Error:", error);
     return NextResponse.json<ApiResponse>(
       { success: false, error: "Internal server error" },
       { status: 500 }

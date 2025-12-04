@@ -213,25 +213,19 @@ export async function searchPlaces(params: {
   // Basic normalization for cache key
   const queryForCache = q.trim().replace(/\s+/g, " ");
 
-  // More aggressive normalization for search
   const normalizedQuery = queryForCache
     .toLowerCase()
     .normalize("NFKD")
-    .replace(/[\u0300-\u036f]/g, "") // remove diacritics
-    .replace(/[^\w\s-]/g, ""); // remove special chars except spaces and hyphens
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^\w\s-]/g, "");
 
-  // Human-readable, debuggable cache key
   const searchKey = `plc:srch:${encodeURIComponent(queryForCache)}:${lat ? bucketCoord(lat) : "null"
     }:${lng ? bucketCoord(lng) : "null"}:${limit}`;
 
-  // 2. Try cache first
   const cached = await cacheGetJson<Place[]>(searchKey);
   if (cached) {
-    console.log(`[Cache] Hit for search: ${normalizedQuery}`);
     return cached;
   }
-
-  // 3. Try local database for existing matches
   const localResults = await prisma.place.findMany({
     where: {
       OR: [
@@ -244,21 +238,13 @@ export async function searchPlaces(params: {
   });
 
   if (localResults.length > 0) {
-    console.log(`[DB] Found ${localResults.length} local matches for: ${q}`);
-    // Cache local results
-    await cacheSetJson(searchKey, localResults.map(serializePlace), 300);
+    await cacheSetJson(searchKey, localResults.map(serializePlace), 900);
     return localResults;
   }
-
-  // 4. Cache miss - search external API
-  console.log(`[Cache] Miss for search: ${q}`);
   const results = await placesProvider.search({ q, lat, lng, limit });
 
-  // Early return if no results
   if (results.length === 0) {
-    console.log("[Mapbox] No results found");
-    // Cache empty result to prevent repeated API calls
-    await cacheSetJson(searchKey, [], 300);
+    await cacheSetJson(searchKey, [], 900);
     return [];
   }
 
@@ -386,10 +372,6 @@ export async function searchPlaces(params: {
       ...withoutExternalId,
     ];
 
-    console.log(
-      `[DB] Creating ${uniquePlaces.length} new places (deduped from ${newPlacesToCreate.length})`
-    );
-
     // Use upsert for places with externalId to handle race conditions
     const createdPlaces: Place[] = [];
 
@@ -433,9 +415,8 @@ export async function searchPlaces(params: {
     }
   }
 
-  // Cache deduplicated results
   if (deduplicatedResults.length > 0) {
-    await cacheSetJson(searchKey, deduplicatedResults.map(serializePlace), 300);
+    await cacheSetJson(searchKey, deduplicatedResults.map(serializePlace), 900);
   }
 
   return deduplicatedResults;
@@ -452,13 +433,10 @@ export async function resolvePlace(input: PlaceInput) {
     `place:name:${input.name.toLowerCase()}:${spatialKey}`,
   ].filter(Boolean) as string[];
 
-  // 1. Try cache first with batched lookup (reduces Upstash requests)
-  // Batch fetch all reference keys in a single request
   const refResults = await cacheGetJsonBatch<string>(cacheKeys);
   
-  // Check each reference and batch fetch place data
   const placeIdsToFetch: string[] = [];
-  const refKeyMap = new Map<string, string>(); // Map place ID -> ref key for logging
+  const refKeyMap = new Map<string, string>();
   
   for (const refKey of cacheKeys) {
     const ref = refResults.get(refKey);
@@ -468,33 +446,26 @@ export async function resolvePlace(input: PlaceInput) {
     }
   }
 
-  // Batch fetch all place data in a single request
   if (placeIdsToFetch.length > 0) {
     const placeResults = await cacheGetJsonBatch<any>(placeIdsToFetch);
     
     for (const placeKey of placeIdsToFetch) {
       const place = placeResults.get(placeKey);
       if (place) {
-        const refKey = refKeyMap.get(placeKey);
-        console.log(`[Cache] Hit for key: ${refKey} -> ${placeKey}`);
         return deserializePlace(place);
       }
     }
     
-    // Clean up dangling references (references exist but place data missing)
     for (const refKey of cacheKeys) {
       const ref = refResults.get(refKey);
       if (ref && typeof ref === "string" && ref.length > 0) {
         const placeKey = `place:${ref}`;
         if (!placeResults.get(placeKey)) {
-          console.warn(`[Cache] Dangling reference at ${refKey}, cleaning up`);
           await cacheDelete(refKey);
         }
       }
     }
   }
-
-  // 2. Try database with mutex to prevent duplicates
   return await withLock(`place:resolve:${spatialKey}`, async () => {
     // Check external ID first
     if (input.externalId) {
@@ -552,56 +523,41 @@ export async function resolvePlace(input: PlaceInput) {
   });
 }
 
-// Helper to cache place with storage optimization using pipelining
+const PLACE_CACHE_TTL = 86400;
+
 async function cacheResults(place: Place, keys: string[]) {
   const spatialKey = generateSpatialKey(place.lat, place.lng, place.placeType);
   const serializedPlace = serializePlace(place);
 
-  // Build pipeline manually for full control
   const pipeline: [string, ...string[]][] = [];
 
-  // 1. Store full place data at primary key
   pipeline.push([
     "setex",
     `place:${place.id}`,
-    "3600",
+    PLACE_CACHE_TTL.toString(),
     JSON.stringify(serializedPlace),
   ]);
 
-  // 2. Store reference at external ID key
   if (place.externalId) {
-    pipeline.push(["setex", `place:ext:${place.externalId}`, "3600", place.id]);
+    pipeline.push(["setex", `place:ext:${place.externalId}`, PLACE_CACHE_TTL.toString(), place.id]);
   }
 
-  // 3. Store reference at spatial key
-  pipeline.push(["setex", `place:spatial:${spatialKey}`, "3600", place.id]);
+  pipeline.push(["setex", `place:spatial:${spatialKey}`, PLACE_CACHE_TTL.toString(), place.id]);
 
-  // 4. Store reference at name+spatial key
   pipeline.push([
     "setex",
     `place:name:${place.name.toLowerCase()}:${spatialKey}`,
-    "3600",
+    PLACE_CACHE_TTL.toString(),
     place.id,
   ]);
 
-  // Execute pipeline with error handling
   try {
-    const result = await upstashFetch("pipeline", pipeline);
-    if (!result) {
-      console.warn(
-        `[Cache] Pipeline failed for place ${place.id} - Redis unavailable`
-      );
-    } else {
-      console.log(
-        `[Cache] ✓ Stored place ${place.id} (${pipeline.length} commands)`
-      );
-    }
+    await upstashFetch("pipeline", pipeline);
   } catch (error) {
     console.error(`[Cache] Pipeline error for place ${place.id}:`, error);
   }
 }
 
-// Cache invalidation helper
 export async function invalidatePlaceCache(place: {
   id: string;
   externalId?: string;
@@ -669,4 +625,142 @@ export async function getTripPlaces(tripId: string) {
     orderBy: [{ visitedAt: "asc" }, { order: "asc" }],
   });
   return items;
+}
+
+/**
+ * Get popular places based on reference count in trips and thread entries
+ * @param limit Maximum number of places to return (default: 100)
+ * @returns Array of places sorted by popularity
+ */
+export async function getPopularPlaces(limit: number = 100): Promise<Place[]> {
+  // Get places referenced in trips (start/end locations)
+  const tripPlaces = await prisma.place.findMany({
+    where: {
+      OR: [
+        { startTrips: { some: {} } },
+        { endTrips: { some: {} } },
+      ],
+    },
+    include: {
+      _count: {
+        select: {
+          startTrips: true,
+          endTrips: true,
+          threadEntries: true,
+          tripVisits: true,
+        },
+      },
+    },
+  });
+
+  // Get places referenced in thread entries
+  const threadPlaces = await prisma.place.findMany({
+    where: {
+      threadEntries: { some: {} },
+    },
+    include: {
+      _count: {
+        select: {
+          startTrips: true,
+          endTrips: true,
+          threadEntries: true,
+          tripVisits: true,
+        },
+      },
+    },
+  });
+
+  // Combine and deduplicate
+  type PlaceWithCount = Place & {
+    _count: {
+      startTrips: number;
+      endTrips: number;
+      threadEntries: number;
+      tripVisits: number;
+    };
+  };
+
+  const placeMap = new Map<string, { place: Place; popularity: number }>();
+  
+  const addPlace = (placeWithCount: PlaceWithCount) => {
+    const popularity = 
+      placeWithCount._count.startTrips * 2 + // Start/end locations are important
+      placeWithCount._count.endTrips * 2 +
+      placeWithCount._count.threadEntries * 1 + // Thread entries indicate active usage
+      placeWithCount._count.tripVisits * 1; // Trip visits show planning activity
+    
+    const existing = placeMap.get(placeWithCount.id);
+    if (!existing || existing.popularity < popularity) {
+      const { _count, ...place } = placeWithCount;
+      placeMap.set(place.id, { place, popularity });
+    }
+  };
+
+  tripPlaces.forEach(addPlace);
+  threadPlaces.forEach(addPlace);
+
+  // Sort by popularity and return top N
+  return Array.from(placeMap.values())
+    .sort((a, b) => b.popularity - a.popularity)
+    .slice(0, limit)
+    .map(({ place }) => place);
+}
+
+/**
+ * Warm the cache for popular places
+ * This pre-caches frequently accessed places to improve cache hit rates
+ * @param limit Maximum number of places to warm (default: 100)
+ * @returns Number of places successfully cached
+ */
+export async function warmPlaceCache(limit: number = 100): Promise<number> {
+  try {
+    const popularPlaces = await getPopularPlaces(limit);
+
+    let warmed = 0;
+    let skipped = 0;
+
+    for (const place of popularPlaces) {
+      try {
+        // Generate cache keys
+        const spatialKey = generateSpatialKey(place.lat, place.lng, place.placeType);
+        const cacheKeys = [
+          place.externalId ? `place:ext:${place.externalId}` : null,
+          `place:spatial:${spatialKey}`,
+          `place:name:${place.name.toLowerCase()}:${spatialKey}`,
+        ].filter(Boolean) as string[];
+
+        // Check if already cached
+        const refResults = await cacheGetJsonBatch<string>(cacheKeys);
+        const placeIdsToFetch: string[] = [];
+        
+        for (const refKey of cacheKeys) {
+          const ref = refResults.get(refKey);
+          if (ref && typeof ref === "string" && ref.length > 0) {
+            placeIdsToFetch.push(`place:${ref}`);
+          }
+        }
+
+        if (placeIdsToFetch.length > 0) {
+          const placeResults = await cacheGetJsonBatch<any>(placeIdsToFetch);
+          const isCached = Array.from(placeResults.values()).some(p => p !== null);
+          
+          if (isCached) {
+            skipped++;
+            continue; // Already cached
+          }
+        }
+
+        // Cache the place
+        await cacheResults(place, cacheKeys);
+        warmed++;
+      } catch (error) {
+        console.error(`[Cache] Error warming cache for place ${place.id}:`, error);
+      }
+    }
+
+    return warmed;
+  } catch (error) {
+    console.error(`[Cache] Error during cache warming:`, error);
+    throw error;
+  }
 }

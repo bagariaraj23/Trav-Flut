@@ -181,16 +181,105 @@ const memoryCache = new LRUCache<string, { value: string; expiresAt: number }>(D
 let upstashRateLimited = false;
 let upstashRateLimitResetTime = 0;
 
+// Cache performance metrics
+interface CacheMetrics {
+  redisHits: number;
+  redisMisses: number;
+  memoryHits: number;
+  memoryMisses: number;
+  totalGets: number;
+  totalSets: number;
+  batchOperations: number;
+  errors: number;
+  lastReset: number;
+}
+
+let cacheMetrics: CacheMetrics = {
+  redisHits: 0,
+  redisMisses: 0,
+  memoryHits: 0,
+  memoryMisses: 0,
+  totalGets: 0,
+  totalSets: 0,
+  batchOperations: 0,
+  errors: 0,
+  lastReset: Date.now(),
+};
+
+export function getCacheMetrics(): CacheMetrics & {
+  redisHitRate: number;
+  memoryHitRate: number;
+  overallHitRate: number;
+} {
+  const totalRedisOps = cacheMetrics.redisHits + cacheMetrics.redisMisses;
+  const totalMemoryOps = cacheMetrics.memoryHits + cacheMetrics.memoryMisses;
+  const totalOps = cacheMetrics.totalGets;
+
+  const uniqueHits = cacheMetrics.memoryHits + cacheMetrics.redisHits;
+  const overallHitRate = totalOps > 0 ? Math.min(uniqueHits / totalOps, 1.0) : 0;
+
+  return {
+    ...cacheMetrics,
+    redisHitRate: totalRedisOps > 0 ? cacheMetrics.redisHits / totalRedisOps : 0,
+    memoryHitRate: totalMemoryOps > 0 ? cacheMetrics.memoryHits / totalMemoryOps : 0,
+    overallHitRate,
+  };
+}
+
+export function resetCacheMetrics(): void {
+  cacheMetrics = {
+    redisHits: 0,
+    redisMisses: 0,
+    memoryHits: 0,
+    memoryMisses: 0,
+    totalGets: 0,
+    totalSets: 0,
+    batchOperations: 0,
+    errors: 0,
+    lastReset: Date.now(),
+  };
+}
+
+export function resetUpstashRateLimit(): void {
+  upstashRateLimited = false;
+  upstashRateLimitResetTime = 0;
+}
+
+// Export function to check rate limit status
+export function getUpstashRateLimitStatus(): { isLimited: boolean; resetTime?: number; remainingMs?: number } {
+  if (!upstashRateLimited) {
+    return { isLimited: false };
+  }
+  const remainingMs = upstashRateLimitResetTime - Date.now();
+  return {
+    isLimited: remainingMs > 0,
+    resetTime: upstashRateLimitResetTime,
+    remainingMs: remainingMs > 0 ? remainingMs : 0,
+  };
+}
+
 // Simple Upstash REST client (lazy) to avoid bringing redis client
 async function upstashFetch<T = unknown>(
   path: string,
   body: unknown
 ): Promise<T | null> {
-  if (!ENV.REDIS_REST_URL || !ENV.REDIS_REST_TOKEN) return null;
+  if (!ENV.REDIS_REST_URL || !ENV.REDIS_REST_TOKEN) {
+    console.warn('[Cache] Redis credentials not configured');
+    return null;
+  }
 
   // Check if we're rate-limited and should skip requests
   if (upstashRateLimited && Date.now() < upstashRateLimitResetTime) {
+    const remainingMs = upstashRateLimitResetTime - Date.now();
+    const remainingMins = Math.round(remainingMs / 60000);
+    console.warn(`[Cache] Upstash rate limit active, skipping request. Resets in ${remainingMins} minutes.`);
     return null;
+  }
+
+  // If rate limit time has passed, reset the flag
+  if (upstashRateLimited && Date.now() >= upstashRateLimitResetTime) {
+    upstashRateLimited = false;
+    upstashRateLimitResetTime = 0;
   }
 
   try {
@@ -205,17 +294,25 @@ async function upstashFetch<T = unknown>(
     });
 
     if (!res.ok) {
+      const text = await res.text();
+      console.warn(`[Cache] Upstash request failed: ${res.status} ${res.statusText}`, {
+        status: res.status,
+        statusText: res.statusText,
+        responsePreview: text.substring(0, 200),
+      });
+
       // Check for rate limit errors
       if (res.status === 400 || res.status === 429) {
-        const text = await res.text();
         if (text.includes('max requests limit exceeded') || text.includes('rate limit')) {
           upstashRateLimited = true;
           // Reset after 1 hour (conservative estimate)
           upstashRateLimitResetTime = Date.now() + 60 * 60 * 1000;
           console.warn(`[Cache] Upstash rate limit detected. Disabling Upstash for 1 hour.`);
+        } else {
+          // 400/429 but not rate limit - log the actual error
+          console.error(`[Cache] Upstash returned ${res.status} but not rate limit. Response: ${text.substring(0, 500)}`);
         }
       }
-      console.warn(`[Cache] Upstash request failed: ${res.status} ${res.statusText}`);
       return null;
     }
 
@@ -226,7 +323,33 @@ async function upstashFetch<T = unknown>(
     }
 
     const json = await res.json();
-    // Upstash REST returns { result: ... }
+    
+    if (path === 'pipeline') {
+      let rawResult: unknown = json;
+      
+      if (Array.isArray(json)) {
+        rawResult = json;
+      } else if (json?.result && Array.isArray(json.result)) {
+        rawResult = json.result;
+      } else if (json && typeof json === 'object' && !Array.isArray(json)) {
+        const keys = Object.keys(json).sort((a, b) => parseInt(a) - parseInt(b));
+        if (keys.length > 0 && keys.every(k => !isNaN(parseInt(k)))) {
+          rawResult = keys.map(k => json[k]);
+        }
+      }
+      
+      if (Array.isArray(rawResult)) {
+        return rawResult.map((item: unknown) => {
+          if (typeof item === 'object' && item !== null && 'result' in item) {
+            return (item as { result: unknown }).result;
+          }
+          return item;
+        }) as T;
+      }
+      
+      return rawResult as T;
+    }
+    
     return (json?.result ?? null) as T | null;
   } catch (error) {
     // Check if error message indicates rate limit
@@ -234,8 +357,14 @@ async function upstashFetch<T = unknown>(
       upstashRateLimited = true;
       upstashRateLimitResetTime = Date.now() + 60 * 60 * 1000;
       console.warn(`[Cache] Upstash rate limit detected from error. Disabling Upstash for 1 hour.`);
+    } else {
+      // Log the actual error for debugging
+      console.error('[Cache] Upstash request error:', {
+        error: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined,
+        url: `${ENV.REDIS_REST_URL}/${path}`,
+      });
     }
-    console.error('[Cache] Upstash request error:', error);
     return null;
   }
 }
@@ -243,26 +372,37 @@ async function upstashFetch<T = unknown>(
 export async function cacheGetJson<T = JsonValue>(
   key: string
 ): Promise<T | null> {
+  cacheMetrics.totalGets++;
+  
   // Check memory cache first
   const memEntry = memoryCache.get(key);
   if (memEntry) {
     if (Date.now() < memEntry.expiresAt) {
       try {
+        cacheMetrics.memoryHits++;
         return JSON.parse(memEntry.value) as T;
       } catch {
         memoryCache.delete(key);
+        cacheMetrics.memoryMisses++;
       }
     } else {
       memoryCache.delete(key);
+      cacheMetrics.memoryMisses++;
     }
+  } else {
+    cacheMetrics.memoryMisses++;
   }
 
   // Try Redis cache
   const result = await upstashFetch<string>("get", [key]);
-  if (!result) return null;
+  if (!result) {
+    cacheMetrics.redisMisses++;
+    return null;
+  }
 
   try {
     const parsed = JSON.parse(result) as T;
+    cacheMetrics.redisHits++;
 
     // Update memory cache
     memoryCache.set(key, {
@@ -272,6 +412,8 @@ export async function cacheGetJson<T = JsonValue>(
 
     return parsed;
   } catch {
+    cacheMetrics.redisMisses++;
+    cacheMetrics.errors++;
     return null;
   }
 }
@@ -285,6 +427,8 @@ export async function cacheGetJsonBatch<T = JsonValue>(
 ): Promise<Map<string, T | null>> {
   const results = new Map<string, T | null>();
   
+  cacheMetrics.totalGets += keys.length;
+  
   // Check memory cache first for all keys
   const keysToFetch: string[] = [];
   for (const key of keys) {
@@ -292,13 +436,16 @@ export async function cacheGetJsonBatch<T = JsonValue>(
     if (memEntry && Date.now() < memEntry.expiresAt) {
       try {
         results.set(key, JSON.parse(memEntry.value) as T);
+        cacheMetrics.memoryHits++;
       } catch {
         memoryCache.delete(key);
         keysToFetch.push(key);
+        cacheMetrics.memoryMisses++;
       }
     } else {
       if (memEntry) memoryCache.delete(key);
       keysToFetch.push(key);
+      cacheMetrics.memoryMisses++;
     }
   }
 
@@ -309,33 +456,71 @@ export async function cacheGetJsonBatch<T = JsonValue>(
 
   // Batch fetch remaining keys from Redis using MGET
   if (keysToFetch.length > 0) {
+    cacheMetrics.batchOperations++;
     const pipeline = keysToFetch.map(key => ["get", key] as [string, string]);
     const redisResults = await upstashFetch<(string | null)[]>("pipeline", pipeline);
     
     if (redisResults && Array.isArray(redisResults)) {
+      let hits = 0;
+      let misses = 0;
+      
       for (let i = 0; i < keysToFetch.length; i++) {
         const key = keysToFetch[i];
-        const value = redisResults[i];
+        const value: unknown = redisResults[i];
         
-        if (value) {
+        let stringValue: string | null = null;
+        
+        if (value === null || value === undefined) {
+          stringValue = null;
+        } else if (typeof value === 'string') {
+          stringValue = value;
+        } else if (typeof value === 'object' && value !== null && 'result' in value) {
+          const result = (value as { result: unknown }).result;
+          if (typeof result === 'string') {
+            stringValue = result;
+          } else if (result === null) {
+            stringValue = null;
+          } else {
+            stringValue = JSON.stringify(result);
+          }
+        }
+        
+        if (stringValue && stringValue.length > 0) {
           try {
-            const parsed = JSON.parse(value) as T;
+            const parsed = JSON.parse(stringValue) as T;
             results.set(key, parsed);
-            
-            // Update memory cache
+            hits++;
+            cacheMetrics.redisHits++;
             memoryCache.set(key, {
-              value: value,
+              value: stringValue,
               expiresAt: Date.now() + DEFAULT_MEMORY_TTL
             });
           } catch {
-            results.set(key, null);
+            results.set(key, stringValue as T);
+            hits++;
+            cacheMetrics.redisHits++;
+            memoryCache.set(key, {
+              value: stringValue,
+              expiresAt: Date.now() + DEFAULT_MEMORY_TTL
+            });
           }
         } else {
           results.set(key, null);
+          misses++;
+          cacheMetrics.redisMisses++;
         }
       }
+      
     } else {
       // If batch fetch failed, mark all as null
+      // Check if it's due to rate limiting or other issues
+      if (!ENV.REDIS_REST_URL || !ENV.REDIS_REST_TOKEN) {
+        console.warn(`[Cache] Batch fetch skipped: Redis credentials not configured`);
+      } else if (upstashRateLimited) {
+        const remainingMs = upstashRateLimitResetTime - Date.now();
+        const remainingMins = Math.round(remainingMs / 60000);
+        console.warn(`[Cache] Batch fetch skipped: Rate limit active (resets in ${remainingMins} minutes)`);
+      }
       for (const key of keysToFetch) {
         results.set(key, null);
       }
@@ -350,12 +535,15 @@ export async function cacheSetJson<T = any>(
   value: T,
   ttlSeconds?: number
 ): Promise<boolean> {
+  cacheMetrics.totalSets++;
+  
   // Validate JSON serializable
   let stringValue: string;
   try {
     stringValue = JSON.stringify(value);
   } catch (error) {
     console.error("[Cache] Value is not JSON serializable to string:", error);
+    cacheMetrics.errors++;
     return false;
   }
 
@@ -363,18 +551,25 @@ export async function cacheSetJson<T = any>(
   const payload = ttlSeconds
     ? ["setex", key, ttlSeconds, stringValue]
     : ["set", key, stringValue];
-  const result = await upstashFetch<"OK">("pipeline", [payload]);
+  const result = await upstashFetch<string | string[]>("pipeline", [payload]);
+
+  // Pipeline returns array, extract first result
+  const success = Array.isArray(result) 
+    ? result[0] === "OK" || (typeof result[0] === 'string' && result[0].toUpperCase() === 'OK')
+    : result === "OK";
 
   // Set in memory cache
-  if (result === "OK") {
+  if (success) {
     memoryCache.set(key, {
       value: stringValue,
       expiresAt:
         Date.now() + (ttlSeconds ? ttlSeconds * 1000 : DEFAULT_MEMORY_TTL),
     });
+  } else {
+    cacheMetrics.errors++;
   }
 
-  return result === "OK";
+  return success;
 }
 
 /**
@@ -476,16 +671,6 @@ export const cacheKeys = {
   }
 };
 
-/**
- * Deletes a cache entry by key
- * @param key The cache key to delete
- * @returns True if the entry was deleted, false otherwise
- */
-/**
- * Deletes a cache entry by key from both memory and Redis caches
- * @param key Cache key to delete
- * @returns Promise<boolean> True if deletion was successful
- */
 export async function cacheDelete(key: string): Promise<boolean> {
   // Always clear memory cache
   memoryCache.delete(key);
