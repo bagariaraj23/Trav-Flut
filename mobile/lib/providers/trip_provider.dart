@@ -250,6 +250,10 @@ class TripProvider extends ChangeNotifier {
     List<String>? taggedUsernames,
   }) async {
     try {
+      // Clear any previous errors
+      _error = null;
+      notifyListeners();
+      
       debugPrint(
           '[TripProvider] Adding thread entry: type=$type, placeId=$placeId');
 
@@ -274,8 +278,10 @@ class TripProvider extends ChangeNotifier {
       );
 
       debugPrint('[TripProvider] Create entry response: ${response.success}');
+      debugPrint('[TripProvider] Create entry error: ${response.error}');
 
       if (response.success && response.data != null) {
+        _error = null;
         _currentTripEntries.add(response.data!);
 
         // Update current trip if loaded
@@ -290,12 +296,14 @@ class TripProvider extends ChangeNotifier {
         return true;
       } else {
         _error = response.error ?? 'Failed to add entry';
+        debugPrint('[TripProvider] Entry creation failed: $_error');
         notifyListeners();
         return false;
       }
-    } catch (e) {
-      _error = 'An unexpected error occurred';
+    } catch (e, stackTrace) {
+      _error = 'An unexpected error occurred: ${e.toString()}';
       debugPrint('[TripProvider] Add thread entry error: $e');
+      debugPrint('[TripProvider] Stack trace: $stackTrace');
       notifyListeners();
       return false;
     }

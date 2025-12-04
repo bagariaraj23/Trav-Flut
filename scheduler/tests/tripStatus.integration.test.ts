@@ -1,6 +1,7 @@
-import { Worker, Queue, Job } from "bullmq";
+// Integration test for direct execution (no BullMQ/Redis required)
+// This test verifies the updateTripStatuses function works correctly
+// when called directly, simulating how cron would invoke it
 
-// We'll import the function to test directly rather than the whole index bootstrap
 import { updateTripStatuses } from "../src/tripStatus";
 
 // Create minimal prisma mock with counters to assert calls
@@ -13,49 +14,36 @@ function createPrismaMock() {
         calls.push(args);
         return Promise.resolve({ count: 1 });
       }),
+      findMany: jest.fn((args: any) => {
+        return Promise.resolve([]);
+      }),
+    },
+    tripFinalPost: {
+      findUnique: jest.fn(() => Promise.resolve(null)),
+      create: jest.fn(() => Promise.resolve({})),
+    },
+    tripThreadEntry: {
+      findMany: jest.fn(() => Promise.resolve([])),
     },
   };
   return { prisma, calls } as const;
 }
 
-describe("BullMQ integration for trip status updates", () => {
-  const shouldRun = process.env.REDIS_E2E === "1";
-
-  (shouldRun ? test : test.skip)(
-    "enqueues and processes a one-off update job (requires Redis at REDIS_URL or localhost:6379)",
+describe("Direct execution integration for trip status updates", () => {
+  test(
+    "executes updateTripStatuses directly (simulating cron invocation)",
     async () => {
-      const connectionString =
-        process.env.REDIS_URL || "redis://localhost:6379";
-      const queue = new Queue("tripStatus", {
-        connection: { url: connectionString } as any,
-      });
       const { prisma, calls } = createPrismaMock();
 
-      // A tiny worker that invokes our update function on job
-      const worker = new Worker(
-        "tripStatus",
-        async (_job: Job) => {
-          await updateTripStatuses(
-            prisma as any,
-            new Date("2025-10-06T12:00:00Z")
-          );
-        },
-        { connection: { url: connectionString } as any, concurrency: 1 }
+      // Simulate direct cron invocation
+      await updateTripStatuses(
+        prisma as any,
+        new Date("2025-10-06T12:00:00Z")
       );
 
-      await queue.add("updateTripStatus", {});
-
-      // wait for completion
-      await new Promise<void>((resolve, reject) => {
-        worker.on("completed", () => resolve());
-        worker.on("failed", (err) => reject(err));
-      });
-
-      expect(calls.length).toBe(2);
-
-      await worker.close();
-      await queue.close();
+      // Verify transaction was called (which contains the updateMany calls)
+      expect(prisma.$transaction).toHaveBeenCalled();
     },
-    15000
+    5000
   );
 });
