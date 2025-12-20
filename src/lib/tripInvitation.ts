@@ -14,76 +14,101 @@ export class TripInvitationService {
     senderId: string,
     receiverId: string
   ) {
-    return await prisma.$transaction(async (tx) => {
-      // 1. Validate trip ownership
-      const trip = await tx.trip.findUnique({ where: { id: tripId } });
-      if (!trip) {
-        throw new NotFoundError("Trip not found");
-      }
-      if (trip.userId !== senderId) {
-        throw new AuthorizationError(
-          "Only the trip owner can send invitations"
-        );
-      }
+    try {
+      return await prisma.$transaction(async (tx) => {
+        // 1. Validate trip ownership
+        const trip = await tx.trip.findUnique({ where: { id: tripId } });
+        if (!trip) {
+          throw new NotFoundError("Trip not found");
+        }
+        if (trip.userId !== senderId) {
+          throw new AuthorizationError(
+            "Only the trip owner can send invitations"
+          );
+        }
 
-      // 2. Validate receiver exists
-      const receiver = await tx.user.findUnique({
-        where: { id: receiverId },
-      });
-      if (!receiver) {
-        throw new NotFoundError("Invited user not found");
-      }
+        // 2. Validate receiver exists
+        const receiver = await tx.user.findUnique({
+          where: { id: receiverId },
+        });
+        if (!receiver) {
+          throw new NotFoundError("Invited user not found");
+        }
 
-      // 3. Prevent self-invitation
-      if (senderId === receiverId) {
-        throw new ConflictError("Cannot invite yourself to a trip");
-      }
+        // 3. Prevent self-invitation
+        if (senderId === receiverId) {
+          throw new ConflictError("Cannot invite yourself to a trip");
+        }
 
-      // 4. Check if receiver is already a participant
-      const existingParticipant = await tx.tripParticipant.findUnique({
-        where: { tripId_userId: { tripId, userId: receiverId } },
-      });
-      if (existingParticipant) {
-        throw new ConflictError("User is already a participant of this trip");
-      }
+        // 4. Check if receiver is already a participant
+        const existingParticipant = await tx.tripParticipant.findUnique({
+          where: { tripId_userId: { tripId, userId: receiverId } },
+        });
+        if (existingParticipant) {
+          throw new ConflictError("User is already a participant of this trip");
+        }
 
-      // 5. Check for existing pending invitation
-      const existingRequest = await tx.tripJoinRequest.findUnique({
-        where: { tripId_receiverId: { tripId, receiverId } },
-      });
-      if (
-        existingRequest &&
-        existingRequest.status === TripJoinRequestStatus.PENDING
-      ) {
+        // 5. Check for existing pending invitation
+        const existingRequest = await tx.tripJoinRequest.findUnique({
+          where: { tripId_receiverId: { tripId, receiverId } },
+        });
+        if (
+          existingRequest &&
+          existingRequest.status === TripJoinRequestStatus.PENDING
+        ) {
+          return {
+            id: existingRequest.id,
+            status: existingRequest.status,
+            message: "Invitation already pending",
+          };
+        }
+        // If an old request exists (rejected/accepted), delete it before creating a new one
+        if (existingRequest) {
+          await tx.tripJoinRequest.delete({
+            where: { id: existingRequest.id },
+          });
+        }
+
+        // 6. Create new invitation
+        const newRequest = await tx.tripJoinRequest.create({
+          data: {
+            tripId,
+            senderId,
+            receiverId,
+            status: TripJoinRequestStatus.PENDING,
+          },
+        });
+
         return {
-          id: existingRequest.id,
-          status: existingRequest.status,
-          message: "Invitation already pending",
+          id: newRequest.id,
+          status: newRequest.status,
+          message: "Invitation sent successfully",
+        };
+      });
+    } catch (error: any) {
+      // If a concurrent create hits the DB unique constraint, map to existing request
+      if (error?.code === "P2002") {
+        const existing = await prisma.tripJoinRequest.findUnique({
+          where: { tripId_receiverId: { tripId, receiverId } },
+        });
+        if (existing) {
+          return {
+            id: existing.id,
+            status: existing.status,
+            message:
+              existing.status === TripJoinRequestStatus.PENDING
+                ? "Invitation already pending"
+                : `Existing invitation with status ${existing.status}`,
+          };
+        }
+        return {
+          id: null,
+          status: TripJoinRequestStatus.PENDING,
+          message: "Invitation already exists",
         };
       }
-      // If an old request exists (rejected/accepted), delete it before creating a new one
-      if (existingRequest) {
-        await tx.tripJoinRequest.delete({
-          where: { id: existingRequest.id },
-        });
-      }
-
-      // 6. Create new invitation
-      const newRequest = await tx.tripJoinRequest.create({
-        data: {
-          tripId,
-          senderId,
-          receiverId,
-          status: TripJoinRequestStatus.PENDING,
-        },
-      });
-
-      return {
-        id: newRequest.id,
-        status: newRequest.status,
-        message: "Invitation sent successfully",
-      };
-    });
+      throw error;
+    }
   }
 
   // Get pending invitations for a user

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { NotFoundError, AuthorizationError } from "@/lib/errors";
 import { AuthService } from "@/lib/auth";
 import { createThreadEntrySchema } from "@/lib/validation";
 import {
@@ -193,11 +194,28 @@ export async function POST(
     }
 
     const createdEntry = await prisma.$transaction(async (tx) => {
-      if (mediaRecord && mediaRecord.tripId !== tripId) {
-        await tx.media.update({
+      // Re-validate media inside transaction to avoid TOCTOU: fetch fresh media row
+      if (mediaRecord) {
+        const txMedia = await tx.media.findUnique({
           where: { id: mediaRecord.id },
-          data: { tripId },
+          select: { id: true, uploadedById: true, tripId: true },
         });
+        if (!txMedia) {
+          throw new NotFoundError("Media not found");
+        }
+        if (txMedia.uploadedById !== userId) {
+          throw new AuthorizationError("You do not have permission to use this media");
+        }
+        if (txMedia.tripId && txMedia.tripId !== tripId) {
+          throw new Error("Media is already attached to another trip");
+        }
+
+        if (txMedia.tripId !== tripId) {
+          await tx.media.update({
+            where: { id: mediaRecord.id },
+            data: { tripId },
+          });
+        }
       }
       const entry = await tx.tripThreadEntry.create({
         data: {
@@ -294,8 +312,8 @@ export async function POST(
       ...completeEntry!,
       gpsCoordinates: completeEntry!.gpsCoordinates
         ? ((typeof completeEntry!.gpsCoordinates === "string"
-            ? JSON.parse(completeEntry!.gpsCoordinates)
-            : completeEntry!.gpsCoordinates) as {
+          ? JSON.parse(completeEntry!.gpsCoordinates)
+          : completeEntry!.gpsCoordinates) as {
             lat: number | null;
             lng: number | null;
           })
@@ -309,16 +327,16 @@ export async function POST(
       taggedUsers:
         completeEntry!.taggedUsers && completeEntry!.taggedUsers.length > 0
           ? completeEntry!.taggedUsers.map((tag) => ({
-              ...tag.taggedUser,
-              createdAt: tag.taggedUser.createdAt.toISOString(),
-              updatedAt: tag.taggedUser.updatedAt.toISOString(),
-            }))
+            ...tag.taggedUser,
+            createdAt: tag.taggedUser.createdAt.toISOString(),
+            updatedAt: tag.taggedUser.updatedAt.toISOString(),
+          }))
           : [],
       media: completeEntry!.media
         ? {
-            ...completeEntry!.media,
-            createdAt: completeEntry!.media.createdAt.toISOString(),
-          }
+          ...completeEntry!.media,
+          createdAt: completeEntry!.media.createdAt.toISOString(),
+        }
         : undefined,
       place: completeEntry!.place
         ? (serializePlace(completeEntry!.place) as PlaceResponse)
@@ -484,8 +502,8 @@ export async function GET(
       ...entry,
       gpsCoordinates: entry.gpsCoordinates
         ? ((typeof entry.gpsCoordinates === "string"
-            ? JSON.parse(entry.gpsCoordinates)
-            : entry.gpsCoordinates) as {
+          ? JSON.parse(entry.gpsCoordinates)
+          : entry.gpsCoordinates) as {
             lat: number | null;
             lng: number | null;
           })
@@ -499,16 +517,16 @@ export async function GET(
       taggedUsers:
         entry.taggedUsers && entry.taggedUsers.length > 0
           ? entry.taggedUsers.map((tag) => ({
-              ...tag.taggedUser,
-              createdAt: tag.taggedUser.createdAt.toISOString(),
-              updatedAt: tag.taggedUser.updatedAt.toISOString(),
-            }))
+            ...tag.taggedUser,
+            createdAt: tag.taggedUser.createdAt.toISOString(),
+            updatedAt: tag.taggedUser.updatedAt.toISOString(),
+          }))
           : [],
       media: entry.media
         ? {
-            ...entry.media,
-            createdAt: entry.media.createdAt.toISOString(),
-          }
+          ...entry.media,
+          createdAt: entry.media.createdAt.toISOString(),
+        }
         : undefined,
       place: entry.place
         ? (serializePlace(entry.place) as PlaceResponse)

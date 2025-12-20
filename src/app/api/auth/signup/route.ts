@@ -24,25 +24,20 @@ export async function POST(request: NextRequest) {
         },
       });
     } catch (error: any) {
-      if (error.code === "P2002") {
-        const field = error.meta?.target?.[0];
-        if (field === "email") {
-          return NextResponse.json<ApiResponse>(
-            {
-              success: false,
-              error: "User with this email already exists",
-            },
-            { status: 400 }
-          );
-        } else if (field === "username") {
-          return NextResponse.json<ApiResponse>(
-            {
-              success: false,
-              error: "Username is already taken",
-            },
-            { status: 400 }
-          );
-        }
+      // Use centralized Prisma error mapper for friendly messages
+      const { handlePrismaUniqueError } = await import("@/lib/prismaErrors");
+      const message = handlePrismaUniqueError(error, {
+        email: "User with this email",
+        username: "Username",
+      });
+      if (message) {
+        return NextResponse.json<ApiResponse>(
+          {
+            success: false,
+            error: message,
+          },
+          { status: 400 }
+        );
       }
       throw error;
     }

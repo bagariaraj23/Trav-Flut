@@ -137,14 +137,13 @@ export async function PUT(request: NextRequest) {
               },
             });
           } catch (error: any) {
-            if (
-              error.code === "P2002" &&
-              error.meta?.target?.includes("username")
-            ) {
+            const { handlePrismaUniqueError } = await import("@/lib/prismaErrors");
+            const message = handlePrismaUniqueError(error, { username: "Username" });
+            if (message) {
               return NextResponse.json<ApiResponse>(
                 {
                   success: false,
-                  error: "Username is already taken",
+                  error: message,
                 },
                 { status: 400 }
               );
