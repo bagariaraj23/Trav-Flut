@@ -14,79 +14,83 @@ export class TripInvitationService {
     senderId: string,
     receiverId: string
   ) {
-    // 1. Validate trip ownership
-    const trip = await prisma.trip.findUnique({ where: { id: tripId } });
-    if (!trip) {
-      throw new NotFoundError("Trip not found");
-    }
-    if (trip.userId !== senderId) {
-      throw new AuthorizationError("Only the trip owner can send invitations");
-    }
+    return await prisma.$transaction(async (tx) => {
+      // 1. Validate trip ownership
+      const trip = await tx.trip.findUnique({ where: { id: tripId } });
+      if (!trip) {
+        throw new NotFoundError("Trip not found");
+      }
+      if (trip.userId !== senderId) {
+        throw new AuthorizationError(
+          "Only the trip owner can send invitations"
+        );
+      }
 
-    // 2. Validate receiver exists
-    const receiver = await prisma.user.findUnique({
-      where: { id: receiverId },
-    });
-    if (!receiver) {
-      throw new NotFoundError("Invited user not found");
-    }
-
-    // 3. Prevent self-invitation
-    if (senderId === receiverId) {
-      throw new ConflictError("Cannot invite yourself to a trip");
-    }
-
-    // 4. Check if receiver is already a participant
-    const existingParticipant = await prisma.tripParticipant.findUnique({
-      where: { tripId_userId: { tripId, userId: receiverId } },
-    });
-    if (existingParticipant) {
-      throw new ConflictError("User is already a participant of this trip");
-    }
-
-    // 5. Check for existing pending invitation
-    const existingRequest = await prisma.tripJoinRequest.findUnique({
-      where: { tripId_receiverId: { tripId, receiverId } },
-    });
-    if (
-      existingRequest &&
-      existingRequest.status === TripJoinRequestStatus.PENDING
-    ) {
-      return {
-        id: existingRequest.id,
-        status: existingRequest.status,
-        message: "Invitation already pending",
-      };
-    }
-    // If an old request exists (rejected/accepted), delete it before creating a new one
-    if (existingRequest) {
-      await prisma.tripJoinRequest.delete({
-        where: { id: existingRequest.id },
+      // 2. Validate receiver exists
+      const receiver = await tx.user.findUnique({
+        where: { id: receiverId },
       });
-    }
+      if (!receiver) {
+        throw new NotFoundError("Invited user not found");
+      }
 
-    // 6. Create new invitation
-    console.log(`[TripInvitationService] Creating trip join request - tripId: ${tripId}, senderId: ${senderId}, receiverId: ${receiverId}`);
-    const newRequest = await prisma.tripJoinRequest.create({
-      data: {
-        tripId,
-        senderId,
-        receiverId,
-        status: TripJoinRequestStatus.PENDING,
-      },
+      // 3. Prevent self-invitation
+      if (senderId === receiverId) {
+        throw new ConflictError("Cannot invite yourself to a trip");
+      }
+
+      // 4. Check if receiver is already a participant
+      const existingParticipant = await tx.tripParticipant.findUnique({
+        where: { tripId_userId: { tripId, userId: receiverId } },
+      });
+      if (existingParticipant) {
+        throw new ConflictError("User is already a participant of this trip");
+      }
+
+      // 5. Check for existing pending invitation
+      const existingRequest = await tx.tripJoinRequest.findUnique({
+        where: { tripId_receiverId: { tripId, receiverId } },
+      });
+      if (
+        existingRequest &&
+        existingRequest.status === TripJoinRequestStatus.PENDING
+      ) {
+        return {
+          id: existingRequest.id,
+          status: existingRequest.status,
+          message: "Invitation already pending",
+        };
+      }
+      // If an old request exists (rejected/accepted), delete it before creating a new one
+      if (existingRequest) {
+        await tx.tripJoinRequest.delete({
+          where: { id: existingRequest.id },
+        });
+      }
+
+      // 6. Create new invitation
+      const newRequest = await tx.tripJoinRequest.create({
+        data: {
+          tripId,
+          senderId,
+          receiverId,
+          status: TripJoinRequestStatus.PENDING,
+        },
+      });
+
+      return {
+        id: newRequest.id,
+        status: newRequest.status,
+        message: "Invitation sent successfully",
+      };
     });
-
-    console.log(`[TripInvitationService] Trip join request created successfully - id: ${newRequest.id}`);
-    return {
-      id: newRequest.id,
-      status: newRequest.status,
-      message: "Invitation sent successfully",
-    };
   }
 
   // Get pending invitations for a user
   static async getPendingInvitations(userId: string) {
-    console.log(`[TripInvitationService] Getting pending invitations for user: ${userId}`);
+    console.log(
+      `[TripInvitationService] Getting pending invitations for user: ${userId}`
+    );
     const invitations = await prisma.tripJoinRequest.findMany({
       where: {
         receiverId: userId,
@@ -121,8 +125,10 @@ export class TripInvitationService {
       },
       orderBy: { createdAt: "desc" },
     });
-    
-    console.log(`[TripInvitationService] Found ${invitations.length} pending invitations for user: ${userId}`);
+
+    console.log(
+      `[TripInvitationService] Found ${invitations.length} pending invitations for user: ${userId}`
+    );
     return invitations;
   }
 
@@ -247,9 +253,7 @@ export class TripInvitationService {
 
     // 3. Verify the invitation belongs to this trip and sender
     if (request.tripId !== tripId || request.senderId !== senderId) {
-      throw new AuthorizationError(
-        "Unauthorized to cancel this invitation"
-      );
+      throw new AuthorizationError("Unauthorized to cancel this invitation");
     }
 
     // 4. Only allow cancelling pending invitations
@@ -258,12 +262,16 @@ export class TripInvitationService {
     }
 
     // 5. Delete the invitation
-    console.log(`[TripInvitationService] Cancelling invitation ${inviteId} for trip ${tripId}`);
+    console.log(
+      `[TripInvitationService] Cancelling invitation ${inviteId} for trip ${tripId}`
+    );
     await prisma.tripJoinRequest.delete({
       where: { id: inviteId },
     });
 
-    console.log(`[TripInvitationService] Invitation ${inviteId} cancelled successfully`);
+    console.log(
+      `[TripInvitationService] Invitation ${inviteId} cancelled successfully`
+    );
     return { message: "Invitation cancelled successfully" };
   }
 }

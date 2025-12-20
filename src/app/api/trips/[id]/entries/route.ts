@@ -149,7 +149,11 @@ export async function POST(
       );
     }
 
-    let mediaRecord: { id: string; uploadedById: string; tripId: string | null } | null = null;
+    let mediaRecord: {
+      id: string;
+      uploadedById: string;
+      tripId: string | null;
+    } | null = null;
 
     if (validatedData.mediaId) {
       mediaRecord = await prisma.media.findUnique({
@@ -195,7 +199,6 @@ export async function POST(
           data: { tripId },
         });
       }
-
       const entry = await tx.tripThreadEntry.create({
         data: {
           tripId,
@@ -203,7 +206,9 @@ export async function POST(
           type: validatedData.type,
           contentText: validatedData.contentText,
           locationName: locationName ?? undefined,
-          mediaId: mediaRecord ? mediaRecord.id : (validatedData.mediaId ?? undefined),
+          mediaId: mediaRecord
+            ? mediaRecord.id
+            : validatedData.mediaId ?? undefined,
           gpsCoordinates: validatedData.gpsCoordinates
             ? JSON.stringify(validatedData.gpsCoordinates)
             : undefined,
@@ -226,7 +231,6 @@ export async function POST(
           media: true,
         },
       });
-
       await tx.trip.update({
         where: { id: tripId },
         data: {
@@ -234,20 +238,18 @@ export async function POST(
           updatedAt: new Date(),
         },
       });
-
+      // Tagging logic inside transaction!
+      if (taggedUserIds.length > 0) {
+        await tx.tripThreadTag.createMany({
+          data: taggedUserIds.map((taggedUserId) => ({
+            threadEntryId: entry.id,
+            taggedUserId,
+          })),
+          skipDuplicates: true,
+        });
+      }
       return entry;
     });
-
-    // Add tags if provided
-    if (taggedUserIds.length > 0) {
-      await prisma.tripThreadTag.createMany({
-        data: taggedUserIds.map((taggedUserId) => ({
-          threadEntryId: createdEntry.id,
-          taggedUserId,
-        })),
-        skipDuplicates: true,
-      });
-    }
 
     // Fetch the complete entry with tags and place
     const completeEntry = await prisma.tripThreadEntry.findUnique({
@@ -304,13 +306,14 @@ export async function POST(
         createdAt: completeEntry!.author.createdAt.toISOString(),
         updatedAt: completeEntry!.author.updatedAt.toISOString(),
       },
-      taggedUsers: completeEntry!.taggedUsers && completeEntry!.taggedUsers.length > 0
-        ? completeEntry!.taggedUsers.map((tag) => ({
-            ...tag.taggedUser,
-            createdAt: tag.taggedUser.createdAt.toISOString(),
-            updatedAt: tag.taggedUser.updatedAt.toISOString(),
-          }))
-        : [],
+      taggedUsers:
+        completeEntry!.taggedUsers && completeEntry!.taggedUsers.length > 0
+          ? completeEntry!.taggedUsers.map((tag) => ({
+              ...tag.taggedUser,
+              createdAt: tag.taggedUser.createdAt.toISOString(),
+              updatedAt: tag.taggedUser.updatedAt.toISOString(),
+            }))
+          : [],
       media: completeEntry!.media
         ? {
             ...completeEntry!.media,
@@ -493,13 +496,14 @@ export async function GET(
         createdAt: entry.author.createdAt.toISOString(),
         updatedAt: entry.author.updatedAt.toISOString(),
       },
-      taggedUsers: entry.taggedUsers && entry.taggedUsers.length > 0
-        ? entry.taggedUsers.map((tag) => ({
-            ...tag.taggedUser,
-            createdAt: tag.taggedUser.createdAt.toISOString(),
-            updatedAt: tag.taggedUser.updatedAt.toISOString(),
-          }))
-        : [],
+      taggedUsers:
+        entry.taggedUsers && entry.taggedUsers.length > 0
+          ? entry.taggedUsers.map((tag) => ({
+              ...tag.taggedUser,
+              createdAt: tag.taggedUser.createdAt.toISOString(),
+              updatedAt: tag.taggedUser.updatedAt.toISOString(),
+            }))
+          : [],
       media: entry.media
         ? {
             ...entry.media,

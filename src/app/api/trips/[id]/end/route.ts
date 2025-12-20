@@ -123,8 +123,52 @@ export async function POST(
       .filter((url): url is string => Boolean(url));
 
     // Update trip status and create final post
-    const [updatedTrip, finalPost] = await prisma.$transaction([
-      prisma.trip.update({
+    const [updatedTrip, finalPost] = await prisma.$transaction(async (tx) => {
+      const trip = await tx.trip.findUnique({
+        where: { id: tripId },
+        include: {
+          threadEntries: {
+            where: { type: "MEDIA", mediaId: { not: null } },
+            include: { media: true },
+            orderBy: { createdAt: "asc" },
+          },
+        },
+      });
+      if (!trip) throw new Error("Trip not found");
+
+      // Use up-to-date threadEntries from transaction
+      const textEntries = trip.threadEntries.filter(
+        (entry) => entry.type === "TEXT" && entry.contentText
+      );
+      const mediaEntries = trip.threadEntries.filter(
+        (entry) => entry.type === "MEDIA" && entry.mediaId
+      );
+      const locationEntries = trip.threadEntries.filter(
+        (entry) => entry.type === "LOCATION" && entry.locationName
+      );
+
+      // Create a simple summary (in production, this would use AI)
+      let summaryText = `Amazing trip to ${trip.destinations.join(", ")}! `;
+
+      if (locationEntries.length > 0) {
+        summaryText += `Visited ${locationEntries.length} amazing places. `;
+      }
+
+      if (textEntries.length > 0) {
+        summaryText += `Shared ${textEntries.length} memorable moments. `;
+      }
+
+      if (mediaEntries.length > 0) {
+        summaryText += `Captured ${mediaEntries.length} beautiful memories.`;
+      }
+
+      // Get curated media (first 6 media entries) - use media relation to get URLs
+      const curatedMedia = mediaEntries
+        .slice(0, 6)
+        .map((entry) => entry.media?.url)
+        .filter((url): url is string => Boolean(url));
+
+      const updatedTrip = await tx.trip.update({
         where: { id: tripId },
         data: {
           status: "ENDED",
@@ -166,8 +210,8 @@ export async function POST(
             orderBy: { createdAt: "asc" },
           },
         },
-      }),
-      prisma.tripFinalPost.create({
+      });
+      const finalPost = await tx.tripFinalPost.create({
         data: {
           tripId,
           summaryText,
@@ -176,8 +220,9 @@ export async function POST(
             ", "
           )} was incredible! 🌟`,
         },
-      }),
-    ]);
+      });
+      return [updatedTrip, finalPost];
+    });
 
     const tripResponse: TripResponse = {
       ...updatedTrip,
@@ -192,7 +237,7 @@ export async function POST(
             name: updatedTrip.user.name ?? undefined,
             avatarUrl: updatedTrip.user.avatarUrl ?? undefined,
             bio: updatedTrip.user.bio ?? undefined,
-            createdAt: updatedTrip.user.createdAt.toISOString() ,
+            createdAt: updatedTrip.user.createdAt.toISOString(),
             updatedAt: updatedTrip.user.updatedAt.toISOString(),
           }
         : undefined,
@@ -216,8 +261,8 @@ export async function POST(
           avatarUrl: p.user.avatarUrl ?? undefined,
           bio: p.user.bio ?? undefined,
           createdAt: p.user.createdAt.toISOString(),
-          updatedAt: p.user.updatedAt.toISOString()
-        }
+          updatedAt: p.user.updatedAt.toISOString(),
+        },
       })),
       threadEntries: updatedTrip.threadEntries.map((entry: any) => ({
         ...entry,
@@ -225,14 +270,15 @@ export async function POST(
         author: {
           ...entry.author,
           createdAt: entry.author.createdAt.toISOString(),
-          updatedAt: entry.author.updatedAt.toISOString()
+          updatedAt: entry.author.updatedAt.toISOString(),
         },
         taggedUsers: entry.taggedUsers.map((tag: any) => ({
           ...tag.taggedUser,
           createdAt: tag.taggedUser.createdAt.toISOString(),
-          updatedAt: tag.taggedUser.updatedAt.toISOString()
+          updatedAt: tag.taggedUser.updatedAt.toISOString(),
         })),
-        media: entry.media ? {
+        media: entry.media
+          ? {
               ...entry.media,
               createdAt: entry.media.createdAt.toISOString(),
             }

@@ -1,5 +1,5 @@
 /** @type {import('next').NextConfig} */
-require('dotenv').config();
+import 'dotenv/config';
 
 const nextConfig = {
   experimental: {
@@ -54,4 +54,4 @@ const nextConfig = {
   }
 }
 
-module.exports = nextConfig
+export default nextConfig;
