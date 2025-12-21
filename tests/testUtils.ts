@@ -91,28 +91,30 @@ export async function createTrip(
 ) {
   // If userId provided, use it directly (assume user exists - tests should create user first)
   // Otherwise create a new user
-  let ownerId = overrides.userId ?? (await createUser()).id;
-
-  // If a userId was provided but the user doesn't exist (rare race or external caller),
-  // create a lightweight placeholder user with that id so the trip FK can be satisfied.
+  let ownerId: string;
   if (overrides.userId) {
-    const existing = await prisma.user.findUnique({ where: { id: overrides.userId } });
-    if (!existing) {
-      // Create a minimal user record with the requested id.
-      // Use a deterministic email to avoid unique collisions in tests.
-      const placeholderEmail = `placeholder-${overrides.userId}@example.com`;
-      const hashed = await AuthService.hashPassword('Password123!');
-      const created = await prisma.user.create({
-        data: {
-          id: overrides.userId,
-          email: placeholderEmail,
-          username: null,
-          name: 'Placeholder User',
-          password: hashed,
-        },
+    // Try to find user, but if not found immediately, wait a bit and retry (for test isolation)
+    let owner = await prisma.user.findUnique({
+      where: { id: overrides.userId },
+    });
+
+    // Retry once after a brief delay if user not found (handles transaction isolation in tests)
+    if (!owner) {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      owner = await prisma.user.findUnique({
+        where: { id: overrides.userId },
       });
-      ownerId = created.id;
     }
+
+    if (!owner) {
+      throw new Error(
+        `User with id ${overrides.userId} does not exist. Create the user first using createUser() before creating a trip.`
+      );
+    }
+    ownerId = overrides.userId;
+  } else {
+    const owner = await createUser();
+    ownerId = owner.id;
   }
 
   return prisma.trip.create({
