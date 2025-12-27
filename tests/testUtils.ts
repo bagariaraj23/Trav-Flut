@@ -89,11 +89,8 @@ export async function createTrip(
     status: TripStatus;
   }> = {}
 ) {
-  // If userId provided, use it directly (assume user exists - tests should create user first)
-  // Otherwise create a new user
   let ownerId: string;
   if (overrides.userId) {
-    // Try to find user, but if not found immediately, wait a bit and retry (for test isolation)
     let owner = await prisma.user.findUnique({
       where: { id: overrides.userId },
     });

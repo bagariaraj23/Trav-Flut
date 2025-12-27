@@ -1,4 +1,4 @@
-## Bolt-Travello Testing Guide
+## TripThread Testing Guide
 
 This document is the central place for all testing: what exists, what is required, and how to run/extend the suite.
 

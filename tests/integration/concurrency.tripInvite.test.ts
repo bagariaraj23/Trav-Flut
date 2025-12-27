@@ -2,7 +2,6 @@ import { describe, it, expect, beforeEach } from "vitest";
 import { prisma } from "../../src/lib/prisma";
 import { cleanDb, createUser, createTrip } from "../testUtils";
 import { TripInvitationService } from "../../src/lib/tripInvitation";
-import { ConflictError } from "../../src/lib/errors";
 
 describe("TripInvitationService - concurrency", () => {
     beforeEach(async () => {

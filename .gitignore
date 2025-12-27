@@ -24,5 +24,4 @@ dist-ssr
 *.sln
 *.sw?
 .env
-# Test environment variables (may contain test DB creds) — do not commit
 .env.test

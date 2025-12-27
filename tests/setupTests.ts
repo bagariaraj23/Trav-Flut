@@ -19,7 +19,7 @@ export default function setupTests() {
 
   if (!isTestEnv) return;
 
-  // Load .env.test if present (local developer convenience)
+  // Load .env.test if present
   const envTestPath = path.resolve(process.cwd(), ".env.test");
   if (fs.existsSync(envTestPath)) {
     dotenv.config({ path: envTestPath });
@@ -56,5 +56,4 @@ export default function setupTests() {
   if (!process.env.DEBUG) process.env.DEBUG = "";
 }
 
-// Auto-run setup if this file is imported
 setupTests();

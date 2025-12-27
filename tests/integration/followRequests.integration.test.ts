@@ -55,7 +55,7 @@ describe("Follow requests - transactional behavior", () => {
 
     // Ensure users are fully committed by doing a simple query outside transaction
     // This helps with transaction isolation in test environments
-    await prisma.$queryRaw`SELECT 1`; // Force a connection/commit
+    await prisma.$queryRaw`SELECT 1`;
 
     const [r1, r2] = await Promise.all([
       createFollowRequestAtomic(a.id, b.id),
@@ -66,7 +66,7 @@ describe("Follow requests - transactional behavior", () => {
     // OR both could be CREATED if they both pass the check before either creates
     // OR one could be CREATED and the other could hit a unique constraint and return error
     // The key is: only ONE request should exist in DB
-    // Also handle NOT_FOUND in case of extreme race conditions (shouldn't happen but be defensive)
+    // Also handle NOT_FOUND in case of extreme race conditions
     const validCodes = ["CREATED", "PENDING", "ALREADY_FOLLOW", "NOT_FOUND"];
     expect(validCodes).toContain(r1.code);
     expect(validCodes).toContain(r2.code);

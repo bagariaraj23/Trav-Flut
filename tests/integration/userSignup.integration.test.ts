@@ -29,5 +29,3 @@ describe("User signup & uniqueness (email/username)", () => {
     ).rejects.toThrow();
   });
 });
-
-
