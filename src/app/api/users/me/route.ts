@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { withAuth, withRateLimit, withLogging } from "@/lib/middleware";
 import { ApiResponse, UserProfile } from "@/types/api";
-import { CloudinaryService } from '@/lib/cloudinary';
+import { CloudinaryService } from "@/lib/cloudinary";
 
 // Get current user profile
 export async function GET(request: NextRequest) {
@@ -82,19 +82,8 @@ export async function PUT(request: NextRequest) {
       return withAuth(rateLimitedReq, async (authenticatedReq) => {
         try {
           const currentUserId = authenticatedReq.user!.userId;
-          console.log(`[API] PUT /users/me - User: ${currentUserId}`);
-
           const body = await request.json();
           const { name, username, bio, avatarUrl, isPrivate } = body;
-
-          console.log(`[API] PUT /users/me - Update data:`, {
-            name,
-            username,
-            bio,
-            avatarUrl,
-            isPrivate,
-          });
-
           // Validate input
           if (username && (username.length < 3 || username.length > 30)) {
             return NextResponse.json<ApiResponse>(
@@ -105,7 +94,6 @@ export async function PUT(request: NextRequest) {
               { status: 400 }
             );
           }
-
           if (name && (name.length < 1 || name.length > 100)) {
             return NextResponse.json<ApiResponse>(
               {
@@ -115,7 +103,6 @@ export async function PUT(request: NextRequest) {
               { status: 400 }
             );
           }
-
           if (bio && bio.length > 500) {
             return NextResponse.json<ApiResponse>(
               {
@@ -125,52 +112,44 @@ export async function PUT(request: NextRequest) {
               { status: 400 }
             );
           }
-
-          // Check if username is already taken (if updating)
-          if (username) {
-            const existingUser = await prisma.user.findFirst({
-              where: {
-                username: username,
-                id: { not: currentUserId },
+          // Remove manual username uniqueness check; just try update
+          let updatedUser;
+          try {
+            updatedUser = await prisma.user.update({
+              where: { id: currentUserId },
+              data: {
+                ...(name !== undefined && { name }),
+                ...(username !== undefined && { username }),
+                ...(bio !== undefined && { bio }),
+                ...(avatarUrl !== undefined && { avatarUrl }),
+                ...(isPrivate !== undefined && { isPrivate }),
+              },
+              select: {
+                id: true,
+                email: true,
+                username: true,
+                name: true,
+                avatarUrl: true,
+                bio: true,
+                isPrivate: true,
+                createdAt: true,
+                updatedAt: true,
               },
             });
-
-            if (existingUser) {
+          } catch (error: any) {
+            const { handlePrismaUniqueError } = await import("@/lib/prismaErrors");
+            const message = handlePrismaUniqueError(error, { username: "Username" });
+            if (message) {
               return NextResponse.json<ApiResponse>(
                 {
                   success: false,
-                  error: "Username is already taken",
+                  error: message,
                 },
                 { status: 400 }
               );
             }
+            throw error;
           }
-
-          // Update user profile
-          const updatedUser = await prisma.user.update({
-            where: { id: currentUserId },
-            data: {
-              ...(name !== undefined && { name }),
-              ...(username !== undefined && { username }),
-              ...(bio !== undefined && { bio }),
-              ...(avatarUrl !== undefined && { avatarUrl }),
-              ...(isPrivate !== undefined && { isPrivate }),
-            },
-            select: {
-              id: true,
-              email: true,
-              username: true,
-              name: true,
-              avatarUrl: true,
-              bio: true,
-              isPrivate: true,
-              createdAt: true,
-              updatedAt: true,
-            },
-          });
-
-          console.log(`[API] PUT /users/me - User updated successfully`);
-
           const userResponse: UserProfile = {
             ...updatedUser,
             username: updatedUser.username ?? undefined,
@@ -180,7 +159,6 @@ export async function PUT(request: NextRequest) {
             createdAt: updatedUser.createdAt.toISOString(),
             updatedAt: updatedUser.updatedAt.toISOString(),
           };
-
           return NextResponse.json<ApiResponse<UserProfile>>({
             success: true,
             data: userResponse,
@@ -218,24 +196,63 @@ export async function DELETE(request: NextRequest) {
 
           await prisma.$transaction(async (tx) => {
             // Revoke tokens, sessions, and auth providers
-            await tx.jWTRefreshToken.deleteMany({ where: { userId: currentUserId } });
-            await tx.oAuthAccount.deleteMany({ where: { userId: currentUserId } });
-            await tx.passwordReset.deleteMany({ where: { userId: currentUserId } });
-            await tx.securityEvent.deleteMany({ where: { userId: currentUserId } });
+            await tx.jWTRefreshToken.deleteMany({
+              where: { userId: currentUserId },
+            });
+            await tx.oAuthAccount.deleteMany({
+              where: { userId: currentUserId },
+            });
+            await tx.passwordReset.deleteMany({
+              where: { userId: currentUserId },
+            });
+            await tx.securityEvent.deleteMany({
+              where: { userId: currentUserId },
+            });
 
             // Remove follow relations and requests
-            await tx.follow.deleteMany({ where: { OR: [{ followerId: currentUserId }, { followeeId: currentUserId }] } });
-            await tx.followRequest.deleteMany({ where: { OR: [{ followerId: currentUserId }, { followeeId: currentUserId }] } });
+            await tx.follow.deleteMany({
+              where: {
+                OR: [
+                  { followerId: currentUserId },
+                  { followeeId: currentUserId },
+                ],
+              },
+            });
+            await tx.followRequest.deleteMany({
+              where: {
+                OR: [
+                  { followerId: currentUserId },
+                  { followeeId: currentUserId },
+                ],
+              },
+            });
 
             // Remove trip-related links where user is directly referenced
-            await tx.tripParticipant.deleteMany({ where: { userId: currentUserId } });
-            await tx.tripThreadTag.deleteMany({ where: { taggedUserId: currentUserId } });
-            await tx.tripJoinRequest.deleteMany({ where: { OR: [{ senderId: currentUserId }, { receiverId: currentUserId }] } });
-            await tx.placeShare.deleteMany({ where: { createdById: currentUserId } });
+            await tx.tripParticipant.deleteMany({
+              where: { userId: currentUserId },
+            });
+            await tx.tripThreadTag.deleteMany({
+              where: { taggedUserId: currentUserId },
+            });
+            await tx.tripJoinRequest.deleteMany({
+              where: {
+                OR: [
+                  { senderId: currentUserId },
+                  { receiverId: currentUserId },
+                ],
+              },
+            });
+            await tx.placeShare.deleteMany({
+              where: { createdById: currentUserId },
+            });
 
             // Delete thread entries and media uploaded by the user
-            await tx.tripThreadEntry.deleteMany({ where: { authorId: currentUserId } });
-            await tx.media.deleteMany({ where: { uploadedById: currentUserId } });
+            await tx.tripThreadEntry.deleteMany({
+              where: { authorId: currentUserId },
+            });
+            await tx.media.deleteMany({
+              where: { uploadedById: currentUserId },
+            });
 
             // Soft delete the user record itself
             await tx.user.update({
@@ -254,20 +271,27 @@ export async function DELETE(request: NextRequest) {
               },
             });
 
-            console.log(`[API] DELETE /users/me - User record soft deleted: ${currentUserId}`);
+            console.log(
+              `[API] DELETE /users/me - User record soft deleted: ${currentUserId}`
+            );
           });
 
           // Optionally attempt to remove remote Cloudinary assets (best-effort).
           // Deleting remote assets is not part of the DB transaction (external IO).
-          const deleteRemote = process.env.DELETE_REMOTE_MEDIA === 'true';
+          const deleteRemote = process.env.DELETE_REMOTE_MEDIA === "true";
           if (deleteRemote && mediaToDelete.length > 0) {
             (async () => {
               for (const m of mediaToDelete) {
                 try {
                   await CloudinaryService.deleteMedia(m.publicId);
-                  console.log(`[API] DELETE /users/me - Deleted remote media ${m.publicId}`);
+                  console.log(
+                    `[API] DELETE /users/me - Deleted remote media ${m.publicId}`
+                  );
                 } catch (err) {
-                  console.error(`[API] DELETE /users/me - Failed to delete remote media ${m.publicId}:`, err);
+                  console.error(
+                    `[API] DELETE /users/me - Failed to delete remote media ${m.publicId}:`,
+                    err
+                  );
                 }
               }
             })();
