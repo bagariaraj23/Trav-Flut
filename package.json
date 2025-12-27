@@ -10,7 +10,7 @@
     "lint": "next lint",
     "test": "dotenv -e .env.test -- vitest",
     "test:run": "dotenv -e .env.test -- vitest run",
-    "test:coverage": "vitest run --coverage",
+    "test:coverage": "vitest run --coverage --no-file-parallelism",
     "test:api": "dotenv -e .env.test -- vitest run tests/api --reporter=dot",
     "test:serial": "node scripts/run-integration-serial.mjs",
     "test:scheduler": "dotenv -e .env.test -- vitest run scheduler/tests",
