@@ -13,6 +13,7 @@
     "test:coverage": "vitest run --coverage",
     "test:api": "dotenv -e .env.test -- vitest run tests/api --reporter=dot",
     "test:serial": "node scripts/run-integration-serial.mjs",
+    "test:scheduler": "dotenv -e .env.test -- vitest run scheduler/tests",
     "db:generate": "prisma generate",
     "db:push": "prisma db push",
     "db:generate:test": "dotenv -e .env.test -- prisma generate",
