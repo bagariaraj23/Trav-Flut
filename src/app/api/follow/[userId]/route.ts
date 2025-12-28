@@ -111,7 +111,7 @@ export async function POST(
   request: NextRequest,
   { params }: { params: { userId: string } }
 ) {
-  return withLogging(async (req) => {
+  const handler = async (req: NextRequest) => {
     return withRateLimit(req, async (rateLimitedReq) => {
       return withAuth(rateLimitedReq, async (authenticatedReq) => {
         try {
@@ -235,7 +235,9 @@ export async function POST(
         }
       });
     });
-  });
+  };
+
+  return withLogging(handler)(request);
 }
 
 // Unfollow a user

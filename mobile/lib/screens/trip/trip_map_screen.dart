@@ -47,8 +47,9 @@ class _TripMapScreenState extends State<TripMapScreen> {
       });
     } else {
       try {
-        final places =
-            await context.read<PlaceProvider>().getTripPlaces(widget.tripId);
+        final places = await context.read<PlaceProvider>().getTripPlaces(
+          widget.tripId,
+        );
         setState(() {
           _places = places;
           _loading = false;
@@ -177,77 +178,78 @@ class _TripMapScreenState extends State<TripMapScreen> {
             ),
           ],
         ),
-      body: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : _error != null
-              ? Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.error, size: 64, color: Colors.red[300]),
-                      const SizedBox(height: 16),
-                      Text(_error!),
-                      const SizedBox(height: 16),
-                      ElevatedButton(
-                        onPressed: () => Navigator.pop(context),
-                        child: const Text('Go Back'),
-                      ),
-                    ],
-                  ),
-                )
-              : _places == null || _places!.isEmpty
-                  ? Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(Icons.map_outlined,
-                              size: 80, color: Colors.grey.shade400),
-                          const SizedBox(height: 12),
-                          const Text(
-                            'No locations yet',
-                            style: TextStyle(fontSize: 18),
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            'Share locations in the trip thread to see them here',
-                            style: TextStyle(color: Colors.grey[600]),
-                            textAlign: TextAlign.center,
-                          ),
-                        ],
-                      ),
-                    )
-                  : Stack(
-                      children: [
-                        // Map widget
-                        mapbox.MapWidget(
-                          key: const Key('tripMapWidget'),
-                          onMapCreated: _onMapCreated,
-                        ),
-
-                        // Place cards at bottom (ONLY ONE LIST)
-                        Positioned(
-                          left: 0,
-                          right: 0,
-                          bottom: 0,
-                          child: Container(
-                            height: 130,
-                            padding: const EdgeInsets.symmetric(vertical: 8.0),
-                            child: ListView.separated(
-                              scrollDirection: Axis.horizontal,
-                              itemCount: _places!.length,
-                              padding:
-                                  const EdgeInsets.symmetric(horizontal: 16.0),
-                              separatorBuilder: (_, __) =>
-                                  const SizedBox(width: 8),
-                              itemBuilder: (context, idx) {
-                                final mp = _places![idx];
-                                return _buildPlaceCard(mp);
-                              },
-                            ),
-                          ),
-                        ),
-                      ],
+        body: _loading
+            ? const Center(child: CircularProgressIndicator())
+            : _error != null
+            ? Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.error, size: 64, color: Colors.red[300]),
+                    const SizedBox(height: 16),
+                    Text(_error!),
+                    const SizedBox(height: 16),
+                    ElevatedButton(
+                      onPressed: () => Navigator.pop(context),
+                      child: const Text('Go Back'),
                     ),
+                  ],
+                ),
+              )
+            : _places == null || _places!.isEmpty
+            ? Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      Icons.map_outlined,
+                      size: 80,
+                      color: Colors.grey.shade400,
+                    ),
+                    const SizedBox(height: 12),
+                    const Text(
+                      'No locations yet',
+                      style: TextStyle(fontSize: 18),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Share locations in the trip thread to see them here',
+                      style: TextStyle(color: Colors.grey[600]),
+                      textAlign: TextAlign.center,
+                    ),
+                  ],
+                ),
+              )
+            : Stack(
+                children: [
+                  // Map widget
+                  mapbox.MapWidget(
+                    key: const Key('tripMapWidget'),
+                    onMapCreated: _onMapCreated,
+                  ),
+
+                  // Place cards at bottom (ONLY ONE LIST)
+                  Positioned(
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    child: Container(
+                      height: 130,
+                      padding: const EdgeInsets.symmetric(vertical: 8.0),
+                      child: ListView.separated(
+                        scrollDirection: Axis.horizontal,
+                        itemCount: _places!.length,
+                        padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                        separatorBuilder: (_, __) => const SizedBox(width: 8),
+                        itemBuilder: (context, idx) {
+                          final mp = _places![idx];
+                          return _buildPlaceCard(mp);
+                        },
+                      ),
+                    ),
+                  ),
+                ],
+              ),
       ),
     );
   }
@@ -259,16 +261,11 @@ class _TripMapScreenState extends State<TripMapScreen> {
     final icon = iconForOrigin(mapPlace.origin);
 
     return ConstrainedBox(
-      constraints: const BoxConstraints(
-        minWidth: 180,
-        maxWidth: 280,
-      ),
+      constraints: const BoxConstraints(minWidth: 180, maxWidth: 280),
       child: Card(
         elevation: 4,
         margin: EdgeInsets.zero,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         child: InkWell(
           onTap: () => _flyToPlace(place),
           borderRadius: BorderRadius.circular(12),
@@ -280,12 +277,17 @@ class _TripMapScreenState extends State<TripMapScreen> {
               children: [
                 // Origin badge
                 Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 6,
+                    vertical: 2,
+                  ),
                   decoration: BoxDecoration(
-                    color: color.withOpacity(0.15),
+                    color: color.withValues(alpha: 0.15),
                     borderRadius: BorderRadius.circular(4),
-                    border: Border.all(color: color.withOpacity(0.5), width: 1),
+                    border: Border.all(
+                      color: color.withValues(alpha: 0.5),
+                      width: 1,
+                    ),
                   ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
@@ -417,12 +419,12 @@ class _TripMapScreenState extends State<TripMapScreen> {
     double maxLng = -double.infinity;
 
     // Initialize managers
-    _circleManager ??=
-        await _mapboxMap?.annotations.createCircleAnnotationManager();
-    _textManager ??=
-        await _mapboxMap?.annotations.createPointAnnotationManager();
-    _routeManager ??=
-        await _mapboxMap?.annotations.createPolylineAnnotationManager();
+    _circleManager ??= await _mapboxMap?.annotations
+        .createCircleAnnotationManager();
+    _textManager ??= await _mapboxMap?.annotations
+        .createPointAnnotationManager();
+    _routeManager ??= await _mapboxMap?.annotations
+        .createPolylineAnnotationManager();
 
     // Create markers
     for (final mapPlace in sortedPlaces) {
@@ -438,24 +440,28 @@ class _TripMapScreenState extends State<TripMapScreen> {
       final color = colorForOrigin(mapPlace.origin);
 
       // Circle marker
-      await _circleManager?.create(mapbox.CircleAnnotationOptions(
-        geometry: mapbox.Point(coordinates: mapbox.Position(lng, lat)),
-        circleColor: color.value,
-        circleRadius: 10.0,
-        circleStrokeWidth: 2.0,
-        circleStrokeColor: Colors.white.value,
-      ));
+      await _circleManager?.create(
+        mapbox.CircleAnnotationOptions(
+          geometry: mapbox.Point(coordinates: mapbox.Position(lng, lat)),
+          circleColor: color.value,
+          circleRadius: 10.0,
+          circleStrokeWidth: 2.0,
+          circleStrokeColor: Colors.white.value,
+        ),
+      );
 
       // Text label
-      await _textManager?.create(mapbox.PointAnnotationOptions(
-        geometry: mapbox.Point(coordinates: mapbox.Position(lng, lat)),
-        textField: place.name,
-        textColor: Colors.black.value,
-        textHaloColor: Colors.white.value,
-        textHaloWidth: 2.0,
-        textSize: 12.0,
-        textOffset: [0, 1.5],
-      ));
+      await _textManager?.create(
+        mapbox.PointAnnotationOptions(
+          geometry: mapbox.Point(coordinates: mapbox.Position(lng, lat)),
+          textField: place.name,
+          textColor: Colors.black.value,
+          textHaloColor: Colors.white.value,
+          textHaloWidth: 2.0,
+          textSize: 12.0,
+          textOffset: [0, 1.5],
+        ),
+      );
     }
 
     // Draw route
@@ -492,18 +498,24 @@ class _TripMapScreenState extends State<TripMapScreen> {
         .toList();
 
     // Use coordinates directly, don't map again!
-    await _routeManager?.create(mapbox.PolylineAnnotationOptions(
-      geometry: mapbox.LineString(coordinates: coordinates),
-      lineColor: Colors.deepPurple.value,
-      lineWidth: 4.0,
-      lineOpacity: 0.7,
-    ));
+    await _routeManager?.create(
+      mapbox.PolylineAnnotationOptions(
+        geometry: mapbox.LineString(coordinates: coordinates),
+        lineColor: Colors.deepPurple.value,
+        lineWidth: 4.0,
+        lineOpacity: 0.7,
+      ),
+    );
 
     debugPrint('[TripMapScreen] Route drawn with ${coordinates.length} points');
   }
 
   double _calculateZoomLevel(
-      double minLat, double maxLat, double minLng, double maxLng) {
+    double minLat,
+    double maxLat,
+    double minLng,
+    double maxLng,
+  ) {
     const zoomOffset = 0.8;
     const minZoom = 2.0;
     const maxZoom = 16.0;

@@ -7,7 +7,7 @@ import 'package:tripthread/widgets/custom_text_field.dart';
 import 'package:tripthread/widgets/loading_button.dart';
 
 class ForgotPasswordScreen extends StatefulWidget {
-  const ForgotPasswordScreen({Key? key}) : super(key: key);
+  const ForgotPasswordScreen({super.key});
 
   @override
   State<ForgotPasswordScreen> createState() => _ForgotPasswordScreenState();
@@ -36,7 +36,8 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text(
-              'If an account exists for this email, a reset link has been sent.'),
+            'If an account exists for this email, a reset link has been sent.',
+          ),
           backgroundColor: Colors.green,
         ),
       );
@@ -109,7 +110,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                   validator: MultiValidator([
                     RequiredValidator(errorText: 'Email is required'),
                     EmailValidator(errorText: 'Please enter a valid email'),
-                  ]),
+                  ]).call,
                   onChanged: (_) {
                     // Clear error when user starts typing after an error
                     final authProvider = context.read<AuthProvider>();
@@ -134,16 +135,14 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                           margin: const EdgeInsets.only(bottom: 16),
                           padding: const EdgeInsets.all(12),
                           decoration: BoxDecoration(
-                            color: Theme.of(context)
-                                .colorScheme
-                                .error
-                                .withOpacity(0.1),
+                            color: Theme.of(
+                              context,
+                            ).colorScheme.error.withValues(alpha: 0.1),
                             borderRadius: BorderRadius.circular(8),
                             border: Border.all(
-                              color: Theme.of(context)
-                                  .colorScheme
-                                  .error
-                                  .withOpacity(0.3),
+                              color: Theme.of(
+                                context,
+                              ).colorScheme.error.withValues(alpha: 0.3),
                             ),
                           ),
                           child: Row(

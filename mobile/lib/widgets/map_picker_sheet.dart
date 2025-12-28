@@ -45,10 +45,7 @@ class _MapPickerModalState extends State<MapPickerModal> {
 
     if (widget.initialLat != null && widget.initialLng != null) {
       _selectedPoint = mapbox.Point(
-        coordinates: mapbox.Position(
-          widget.initialLng!,
-          widget.initialLat!,
-        ),
+        coordinates: mapbox.Position(widget.initialLng!, widget.initialLat!),
       );
       _selectedName = widget.initialPlaceName;
       setState(() => _loading = false);
@@ -78,10 +75,8 @@ class _MapPickerModalState extends State<MapPickerModal> {
     _debounceTimer?.cancel();
     _debounceTimer = Timer(const Duration(milliseconds: 50), () {
       _safeSetState(() {
-        if (event.cameraState.center != null) {
-          _selectedPoint = event.cameraState.center;
-        }
-      });
+        _selectedPoint = event.cameraState.center;
+            });
     });
   }
 
@@ -102,13 +97,14 @@ class _MapPickerModalState extends State<MapPickerModal> {
         }
       }
 
-      _currentPosition = await Geolocator.getCurrentPosition(
-        timeLimit: const Duration(seconds: 5),
-        desiredAccuracy: LocationAccuracy.medium,
-      ).timeout(
-        const Duration(seconds: 7),
-        onTimeout: () => throw Exception('GPS fetch timed out'),
-      );
+      _currentPosition =
+          await Geolocator.getCurrentPosition(
+            timeLimit: const Duration(seconds: 5),
+            desiredAccuracy: LocationAccuracy.medium,
+          ).timeout(
+            const Duration(seconds: 7),
+            onTimeout: () => throw Exception('GPS fetch timed out'),
+          );
 
       final point = mapbox.Point(
         coordinates: mapbox.Position(
@@ -134,18 +130,16 @@ class _MapPickerModalState extends State<MapPickerModal> {
         _error = true;
         _errorMessage = 'Could not get your location';
         _loading = false;
-        _selectedPoint = mapbox.Point(
-          coordinates: mapbox.Position(0, 20),
-        );
+        _selectedPoint = mapbox.Point(coordinates: mapbox.Position(0, 20));
       });
     }
   }
 
   void _confirmLocation() async {
     if (_selectedPoint == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please select a location')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Please select a location')));
       return;
     }
 
@@ -206,9 +200,9 @@ class _MapPickerModalState extends State<MapPickerModal> {
       debugPrint('[MapPickerModal] Error: $e');
       _safeSetState(() => _isConfirmingLocation = false);
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error: $e')));
       }
     }
   }
@@ -236,56 +230,59 @@ class _MapPickerModalState extends State<MapPickerModal> {
                     ),
                   )
                 : _error
-                    ? Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            const Icon(Icons.location_off,
-                                size: 64, color: Colors.white54),
-                            const SizedBox(height: 16),
-                            Text(_errorMessage,
-                                style: const TextStyle(color: Colors.white)),
-                            const SizedBox(height: 16),
-                            ElevatedButton(
-                              onPressed: _getCurrentLocation,
-                              child: const Text('Retry'),
-                            ),
-                          ],
+                ? Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Icon(
+                          Icons.location_off,
+                          size: 64,
+                          color: Colors.white54,
                         ),
-                      )
-                    : mapbox.MapWidget(
-                        key: const ValueKey('mapbox-modal'),
-                        styleUri: 'mapbox://styles/mapbox/streets-v12',
-                        cameraOptions: mapbox.CameraOptions(
-                          center: _selectedPoint ??
-                              mapbox.Point(
-                                coordinates: mapbox.Position(0, 20),
-                              ),
+                        const SizedBox(height: 16),
+                        Text(
+                          _errorMessage,
+                          style: const TextStyle(color: Colors.white),
+                        ),
+                        const SizedBox(height: 16),
+                        ElevatedButton(
+                          onPressed: _getCurrentLocation,
+                          child: const Text('Retry'),
+                        ),
+                      ],
+                    ),
+                  )
+                : mapbox.MapWidget(
+                    key: const ValueKey('mapbox-modal'),
+                    styleUri: 'mapbox://styles/mapbox/streets-v12',
+                    cameraOptions: mapbox.CameraOptions(
+                      center:
+                          _selectedPoint ??
+                          mapbox.Point(coordinates: mapbox.Position(0, 20)),
+                      zoom: 15.0,
+                    ),
+                    onMapCreated: (controller) {
+                      if (!_isDisposed) {
+                        _mapboxMap = controller;
+                        debugPrint('[MapPickerModal] Map created');
+                      }
+                    },
+                    onCameraChangeListener: _onCameraChanged,
+                    onTapListener: (mapbox.MapContentGestureContext context) {
+                      _safeSetState(() {
+                        _selectedPoint = context.point;
+                      });
+
+                      // Animate to tapped location
+                      _mapboxMap?.easeTo(
+                        mapbox.CameraOptions(
+                          center: context.point,
                           zoom: 15.0,
                         ),
-                        onMapCreated: (controller) {
-                          if (!_isDisposed) {
-                            _mapboxMap = controller;
-                            debugPrint('[MapPickerModal] Map created');
-                          }
-                        },
-                        onCameraChangeListener: _onCameraChanged,
-                        onTapListener:
-                            (mapbox.MapContentGestureContext context) {
-                          if (context.point != null) {
-                            _safeSetState(() {
-                              _selectedPoint = context.point;
-                            });
-
-                            // Animate to tapped location
-                            _mapboxMap?.easeTo(
-                              mapbox.CameraOptions(
-                                  center: context.point, zoom: 15.0),
-                              mapbox.MapAnimationOptions(duration: 300),
-                            );
-                          }
-                        },
-                      ),
+                        mapbox.MapAnimationOptions(duration: 300),
+                      );
+                                        },
+                  ),
 
             // Pin
             if (!_loading && !_error)
@@ -294,9 +291,7 @@ class _MapPickerModalState extends State<MapPickerModal> {
                   Icons.location_on,
                   size: 48,
                   color: Colors.red,
-                  shadows: [
-                    Shadow(blurRadius: 8, color: Colors.black45),
-                  ],
+                  shadows: [Shadow(blurRadius: 8, color: Colors.black45)],
                 ),
               ),
 
@@ -312,7 +307,7 @@ class _MapPickerModalState extends State<MapPickerModal> {
                     begin: Alignment.topCenter,
                     end: Alignment.bottomCenter,
                     colors: [
-                      Colors.black.withOpacity(0.7),
+                      Colors.black.withValues(alpha: 0.7),
                       Colors.transparent,
                     ],
                   ),
@@ -333,9 +328,7 @@ class _MapPickerModalState extends State<MapPickerModal> {
                         color: Colors.white,
                         fontSize: 20,
                         fontWeight: FontWeight.w600,
-                        shadows: [
-                          Shadow(blurRadius: 4, color: Colors.black45),
-                        ],
+                        shadows: [Shadow(blurRadius: 4, color: Colors.black45)],
                       ),
                     ),
                   ],
@@ -382,7 +375,8 @@ class _MapPickerModalState extends State<MapPickerModal> {
                       if (mounted) {
                         ScaffoldMessenger.of(context).showSnackBar(
                           const SnackBar(
-                              content: Text('GPS timeout. Please try again.')),
+                            content: Text('GPS timeout. Please try again.'),
+                          ),
                         );
                       }
                     } on LocationServiceDisabledException {
@@ -390,7 +384,8 @@ class _MapPickerModalState extends State<MapPickerModal> {
                       if (mounted) {
                         ScaffoldMessenger.of(context).showSnackBar(
                           const SnackBar(
-                              content: Text('Please enable location services')),
+                            content: Text('Please enable location services'),
+                          ),
                         );
                       }
                     } catch (e) {
@@ -398,14 +393,15 @@ class _MapPickerModalState extends State<MapPickerModal> {
                       if (mounted) {
                         ScaffoldMessenger.of(context).showSnackBar(
                           const SnackBar(
-                              content: Text('Could not get location')),
+                            content: Text('Could not get location'),
+                          ),
                         );
                       }
                     }
                   },
-                  child: const Icon(Icons.my_location),
                   backgroundColor: Colors.white,
                   foregroundColor: Theme.of(context).colorScheme.primary,
+                  child: const Icon(Icons.my_location),
                 ),
               ),
 
@@ -422,8 +418,8 @@ class _MapPickerModalState extends State<MapPickerModal> {
                       begin: Alignment.bottomCenter,
                       end: Alignment.topCenter,
                       colors: [
-                        Colors.black.withOpacity(0.9),
-                        Colors.black.withOpacity(0.7),
+                        Colors.black.withValues(alpha: 0.9),
+                        Colors.black.withValues(alpha: 0.7),
                         Colors.transparent,
                       ],
                     ),
@@ -437,10 +433,10 @@ class _MapPickerModalState extends State<MapPickerModal> {
                         Container(
                           padding: const EdgeInsets.all(16),
                           decoration: BoxDecoration(
-                            color: Colors.white.withOpacity(0.15),
+                            color: Colors.white.withValues(alpha: 0.15),
                             borderRadius: BorderRadius.circular(12),
                             border: Border.all(
-                              color: Colors.white.withOpacity(0.3),
+                              color: Colors.white.withValues(alpha: 0.3),
                             ),
                           ),
                           child: Column(
@@ -481,8 +477,9 @@ class _MapPickerModalState extends State<MapPickerModal> {
 
                       // Button
                       ElevatedButton.icon(
-                        onPressed:
-                            _isConfirmingLocation ? null : _confirmLocation,
+                        onPressed: _isConfirmingLocation
+                            ? null
+                            : _confirmLocation,
                         icon: _isConfirmingLocation
                             ? const SizedBox(
                                 width: 20,
@@ -504,8 +501,9 @@ class _MapPickerModalState extends State<MapPickerModal> {
                         ),
                         style: ElevatedButton.styleFrom(
                           padding: const EdgeInsets.symmetric(vertical: 16),
-                          backgroundColor:
-                              Theme.of(context).colorScheme.primary,
+                          backgroundColor: Theme.of(
+                            context,
+                          ).colorScheme.primary,
                           foregroundColor: Colors.white,
                           disabledBackgroundColor: Colors.grey,
                           shape: RoundedRectangleBorder(

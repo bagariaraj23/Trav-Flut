@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
 
 class ResetSuccessScreen extends StatelessWidget {
-  const ResetSuccessScreen({Key? key}) : super(key: key);
+  const ResetSuccessScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
-    return WillPopScope(
-      onWillPop: () async => false,
+    return PopScope(
+      canPop: false,
       child: Scaffold(
         appBar: AppBar(
           automaticallyImplyLeading: false,

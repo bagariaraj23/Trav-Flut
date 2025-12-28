@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart';
 import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
 import 'package:another_flushbar/flushbar.dart';
@@ -58,7 +57,7 @@ void main() async {
       debugPrint('[main] StorageService initialized');
     } catch (e) {
       debugPrint('[main] StorageService initialization failed: $e');
-      throw e;
+      rethrow;
     }
 
     debugPrint('[main] Creating ConnectivityService');
@@ -69,7 +68,7 @@ void main() async {
       debugPrint('[main] ConnectivityService initialized');
     } catch (e) {
       debugPrint('[main] ConnectivityService initialization failed: $e');
-      throw e;
+      rethrow;
     }
 
     debugPrint('[main] Creating core services');
@@ -169,7 +168,7 @@ void main() async {
 }
 
 class TripThreadAppRouter extends StatefulWidget {
-  TripThreadAppRouter({Key? key}) : super(key: key);
+  const TripThreadAppRouter({super.key});
 
   static String? _lastLocation;
 
@@ -487,8 +486,9 @@ class _TripThreadAppRouterState extends State<TripThreadAppRouter> {
             AnimatedBuilder(
               animation: context.watch<AuthProvider>().routingNotifier,
               builder: (context, _) {
-                if (!context.read<AuthProvider>().isLoading)
+                if (!context.read<AuthProvider>().isLoading) {
                   return const SizedBox.shrink();
+                }
                 debugPrint('Rendering SplashScreen');
                 return const IgnorePointer(
                   ignoring: false,

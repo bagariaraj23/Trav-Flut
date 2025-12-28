@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
 
 class ResetPasswordSuccessScreen extends StatelessWidget {
-  const ResetPasswordSuccessScreen({Key? key}) : super(key: key);
+  const ResetPasswordSuccessScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
-    return WillPopScope(
-      onWillPop: () async => false, // Prevent back button
+    return PopScope(
+      canPop: false,
       child: Scaffold(
         appBar: AppBar(
           automaticallyImplyLeading: false, // Remove back button

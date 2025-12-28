@@ -13,20 +13,20 @@ class AppException implements Exception {
 }
 
 class NetworkException extends AppException {
-  NetworkException(String message) : super(message, code: 'NETWORK_ERROR');
+  NetworkException(super.message) : super(code: 'NETWORK_ERROR');
 }
 
 class ValidationException extends AppException {
-  ValidationException(String message) : super(message, code: 'VALIDATION_ERROR');
+  ValidationException(super.message) : super(code: 'VALIDATION_ERROR');
 }
 
 class AuthenticationException extends AppException {
-  AuthenticationException(String message) : super(message, code: 'AUTH_ERROR');
+  AuthenticationException(super.message) : super(code: 'AUTH_ERROR');
 }
 
 class ServerException extends AppException {
-  ServerException(String message, {int? statusCode}) 
-    : super(message, code: 'SERVER_ERROR', statusCode: statusCode);
+  ServerException(super.message, {super.statusCode}) 
+    : super(code: 'SERVER_ERROR');
 }
 
 class ErrorHandler {

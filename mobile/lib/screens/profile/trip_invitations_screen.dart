@@ -5,7 +5,7 @@ import 'package:tripthread/providers/trip_provider.dart';
 import 'package:tripthread/models/trip_join_request.dart';
 
 class TripInvitationsScreen extends StatefulWidget {
-  const TripInvitationsScreen({Key? key}) : super(key: key);
+  const TripInvitationsScreen({super.key});
 
   @override
   State<TripInvitationsScreen> createState() => _TripInvitationsScreenState();

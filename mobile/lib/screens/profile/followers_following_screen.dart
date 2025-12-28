@@ -5,17 +5,16 @@ import 'package:tripthread/models/user.dart';
 import 'package:tripthread/services/api_service.dart';
 import 'package:tripthread/providers/user_provider.dart';
 import 'package:tripthread/providers/auth_provider.dart';
-import 'package:flutter/foundation.dart';
 
 class FollowersFollowingScreen extends StatefulWidget {
   final String userId;
   final bool showFollowers; // true for followers, false for following
 
   const FollowersFollowingScreen({
-    Key? key,
+    super.key,
     required this.userId,
     required this.showFollowers,
-  }) : super(key: key);
+  });
 
   @override
   State<FollowersFollowingScreen> createState() =>

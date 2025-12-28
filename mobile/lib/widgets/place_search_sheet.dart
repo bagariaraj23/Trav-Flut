@@ -7,10 +7,7 @@ import 'package:tripthread/utils/place_search_cache.dart';
 class PlaceSearchSheet extends StatefulWidget {
   final ScrollController controller;
 
-  const PlaceSearchSheet({
-    Key? key,
-    required this.controller,
-  }) : super(key: key);
+  const PlaceSearchSheet({super.key, required this.controller});
 
   @override
   State<PlaceSearchSheet> createState() => _PlaceSearchSheetState();
@@ -94,9 +91,7 @@ class _PlaceSearchSheetState extends State<PlaceSearchSheet> {
       ),
       decoration: BoxDecoration(
         color: Theme.of(context).scaffoldBackgroundColor,
-        borderRadius: const BorderRadius.vertical(
-          top: Radius.circular(20),
-        ),
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -105,7 +100,9 @@ class _PlaceSearchSheetState extends State<PlaceSearchSheet> {
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: Theme.of(context).colorScheme.primary.withOpacity(0.1),
+              color: Theme.of(
+                context,
+              ).colorScheme.primary.withValues(alpha: 0.1),
               borderRadius: const BorderRadius.vertical(
                 top: Radius.circular(20),
               ),
@@ -170,7 +167,9 @@ class _PlaceSearchSheetState extends State<PlaceSearchSheet> {
               child: Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.error.withOpacity(0.1),
+                  color: Theme.of(
+                    context,
+                  ).colorScheme.error.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Row(
@@ -205,10 +204,7 @@ class _PlaceSearchSheetState extends State<PlaceSearchSheet> {
                   SizedBox(height: 16),
                   Text(
                     'Searching places...',
-                    style: TextStyle(
-                      fontSize: 14,
-                      color: Colors.grey,
-                    ),
+                    style: TextStyle(fontSize: 14, color: Colors.grey),
                   ),
                 ],
               ),
@@ -226,11 +222,7 @@ class _PlaceSearchSheetState extends State<PlaceSearchSheet> {
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(
-                        Icons.search_off,
-                        size: 64,
-                        color: Colors.grey[400],
-                      ),
+                      Icon(Icons.search_off, size: 64, color: Colors.grey[400]),
                       const SizedBox(height: 16),
                       Text(
                         'No places found for "${_searchController.text.trim()}"',
@@ -244,10 +236,7 @@ class _PlaceSearchSheetState extends State<PlaceSearchSheet> {
                       const SizedBox(height: 8),
                       Text(
                         'Try searching with a different name\nor use the map picker instead',
-                        style: TextStyle(
-                          fontSize: 14,
-                          color: Colors.grey[500],
-                        ),
+                        style: TextStyle(fontSize: 14, color: Colors.grey[500]),
                         textAlign: TextAlign.center,
                       ),
                       const SizedBox(height: 24),
@@ -273,8 +262,10 @@ class _PlaceSearchSheetState extends State<PlaceSearchSheet> {
             Expanded(
               child: ListView.builder(
                 controller: widget.controller,
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 8,
+                ),
                 itemCount: _searchResults.length,
                 itemBuilder: (context, index) {
                   final place = _searchResults[index];
@@ -312,10 +303,7 @@ class _PlaceSearchSheetState extends State<PlaceSearchSheet> {
                       const SizedBox(height: 8),
                       Text(
                         'Enter at least 2 characters',
-                        style: TextStyle(
-                          fontSize: 14,
-                          color: Colors.grey[500],
-                        ),
+                        style: TextStyle(fontSize: 14, color: Colors.grey[500]),
                       ),
                     ],
                   ),
@@ -333,20 +321,14 @@ class _PlaceSearchSheetState extends State<PlaceSearchSheet> {
       elevation: 0,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
-        side: BorderSide(
-          color: Colors.grey[300]!,
-          width: 1,
-        ),
+        side: BorderSide(color: Colors.grey[300]!, width: 1),
       ),
       child: ListTile(
-        contentPadding: const EdgeInsets.symmetric(
-          horizontal: 16,
-          vertical: 8,
-        ),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         leading: Container(
           padding: const EdgeInsets.all(10),
           decoration: BoxDecoration(
-            color: Theme.of(context).colorScheme.primary.withOpacity(0.1),
+            color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.1),
             borderRadius: BorderRadius.circular(10),
           ),
           child: Icon(
@@ -356,20 +338,14 @@ class _PlaceSearchSheetState extends State<PlaceSearchSheet> {
         ),
         title: Text(
           place.name,
-          style: const TextStyle(
-            fontWeight: FontWeight.w600,
-            fontSize: 15,
-          ),
+          style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15),
         ),
         subtitle: place.address != null
             ? Padding(
                 padding: const EdgeInsets.only(top: 4),
                 child: Text(
                   place.address!,
-                  style: TextStyle(
-                    color: Colors.grey[600],
-                    fontSize: 13,
-                  ),
+                  style: TextStyle(color: Colors.grey[600], fontSize: 13),
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                 ),
