@@ -105,7 +105,7 @@ export async function updateTripStatuses(
   prisma: PrismaClient,
   now: Date
 ): Promise<void> {
-  // First, find trips that will be ended (before updating status)
+  // Find trips that will be ended
   const tripsToEnd = await prisma.trip.findMany({
     where: {
       endDate: { lte: now },
@@ -117,36 +117,85 @@ export async function updateTripStatuses(
     },
   });
 
-  // Create final posts for trips that will be ended
-  // Do this before updating status to ensure we have the trip data
+  // For each trip, atomically: (a) create final post if needed, (b) update status
   for (const trip of tripsToEnd) {
     try {
-      await createFinalPostForTrip(prisma, trip.id, trip.destinations);
+      await prisma.$transaction(async (tx) => {
+        // If final post already exists, skip
+        const existingFinalPost = await tx.tripFinalPost.findUnique({
+          where: { tripId: trip.id },
+        });
+        if (!existingFinalPost) {
+          // Fetch full trip with thread entries for summary (inside tx)
+          const tripData = await tx.trip.findUnique({
+            where: { id: trip.id },
+            include: {
+              threadEntries: {
+                where: { type: "MEDIA", mediaId: { not: null } },
+                include: { media: true },
+                orderBy: { createdAt: "asc" },
+              },
+            },
+          });
+          if (!tripData) throw new Error("Trip not found");
+          // Fetch all thread entries for full summary
+          const allThreadEntries = await tx.tripThreadEntry.findMany({
+            where: { tripId: trip.id },
+            orderBy: { createdAt: "asc" },
+          });
+          const textEntries = allThreadEntries.filter(
+            (entry) => entry.type === "TEXT" && entry.contentText
+          );
+          const mediaEntries = (tripData.threadEntries || []).filter(
+            (entry) => entry.type === "MEDIA" && entry.mediaId
+          );
+          const locationEntries = allThreadEntries.filter(
+            (entry) => entry.type === "LOCATION" && entry.locationName
+          );
+          let summaryText = `Amazing trip to ${trip.destinations.join(", ")}! `;
+          if (locationEntries.length > 0)
+            summaryText += `Visited ${locationEntries.length} amazing places. `;
+          if (textEntries.length > 0)
+            summaryText += `Shared ${textEntries.length} memorable moments. `;
+          if (mediaEntries.length > 0)
+            summaryText += `Captured ${mediaEntries.length} beautiful memories.`;
+          const curatedMedia = mediaEntries
+            .slice(0, 6)
+            .map((entry) => entry.media?.url)
+            .filter((url): url is string => Boolean(url));
+          await tx.tripFinalPost.create({
+            data: {
+              tripId: trip.id,
+              summaryText,
+              curatedMedia,
+              caption: `My trip to ${trip.destinations.join(
+                ", "
+              )} was incredible! 🌟`,
+            },
+          });
+        }
+        // Update trip status
+        await tx.trip.update({
+          where: { id: trip.id },
+          data: { status: TripStatus.ENDED },
+        });
+      });
     } catch (error) {
-      // Log error but continue with other trips
       console.error(
-        `Failed to create final post for trip ${trip.id}:`,
+        `Failed to end trip ${trip.id}:`,
         error instanceof Error ? error.message : String(error)
       );
     }
   }
-
-  // Now update trip statuses in a transaction
-  await prisma.$transaction([
-    prisma.trip.updateMany({
-      where: {
-        endDate: { lte: now },
-        status: { in: [TripStatus.UPCOMING, TripStatus.ONGOING] },
-      },
-      data: { status: TripStatus.ENDED },
-    }),
-    prisma.trip.updateMany({
+  // Atomically update ongoing trips in one go (safe, read to write, not used for ending)
+  await prisma.$transaction(async (tx) => {
+    await tx.trip.updateMany({
       where: {
         startDate: { lte: now },
         endDate: { gt: now },
         status: TripStatus.UPCOMING,
       },
       data: { status: TripStatus.ONGOING },
-    }),
-  ]);
+    });
+  });
 }
