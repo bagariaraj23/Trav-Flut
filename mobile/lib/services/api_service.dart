@@ -1316,6 +1316,15 @@ class ApiService {
       });
       debugPrint('[ApiService] Get home feed response: ${response.statusCode}');
 
+      // Check if response is valid JSON
+      if (response.data is! Map<String, dynamic>) {
+        debugPrint('[ApiService] Get home feed: Invalid response format (expected JSON)');
+        return ApiResponse<Map<String, dynamic>>(
+          success: false,
+          error: 'Invalid server response format',
+        );
+      }
+
       if (response.data['success'] && response.data['data'] != null) {
         return ApiResponse<Map<String, dynamic>>(
           success: true,
@@ -1331,9 +1340,18 @@ class ApiService {
       }
     } on DioException catch (e) {
       debugPrint('[ApiService] Get home feed DioException: ${e.message}');
+      String errorMessage = 'Network error occurred';
+      if (e.response?.data != null) {
+        if (e.response!.data is Map<String, dynamic>) {
+          errorMessage = e.response!.data['error'] ?? 'Network error occurred';
+        } else if (e.response!.data is String) {
+          // Server returned HTML error page (e.g., 500 error)
+          errorMessage = 'Server error (${e.response?.statusCode ?? 'unknown'})';
+        }
+      }
       return ApiResponse<Map<String, dynamic>>(
         success: false,
-        error: e.response?.data['error'] ?? 'Network error occurred',
+        error: errorMessage,
       );
     } catch (e) {
       debugPrint('[ApiService] Get home feed unexpected error: $e');
