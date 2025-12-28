@@ -141,11 +141,51 @@ export async function POST(
             if (existingFollow) return { code: "ALREADY_FOLLOW" };
 
             // Existing pending request?
-            const existingRequest = await tx.followRequest.findFirst({
+            const existingPendingRequest = await tx.followRequest.findFirst({
               where: { followerId, followeeId, status: "PENDING" },
             });
-            if (existingRequest)
-              return { code: "PENDING", request: existingRequest };
+            if (existingPendingRequest)
+              return { code: "PENDING", request: existingPendingRequest };
+
+            // Check for ACCEPTED request - if exists, verify follow relationship exists
+            // If ACCEPTED request exists but no follow relationship, it's orphaned (user unfollowed)
+            // In that case, delete it and allow new request
+            const existingAcceptedRequest = await tx.followRequest.findFirst({
+              where: { followerId, followeeId, status: "ACCEPTED" },
+            });
+            if (existingAcceptedRequest) {
+              // Verify follow relationship exists - if not, delete orphaned ACCEPTED request
+              const followExists = await tx.follow.findUnique({
+                where: {
+                  followerId_followeeId: {
+                    followerId,
+                    followeeId,
+                  },
+                },
+              });
+              if (followExists) {
+                // Follow relationship exists, so they're already following
+                return { code: "ALREADY_FOLLOW" };
+              } else {
+                // Orphaned ACCEPTED request (user unfollowed), delete it
+                await tx.followRequest.deleteMany({
+                  where: {
+                    followerId,
+                    followeeId,
+                    status: "ACCEPTED",
+                  },
+                });
+              }
+            }
+
+            // Delete REJECTED requests to allow re-requesting after rejection
+            await tx.followRequest.deleteMany({
+              where: {
+                followerId,
+                followeeId,
+                status: "REJECTED",
+              },
+            });
 
             // Private: create request, else create follow
             if (followee.isPrivate) {
@@ -280,12 +320,10 @@ export async function DELETE(
 
     // Handle unfollow in a transaction
     const result = await prisma.$transaction(async (tx) => {
-      // Delete any pending follow requests first
       const deletedRequests = await tx.followRequest.deleteMany({
         where: {
           followerId,
           followeeId,
-          status: "PENDING",
         },
       });
 
@@ -297,11 +335,13 @@ export async function DELETE(
         },
       });
 
-      let message = "Already not following this user";
+      let message = "Successfully unfollowed user";
       if (deletedFollow.count > 0) {
         message = "Successfully unfollowed user";
       } else if (deletedRequests.count > 0) {
         message = "Follow request cancelled successfully";
+      } else {
+        message = "Already not following this user";
       }
 
       return {

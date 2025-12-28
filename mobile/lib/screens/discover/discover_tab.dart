@@ -121,10 +121,13 @@ class _DiscoverTabState extends State<DiscoverTab> {
 
     try {
       bool success = false;
+      // Always fetch fresh status before taking action
+      await userProvider.fetchDetailedFollowStatus(userId);
       final detailedStatus = userProvider.getDetailedFollowStatus(userId);
       final isRequestPending = detailedStatus?.isRequestPending ?? false;
+      final isFollowing = detailedStatus?.isFollowing ?? false;
 
-      if (isCurrentlyFollowing) {
+      if (isFollowing) {
         success = await userProvider.unfollowUser(
           userId,
           currentUserId: currentUserId,
@@ -144,6 +147,8 @@ class _DiscoverTabState extends State<DiscoverTab> {
       if (!mounted) return;
 
       if (success) {
+        // Refresh status after action
+        await userProvider.fetchDetailedFollowStatus(userId);
         final status = userProvider.getDetailedFollowStatus(userId);
         if (status != null) {
           final newState = status.isRequestPending
@@ -156,10 +161,13 @@ class _DiscoverTabState extends State<DiscoverTab> {
             ),
           );
         }
-      } else if (userProvider.error != null) {
+      } else {
+        final errorMessage = userProvider.error ?? 
+            userProvider.followRequestsError ?? 
+            'Failed to perform action';
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(userProvider.error!),
+            content: Text(errorMessage),
             backgroundColor: Colors.red,
           ),
         );

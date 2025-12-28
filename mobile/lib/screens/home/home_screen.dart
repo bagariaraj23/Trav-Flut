@@ -28,11 +28,14 @@ class _HomeScreenState extends State<HomeScreen> {
       '[HomeScreen] Initializing with initialTab: ${widget.initialTab}',
     );
     _currentIndex = widget.initialTab;
-    // Initialize trip provider
+    // Initialize trip provider and load pending follow requests for notifications
     WidgetsBinding.instance.addPostFrameCallback((_) {
       debugPrint('[HomeScreen] Initializing providers');
       context.read<TripProvider>().initialize();
       debugPrint('[HomeScreen] TripProvider initialized');
+      // Load pending follow requests to update notification badge
+      context.read<UserProvider>().loadPendingFollowRequests();
+      debugPrint('[HomeScreen] Loading pending follow requests for notifications');
     });
   }
 

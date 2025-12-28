@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
 import 'package:tripthread/providers/user_provider.dart';
+import 'package:tripthread/providers/auth_provider.dart';
 import 'package:tripthread/models/follow_status.dart';
 
 class FollowRequestsScreen extends StatefulWidget {
@@ -25,6 +26,9 @@ class _FollowRequestsScreenState extends State<FollowRequestsScreen> {
     if (!mounted) return;
 
     final userProvider = context.read<UserProvider>();
+    final authProvider = context.read<AuthProvider>();
+    final currentUserId = authProvider.currentUser?.id;
+    
     final success = await userProvider.acceptFollowRequest(requestId);
 
     if (!mounted) return;
@@ -37,9 +41,12 @@ class _FollowRequestsScreenState extends State<FollowRequestsScreen> {
         ),
       );
 
-      // Refresh follow requests list
-      if (mounted) {
-        await userProvider.loadPendingFollowRequests();
+      // Refresh follow requests list and current user's profile stats
+      if (mounted && currentUserId != null) {
+        await Future.wait([
+          userProvider.loadPendingFollowRequests(),
+          userProvider.loadProfileData(currentUserId, currentUserId),
+        ]);
       }
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -57,6 +64,9 @@ class _FollowRequestsScreenState extends State<FollowRequestsScreen> {
     if (!mounted) return;
 
     final userProvider = context.read<UserProvider>();
+    final authProvider = context.read<AuthProvider>();
+    final currentUserId = authProvider.currentUser?.id;
+    
     final success = await userProvider.rejectFollowRequest(requestId);
 
     if (!mounted) return;
@@ -69,9 +79,12 @@ class _FollowRequestsScreenState extends State<FollowRequestsScreen> {
         ),
       );
 
-      // Refresh follow requests list
-      if (mounted) {
-        await userProvider.loadPendingFollowRequests();
+      // Refresh follow requests list and current user's profile stats
+      if (mounted && currentUserId != null) {
+        await Future.wait([
+          userProvider.loadPendingFollowRequests(),
+          userProvider.loadProfileData(currentUserId, currentUserId),
+        ]);
       }
     } else {
       ScaffoldMessenger.of(context).showSnackBar(

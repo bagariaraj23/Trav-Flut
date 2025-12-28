@@ -12,6 +12,13 @@ export async function register() {
   console.log(`[Instrumentation] NEXT_RUNTIME: ${process.env.NEXT_RUNTIME || 'not set'}`);
   console.log(`[Instrumentation] NODE_ENV: ${process.env.NODE_ENV || 'not set'}`);
   
+  // Only run startup logging in Node.js runtime, not in Edge runtime
+  // Prisma and other Node.js-only libraries can't run in Edge runtime
+  if (process.env.NEXT_RUNTIME === 'edge') {
+    console.log('[Instrumentation] Skipping startup logging in Edge runtime');
+    return;
+  }
+  
   try {
     // Import and run startup logger
     const { logStartupInfo } = await import('./lib/startup-logger');

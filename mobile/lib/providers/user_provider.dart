@@ -225,23 +225,35 @@ class UserProvider extends ChangeNotifier {
   Future<bool> sendFollowRequest(String userId, {String? currentUserId}) async {
     try {
       _isLoading = true;
+      _followRequestsError = null;
       notifyListeners();
       final response = await _apiService.followUser(userId);
       if (response.success) {
         await fetchDetailedFollowStatus(userId);
-        // Refresh current user's stats to update following count
+        // Refresh current user's stats to update following count (only if actually following, not just request sent)
+        // For public profiles, following count increases immediately
+        // For private profiles, following count doesn't change until request is accepted
         if (currentUserId != null) {
-          await fetchUserStats(currentUserId);
+          // Check if we're actually following (public profile) or just sent request (private profile)
+          final status = getDetailedFollowStatus(userId);
+          if (status?.isFollowing == true) {
+            await fetchUserStats(currentUserId);
+          }
         }
+        // Refresh pending follow requests to update notification count
+        // This ensures the notification icon shows the new request
+        await loadPendingFollowRequests();
         notifyListeners();
         return true;
       } else {
         _followRequestsError =
             response.error ?? 'Failed to send follow request';
+        notifyListeners();
         return false;
       }
     } catch (e) {
       _followRequestsError = 'Failed to send follow request';
+      notifyListeners();
       return false;
     } finally {
       _isLoading = false;
@@ -314,10 +326,26 @@ class UserProvider extends ChangeNotifier {
       _isFollowRequestsLoading = true;
       isProcessingRequestId = requestId;
       notifyListeners();
+      
+      // Get the request to find followerId before accepting
+      final request = _pendingFollowRequests.firstWhere(
+        (r) => r.id == requestId,
+        orElse: () => throw Exception('Request not found'),
+      );
+      final followerId = request.followerId;
+      final followeeId = request.followeeId;
+      
       final response = await _apiService.acceptFollowRequest(requestId);
       if (response.success) {
         _pendingFollowRequests
             .removeWhere((request) => request.id == requestId);
+        
+        // Update stats for both users after accepting
+        // Current user (followee) gets a new follower
+        await fetchUserStats(followeeId);
+        // Follower gets a new following
+        await fetchUserStats(followerId);
+        
         notifyListeners();
         return true;
       }
@@ -339,10 +367,23 @@ class UserProvider extends ChangeNotifier {
       _isFollowRequestsLoading = true;
       isProcessingRequestId = requestId;
       notifyListeners();
+      
+      // Get the request to find followerId before rejecting
+      // Note: Rejecting doesn't change stats, but we keep this for consistency
+      final request = _pendingFollowRequests.firstWhere(
+        (r) => r.id == requestId,
+        orElse: () => throw Exception('Request not found'),
+      );
+      final followeeId = request.followeeId;
+      
       final response = await _apiService.rejectFollowRequest(requestId);
       if (response.success) {
         _pendingFollowRequests
             .removeWhere((request) => request.id == requestId);
+        
+        // Stats don't change on reject, but refresh to ensure consistency
+        await fetchUserStats(followeeId);
+        
         notifyListeners();
         return true;
       }
@@ -384,6 +425,18 @@ class UserProvider extends ChangeNotifier {
         _hasMoreUsers = response.data!.length == pageSize;
         if (_hasMoreUsers) {
           _discoverPage++;
+        }
+        // Fetch detailed follow status for all users to ensure accurate button states
+        // This ensures we have isRequestPending information for each user
+        final userIds = response.data!
+            .map((user) => user['id'] as String)
+            .where((id) => id.isNotEmpty)
+            .toList();
+        if (userIds.isNotEmpty) {
+          // Fetch detailed follow status for all users in parallel
+          await Future.wait(
+            userIds.map((userId) => fetchDetailedFollowStatus(userId)),
+          );
         }
       } else {
         _discoverError = response.error ?? "Failed to search users";

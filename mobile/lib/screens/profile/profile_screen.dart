@@ -51,10 +51,24 @@ class _ProfileScreenState extends State<ProfileScreen> {
   // The provider is now responsible for updating the state and notifying the UI.
   Future<void> _handleFollowToggle() async {
     final userProvider = context.read<UserProvider>();
-    final detailedStatus = userProvider.getDetailedFollowStatus(widget.userId);
     final authProvider = context.read<AuthProvider>();
 
-    if (detailedStatus == null || authProvider.currentUser == null) return;
+    if (authProvider.currentUser == null) return;
+
+    // Fetch fresh status before taking action
+    await userProvider.fetchDetailedFollowStatus(widget.userId);
+    final detailedStatus = userProvider.getDetailedFollowStatus(widget.userId);
+
+    if (detailedStatus == null) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Unable to determine follow status'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
 
     bool success = false;
     String actionMessage = '';
@@ -64,9 +78,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
         widget.userId,
         currentUserId: authProvider.currentUser!.id,
       );
+      // Use the message from the API response if available
       actionMessage = success
-          ? 'Successfully unfollowed user'
-          : 'Failed to unfollow user';
+          ? (userProvider.error == null ? 'Successfully unfollowed user' : userProvider.error!)
+          : (userProvider.error ?? 'Failed to unfollow user');
     } else if (detailedStatus.isRequestPending) {
       success = await userProvider.cancelFollowRequest(
         widget.userId,
@@ -74,24 +89,42 @@ class _ProfileScreenState extends State<ProfileScreen> {
       );
       actionMessage = success
           ? 'Follow request cancelled'
-          : 'Failed to cancel follow request';
+          : (userProvider.error ?? 'Failed to cancel follow request');
     } else {
       success = await userProvider.sendFollowRequest(
         widget.userId,
         currentUserId: authProvider.currentUser!.id,
       );
-      actionMessage = success
-          ? 'Follow request sent'
-          : 'Failed to send follow request';
+      // Check the updated status to determine the correct message
+      await userProvider.fetchDetailedFollowStatus(widget.userId);
+      final updatedStatus = userProvider.getDetailedFollowStatus(widget.userId);
+      if (success) {
+        if (updatedStatus?.isFollowing == true) {
+          // Public profile - now following
+          actionMessage = 'Successfully following user';
+        } else if (updatedStatus?.isRequestPending == true) {
+          // Private profile - request sent
+          actionMessage = 'Follow request sent';
+        } else {
+          actionMessage = 'Follow request sent';
+        }
+      } else {
+        actionMessage = userProvider.followRequestsError ?? 
+            userProvider.error ?? 
+            'Failed to send follow request';
+      }
     }
 
     if (!mounted) return;
 
     // Show appropriate message regardless of success/failure
+    final errorMessage = userProvider.error ?? 
+        userProvider.followRequestsError ?? 
+        'An error occurred';
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
-          success ? actionMessage : (userProvider.error ?? 'An error occurred'),
+          success ? actionMessage : errorMessage,
         ),
         backgroundColor: success ? Colors.green : Colors.red,
       ),

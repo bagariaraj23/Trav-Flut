@@ -21,7 +21,6 @@ export async function POST(request: NextRequest) {
             );
           }
 
-          // TRANSACTIONAL LOGIC
           const result = await prisma.$transaction(async (tx) => {
             const [follower, followee] = await Promise.all([
               tx.user.findUnique({ where: { id: followerId } }),
@@ -34,11 +33,49 @@ export async function POST(request: NextRequest) {
             });
             if (existingFollow)
               return { code: "ALREADY_FOLLOW", id: existingFollow.id };
-            const existingRequest = await tx.followRequest.findFirst({
+            
+            // Check for existing pending request
+            const existingPendingRequest = await tx.followRequest.findFirst({
               where: { followerId, followeeId, status: "PENDING" },
             });
-            if (existingRequest)
-              return { code: "PENDING", request: existingRequest };
+            if (existingPendingRequest)
+              return { code: "PENDING", request: existingPendingRequest };
+            
+            // Check for ACCEPTED request - if exists, verify follow relationship exists
+            // If ACCEPTED request exists but no follow relationship, it's orphaned (user unfollowed)
+            // In that case, delete it and allow new request
+            const existingAcceptedRequest = await tx.followRequest.findFirst({
+              where: { followerId, followeeId, status: "ACCEPTED" },
+            });
+            if (existingAcceptedRequest) {
+              // Verify follow relationship exists - if not, delete orphaned ACCEPTED request
+              const followExists = await tx.follow.findFirst({
+                where: { followerId, followeeId },
+              });
+              if (followExists) {
+                // Follow relationship exists, so they're already following
+                return { code: "ALREADY_FOLLOW" };
+              } else {
+                // Orphaned ACCEPTED request (user unfollowed), delete it
+                await tx.followRequest.deleteMany({
+                  where: {
+                    followerId,
+                    followeeId,
+                    status: "ACCEPTED",
+                  },
+                });
+              }
+            }
+            
+            // Delete REJECTED requests to allow re-requesting after rejection
+            await tx.followRequest.deleteMany({
+              where: {
+                followerId,
+                followeeId,
+                status: "REJECTED",
+              },
+            });
+            
             const followRequest = await tx.followRequest.create({
               data: { followerId, followeeId, status: "PENDING" },
             });
@@ -217,12 +254,10 @@ export async function DELETE(request: NextRequest) {
             );
           }
 
-          // Find and delete the follow request
           const deletedRequest = await prisma.followRequest.deleteMany({
             where: {
               id: requestId,
               followerId: currentUserId,
-              status: "PENDING",
             },
           });
 

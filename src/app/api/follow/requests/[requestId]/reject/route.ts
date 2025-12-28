@@ -53,7 +53,6 @@ export async function PUT(
             );
           }
 
-          // Update request status to rejected
           await prisma.followRequest.update({
             where: { id: requestId },
             data: {
