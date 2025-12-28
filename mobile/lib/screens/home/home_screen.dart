@@ -516,8 +516,22 @@ class _TripsTabState extends State<TripsTab> {
       return;
     }
 
-    // Check if there are any conflicts
-    if (!conflictInfo.hasOngoingTrip && !conflictInfo.hasFutureTrip) {
+    // If there's an ongoing trip, button should be disabled (this shouldn't be called)
+    // But handle it just in case
+    if (conflictInfo.hasOngoingTrip) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('You have an ongoing trip. Please end it before starting a new one.'),
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+      return;
+    }
+
+    // Check if there's a future trip - show warning dialog
+    if (!conflictInfo.hasFutureTrip) {
       // No conflicts, proceed directly
       if (context.mounted) {
         context.push('/create-trip', extra: {'from': '/home'});
@@ -525,12 +539,10 @@ class _TripsTabState extends State<TripsTab> {
       return;
     }
 
-    // Show warning dialog
+    // Show warning dialog for future trip
     if (!context.mounted) return;
 
-    final existingTrip = conflictInfo.hasOngoingTrip
-        ? conflictInfo.ongoingTrip
-        : conflictInfo.futureTrip;
+    final existingTrip = conflictInfo.futureTrip;
 
     final shouldContinue = await showDialog<bool>(
       context: context,
@@ -548,9 +560,7 @@ class _TripsTabState extends State<TripsTab> {
             children: [
               // Title
               Text(
-                conflictInfo.hasOngoingTrip
-                    ? 'Ongoing Trip Active'
-                    : 'Future Trip Scheduled',
+                'Future Trip Scheduled',
                 style: Theme.of(context).textTheme.titleLarge?.copyWith(
                       fontWeight: FontWeight.bold,
                       fontSize: 20,
@@ -620,59 +630,84 @@ class _TripsTabState extends State<TripsTab> {
 
               // Warning Message
               Container(
-                padding: const EdgeInsets.all(16),
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                 decoration: BoxDecoration(
                   color: Theme.of(context)
                       .colorScheme
                       .errorContainer
-                      .withOpacity(0.3),
+                      .withOpacity(0.2),
                   borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: Theme.of(context).colorScheme.error.withOpacity(0.3),
+                    width: 1,
+                  ),
                 ),
                 child: Text(
-                  conflictInfo.hasOngoingTrip
-                      ? 'Creating a new trip will end your current trip.'
-                      : 'Creating a new trip will replace your scheduled trip. The scheduled trip will be cancelled.',
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  'Creating a new trip will replace your scheduled trip. The scheduled trip will be cancelled.',
+                  textAlign: TextAlign.left,
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
                         color: Theme.of(context).colorScheme.onSurface,
+                        fontSize: 12,
                         height: 1.4,
+                        fontWeight: FontWeight.w400,
+                        letterSpacing: 0.1,
                       ),
                 ),
               ),
 
               const SizedBox(height: 24),
 
-              // Action Buttons - Vertical Layout
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  if (existingTrip != null)
-                    OutlinedButton(
-                      onPressed: () {
-                        Navigator.of(context).pop(false);
-                        context.push('/trip/${existingTrip.id}');
-                      },
-                      style: OutlinedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+              // Action Buttons - Bottom Right Aligned
+              Align(
+                alignment: Alignment.centerRight,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    if (existingTrip != null)
+                      OutlinedButton(
+                        onPressed: () {
+                          Navigator.of(context).pop(false);
+                          context.push('/trip/${existingTrip.id}');
+                        },
+                        style: OutlinedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 12),
+                          minimumSize: const Size(0, 32),
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        ),
+                        child: const Text('View Trip', style: TextStyle(fontSize: 13)),
                       ),
-                      child: const Text('View Trip'),
+                    if (existingTrip != null) const SizedBox(height: 8),
+                    // Continue & replace and Cancel on same line
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        TextButton(
+                          onPressed: () => Navigator.of(context).pop(false),
+                          style: TextButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 12),
+                            minimumSize: const Size(0, 32),
+                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          ),
+                          child: const Text('Cancel', style: TextStyle(fontSize: 13)),
+                        ),
+                        const SizedBox(width: 8),
+                        ElevatedButton(
+                          onPressed: () => Navigator.of(context).pop(true),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Theme.of(context).colorScheme.error,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 12),
+                            minimumSize: const Size(0, 32),
+                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                            elevation: 0,
+                          ),
+                          child: const Text('Continue & replace', style: TextStyle(fontSize: 13)),
+                        ),
+                      ],
                     ),
-                  if (existingTrip != null) const SizedBox(height: 10),
-                  ElevatedButton(
-                    onPressed: () => Navigator.of(context).pop(true),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Theme.of(context).colorScheme.error,
-                      foregroundColor: Colors.white,
-                    ),
-                    child: Text(
-                      conflictInfo.hasOngoingTrip ? 'Continue & end' : 'Continue & replace',
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  TextButton(
-                    onPressed: () => Navigator.of(context).pop(false),
-                    child: const Text('Cancel'),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ],
           ),
@@ -721,9 +756,16 @@ class _TripsTabState extends State<TripsTab> {
           actions: [
             Consumer<TripProvider>(
               builder: (context, tripProvider, child) {
+                // Check if there's an ongoing trip to disable the button
+                final hasOngoingTrip = tripProvider.hasOngoingTrip;
                 return IconButton(
                   icon: const Icon(Icons.add),
-                  onPressed: () => _handleCreateTrip(context, tripProvider),
+                  onPressed: hasOngoingTrip
+                      ? null
+                      : () => _handleCreateTrip(context, tripProvider),
+                  tooltip: hasOngoingTrip
+                      ? 'End your ongoing trip before creating a new one'
+                      : 'Create new trip',
                 );
               },
             ),
@@ -735,7 +777,8 @@ class _TripsTabState extends State<TripsTab> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                if (tripProvider.currentTrip != null)
+                if (tripProvider.currentTrip != null &&
+                    tripProvider.currentTrip!.status == TripStatus.ongoing)
                   _buildOngoingTripBanner(context, tripProvider.currentTrip!),
                 _buildTripsContent(context, tripProvider),
               ],
@@ -782,7 +825,9 @@ class _TripsTabState extends State<TripsTab> {
               ),
               const SizedBox(height: 24),
               ElevatedButton.icon(
-                onPressed: () => _handleCreateTrip(context, tripProvider),
+                onPressed: tripProvider.hasOngoingTrip
+                    ? null
+                    : () => _handleCreateTrip(context, tripProvider),
                 icon: const Icon(Icons.add),
                 label: const Text('Start Your First Trip'),
               ),
