@@ -182,6 +182,58 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
                       ],
                     ),
                   ),
+                  // Floating avatar button in top right (only for other users' trips)
+                  if (_trip?.user != null && !_isOwner())
+                    Positioned(
+                      top: MediaQuery.of(context).padding.top + 12,
+                      right: 12,
+                      child: Material(
+                        color: Colors.transparent,
+                        child: InkWell(
+                          onTap: () {
+                            context.push('/profile/${_trip!.user!.id}');
+                          },
+                          customBorder: const CircleBorder(),
+                          borderRadius: BorderRadius.circular(20),
+                          child: Container(
+                            padding: const EdgeInsets.all(1.5),
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: Colors.white,
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withOpacity(0.15),
+                                  blurRadius: 8,
+                                  offset: const Offset(0, 2),
+                                  spreadRadius: 0,
+                                ),
+                              ],
+                            ),
+                            child: CircleAvatar(
+                              radius: 15,
+                              backgroundColor:
+                                  Theme.of(context).colorScheme.primary,
+                              backgroundImage: _trip!.user!.avatarUrl != null
+                                  ? NetworkImage(_trip!.user!.avatarUrl!)
+                                  : null,
+                              child: _trip!.user!.avatarUrl == null
+                                  ? Text(
+                                      _trip!.user!.name
+                                              ?.substring(0, 1)
+                                              .toUpperCase() ??
+                                          'U',
+                                      style: const TextStyle(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w600,
+                                        color: Colors.white,
+                                      ),
+                                    )
+                                  : null,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
                   if (_isUpdatingCover)
                     Positioned.fill(
                       child: Container(
