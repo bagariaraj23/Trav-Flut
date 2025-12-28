@@ -90,7 +90,7 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
 
     return PopScope(
       canPop: true,
-      onPopInvoked: (didPop) {
+      onPopInvokedWithResult: (didPop, result) {
         if (!didPop) {
           if (context.canPop()) {
             context.pop();

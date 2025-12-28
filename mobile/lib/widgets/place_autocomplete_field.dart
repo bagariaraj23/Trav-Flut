@@ -37,8 +37,6 @@ class _PlaceAutocompleteFieldState extends State<PlaceAutocompleteField> {
   OverlayEntry? _overlayEntry;
   final LayerLink _layerLink = LayerLink();
 
-  bool _isShowingSuggestions = false;
-
   @override
   void initState() {
     super.initState();
@@ -122,13 +120,11 @@ class _PlaceAutocompleteFieldState extends State<PlaceAutocompleteField> {
     );
 
     Overlay.of(context).insert(_overlayEntry!);
-    _isShowingSuggestions = true;
   }
 
   void _hideOverlay() {
     _overlayEntry?.remove();
     _overlayEntry = null;
-    _isShowingSuggestions = false;
   }
 
   void _onChanged(String value) {

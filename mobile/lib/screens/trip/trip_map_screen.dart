@@ -143,7 +143,7 @@ class _TripMapScreenState extends State<TripMapScreen> {
   Widget build(BuildContext context) {
     return PopScope(
       canPop: true,
-      onPopInvoked: (didPop) {
+      onPopInvokedWithResult: (didPop, result) {
         if (!didPop) {
           if (context.canPop()) {
             context.pop();
@@ -240,7 +240,7 @@ class _TripMapScreenState extends State<TripMapScreen> {
                         scrollDirection: Axis.horizontal,
                         itemCount: _places!.length,
                         padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                        separatorBuilder: (_, __) => const SizedBox(width: 8),
+                        separatorBuilder: (_, _) => const SizedBox(width: 8),
                         itemBuilder: (context, idx) {
                           final mp = _places![idx];
                           return _buildPlaceCard(mp);
@@ -443,10 +443,10 @@ class _TripMapScreenState extends State<TripMapScreen> {
       await _circleManager?.create(
         mapbox.CircleAnnotationOptions(
           geometry: mapbox.Point(coordinates: mapbox.Position(lng, lat)),
-          circleColor: color.value,
+          circleColor: color.toARGB32(),
           circleRadius: 10.0,
           circleStrokeWidth: 2.0,
-          circleStrokeColor: Colors.white.value,
+          circleStrokeColor: Colors.white.toARGB32(),
         ),
       );
 
@@ -455,8 +455,8 @@ class _TripMapScreenState extends State<TripMapScreen> {
         mapbox.PointAnnotationOptions(
           geometry: mapbox.Point(coordinates: mapbox.Position(lng, lat)),
           textField: place.name,
-          textColor: Colors.black.value,
-          textHaloColor: Colors.white.value,
+          textColor: Colors.black.toARGB32(),
+          textHaloColor: Colors.white.toARGB32(),
           textHaloWidth: 2.0,
           textSize: 12.0,
           textOffset: [0, 1.5],
@@ -501,7 +501,7 @@ class _TripMapScreenState extends State<TripMapScreen> {
     await _routeManager?.create(
       mapbox.PolylineAnnotationOptions(
         geometry: mapbox.LineString(coordinates: coordinates),
-        lineColor: Colors.deepPurple.value,
+        lineColor: Colors.deepPurple.toARGB32(),
         lineWidth: 4.0,
         lineOpacity: 0.7,
       ),

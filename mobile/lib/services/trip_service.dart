@@ -116,10 +116,10 @@ class TripService {
     bool replaceExisting = false,
   }) async {
     try {
-      print('[DEBUG] TripService.createTrip called');
-      print('[DEBUG] Request data: ${request.toJson()}');
-      print('[DEBUG] Request JSON: ${jsonEncode(request.toJson())}');
-      print('[DEBUG] Replace existing: $replaceExisting');
+      debugPrint('[DEBUG] TripService.createTrip called');
+      debugPrint('[DEBUG] Request data: ${request.toJson()}');
+      debugPrint('[DEBUG] Request JSON: ${jsonEncode(request.toJson())}');
+      debugPrint('[DEBUG] Replace existing: $replaceExisting');
 
       final requestData = request.toJson();
       if (replaceExisting) {
@@ -128,27 +128,27 @@ class TripService {
 
       final response = await _dio.post('/trips', data: requestData);
 
-      print('[DEBUG] HTTP response received:');
-      print('[DEBUG] Status code: ${response.statusCode}');
-      print('[DEBUG] Response data: ${response.data}');
+      debugPrint('[DEBUG] HTTP response received:');
+      debugPrint('[DEBUG] Status code: ${response.statusCode}');
+      debugPrint('[DEBUG] Response data: ${response.data}');
 
       return ApiResponse<Trip>.fromJson(
         response.data,
         (json) => Trip.fromJson(json as Map<String, dynamic>),
       );
     } on DioException catch (e) {
-      print('[DEBUG] DioException in createTrip:');
-      print('[DEBUG] Error type: ${e.type}');
-      print('[DEBUG] Error message: ${e.message}');
-      print('[DEBUG] Response status: ${e.response?.statusCode}');
-      print('[DEBUG] Response data: ${e.response?.data}');
+      debugPrint('[DEBUG] DioException in createTrip:');
+      debugPrint('[DEBUG] Error type: ${e.type}');
+      debugPrint('[DEBUG] Error message: ${e.message}');
+      debugPrint('[DEBUG] Response status: ${e.response?.statusCode}');
+      debugPrint('[DEBUG] Response data: ${e.response?.data}');
 
       return ApiResponse<Trip>(
         success: false,
         error: e.response?.data['error'] ?? 'Network error occurred',
       );
     } catch (e) {
-      print('[DEBUG] Unexpected error in createTrip: $e');
+      debugPrint('[DEBUG] Unexpected error in createTrip: $e');
       return ApiResponse<Trip>(
         success: false,
         error: 'An unexpected error occurred',
@@ -333,7 +333,7 @@ class TripService {
       required CreateThreadEntryRequest request,
     }) async {
     try {
-      print('[TripService] Creating thread entry: ${request.toJson()}');
+      debugPrint('[TripService] Creating thread entry: ${request.toJson()}');
 
       final response =
           await _dio.post('/trips/$tripId/entries', data: request.toJson());

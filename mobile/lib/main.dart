@@ -301,14 +301,14 @@ class _TripThreadAppRouterState extends State<TripThreadAppRouter> {
           final location = state.uri.toString();
 
           if (location != TripThreadAppRouter._lastLocation) {
-            print('[GoRouter] location changed to: $location');
-            print('[GoRouter] isLoading: $isLoading, isLoggedIn: $isLoggedIn');
+            debugPrint('[GoRouter] location changed to: $location');
+            debugPrint('[GoRouter] isLoading: $isLoading, isLoggedIn: $isLoggedIn');
             TripThreadAppRouter._lastLocation = location;
           }
 
           // Don't redirect while loading
           if (isLoading) {
-            print('[GoRouter] Still loading, no redirect');
+            debugPrint('[GoRouter] Still loading, no redirect');
             return null;
           }
 
@@ -318,7 +318,7 @@ class _TripThreadAppRouterState extends State<TripThreadAppRouter> {
               location != '/signup' &&
               location != '/forgot-password' &&
               !location.startsWith('/reset-password')) {
-            print('[GoRouter] Not logged in, redirecting to /login');
+            debugPrint('[GoRouter] Not logged in, redirecting to /login');
             return '/login';
           }
 
@@ -328,11 +328,11 @@ class _TripThreadAppRouterState extends State<TripThreadAppRouter> {
                   location == '/signup' ||
                   location == '/forgot-password' ||
                   location.startsWith('/reset-password'))) {
-            print('[GoRouter] Already logged in, redirecting to /home');
+            debugPrint('[GoRouter] Already logged in, redirecting to /home');
             return '/home';
           }
 
-          print('[GoRouter] No redirect needed');
+          debugPrint('[GoRouter] No redirect needed');
           return null;
         },
         routes: [

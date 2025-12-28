@@ -107,9 +107,9 @@ class TripProvider extends ChangeNotifier {
     bool replaceExisting = false,
   }) async {
     try {
-      print('[DEBUG] TripProvider.createTrip called');
-      print('[DEBUG] Request data: ${request.toJson()}');
-      print('[DEBUG] Replace existing: $replaceExisting');
+      debugPrint('[DEBUG] TripProvider.createTrip called');
+      debugPrint('[DEBUG] Request data: ${request.toJson()}');
+      debugPrint('[DEBUG] Replace existing: $replaceExisting');
 
       _isLoading = true;
       _error = null;
@@ -120,10 +120,10 @@ class TripProvider extends ChangeNotifier {
         replaceExisting: replaceExisting,
       );
 
-      print('[DEBUG] API response received:');
-      print('[DEBUG] Success: ${response.success}');
-      print('[DEBUG] Error: ${response.error}');
-      print('[DEBUG] Data: ${response.data}');
+      debugPrint('[DEBUG] API response received:');
+      debugPrint('[DEBUG] Success: ${response.success}');
+      debugPrint('[DEBUG] Error: ${response.error}');
+      debugPrint('[DEBUG] Data: ${response.data}');
 
       if (response.success && response.data != null) {
         _currentTrip = response.data;
@@ -142,7 +142,7 @@ class TripProvider extends ChangeNotifier {
         return false;
       }
     } catch (e) {
-      print('[DEBUG] Exception in createTrip: $e');
+      debugPrint('[DEBUG] Exception in createTrip: $e');
       _error = 'An unexpected error occurred';
       _isLoading = false;
       notifyListeners();

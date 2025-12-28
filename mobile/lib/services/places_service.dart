@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:tripthread/models/place.dart';
 import 'package:tripthread/services/api_service.dart';
 import 'package:tripthread/utils/location_service.dart';
@@ -23,7 +24,7 @@ class PlacesService {
 
       return [];
     } catch (e) {
-      print('[PlacesService] Search error: $e');
+      debugPrint('[PlacesService] Search error: $e');
       return [];
     }
   }
@@ -59,7 +60,7 @@ class PlacesService {
 
       return null;
     } catch (e) {
-      print('[PlacesService] Resolve error: $e');
+      debugPrint('[PlacesService] Resolve error: $e');
       return null;
     }
   }

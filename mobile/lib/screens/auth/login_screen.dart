@@ -34,7 +34,7 @@ class _LoginScreenState extends State<LoginScreen> {
       email: _emailController.text.trim(),
       password: _passwordController.text,
     );
-    print(
+    debugPrint(
       'LoginScreen: login success = $success, isAuthenticated = ${authProvider.isAuthenticated}',
     );
     if (success && mounted) {

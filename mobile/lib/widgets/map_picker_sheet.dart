@@ -99,8 +99,10 @@ class _MapPickerModalState extends State<MapPickerModal> {
 
       _currentPosition =
           await Geolocator.getCurrentPosition(
-            timeLimit: const Duration(seconds: 5),
-            desiredAccuracy: LocationAccuracy.medium,
+          locationSettings: const LocationSettings(
+              accuracy: LocationAccuracy.medium,
+              timeLimit: Duration(seconds: 5),
+            ),
           ).timeout(
             const Duration(seconds: 7),
             onTimeout: () => throw Exception('GPS fetch timed out'),
@@ -345,11 +347,15 @@ class _MapPickerModalState extends State<MapPickerModal> {
                   heroTag: 'gps-modal',
                   mini: true,
                   onPressed: () async {
+                    // Capture messenger before async operation to satisfy analyzer
+                    final messenger = ScaffoldMessenger.of(context);
                     _safeSetState(() => _loading = true);
                     try {
                       final position = await Geolocator.getCurrentPosition(
-                        timeLimit: const Duration(seconds: 15),
-                        desiredAccuracy: LocationAccuracy.medium,
+                        locationSettings: const LocationSettings(
+                        accuracy: LocationAccuracy.medium,
+                        timeLimit: Duration(seconds: 15),
+                      ),
                       );
 
                       final point = mapbox.Point(
@@ -372,31 +378,25 @@ class _MapPickerModalState extends State<MapPickerModal> {
                       }
                     } on TimeoutException {
                       _safeSetState(() => _loading = false);
-                      if (mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('GPS timeout. Please try again.'),
-                          ),
-                        );
-                      }
+                      messenger.showSnackBar(
+                        const SnackBar(
+                          content: Text('GPS timeout. Please try again.'),
+                        ),
+                      );
                     } on LocationServiceDisabledException {
                       _safeSetState(() => _loading = false);
-                      if (mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('Please enable location services'),
-                          ),
-                        );
-                      }
+                      messenger.showSnackBar(
+                        const SnackBar(
+                          content: Text('Please enable location services'),
+                        ),
+                      );
                     } catch (e) {
                       _safeSetState(() => _loading = false);
-                      if (mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('Could not get location'),
-                          ),
-                        );
-                      }
+                      messenger.showSnackBar(
+                        const SnackBar(
+                          content: Text('Could not get location'),
+                        ),
+                      );
                     }
                   },
                   backgroundColor: Colors.white,

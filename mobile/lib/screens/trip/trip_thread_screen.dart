@@ -733,7 +733,7 @@ class _TripThreadScreenState extends State<TripThreadScreen> {
     if (_isLoading) {
       return PopScope(
         canPop: false, // Prevent system from handling back gesture
-        onPopInvoked: (didPop) {
+        onPopInvokedWithResult: (didPop, result) {
           // Always handle navigation ourselves
           if (context.canPop()) {
             context.pop();
@@ -748,7 +748,7 @@ class _TripThreadScreenState extends State<TripThreadScreen> {
     if (_trip == null) {
       return PopScope(
         canPop: false, // Prevent system from handling back gesture
-        onPopInvoked: (didPop) {
+        onPopInvokedWithResult: (didPop, result) {
           // Always handle navigation ourselves
           if (context.canPop()) {
             context.pop();
@@ -772,7 +772,7 @@ class _TripThreadScreenState extends State<TripThreadScreen> {
 
     return PopScope(
       canPop: false, // Prevent system from handling back gesture
-      onPopInvoked: (didPop) {
+      onPopInvokedWithResult: (didPop, result) {
         // Always handle navigation ourselves
         if (context.canPop()) {
           context.pop();

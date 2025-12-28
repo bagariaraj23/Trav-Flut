@@ -62,16 +62,16 @@ class _CreateTripScreenState extends State<CreateTripScreen> {
       setState(() {
         if (isStartDate) {
           _startDate = picked;
-          print('[DEBUG] Start date selected: $picked');
-          print('[DEBUG] Start date ISO: ${picked.toIso8601String()}');
+          debugPrint('[DEBUG] Start date selected: $picked');
+          debugPrint('[DEBUG] Start date ISO: ${picked.toIso8601String()}');
           if (_endDate != null && _endDate!.isBefore(picked)) {
             _endDate = null;
-            print('[DEBUG] End date reset because it was before start date');
+            debugPrint('[DEBUG] End date reset because it was before start date');
           }
         } else {
           _endDate = picked;
-          print('[DEBUG] End date selected: $picked');
-          print('[DEBUG] End date ISO: ${picked.toIso8601String()}');
+          debugPrint('[DEBUG] End date selected: $picked');
+          debugPrint('[DEBUG] End date ISO: ${picked.toIso8601String()}');
         }
       });
     }
@@ -132,28 +132,28 @@ class _CreateTripScreenState extends State<CreateTripScreen> {
       return;
     }
 
-    print('[DEBUG] Creating trip with dates:');
-    print('[DEBUG] _startDate: $_startDate');
-    print('[DEBUG] _endDate: $_endDate');
+    debugPrint('[DEBUG] Creating trip with dates:');
+    debugPrint('[DEBUG] _startDate: $_startDate');
+    debugPrint('[DEBUG] _endDate: $_endDate');
 
     if (_startDate != null) {
-      print(
+      debugPrint(
         '[DEBUG] startDate.toIso8601String(): ${_startDate!.toIso8601String()}',
       );
-      print(
+      debugPrint(
         '[DEBUG] startDate.millisecondsSinceEpoch: ${_startDate!.millisecondsSinceEpoch}',
       );
-      print('[DEBUG] startDate timezone offset: ${_startDate!.timeZoneOffset}');
+      debugPrint('[DEBUG] startDate timezone offset: ${_startDate!.timeZoneOffset}');
     }
 
     if (_endDate != null) {
-      print(
+      debugPrint(
         '[DEBUG] endDate.toIso8601String(): ${_endDate!.toIso8601String()}',
       );
-      print(
+      debugPrint(
         '[DEBUG] endDate.millisecondsSinceEpoch: ${_endDate!.millisecondsSinceEpoch}',
       );
-      print('[DEBUG] endDate timezone offset: ${_endDate!.timeZoneOffset}');
+      debugPrint('[DEBUG] endDate timezone offset: ${_endDate!.timeZoneOffset}');
     }
 
     if (_startDate != null) {
@@ -241,8 +241,8 @@ class _CreateTripScreenState extends State<CreateTripScreen> {
       coverMediaId: coverMediaId,
     );
 
-    print('[DEBUG] CreateTripRequest created:');
-    print('[DEBUG] request.toJson(): ${request.toJson()}');
+    debugPrint('[DEBUG] CreateTripRequest created:');
+    debugPrint('[DEBUG] request.toJson(): ${request.toJson()}');
 
     // Check if user wants to replace existing trip
     final routerState = GoRouterState.of(context);
@@ -267,7 +267,7 @@ class _CreateTripScreenState extends State<CreateTripScreen> {
   Widget build(BuildContext context) {
     return PopScope(
       canPop: true,
-      onPopInvoked: (didPop) {
+      onPopInvokedWithResult: (didPop, result) {
         if (!didPop) {
           if (context.canPop()) {
             context.pop();
