@@ -38,6 +38,15 @@ migrate_working_dir/
 .env.local
 .env.production
 
+# Android signing keys (NEVER commit - contains passwords!)
+android/key.properties
+android/*.jks
+android/*.keystore
+android/local.properties
+
+# Backup files
+android/app/build.gradle.kts.save
+
 # Symbolication related
 app.*.symbols
 
