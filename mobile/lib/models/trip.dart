@@ -264,10 +264,7 @@ class GpsCoordinates {
   final double lat;
   final double lng;
 
-  const GpsCoordinates({
-    required this.lat,
-    required this.lng,
-  });
+  const GpsCoordinates({required this.lat, required this.lng});
 
   factory GpsCoordinates.fromJson(Map<String, dynamic> json) =>
       _$GpsCoordinatesFromJson(json);
@@ -365,18 +362,15 @@ class CreateTripRequest {
 
   factory CreateTripRequest.fromJson(Map<String, dynamic> json) =>
       _$CreateTripRequestFromJson(json);
-  
+
   Map<String, dynamic> toJson() {
-    // Normalize dates to UTC midnight before sending to backend
-    // This prevents timezone conversion issues where dates shift by 1 day
     final normalizedStartDate = startDate != null
         ? DateTime.utc(startDate!.year, startDate!.month, startDate!.day)
         : null;
     final normalizedEndDate = endDate != null
         ? DateTime.utc(endDate!.year, endDate!.month, endDate!.day)
         : null;
-    
-    // Use the generated toJson but with normalized dates
+
     final baseJson = _$CreateTripRequestToJson(this);
     if (normalizedStartDate != null) {
       baseJson['startDate'] = normalizedStartDate.toIso8601String();
