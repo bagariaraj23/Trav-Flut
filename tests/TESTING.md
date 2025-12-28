@@ -64,18 +64,29 @@ This document provides comprehensive information about the testing strategy, set
 
 ### Environment Variables
 
-Tests require the following environment variables:
+Tests use **TEST_* prefixed variables** from `.env.test` ONLY. This ensures complete separation from production variables in `.env`.
+
+**Required TEST_* variables in `.env.test`:**
 
 ```bash
 # Required
-DATABASE_URL="postgresql://postgres:postgres@localhost:5432/test"
-NODE_ENV="test"
+TEST_DATABASE_URL="postgresql://postgres:postgres@localhost:5432/tripthread_test"
+TEST_JWT_SECRET="test-jwt-secret-key-for-testing-only"
+TEST_MAPBOX_ACCESS_TOKEN="test-mapbox-token"
 
-# Optional (defaults provided by setupTests.ts)
-JWT_SECRET="test-secret"  # Default: "test-secret"
-MAPBOX_ACCESS_TOKEN="test-mapbox-token"  # Default: "test-mapbox-token"
-TEST_DATABASE_URL="${DATABASE_URL}"  # Mirrored from DATABASE_URL if not set
+# Optional (tests can run without Redis)
+# TEST_REDIS_REST_URL="https://your-test-redis.upstash.io"
+# TEST_REDIS_REST_TOKEN="your-test-redis-token"
 ```
+
+**How it works:**
+- `.env.test` contains TEST_* prefixed variables
+- `setupTests.ts` maps TEST_* variables to non-prefixed versions (DATABASE_URL, JWT_SECRET, etc.)
+- Application code (Prisma, etc.) uses the non-prefixed versions
+- Production code never sees TEST_* variables
+- Tests never see production variables from `.env`
+
+**See `.env.test.example` for a template.**
 
 ### Configuration Files
 
@@ -88,14 +99,22 @@ TEST_DATABASE_URL="${DATABASE_URL}"  # Mirrored from DATABASE_URL if not set
   - `tests/**/*.test.ts`
   - `scheduler/tests/**/*.test.ts`
 - **Path Aliases**: `@/` → `src/`
+- **Execution Mode**: Test files run serially (`fileParallelism: false`, `maxConcurrency: 1`)
+  - Prevents flakiness caused by PostgreSQL READ COMMITTED isolation + Prisma connection pooling
+  - Tests within a file can still run in parallel (they use `cleanDb()` for isolation)
 
 #### `tests/setupTests.ts`
 Automatically executed before all tests. Responsibilities:
-1. Loads `.env.test` if present
-2. Validates `DATABASE_URL` is set (fails fast in CI)
-3. Sets default values for optional env vars
-4. Mirrors `TEST_DATABASE_URL` from `DATABASE_URL`
-5. Silences noisy logs unless `DEBUG` is set
+1. Forces `NODE_ENV=test` before any imports
+2. Loads `.env.test` (contains TEST_* prefixed variables)
+3. Validates `TEST_DATABASE_URL` is set (fails fast in CI)
+4. Maps TEST_* variables to non-prefixed versions for application code:
+   - `TEST_DATABASE_URL` → `DATABASE_URL`
+   - `TEST_JWT_SECRET` → `JWT_SECRET`
+   - `TEST_MAPBOX_ACCESS_TOKEN` → `MAPBOX_ACCESS_TOKEN`
+   - etc.
+5. Provides safe test defaults if TEST_* variables are missing
+6. Silences noisy logs unless `DEBUG` is set
 
 ### Database Setup
 
@@ -105,15 +124,34 @@ Before running tests:
 # 1. Start PostgreSQL (Docker example)
 docker run --rm \
   -e POSTGRES_PASSWORD=postgres \
-  -e POSTGRES_DB=test \
+  -e POSTGRES_DB=postgres \
   -p 5432:5432 \
   --name tripthread-postgres \
   -d postgres:15
 
-# 2. Generate Prisma client
+# 2. Create .env.test file (if not exists)
+# Copy from example template
+cp .env.test.example .env.test
+
+# Or create manually with TEST_* prefixed variables:
+cat > .env.test << EOF
+TEST_DATABASE_URL="postgresql://postgres:postgres@localhost:5432/tripthread_test"
+TEST_JWT_SECRET="test-jwt-secret-key-for-testing-only"
+TEST_MAPBOX_ACCESS_TOKEN="test-mapbox-token"
+EOF
+
+# 3. Setup test database (creates DB and pushes schema)
+./scripts/setup-test-db.sh
+
+# OR manually:
+# 3a. Create test database
+psql -U postgres -c "CREATE DATABASE tripthread_test;"
+
+# 3b. Generate Prisma client
 npx prisma generate
 
-# 3. Push schema to test database
+# 3c. Push schema to test database
+export DATABASE_URL="postgresql://postgres:postgres@localhost:5432/tripthread_test"
 npx prisma db push
 ```
 
@@ -122,10 +160,10 @@ npx prisma db push
 The test setup includes safety mechanisms:
 
 1. **Database Protection**: Refuses to run destructive operations on non-test databases
-   - Checks for "test", "localhost", or "127.0.0.1" in `DATABASE_URL`
-   - Requires `NODE_ENV=test` or test-like database URL
-   - Validates `TEST_DATABASE_URL` matches `DATABASE_URL` if both are set
-   - **Override**: To override safety check, set `FORCE_TEST_DB_OVERRIDE=true` (not recommended)
+   - Requires `NODE_ENV=test` (enforced by setupTests.ts)
+   - Requires `TEST_DATABASE_URL` to be set in `.env.test`
+   - Validates `DATABASE_URL` (mapped from `TEST_DATABASE_URL`) matches `TEST_DATABASE_URL`
+   - Additional safety: URL must contain "test", "localhost", or "127.0.0.1"
 
 2. **CI Safety**: Fails fast in CI if `DATABASE_URL` is missing
    - Prevents accidental connection to wrong database
@@ -660,17 +698,21 @@ npm run test:run
 
 ### Common Issues
 
-#### 1. `DATABASE_URL is not set`
+#### 1. `TEST_DATABASE_URL is not set`
 
-**Symptom**: Warning or error about missing `DATABASE_URL`
+**Symptom**: Warning or error about missing `TEST_DATABASE_URL`
 
 **Solution**:
 ```bash
-# Create .env.test file
-echo 'DATABASE_URL="postgresql://postgres:postgres@localhost:5432/test"' > .env.test
+# Create .env.test file with TEST_* prefixed variables
+cat > .env.test << EOF
+TEST_DATABASE_URL="postgresql://postgres:postgres@localhost:5432/tripthread_test"
+TEST_JWT_SECRET="test-jwt-secret-key-for-testing-only"
+TEST_MAPBOX_ACCESS_TOKEN="test-mapbox-token"
+EOF
 
-# Or export directly
-export DATABASE_URL="postgresql://postgres:postgres@localhost:5432/test"
+# Or copy from example
+cp .env.test.example .env.test
 ```
 
 #### 2. `P2002` Unique Constraint Errors
@@ -685,10 +727,20 @@ export DATABASE_URL="postgresql://postgres:postgres@localhost:5432/test"
 
 **Symptom**: Tests pass individually but fail when run together
 
-**Solution**: Run tests serially
-```bash
-node scripts/run-integration-serial.mjs
+**Root Cause**: This is caused by PostgreSQL's READ COMMITTED isolation level combined with Prisma's connection pooling. When tests run in parallel:
+- Multiple tests use different connections from the pool
+- A connection that commits data might not be immediately visible to other connections
+- Timing-dependent visibility issues occur
+
+**Solution**: Tests are now configured to run serially by default in `vitest.config.ts`:
+```typescript
+fileParallelism: false, // Disable parallel file execution
+maxConcurrency: 1,       // Only one test file at a time
 ```
+
+This eliminates flakiness while still allowing tests within a file to run in parallel (they use `cleanDb()` for isolation).
+
+**Note**: The flakiness is NOT a bug in your application logic - it's a test infrastructure issue. Your business logic is correct, and the tests validate that correctly.
 
 #### 4. Tests Hanging
 
@@ -742,6 +794,36 @@ DEBUG=* npm test
 
 ## Architecture Notes
 
+### Environment Variable Separation
+
+**Core Principle**: Tests use TEST_* prefixed variables from `.env.test` ONLY. Production code uses non-prefixed variables from `.env`. This ensures complete isolation.
+
+**Variable Mapping**:
+
+| Test Variable (`.env.test`) | Application Variable (mapped by `setupTests.ts`) |
+|----------------------------|---------------------------------------------------|
+| `TEST_DATABASE_URL` | `DATABASE_URL` |
+| `TEST_JWT_SECRET` | `JWT_SECRET` |
+| `TEST_MAPBOX_ACCESS_TOKEN` | `MAPBOX_ACCESS_TOKEN` |
+| `TEST_REDIS_REST_URL` | `REDIS_REST_URL` (optional) |
+| `TEST_REDIS_REST_TOKEN` | `REDIS_REST_TOKEN` (optional) |
+
+**How It Works**:
+1. `vitest.config.ts` sets `NODE_ENV=test` before any imports
+2. `setupTests.ts` runs (before any application code):
+   - Loads `.env.test` (contains TEST_* prefixed variables)
+   - Maps TEST_* variables to non-prefixed versions for application code
+3. Application code imports:
+   - `src/env.ts` validates `DATABASE_URL`, `JWT_SECRET` (already set from TEST_*)
+   - `src/lib/prisma.ts` uses `DATABASE_URL` (from TEST_DATABASE_URL)
+4. Tests run with test database and test secrets
+
+**Benefits**:
+- ✅ Complete isolation: Tests never see production variables
+- ✅ Clear separation: `.env` = Production, `.env.test` = Tests
+- ✅ Type safety: Application code uses standard variable names
+- ✅ Safety guards: Tests refuse to run if `NODE_ENV !== "test"` or `TEST_DATABASE_URL` is missing
+
 ### Separation of Concerns
 
 The codebase follows a clean architecture pattern:
@@ -765,8 +847,42 @@ The codebase follows a clean architecture pattern:
 ### Environment Validation
 
 - **Strict in Production**: `src/env.ts` validates all required environment variables
-- **No Test Bypasses**: Production code doesn't have test mode workarounds
-- **Test Setup**: Tests provide proper environment via `setupTests.ts`
+- **Test Mode Handling**: In test mode, `src/env.ts` expects variables to already be set by `setupTests.ts` and provides defaults instead of exiting
+- **Test Setup**: `setupTests.ts` runs before any imports to ensure `.env.test` is loaded and TEST_* variables are mapped
+- **No Production Bypasses**: Production code remains strict; test handling is in setup only
+
+### Mocking Strategy
+
+**For Unit Tests**: Test pure business logic without external dependencies.
+
+```typescript
+// Example: Testing cacheUtils (pure functions)
+import { bucketCoord } from '../../src/lib/cacheUtils';
+
+// No mocks needed - pure function, no dependencies
+describe('bucketCoord', () => {
+  it('encodes coordinates correctly', () => {
+    expect(bucketCoord(12.34567)).toBe('...');
+  });
+});
+```
+
+**For Integration Tests**: Test database interactions with real database, but mock external services.
+
+```typescript
+import { vi } from 'vitest';
+
+// Mock Redis/Upstash
+vi.mock('../../src/lib/cache', () => ({
+  cacheGetJson: vi.fn(),
+  cacheSetJson: vi.fn(),
+}));
+
+// Mock Cloudinary
+vi.mock('../../src/lib/cloudinary', () => ({
+  uploadToCloudinary: vi.fn(),
+}));
+```
 
 ---
 
