@@ -2,58 +2,99 @@
  * Test setup: ensure essential env vars are present for test runs.
  * This file is loaded by Vitest before running tests.
  *
- * Sets default test environment variables if not already provided:
- * - NODE_ENV=test (should be set by test runner)
- * - DATABASE_URL: Test database connection string
- * - TEST_DATABASE_URL: Same as DATABASE_URL for test DB
- * - JWT_SECRET: Test JWT secret
- * - MAPBOX_ACCESS_TOKEN: Test Mapbox token
+ * IMPORTANT: This runs BEFORE any application code is imported.
+ * This ensures .env.test is loaded before src/env.ts validates environment.
+ *
+ * ARCHITECTURE:
+ * - Tests use TEST_* prefixed variables from .env.test ONLY
+ * - In test mode, we map TEST_* variables to non-prefixed versions for Prisma/application code
+ * - This ensures complete separation: tests never touch production variables
+ *
+ * Required TEST_* variables in .env.test:
+ * - TEST_DATABASE_URL: Test database connection string
+ * - TEST_JWT_SECRET: Test JWT secret
+ * - TEST_MAPBOX_ACCESS_TOKEN: Test Mapbox token
+ * - TEST_REDIS_REST_URL: (optional) Test Redis URL
+ * - TEST_REDIS_REST_TOKEN: (optional) Test Redis token
  */
 import fs from "fs";
 import path from "path";
 import dotenv from "dotenv";
 
 export default function setupTests() {
-  // Only run setup when NODE_ENV is test (or not set)
-  const isTestEnv = !process.env.NODE_ENV || process.env.NODE_ENV === "test";
+  // Force NODE_ENV to test mode for all tests
+  // This ensures no production code paths are executed
+  if (process.env.NODE_ENV !== "test") {
+    Object.defineProperty(process.env, 'NODE_ENV', {
+      value: 'test',
+      writable: true,
+      configurable: true
+    });
+  }
 
-  if (!isTestEnv) return;
-
-  // Load .env.test if present
+  // Load .env.test FIRST
   const envTestPath = path.resolve(process.cwd(), ".env.test");
   if (fs.existsSync(envTestPath)) {
     dotenv.config({ path: envTestPath });
   }
 
-  // Don't silently fallback to a hard-coded DB URL. Require tests to provide DATABASE_URL.
-  // In CI (GITHUB_ACTIONS or CI=true) we fail fast with clear instructions.
+  // In test mode, map TEST_* variables to non-prefixed versions
+  // This allows Prisma and application code to work without knowing about TEST_* prefix
+  
+  // Check for required TEST_* variables
   const inCI = process.env.GITHUB_ACTIONS === "true" || process.env.CI === "true";
-
-  if (!process.env.DATABASE_URL) {
-    const msg = `DATABASE_URL is not set. Create a .env.test with DATABASE_URL (or export DATABASE_URL) before running tests.`;
+  
+  if (!process.env.TEST_DATABASE_URL) {
+    const msg = `TEST_DATABASE_URL is not set in .env.test. Tests require TEST_* prefixed variables.`;
     if (inCI) {
-      // Fail early in CI to avoid accidentally connecting to wrong DB
       console.error(msg);
       throw new Error(msg);
     } else {
-      // Local: warn developer and continue; tests will likely fail but message is clear
-      // Developers can create a `.env.test` from `.env.test.example`.
-      // eslint-disable-next-line no-console
       console.warn(msg);
     }
   }
 
-  // Mirror TEST_DATABASE_URL to DATABASE_URL if not explicitly set
-  if (!process.env.TEST_DATABASE_URL && process.env.DATABASE_URL) {
-    process.env.TEST_DATABASE_URL = process.env.DATABASE_URL;
+  // Map TEST_* variables to non-prefixed versions for application code
+  // This is ONLY done in test mode - production code never sees TEST_* variables
+  if (process.env.TEST_DATABASE_URL) {
+    process.env.DATABASE_URL = process.env.TEST_DATABASE_URL;
   }
-
-  // Set minimal default secrets if missing (non-sensitive defaults for local dev)
-  if (!process.env.JWT_SECRET) process.env.JWT_SECRET = "test-secret";
-  if (!process.env.MAPBOX_ACCESS_TOKEN) process.env.MAPBOX_ACCESS_TOKEN = "test-mapbox-token";
+  
+  if (process.env.TEST_JWT_SECRET) {
+    process.env.JWT_SECRET = process.env.TEST_JWT_SECRET;
+  } else {
+    // Provide safe test default if not in .env.test
+    process.env.JWT_SECRET = "test-jwt-secret-key-for-testing-only-do-not-use-in-production";
+  }
+  
+  if (process.env.TEST_MAPBOX_ACCESS_TOKEN) {
+    process.env.MAPBOX_ACCESS_TOKEN = process.env.TEST_MAPBOX_ACCESS_TOKEN;
+  } else {
+    // Provide safe test default if not in .env.test
+    process.env.MAPBOX_ACCESS_TOKEN = "test-mapbox-token";
+  }
+  
+  // Optional Redis variables
+  if (process.env.TEST_REDIS_REST_URL) {
+    process.env.REDIS_REST_URL = process.env.TEST_REDIS_REST_URL;
+  }
+  
+  if (process.env.TEST_REDIS_REST_TOKEN) {
+    process.env.REDIS_REST_TOKEN = process.env.TEST_REDIS_REST_TOKEN;
+  }
 
   // Silence noisy logs in test environments unless DEBUG is explicitly set
   if (!process.env.DEBUG) process.env.DEBUG = "";
+
+  // Log test environment status (helpful for debugging)
+  if (process.env.DEBUG?.includes('test')) {
+    console.log('[Test Setup] Environment configured:', {
+      NODE_ENV: process.env.NODE_ENV,
+      TEST_DATABASE_URL: process.env.TEST_DATABASE_URL?.replace(/:[^:@]+@/, ':****@'), // Mask password
+      HAS_TEST_JWT_SECRET: !!process.env.TEST_JWT_SECRET,
+      HAS_TEST_MAPBOX_TOKEN: !!process.env.TEST_MAPBOX_ACCESS_TOKEN,
+    });
+  }
 }
 
 setupTests();

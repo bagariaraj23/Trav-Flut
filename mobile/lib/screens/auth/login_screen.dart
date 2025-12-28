@@ -5,10 +5,9 @@ import 'package:form_field_validator/form_field_validator.dart';
 import 'package:tripthread/providers/auth_provider.dart';
 import 'package:tripthread/widgets/custom_text_field.dart';
 import 'package:tripthread/widgets/loading_button.dart';
-import 'package:flutter/services.dart';
 
 class LoginScreen extends StatefulWidget {
-  const LoginScreen({Key? key}) : super(key: key);
+  const LoginScreen({super.key});
 
   @override
   State<LoginScreen> createState() => _LoginScreenState();
@@ -35,8 +34,9 @@ class _LoginScreenState extends State<LoginScreen> {
       email: _emailController.text.trim(),
       password: _passwordController.text,
     );
-    print(
-        'LoginScreen: login success = $success, isAuthenticated = ${authProvider.isAuthenticated}');
+    debugPrint(
+      'LoginScreen: login success = $success, isAuthenticated = ${authProvider.isAuthenticated}',
+    );
     if (success && mounted) {
       context.go('/home');
     } else if (mounted) {
@@ -100,7 +100,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   validator: MultiValidator([
                     RequiredValidator(errorText: 'Email is required'),
                     EmailValidator(errorText: 'Please enter a valid email'),
-                  ]),
+                  ]).call,
                   onChanged: (_) {
                     // Clear error when user starts typing after an error
                     final authProvider = context.read<AuthProvider>();
@@ -130,8 +130,9 @@ class _LoginScreenState extends State<LoginScreen> {
                       });
                     },
                   ),
-                  validator:
-                      RequiredValidator(errorText: 'Password is required'),
+                  validator: RequiredValidator(
+                    errorText: 'Password is required',
+                  ).call,
                   onChanged: (_) {
                     // Clear error when user starts typing after an error
                     final authProvider = context.read<AuthProvider>();
@@ -156,16 +157,14 @@ class _LoginScreenState extends State<LoginScreen> {
                           margin: const EdgeInsets.only(bottom: 16),
                           padding: const EdgeInsets.all(12),
                           decoration: BoxDecoration(
-                            color: Theme.of(context)
-                                .colorScheme
-                                .error
-                                .withOpacity(0.1),
+                            color: Theme.of(
+                              context,
+                            ).colorScheme.error.withValues(alpha: 0.1),
                             borderRadius: BorderRadius.circular(8),
                             border: Border.all(
-                              color: Theme.of(context)
-                                  .colorScheme
-                                  .error
-                                  .withOpacity(0.3),
+                              color: Theme.of(
+                                context,
+                              ).colorScheme.error.withValues(alpha: 0.3),
                             ),
                           ),
                           child: Row(

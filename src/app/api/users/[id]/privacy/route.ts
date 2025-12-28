@@ -5,10 +5,11 @@ import { ApiResponse, UserProfile } from '@/types/api'
 
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const userId = params.id
+    const { id } = await params;
+    const userId = id
     
     // Verify authentication
     const authHeader = request.headers.get('authorization')

@@ -6,13 +6,13 @@ import { withAuth, withRateLimit, withLogging } from "@/lib/middleware";
 // Reject trip invitation
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { inviteId: string } }
+  { params }: { params: Promise<{ inviteId: string }> }
 ) {
+  const { inviteId } = await params;
   return withLogging(async (req) => {
     return withRateLimit(req, async (rateLimitedReq) => {
       return withAuth(rateLimitedReq, async (authenticatedReq) => {
         try {
-          const inviteId = params.inviteId;
           const receiverId = authenticatedReq.user!.userId;
 
           await TripInvitationService.respondToInvitation(

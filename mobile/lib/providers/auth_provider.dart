@@ -11,6 +11,7 @@ class AuthProvider extends ChangeNotifier {
   bool _isLoading = true;
   String? _error;
   bool _hasShownError = false;
+  bool _isInitializing = false;
 
   // Notifier dedicated for UI-only updates (e.g., error banner)
   final ChangeNotifier uiNotifier = ChangeNotifier();
@@ -33,52 +34,94 @@ class AuthProvider extends ChangeNotifier {
   String? get error => _error;
 
   Future<void> _initializeAuth() async {
-    print('AuthProvider: Starting initialization');
+    // Skip initialization if already in progress or user is already authenticated
+    if (_isInitializing) {
+      debugPrint('AuthProvider: Initialization already in progress, skipping');
+      return;
+    }
+
+    // If user is already authenticated (e.g., after signup/login), skip initialization
+    if (_currentUser != null) {
+      debugPrint('AuthProvider: User already authenticated, skipping initialization');
+      _setLoadingState(false);
+      return;
+    }
+
+    debugPrint('AuthProvider: Starting initialization');
+    _isInitializing = true;
     _setLoadingState(true);
     try {
-      print('AuthProvider: Checking tokens...');
+      debugPrint('AuthProvider: Checking tokens...');
       final hasTokens = await _storageService
           .hasValidTokens()
           .timeout(const Duration(seconds: 5), onTimeout: () {
-        print('AuthProvider: hasValidTokens() timed out!');
+        debugPrint('AuthProvider: hasValidTokens() timed out!');
         throw Exception('hasValidTokens() timed out');
       });
-      print('AuthProvider: hasTokens = $hasTokens');
+      debugPrint('AuthProvider: hasTokens = $hasTokens');
+      
+      // Double-check if user was authenticated during token check (race condition protection)
+      if (_currentUser != null) {
+        debugPrint('AuthProvider: User authenticated during token check, skipping getCurrentUser');
+        return;
+      }
+
       if (hasTokens) {
-        print('AuthProvider: Getting userId...');
+        debugPrint('AuthProvider: Getting userId...');
         final userId = await _storageService
             .getUserId()
             .timeout(const Duration(seconds: 5), onTimeout: () {
-          print('AuthProvider: getUserId() timed out!');
+          debugPrint('AuthProvider: getUserId() timed out!');
           throw Exception('getUserId() timed out');
         });
-        print('AuthProvider: userId = $userId');
+        debugPrint('AuthProvider: userId = $userId');
+        
+        // Double-check again if user was authenticated during userId fetch
+        if (_currentUser != null) {
+          debugPrint('AuthProvider: User authenticated during userId fetch, skipping getCurrentUser');
+          return;
+        }
+
         if (userId != null) {
-          print('AuthProvider: Calling getCurrentUser...');
+          debugPrint('AuthProvider: Calling getCurrentUser...');
           final response = await _apiService
               .getCurrentUser()
               .timeout(const Duration(seconds: 5), onTimeout: () {
-            print('AuthProvider: getCurrentUser() timed out!');
+            debugPrint('AuthProvider: getCurrentUser() timed out!');
             throw Exception('getCurrentUser() timed out');
           });
-          print(
+          debugPrint(
               'AuthProvider: getUser response = ${response.success} | ${response.data} | ${response.error}');
+          
+          // Final check: if user was authenticated during API call (e.g., from signup/login)
+          if (_currentUser != null) {
+            debugPrint('AuthProvider: User authenticated during getCurrentUser, preserving existing state');
+            return;
+          }
+
           if (response.success && response.data != null) {
             _currentUser = response.data;
             routingNotifier.notifyListeners();
             notifyListeners();
           } else {
-            print('AuthProvider: Invalid tokens, clearing');
+            debugPrint('AuthProvider: Invalid tokens, clearing');
             await _storageService.clearTokens();
           }
         }
       }
     } catch (e, stack) {
-      _error = 'Failed to initialize authentication';
-      uiNotifier.notifyListeners();
-      print('AuthProvider: Exception in _initializeAuth: $e\n$stack');
-      await _storageService.clearTokens();
+      // Only clear tokens and set error if user is not already authenticated
+      // This prevents clearing tokens that were just set by signup/login
+      if (_currentUser == null) {
+        _error = 'Failed to initialize authentication';
+        uiNotifier.notifyListeners();
+        debugPrint('AuthProvider: Exception in _initializeAuth: $e\n$stack');
+        await _storageService.clearTokens();
+      } else {
+        debugPrint('AuthProvider: Exception in _initializeAuth but user is authenticated, ignoring: $e');
+      }
     } finally {
+      _isInitializing = false;
       _setLoadingState(false);
     }
   }
@@ -100,31 +143,35 @@ class AuthProvider extends ChangeNotifier {
         username: username,
       );
 
-      print(
+      debugPrint(
           '[AuthProvider] signup response: success=${response.success}, error=${response.error}');
 
       if (response.success && response.data != null) {
         final authData = response.data!;
-        _currentUser = authData.user;
-        routingNotifier.notifyListeners();
-        notifyListeners();
-
+        
+        // Save tokens first to ensure they're persisted before setting user
+        // This prevents race condition with _initializeAuth()
         await _storageService.saveTokens(
           accessToken: authData.accessToken,
           refreshToken: authData.refreshToken,
           userId: authData.user.id,
         );
 
+        // Set user after tokens are saved to prevent race condition
+        _currentUser = authData.user;
+        routingNotifier.notifyListeners();
+        notifyListeners();
+
         _setLoadingState(false);
         return true;
       } else {
         _setError(response.error ?? 'Signup failed. Please try again.');
-        print('[AuthProvider] signup error set: $_error');
+        debugPrint('[AuthProvider] signup error set: $_error');
         _setLoadingState(false);
         return false;
       }
     } catch (e) {
-      print('[AuthProvider] signup catch error: $e');
+      debugPrint('[AuthProvider] signup catch error: $e');
       _setError('Network error. Please check your connection and try again.');
       _setLoadingState(false);
       debugPrint('Signup error: $e');
@@ -145,32 +192,36 @@ class AuthProvider extends ChangeNotifier {
         password: password,
       );
 
-      print(
+      debugPrint(
           '[AuthProvider] login response: success=${response.success}, error=${response.error}, data=${response.data}');
 
       if (response.success && response.data != null) {
         final authData = response.data!;
-        _currentUser = authData.user;
-        routingNotifier.notifyListeners();
-        notifyListeners();
-
+        
+        // Save tokens first to ensure they're persisted before setting user
+        // This prevents race condition with _initializeAuth()
         await _storageService.saveTokens(
           accessToken: authData.accessToken,
           refreshToken: authData.refreshToken,
           userId: authData.user.id,
         );
 
+        // Set user after tokens are saved to prevent race condition
+        _currentUser = authData.user;
+        routingNotifier.notifyListeners();
+        notifyListeners();
+
         _setLoadingState(false);
         return true;
       } else {
         _setError(
             response.error ?? 'Login failed. Please check your credentials.');
-        print('[AuthProvider] login error set: $_error');
+        debugPrint('[AuthProvider] login error set: $_error');
         _setLoadingState(false);
         return false;
       }
     } catch (e) {
-      print('[AuthProvider] login catch error: $e');
+      debugPrint('[AuthProvider] login catch error: $e');
       _setError('Network error. Please check your connection and try again.');
       _setLoadingState(false);
       debugPrint('Login error: $e');
@@ -232,7 +283,7 @@ class AuthProvider extends ChangeNotifier {
 
       final response = await _apiService.forgotPassword(email: email);
 
-      print(
+      debugPrint(
           '[AuthProvider] forgotPassword response: success=${response.success}, error=${response.error}');
 
       if (response.success) {
@@ -241,12 +292,12 @@ class AuthProvider extends ChangeNotifier {
       } else {
         _setError(
             response.error ?? 'Failed to send reset email. Please try again.');
-        print('[AuthProvider] forgotPassword error set: $_error');
+        debugPrint('[AuthProvider] forgotPassword error set: $_error');
         _setLoadingState(false);
         return false;
       }
     } catch (e) {
-      print('[AuthProvider] forgotPassword catch error: $e');
+      debugPrint('[AuthProvider] forgotPassword catch error: $e');
       _setError('Network error. Please check your connection and try again.');
       _setLoadingState(false);
       debugPrint('Forgot password error: $e');
@@ -267,21 +318,26 @@ class AuthProvider extends ChangeNotifier {
         newPassword: newPassword,
       );
 
-      print(
+      debugPrint(
           '[AuthProvider] resetPassword response: success=${response.success}, error=${response.error}');
 
       if (response.success) {
+        // After successful password reset, backend invalidates all refresh tokens
+        // for security. We must log out the user immediately so they can log in
+        // with their new password. This is a security best practice.
+        debugPrint('[AuthProvider] Password reset successful, logging out user');
+        await logout();
         _setLoadingState(false);
         return true;
       } else {
         _setError(
             response.error ?? 'Failed to reset password. Please try again.');
-        print('[AuthProvider] resetPassword error set: $_error');
+        debugPrint('[AuthProvider] resetPassword error set: $_error');
         _setLoadingState(false);
         return false;
       }
     } catch (e) {
-      print('[AuthProvider] resetPassword catch error: $e');
+      debugPrint('[AuthProvider] resetPassword catch error: $e');
       _setError('Network error. Please check your connection and try again.');
       _setLoadingState(false);
       debugPrint('Reset password error: $e');
@@ -313,7 +369,7 @@ class AuthProvider extends ChangeNotifier {
   bool get shouldShowError => _error != null && !_hasShownError;
 
   void clearError() {
-    print('[AuthProvider] clearError called by user');
+    debugPrint('[AuthProvider] clearError called by user');
     _clearError();
   }
 

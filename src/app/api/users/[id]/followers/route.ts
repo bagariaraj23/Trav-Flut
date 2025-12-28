@@ -6,10 +6,11 @@ import { AuthService } from '@/lib/auth'
 
 async function handler(
   request: AuthenticatedRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
+  const { id } = await params;
   try {
-    const targetUserId = params.id
+    const targetUserId = id
     const currentUserId = request.user!.userId
     const { searchParams } = new URL(request.url)
     const page = parseInt(searchParams.get('page') || '1')
@@ -131,7 +132,8 @@ async function handler(
 
 export async function GET(
   request: NextRequest,
-  context: { params: { id: string } }
+  context: { params: Promise<{ id: string }> }
 ) {
-  return withAuth(request, (authRequest) => handler(authRequest, context))
+  const params = await context.params;
+  return withAuth(request, (authRequest) => handler(authRequest, { params: Promise.resolve(params) }))
 }

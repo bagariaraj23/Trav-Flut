@@ -13,10 +13,11 @@ import { serializePlace } from "@/lib/place";
 // Create a new thread entry
 export async function POST(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const tripId = params.id;
+    const { id } = await params;
+    const tripId = id;
 
     // Verify authentication
     const authHeader = request.headers.get("authorization");
@@ -376,10 +377,11 @@ export async function POST(
 // Get trip thread entries
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const tripId = params.id;
+    const { id } = await params;
+    const tripId = id;
 
     // Verify authentication
     const authHeader = request.headers.get("authorization");

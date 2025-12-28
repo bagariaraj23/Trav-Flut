@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart';
 import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
 import 'package:another_flushbar/flushbar.dart';
@@ -58,7 +57,7 @@ void main() async {
       debugPrint('[main] StorageService initialized');
     } catch (e) {
       debugPrint('[main] StorageService initialization failed: $e');
-      throw e;
+      rethrow;
     }
 
     debugPrint('[main] Creating ConnectivityService');
@@ -69,7 +68,7 @@ void main() async {
       debugPrint('[main] ConnectivityService initialized');
     } catch (e) {
       debugPrint('[main] ConnectivityService initialization failed: $e');
-      throw e;
+      rethrow;
     }
 
     debugPrint('[main] Creating core services');
@@ -169,7 +168,7 @@ void main() async {
 }
 
 class TripThreadAppRouter extends StatefulWidget {
-  TripThreadAppRouter({Key? key}) : super(key: key);
+  const TripThreadAppRouter({super.key});
 
   static String? _lastLocation;
 
@@ -302,14 +301,14 @@ class _TripThreadAppRouterState extends State<TripThreadAppRouter> {
           final location = state.uri.toString();
 
           if (location != TripThreadAppRouter._lastLocation) {
-            print('[GoRouter] location changed to: $location');
-            print('[GoRouter] isLoading: $isLoading, isLoggedIn: $isLoggedIn');
+            debugPrint('[GoRouter] location changed to: $location');
+            debugPrint('[GoRouter] isLoading: $isLoading, isLoggedIn: $isLoggedIn');
             TripThreadAppRouter._lastLocation = location;
           }
 
           // Don't redirect while loading
           if (isLoading) {
-            print('[GoRouter] Still loading, no redirect');
+            debugPrint('[GoRouter] Still loading, no redirect');
             return null;
           }
 
@@ -319,7 +318,7 @@ class _TripThreadAppRouterState extends State<TripThreadAppRouter> {
               location != '/signup' &&
               location != '/forgot-password' &&
               !location.startsWith('/reset-password')) {
-            print('[GoRouter] Not logged in, redirecting to /login');
+            debugPrint('[GoRouter] Not logged in, redirecting to /login');
             return '/login';
           }
 
@@ -329,11 +328,11 @@ class _TripThreadAppRouterState extends State<TripThreadAppRouter> {
                   location == '/signup' ||
                   location == '/forgot-password' ||
                   location.startsWith('/reset-password'))) {
-            print('[GoRouter] Already logged in, redirecting to /home');
+            debugPrint('[GoRouter] Already logged in, redirecting to /home');
             return '/home';
           }
 
-          print('[GoRouter] No redirect needed');
+          debugPrint('[GoRouter] No redirect needed');
           return null;
         },
         routes: [
@@ -487,8 +486,9 @@ class _TripThreadAppRouterState extends State<TripThreadAppRouter> {
             AnimatedBuilder(
               animation: context.watch<AuthProvider>().routingNotifier,
               builder: (context, _) {
-                if (!context.read<AuthProvider>().isLoading)
+                if (!context.read<AuthProvider>().isLoading) {
                   return const SizedBox.shrink();
+                }
                 debugPrint('Rendering SplashScreen');
                 return const IgnorePointer(
                   ignoring: false,

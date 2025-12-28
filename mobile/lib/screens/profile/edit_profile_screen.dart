@@ -8,7 +8,7 @@ import 'package:tripthread/widgets/custom_text_field.dart';
 import 'package:tripthread/widgets/loading_button.dart';
 
 class EditProfileScreen extends StatefulWidget {
-  const EditProfileScreen({Key? key}) : super(key: key);
+  const EditProfileScreen({super.key});
 
   @override
   State<EditProfileScreen> createState() => _EditProfileScreenState();
@@ -159,7 +159,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   Widget build(BuildContext context) {
     return PopScope(
       canPop: true,
-      onPopInvoked: (didPop) {
+      onPopInvokedWithResult: (didPop, result) {
         if (!didPop) {
           if (context.canPop()) {
             context.pop();
@@ -181,219 +181,220 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
               }
             },
           ),
-        actions: [
-          Consumer<UserProvider>(
-            builder: (context, userProvider, child) {
-              return LoadingButton(
-                onPressed: _handleSave,
-                isLoading: userProvider.isLoading,
-                style: TextButton.styleFrom(),
-                child: const Text('Save'),
-              );
-            },
-          ),
-        ],
-      ),
-      body: Form(
-        key: _formKey,
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            children: [
-              // Profile Picture Section
-              Center(
-                child: Stack(
-                  children: [
-                    Consumer<AuthProvider>(
-                      builder: (context, authProvider, child) {
-                        final user = authProvider.currentUser;
-                        return CircleAvatar(
-                          radius: 50,
-                          backgroundColor:
-                              Theme.of(context).colorScheme.primary,
-                          backgroundImage: user?.avatarUrl != null
-                              ? NetworkImage(user!.avatarUrl!)
-                              : null,
-                          child: user?.avatarUrl == null
-                              ? Text(
-                                  user?.name?.substring(0, 1).toUpperCase() ??
-                                      'U',
-                                  style: const TextStyle(
-                                    fontSize: 28,
-                                    fontWeight: FontWeight.bold,
+          actions: [
+            Consumer<UserProvider>(
+              builder: (context, userProvider, child) {
+                return LoadingButton(
+                  onPressed: _handleSave,
+                  isLoading: userProvider.isLoading,
+                  style: TextButton.styleFrom(),
+                  child: const Text('Save'),
+                );
+              },
+            ),
+          ],
+        ),
+        body: Form(
+          key: _formKey,
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              children: [
+                // Profile Picture Section
+                Center(
+                  child: Stack(
+                    children: [
+                      Consumer<AuthProvider>(
+                        builder: (context, authProvider, child) {
+                          final user = authProvider.currentUser;
+                          return CircleAvatar(
+                            radius: 50,
+                            backgroundColor: Theme.of(
+                              context,
+                            ).colorScheme.primary,
+                            backgroundImage: user?.avatarUrl != null
+                                ? NetworkImage(user!.avatarUrl!)
+                                : null,
+                            child: user?.avatarUrl == null
+                                ? Text(
+                                    user?.name?.substring(0, 1).toUpperCase() ??
+                                        'U',
+                                    style: const TextStyle(
+                                      fontSize: 28,
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.white,
+                                    ),
+                                  )
+                                : null,
+                          );
+                        },
+                      ),
+                      Positioned(
+                        bottom: 0,
+                        right: 0,
+                        child: Container(
+                          decoration: BoxDecoration(
+                            color: Theme.of(context).colorScheme.primary,
+                            shape: BoxShape.circle,
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withValues(alpha: 0.2),
+                                blurRadius: 6,
+                                offset: const Offset(0, 2),
+                              ),
+                            ],
+                          ),
+                          child: IconButton(
+                            icon: _isUploadingPhoto
+                                ? const SizedBox(
+                                    width: 20,
+                                    height: 20,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      valueColor: AlwaysStoppedAnimation<Color>(
+                                        Colors.white,
+                                      ),
+                                    ),
+                                  )
+                                : const Icon(
+                                    Icons.camera_alt,
                                     color: Colors.white,
+                                    size: 20,
                                   ),
-                                )
-                              : null,
+                            onPressed: _isUploadingPhoto
+                                ? null
+                                : _handlePhotoUpdate,
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+
+                const SizedBox(height: 32),
+
+                // Name Field
+                CustomTextField(
+                  controller: _nameController,
+                  label: 'Full Name',
+                  prefixIcon: Icons.person_outlined,
+                  validator: (value) {
+                    if (value == null || value.trim().isEmpty) {
+                      return 'Name is required';
+                    }
+                    if (value.trim().length < 2) {
+                      return 'Name must be at least 2 characters';
+                    }
+                    return null;
+                  },
+                  textCapitalization: TextCapitalization.words,
+                ),
+
+                const SizedBox(height: 16),
+
+                // Username Field
+                CustomTextField(
+                  controller: _usernameController,
+                  label: 'Username',
+                  prefixIcon: Icons.alternate_email,
+                  validator: (value) {
+                    if (value != null && value.isNotEmpty && value.length < 3) {
+                      return 'Username must be at least 3 characters';
+                    }
+                    return null;
+                  },
+                ),
+
+                const SizedBox(height: 16),
+
+                // Bio Field
+                CustomTextField(
+                  controller: _bioController,
+                  label: 'Bio',
+                  prefixIcon: Icons.info_outlined,
+                  maxLines: 3,
+                  maxLength: 500,
+                  validator: (value) {
+                    if (value != null && value.length > 500) {
+                      return 'Bio must be less than 500 characters';
+                    }
+                    return null;
+                  },
+                ),
+
+                const SizedBox(height: 24),
+
+                // Error Message
+                Consumer<UserProvider>(
+                  builder: (context, userProvider, child) {
+                    if (userProvider.error != null) {
+                      return Container(
+                        margin: const EdgeInsets.only(bottom: 16),
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Theme.of(
+                            context,
+                          ).colorScheme.error.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                            color: Theme.of(
+                              context,
+                            ).colorScheme.error.withValues(alpha: 0.3),
+                          ),
+                        ),
+                        child: Text(
+                          userProvider.error!,
+                          style: TextStyle(
+                            color: Theme.of(context).colorScheme.error,
+                            fontSize: 14,
+                          ),
+                        ),
+                      );
+                    }
+                    return const SizedBox.shrink();
+                  },
+                ),
+
+                // Privacy Toggle
+                Card(
+                  child: ListTile(
+                    leading: Icon(
+                      _isPrivate == true
+                          ? Icons.lock_outlined
+                          : Icons.public_outlined,
+                    ),
+                    title: const Text('Private Account'),
+                    subtitle: Text(
+                      _isPrivate == true
+                          ? 'Only followers can see your trips'
+                          : 'Anyone can see your trips',
+                    ),
+                    trailing: Switch(
+                      value: _isPrivate ?? false,
+                      onChanged: (value) {
+                        setState(() {
+                          _isPrivate = value;
+                        });
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(
+                              value
+                                  ? 'Profile set to private'
+                                  : 'Profile set to public',
+                            ),
+                            duration: const Duration(seconds: 2),
+                          ),
                         );
                       },
                     ),
-                    Positioned(
-                      bottom: 0,
-                      right: 0,
-                      child: Container(
-                        decoration: BoxDecoration(
-                          color: Theme.of(context).colorScheme.primary,
-                          shape: BoxShape.circle,
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withOpacity(0.2),
-                              blurRadius: 6,
-                              offset: const Offset(0, 2),
-                            ),
-                          ],
-                        ),
-                        child: IconButton(
-                          icon: _isUploadingPhoto
-                              ? const SizedBox(
-                                  width: 20,
-                                  height: 20,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                    valueColor: AlwaysStoppedAnimation<Color>(
-                                        Colors.white),
-                                  ),
-                                )
-                              : const Icon(
-                                  Icons.camera_alt,
-                                  color: Colors.white,
-                                  size: 20,
-                                ),
-                          onPressed:
-                              _isUploadingPhoto ? null : _handlePhotoUpdate,
-                          padding: EdgeInsets.zero,
-                          constraints: const BoxConstraints(),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-
-              const SizedBox(height: 32),
-
-              // Name Field
-              CustomTextField(
-                controller: _nameController,
-                label: 'Full Name',
-                prefixIcon: Icons.person_outlined,
-                validator: (value) {
-                  if (value == null || value.trim().isEmpty) {
-                    return 'Name is required';
-                  }
-                  if (value.trim().length < 2) {
-                    return 'Name must be at least 2 characters';
-                  }
-                  return null;
-                },
-                textCapitalization: TextCapitalization.words,
-              ),
-
-              const SizedBox(height: 16),
-
-              // Username Field
-              CustomTextField(
-                controller: _usernameController,
-                label: 'Username',
-                prefixIcon: Icons.alternate_email,
-                validator: (value) {
-                  if (value != null && value.isNotEmpty && value.length < 3) {
-                    return 'Username must be at least 3 characters';
-                  }
-                  return null;
-                },
-              ),
-
-              const SizedBox(height: 16),
-
-              // Bio Field
-              CustomTextField(
-                controller: _bioController,
-                label: 'Bio',
-                prefixIcon: Icons.info_outlined,
-                maxLines: 3,
-                maxLength: 500,
-                validator: (value) {
-                  if (value != null && value.length > 500) {
-                    return 'Bio must be less than 500 characters';
-                  }
-                  return null;
-                },
-              ),
-
-              const SizedBox(height: 24),
-
-              // Error Message
-              Consumer<UserProvider>(
-                builder: (context, userProvider, child) {
-                  if (userProvider.error != null) {
-                    return Container(
-                      margin: const EdgeInsets.only(bottom: 16),
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: Theme.of(context)
-                            .colorScheme
-                            .error
-                            .withOpacity(0.1),
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(
-                          color: Theme.of(context)
-                              .colorScheme
-                              .error
-                              .withOpacity(0.3),
-                        ),
-                      ),
-                      child: Text(
-                        userProvider.error!,
-                        style: TextStyle(
-                          color: Theme.of(context).colorScheme.error,
-                          fontSize: 14,
-                        ),
-                      ),
-                    );
-                  }
-                  return const SizedBox.shrink();
-                },
-              ),
-
-              // Privacy Toggle
-              Card(
-                child: ListTile(
-                  leading: Icon(
-                    _isPrivate == true
-                        ? Icons.lock_outlined
-                        : Icons.public_outlined,
-                  ),
-                  title: const Text('Private Account'),
-                  subtitle: Text(
-                    _isPrivate == true
-                        ? 'Only followers can see your trips'
-                        : 'Anyone can see your trips',
-                  ),
-                  trailing: Switch(
-                    value: _isPrivate ?? false,
-                    onChanged: (value) {
-                      setState(() {
-                        _isPrivate = value;
-                      });
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text(
-                            value
-                                ? 'Profile set to private'
-                                : 'Profile set to public',
-                          ),
-                          duration: const Duration(seconds: 2),
-                        ),
-                      );
-                    },
                   ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
-      ),
       ),
     );
   }

@@ -1,4 +1,5 @@
 import { ENV } from '@/env';
+import { bucketCoord, cacheKeys } from './cacheUtils';
 
 type JsonValue =
   | string
@@ -323,10 +324,10 @@ async function upstashFetch<T = unknown>(
     }
 
     const json = await res.json();
-    
+
     if (path === 'pipeline') {
       let rawResult: unknown = json;
-      
+
       if (Array.isArray(json)) {
         rawResult = json;
       } else if (json?.result && Array.isArray(json.result)) {
@@ -337,7 +338,7 @@ async function upstashFetch<T = unknown>(
           rawResult = keys.map(k => json[k]);
         }
       }
-      
+
       if (Array.isArray(rawResult)) {
         return rawResult.map((item: unknown) => {
           if (typeof item === 'object' && item !== null && 'result' in item) {
@@ -346,10 +347,10 @@ async function upstashFetch<T = unknown>(
           return item;
         }) as T;
       }
-      
+
       return rawResult as T;
     }
-    
+
     return (json?.result ?? null) as T | null;
   } catch (error) {
     // Check if error message indicates rate limit
@@ -373,7 +374,7 @@ export async function cacheGetJson<T = JsonValue>(
   key: string
 ): Promise<T | null> {
   cacheMetrics.totalGets++;
-  
+
   // Check memory cache first
   const memEntry = memoryCache.get(key);
   if (memEntry) {
@@ -426,9 +427,9 @@ export async function cacheGetJsonBatch<T = JsonValue>(
   keys: string[]
 ): Promise<Map<string, T | null>> {
   const results = new Map<string, T | null>();
-  
+
   cacheMetrics.totalGets += keys.length;
-  
+
   // Check memory cache first for all keys
   const keysToFetch: string[] = [];
   for (const key of keys) {
@@ -459,17 +460,17 @@ export async function cacheGetJsonBatch<T = JsonValue>(
     cacheMetrics.batchOperations++;
     const pipeline = keysToFetch.map(key => ["get", key] as [string, string]);
     const redisResults = await upstashFetch<(string | null)[]>("pipeline", pipeline);
-    
+
     if (redisResults && Array.isArray(redisResults)) {
       let hits = 0;
       let misses = 0;
-      
+
       for (let i = 0; i < keysToFetch.length; i++) {
         const key = keysToFetch[i];
         const value: unknown = redisResults[i];
-        
+
         let stringValue: string | null = null;
-        
+
         if (value === null || value === undefined) {
           stringValue = null;
         } else if (typeof value === 'string') {
@@ -484,7 +485,7 @@ export async function cacheGetJsonBatch<T = JsonValue>(
             stringValue = JSON.stringify(result);
           }
         }
-        
+
         if (stringValue && stringValue.length > 0) {
           try {
             const parsed = JSON.parse(stringValue) as T;
@@ -510,7 +511,7 @@ export async function cacheGetJsonBatch<T = JsonValue>(
           cacheMetrics.redisMisses++;
         }
       }
-      
+
     } else {
       // If batch fetch failed, mark all as null
       // Check if it's due to rate limiting or other issues
@@ -536,7 +537,7 @@ export async function cacheSetJson<T = any>(
   ttlSeconds?: number
 ): Promise<boolean> {
   cacheMetrics.totalSets++;
-  
+
   // Validate JSON serializable
   let stringValue: string;
   try {
@@ -554,7 +555,7 @@ export async function cacheSetJson<T = any>(
   const result = await upstashFetch<string | string[]>("pipeline", [payload]);
 
   // Pipeline returns array, extract first result
-  const success = Array.isArray(result) 
+  const success = Array.isArray(result)
     ? result[0] === "OK" || (typeof result[0] === 'string' && result[0].toUpperCase() === 'OK')
     : result === "OK";
 
@@ -572,104 +573,7 @@ export async function cacheSetJson<T = any>(
   return success;
 }
 
-/**
- * Base62 encoding for more compact keys while remaining URL-safe
- * Using a modified base62 that's case-sensitive for more density
- */
-const base62Chars = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
-
-function toBase62(num: number): string {
-  if (num === 0) return "0";
-  let result = "";
-  while (num > 0) {
-    result = base62Chars[num % 62] + result;
-    num = Math.floor(num / 62);
-  }
-  return result;
-}
-
-/**
- * Rounds and encodes a coordinate for cache key generation
- * Uses 4 decimals (11.1m precision) instead of 5 (1.1m precision)
- * Encodes as base62 for shorter strings
- */
-export function bucketCoord(value: number): string {
-  // Use 4 decimals (11.1m precision) instead of 5
-  const factor = 10000;
-  const encoded = toBase62(Math.round(value * factor));
-  return encoded;
-}
-
-/**
- * Cache key generators for different types of place queries
- * Optimized for storage reduction:
- * - Shorter prefixes (p=place, s=search, n=nearby)
- * - Base62 encoded coordinates
- * - Minimal separators
- * - Optional params omitted entirely instead of empty strings
- */
-export const cacheKeys = {
-  /**
-   * Primary place storage key
-   * Format: p:{id} - Stores full place data
-   */
-  place: (id: string): string => `p:${id}`,
-
-  /**
-   * Place reference by external ID
-   * Format: p:e:{externalId} - Stores only place ID reference
-   */
-  placeByExternal: (externalId: string): string => `p:e:${externalId}`,
-
-  /**
-   * Place reference by spatial key
-   * Format: p:s:{spatialKey} - Stores only place ID reference
-   */
-  placeBySpatial: (spatialKey: string): string => `p:s:${spatialKey}`,
-
-  /**
-   * Place reference by name and spatial key
-   * Format: p:n:{nameLower}:{spatialKey} - Stores only place ID reference
-   */
-  placeByName: (name: string, spatialKey: string): string =>
-    `p:n:${name.toLowerCase()}:${spatialKey}`,
-
-  /**
-   * Generate a compact cache key for place search queries
-   * Format: p:q:{query}{lat}{lng}{type}{limit}
-   */
-  search: (
-    q: string,
-    lat?: number,
-    lng?: number,
-    type?: string,
-    limit?: number
-  ): string => {
-    // Start with minimal prefix
-    let key = 'p:q:' + q;
-
-    // Only add coordinates if both are present
-    if (lat != null && lng != null) {
-      key += ',' + bucketCoord(lat) + bucketCoord(lng);
-    }
-
-    // Only add type and limit if specified
-    if (type) key += ',' + type;
-    if (limit) key += ',' + limit;
-
-    return key;
-  },
-
-  /**
-   * Generate a compact cache key for nearby place queries
-   * Format: p:n:{lat}{lng}{kinds}
-   */
-  nearby: (lat: number, lng: number, kinds?: string): string => {
-    let key = 'p:n:' + bucketCoord(lat) + bucketCoord(lng);
-    if (kinds) key += ',' + kinds;
-    return key;
-  }
-};
+export { bucketCoord, cacheKeys } from './cacheUtils';
 
 export async function cacheDelete(key: string): Promise<boolean> {
   // Always clear memory cache

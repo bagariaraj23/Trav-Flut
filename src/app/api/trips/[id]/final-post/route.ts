@@ -7,10 +7,11 @@ import { ApiResponse, TripFinalPostResponse } from '@/types/api'
 // Get final post preview
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const tripId = params.id
+    const { id } = await params;
+    const tripId = id
     
     // Verify authentication
     const authHeader = request.headers.get('authorization')
@@ -85,10 +86,11 @@ export async function GET(
 // Update final post
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const tripId = params.id
+    const { id } = await params;
+    const tripId = id
     
     // Verify authentication
     const authHeader = request.headers.get('authorization')

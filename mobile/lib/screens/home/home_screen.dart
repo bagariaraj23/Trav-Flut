@@ -12,7 +12,7 @@ import 'package:tripthread/utils/cloudinary_utils.dart';
 class HomeScreen extends StatefulWidget {
   final int initialTab;
 
-  const HomeScreen({Key? key, this.initialTab = 0}) : super(key: key);
+  const HomeScreen({super.key, this.initialTab = 0});
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -25,7 +25,8 @@ class _HomeScreenState extends State<HomeScreen> {
   void initState() {
     super.initState();
     debugPrint(
-        '[HomeScreen] Initializing with initialTab: ${widget.initialTab}');
+      '[HomeScreen] Initializing with initialTab: ${widget.initialTab}',
+    );
     _currentIndex = widget.initialTab;
     // Initialize trip provider
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -82,7 +83,7 @@ class _HomeScreenState extends State<HomeScreen> {
 }
 
 class FeedTab extends StatelessWidget {
-  const FeedTab({Key? key}) : super(key: key);
+  const FeedTab({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -91,7 +92,7 @@ class FeedTab extends StatelessWidget {
 }
 
 class HomeFeedScreen extends StatefulWidget {
-  const HomeFeedScreen({Key? key}) : super(key: key);
+  const HomeFeedScreen({super.key});
 
   @override
   State<HomeFeedScreen> createState() => _HomeFeedScreenState();
@@ -127,7 +128,8 @@ class _HomeFeedScreenState extends State<HomeFeedScreen> {
     if (_scrollController.position.pixels >=
         _scrollController.position.maxScrollExtent - 200) {
       debugPrint(
-          '[HomeFeedScreen] Near end of scroll, checking for more posts');
+        '[HomeFeedScreen] Near end of scroll, checking for more posts',
+      );
       final feedProvider = context.read<FeedProvider>();
       if (feedProvider.hasMoreHomeFeedPosts &&
           !feedProvider.isHomeFeedLoading) {
@@ -154,7 +156,8 @@ class _HomeFeedScreenState extends State<HomeFeedScreen> {
           // Combined Notification Icon
           Consumer2<UserProvider, TripProvider>(
             builder: (context, userProvider, tripProvider, child) {
-              final totalPending = userProvider.pendingFollowRequests.length +
+              final totalPending =
+                  userProvider.pendingFollowRequests.length +
                   tripProvider.pendingTripInvitations.length;
               return Stack(
                 alignment: Alignment.center,
@@ -166,7 +169,8 @@ class _HomeFeedScreenState extends State<HomeFeedScreen> {
                       if (userProvider.pendingFollowRequests.isNotEmpty) {
                         context.push('/follow-requests');
                       } else if (tripProvider
-                          .pendingTripInvitations.isNotEmpty) {
+                          .pendingTripInvitations
+                          .isNotEmpty) {
                         context.push('/trip-invites');
                       } else {
                         // Show a message or navigate to an empty notifications screen
@@ -219,11 +223,7 @@ class _HomeFeedScreenState extends State<HomeFeedScreen> {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(
-                    Icons.feed_outlined,
-                    size: 64,
-                    color: Colors.grey,
-                  ),
+                  Icon(Icons.feed_outlined, size: 64, color: Colors.grey),
                   SizedBox(height: 16),
                   Text(
                     'No posts yet',
@@ -249,11 +249,7 @@ class _HomeFeedScreenState extends State<HomeFeedScreen> {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(
-                    Icons.error_outline,
-                    size: 64,
-                    color: Colors.red[300],
-                  ),
+                  Icon(Icons.error_outline, size: 64, color: Colors.red[300]),
                   const SizedBox(height: 16),
                   Text(
                     'Error loading feed',
@@ -317,9 +313,7 @@ class _HomeFeedScreenState extends State<HomeFeedScreen> {
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       elevation: 2,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-      ),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -335,11 +329,7 @@ class _HomeFeedScreenState extends State<HomeFeedScreen> {
                       ? NetworkImage(post.trip!.user!.avatarUrl!)
                       : null,
                   child: post.trip?.user?.avatarUrl == null
-                      ? Icon(
-                          Icons.person,
-                          color: Colors.white,
-                          size: 20,
-                        )
+                      ? Icon(Icons.person, color: Colors.white, size: 20)
                       : null,
                 ),
                 const SizedBox(width: 12),
@@ -351,16 +341,14 @@ class _HomeFeedScreenState extends State<HomeFeedScreen> {
                         post.trip?.user?.name ??
                             post.trip?.user?.username ??
                             'Travel Story',
-                        style:
-                            Theme.of(context).textTheme.titleMedium?.copyWith(
-                                  fontWeight: FontWeight.w600,
-                                ),
+                        style: Theme.of(context).textTheme.titleMedium
+                            ?.copyWith(fontWeight: FontWeight.w600),
                       ),
                       Text(
                         _formatDateTime(post.createdAt),
                         style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                              color: Colors.grey[600],
-                            ),
+                          color: Colors.grey[600],
+                        ),
                       ),
                     ],
                   ),
@@ -432,9 +420,9 @@ class _HomeFeedScreenState extends State<HomeFeedScreen> {
                   const SizedBox(height: 8),
                   Text(
                     post.caption!,
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          color: Colors.grey[700],
-                        ),
+                    style: Theme.of(
+                      context,
+                    ).textTheme.bodyMedium?.copyWith(color: Colors.grey[700]),
                   ),
                 ],
 
@@ -464,8 +452,10 @@ class _HomeFeedScreenState extends State<HomeFeedScreen> {
                     const Spacer(),
                     TextButton(
                       onPressed: () {
-                        context.push('/trip/${post.tripId}',
-                            extra: {'from': '/home'});
+                        context.push(
+                          '/trip/${post.tripId}',
+                          extra: {'from': '/home'},
+                        );
                       },
                       child: const Text('View Trip'),
                     ),
@@ -496,7 +486,7 @@ class _HomeFeedScreenState extends State<HomeFeedScreen> {
 }
 
 class TripsTab extends StatefulWidget {
-  const TripsTab({Key? key}) : super(key: key);
+  const TripsTab({super.key});
 
   @override
   State<TripsTab> createState() => _TripsTabState();
@@ -504,7 +494,9 @@ class TripsTab extends StatefulWidget {
 
 class _TripsTabState extends State<TripsTab> {
   Future<void> _handleCreateTrip(
-      BuildContext context, TripProvider tripProvider) async {
+    BuildContext context,
+    TripProvider tripProvider,
+  ) async {
     // Check for existing trips
     final conflictInfo = await tripProvider.checkTripConflicts();
 
@@ -522,7 +514,9 @@ class _TripsTabState extends State<TripsTab> {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('You have an ongoing trip. Please end it before starting a new one.'),
+            content: Text(
+              'You have an ongoing trip. Please end it before starting a new one.',
+            ),
             duration: Duration(seconds: 2),
           ),
         );
@@ -548,9 +542,7 @@ class _TripsTabState extends State<TripsTab> {
       context: context,
       barrierDismissible: false,
       builder: (context) => Dialog(
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(20),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         child: Container(
           constraints: const BoxConstraints(maxWidth: 400),
           padding: const EdgeInsets.all(24),
@@ -562,9 +554,9 @@ class _TripsTabState extends State<TripsTab> {
               Text(
                 'Future Trip Scheduled',
                 style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 20,
-                    ),
+                  fontWeight: FontWeight.bold,
+                  fontSize: 20,
+                ),
               ),
               const SizedBox(height: 24),
 
@@ -573,10 +565,14 @@ class _TripsTabState extends State<TripsTab> {
                 Container(
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
-                    color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                    color: Theme.of(
+                      context,
+                    ).colorScheme.surfaceContainerHighest,
                     borderRadius: BorderRadius.circular(12),
                     border: Border.all(
-                      color: Theme.of(context).colorScheme.outline.withOpacity(0.2),
+                      color: Theme.of(
+                        context,
+                      ).colorScheme.outline.withValues(alpha: 0.2),
                     ),
                   ),
                   child: Column(
@@ -593,12 +589,8 @@ class _TripsTabState extends State<TripsTab> {
                           Expanded(
                             child: Text(
                               existingTrip.title,
-                              style: Theme.of(context)
-                                  .textTheme
-                                  .titleMedium
-                                  ?.copyWith(
-                                    fontWeight: FontWeight.w600,
-                                  ),
+                              style: Theme.of(context).textTheme.titleMedium
+                                  ?.copyWith(fontWeight: FontWeight.w600),
                               maxLines: 2,
                               overflow: TextOverflow.ellipsis,
                             ),
@@ -611,13 +603,18 @@ class _TripsTabState extends State<TripsTab> {
                           Icon(
                             Icons.calendar_month_rounded,
                             size: 16,
-                            color: Theme.of(context).colorScheme.onSurfaceVariant,
+                            color: Theme.of(
+                              context,
+                            ).colorScheme.onSurfaceVariant,
                           ),
                           const SizedBox(width: 6),
                           Text(
                             '${_formatDate(existingTrip.startDate)}${existingTrip.endDate != null ? ' - ${_formatDate(existingTrip.endDate!)}' : ''}',
-                            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                            style: Theme.of(context).textTheme.bodySmall
+                                ?.copyWith(
+                                  color: Theme.of(
+                                    context,
+                                  ).colorScheme.onSurfaceVariant,
                                 ),
                           ),
                         ],
@@ -630,15 +627,19 @@ class _TripsTabState extends State<TripsTab> {
 
               // Warning Message
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 12,
+                ),
                 decoration: BoxDecoration(
-                  color: Theme.of(context)
-                      .colorScheme
-                      .errorContainer
-                      .withOpacity(0.2),
+                  color: Theme.of(
+                    context,
+                  ).colorScheme.errorContainer.withValues(alpha: 0.2),
                   borderRadius: BorderRadius.circular(12),
                   border: Border.all(
-                    color: Theme.of(context).colorScheme.error.withOpacity(0.3),
+                    color: Theme.of(
+                      context,
+                    ).colorScheme.error.withValues(alpha: 0.3),
                     width: 1,
                   ),
                 ),
@@ -646,12 +647,12 @@ class _TripsTabState extends State<TripsTab> {
                   'Creating a new trip will replace your scheduled trip. The scheduled trip will be cancelled.',
                   textAlign: TextAlign.left,
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: Theme.of(context).colorScheme.onSurface,
-                        fontSize: 12,
-                        height: 1.4,
-                        fontWeight: FontWeight.w400,
-                        letterSpacing: 0.1,
-                      ),
+                    color: Theme.of(context).colorScheme.onSurface,
+                    fontSize: 12,
+                    height: 1.4,
+                    fontWeight: FontWeight.w400,
+                    letterSpacing: 0.1,
+                  ),
                 ),
               ),
 
@@ -671,11 +672,17 @@ class _TripsTabState extends State<TripsTab> {
                           context.push('/trip/${existingTrip.id}');
                         },
                         style: OutlinedButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 12),
+                          padding: const EdgeInsets.symmetric(
+                            vertical: 6,
+                            horizontal: 12,
+                          ),
                           minimumSize: const Size(0, 32),
                           tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                         ),
-                        child: const Text('View Trip', style: TextStyle(fontSize: 13)),
+                        child: const Text(
+                          'View Trip',
+                          style: TextStyle(fontSize: 13),
+                        ),
                       ),
                     if (existingTrip != null) const SizedBox(height: 8),
                     // Continue & replace and Cancel on same line
@@ -685,24 +692,38 @@ class _TripsTabState extends State<TripsTab> {
                         TextButton(
                           onPressed: () => Navigator.of(context).pop(false),
                           style: TextButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 12),
+                            padding: const EdgeInsets.symmetric(
+                              vertical: 6,
+                              horizontal: 12,
+                            ),
                             minimumSize: const Size(0, 32),
                             tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                           ),
-                          child: const Text('Cancel', style: TextStyle(fontSize: 13)),
+                          child: const Text(
+                            'Cancel',
+                            style: TextStyle(fontSize: 13),
+                          ),
                         ),
                         const SizedBox(width: 8),
                         ElevatedButton(
                           onPressed: () => Navigator.of(context).pop(true),
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: Theme.of(context).colorScheme.error,
+                            backgroundColor: Theme.of(
+                              context,
+                            ).colorScheme.error,
                             foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 12),
+                            padding: const EdgeInsets.symmetric(
+                              vertical: 6,
+                              horizontal: 12,
+                            ),
                             minimumSize: const Size(0, 32),
                             tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                             elevation: 0,
                           ),
-                          child: const Text('Continue & replace', style: TextStyle(fontSize: 13)),
+                          child: const Text(
+                            'Continue & replace',
+                            style: TextStyle(fontSize: 13),
+                          ),
                         ),
                       ],
                     ),
@@ -719,10 +740,7 @@ class _TripsTabState extends State<TripsTab> {
       // Store replaceExisting flag in extra
       context.push(
         '/create-trip',
-        extra: {
-          'from': '/home',
-          'replaceExisting': true,
-        },
+        extra: {'from': '/home', 'replaceExisting': true},
       );
     }
   }
@@ -743,7 +761,7 @@ class _TripsTabState extends State<TripsTab> {
       'Sep',
       'Oct',
       'Nov',
-      'Dec'
+      'Dec',
     ];
     return '${months[dateOnly.month - 1]} ${dateOnly.day}, ${dateOnly.year}';
   }
@@ -751,40 +769,44 @@ class _TripsTabState extends State<TripsTab> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-        appBar: AppBar(
-          title: const Text('My Trips'),
-          actions: [
-            Consumer<TripProvider>(
-              builder: (context, tripProvider, child) {
-                // Check if there's an ongoing trip to disable the button
-                final hasOngoingTrip = tripProvider.hasOngoingTrip;
-                return IconButton(
-                  icon: const Icon(Icons.add),
-                  onPressed: hasOngoingTrip
-                      ? null
-                      : () => _handleCreateTrip(context, tripProvider),
-                  tooltip: hasOngoingTrip
-                      ? 'End your ongoing trip before creating a new one'
-                      : 'Create new trip',
-                );
-              },
-            ),
-          ],
+      appBar: AppBar(
+        title: const Text('My Trips'),
+        actions: [
+          Consumer<TripProvider>(
+            builder: (context, tripProvider, child) {
+              // Check if there's an ongoing trip to disable the button
+              final hasOngoingTrip = tripProvider.hasOngoingTrip;
+              return IconButton(
+                icon: const Icon(Icons.add),
+                onPressed: hasOngoingTrip
+                    ? null
+                    : () => _handleCreateTrip(context, tripProvider),
+                tooltip: hasOngoingTrip
+                    ? 'End your ongoing trip before creating a new one'
+                    : 'Create new trip',
+              );
+            },
+          ),
+        ],
+      ),
+      body: SafeArea(
+        child: Consumer<TripProvider>(
+          builder: (context, tripProvider, child) {
+            return SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (tripProvider.currentTrip != null &&
+                      tripProvider.currentTrip!.status == TripStatus.ongoing)
+                    _buildOngoingTripBanner(context, tripProvider.currentTrip!),
+                  _buildTripsContent(context, tripProvider),
+                ],
+              ),
+            );
+          },
         ),
-        body: SafeArea(child:
-            Consumer<TripProvider>(builder: (context, tripProvider, child) {
-          return SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (tripProvider.currentTrip != null &&
-                    tripProvider.currentTrip!.status == TripStatus.ongoing)
-                  _buildOngoingTripBanner(context, tripProvider.currentTrip!),
-                _buildTripsContent(context, tripProvider),
-              ],
-            ),
-          );
-        })));
+      ),
+    );
   }
 
   Widget _buildTripsContent(BuildContext context, TripProvider tripProvider) {
@@ -803,25 +825,21 @@ class _TripsTabState extends State<TripsTab> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(
-                Icons.map_outlined,
-                size: 64,
-                color: Colors.grey[400],
-              ),
+              Icon(Icons.map_outlined, size: 64, color: Colors.grey[400]),
               const SizedBox(height: 16),
               Text(
                 'No Trips Yet',
-                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                      color: Colors.grey[600],
-                    ),
+                style: Theme.of(
+                  context,
+                ).textTheme.headlineSmall?.copyWith(color: Colors.grey[600]),
               ),
               const SizedBox(height: 8),
               Text(
                 'Start documenting your travel adventures',
                 textAlign: TextAlign.center,
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: Colors.grey[500],
-                    ),
+                style: Theme.of(
+                  context,
+                ).textTheme.bodyMedium?.copyWith(color: Colors.grey[500]),
               ),
               const SizedBox(height: 24),
               ElevatedButton.icon(
@@ -842,7 +860,7 @@ class _TripsTabState extends State<TripsTab> {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          ...trips.map((trip) => _buildTripCard(context, trip)).toList(),
+          ...trips.map((trip) => _buildTripCard(context, trip)),
           const SizedBox(height: 80), // Bottom padding for FAB
         ],
       ),
@@ -860,7 +878,7 @@ class _TripsTabState extends State<TripsTab> {
         gradient: LinearGradient(
           colors: [
             Theme.of(context).colorScheme.primary,
-            Theme.of(context).colorScheme.primary.withOpacity(0.8),
+            Theme.of(context).colorScheme.primary.withValues(alpha: 0.8),
           ],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
@@ -873,22 +891,25 @@ class _TripsTabState extends State<TripsTab> {
         children: [
           Row(
             children: [
-              Icon(Icons.flight_takeoff,
-                  color: Colors.white, size: isLandscape ? 18 : 20),
+              Icon(
+                Icons.flight_takeoff,
+                color: Colors.white,
+                size: isLandscape ? 18 : 20,
+              ),
               const SizedBox(width: 8),
               Text(
                 'Ongoing Trip',
                 style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w600,
-                      fontSize: isLandscape ? 14 : 16,
-                    ),
+                  color: Colors.white,
+                  fontWeight: FontWeight.w600,
+                  fontSize: isLandscape ? 14 : 16,
+                ),
               ),
               const Spacer(),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                 decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.2),
+                  color: Colors.white.withValues(alpha: 0.2),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Text(
@@ -906,10 +927,10 @@ class _TripsTabState extends State<TripsTab> {
           Text(
             trip.title,
             style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                  color: Colors.white,
-                  fontWeight: FontWeight.bold,
-                  fontSize: isLandscape ? 18 : 22,
-                ),
+              color: Colors.white,
+              fontWeight: FontWeight.bold,
+              fontSize: isLandscape ? 18 : 22,
+            ),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
           ),
@@ -917,9 +938,9 @@ class _TripsTabState extends State<TripsTab> {
           Text(
             trip.destinations.join(', '),
             style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: Colors.white.withOpacity(0.9),
-                  fontSize: isLandscape ? 12 : 14,
-                ),
+              color: Colors.white.withValues(alpha: 0.9),
+              fontSize: isLandscape ? 12 : 14,
+            ),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
           ),
@@ -928,8 +949,10 @@ class _TripsTabState extends State<TripsTab> {
             children: [
               Expanded(
                 child: ElevatedButton.icon(
-                  onPressed: () => context.push('/trip/${trip.id}/thread',
-                      extra: {'from': '/trip/${trip.id}'}),
+                  onPressed: () => context.push(
+                    '/trip/${trip.id}/thread',
+                    extra: {'from': '/trip/${trip.id}'},
+                  ),
                   icon: Icon(Icons.add, size: isLandscape ? 16 : 18),
                   label: Text(
                     'Add Entry',
@@ -972,7 +995,8 @@ class _TripsTabState extends State<TripsTab> {
     return Card(
       margin: const EdgeInsets.only(bottom: 16),
       child: InkWell(
-        onTap: () => context.push('/trip/${trip.id}', extra: {'from': '/trips'}),
+        onTap: () =>
+            context.push('/trip/${trip.id}', extra: {'from': '/trips'}),
         borderRadius: BorderRadius.circular(12),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -981,8 +1005,9 @@ class _TripsTabState extends State<TripsTab> {
             Container(
               height: 200,
               decoration: BoxDecoration(
-                borderRadius:
-                    const BorderRadius.vertical(top: Radius.circular(12)),
+                borderRadius: const BorderRadius.vertical(
+                  top: Radius.circular(12),
+                ),
                 color: Colors.grey[200],
               ),
               child: () {
@@ -991,8 +1016,9 @@ class _TripsTabState extends State<TripsTab> {
                   return _buildPlaceholderImage(context, trip);
                 }
                 return ClipRRect(
-                  borderRadius:
-                      const BorderRadius.vertical(top: Radius.circular(12)),
+                  borderRadius: const BorderRadius.vertical(
+                    top: Radius.circular(12),
+                  ),
                   child: Image.network(
                     buildOptimizedImageUrl(coverUrl, width: 1600),
                     width: double.infinity,
@@ -1016,10 +1042,8 @@ class _TripsTabState extends State<TripsTab> {
                       Expanded(
                         child: Text(
                           trip.title,
-                          style:
-                              Theme.of(context).textTheme.titleLarge?.copyWith(
-                                    fontWeight: FontWeight.bold,
-                                  ),
+                          style: Theme.of(context).textTheme.titleLarge
+                              ?.copyWith(fontWeight: FontWeight.bold),
                           overflow: TextOverflow.ellipsis,
                           maxLines: 1,
                         ),
@@ -1030,16 +1054,17 @@ class _TripsTabState extends State<TripsTab> {
                   const SizedBox(height: 8),
                   Row(
                     children: [
-                      Icon(Icons.location_on,
-                          size: 16, color: Colors.grey[600]),
+                      Icon(
+                        Icons.location_on,
+                        size: 16,
+                        color: Colors.grey[600],
+                      ),
                       const SizedBox(width: 4),
                       Expanded(
                         child: Text(
                           trip.destinations.join(', '),
-                          style:
-                              Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                    color: Colors.grey[600],
-                                  ),
+                          style: Theme.of(context).textTheme.bodyMedium
+                              ?.copyWith(color: Colors.grey[600]),
                           overflow: TextOverflow.ellipsis,
                           maxLines: 1,
                         ),
@@ -1089,7 +1114,7 @@ class _TripsTabState extends State<TripsTab> {
         gradient: LinearGradient(
           colors: [
             Theme.of(context).colorScheme.primary,
-            Theme.of(context).colorScheme.primary.withOpacity(0.7),
+            Theme.of(context).colorScheme.primary.withValues(alpha: 0.7),
           ],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
@@ -1099,11 +1124,7 @@ class _TripsTabState extends State<TripsTab> {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          const Icon(
-            Icons.travel_explore,
-            size: 48,
-            color: Colors.white,
-          ),
+          const Icon(Icons.travel_explore, size: 48, color: Colors.white),
           const SizedBox(height: 8),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -1148,9 +1169,9 @@ class _TripsTabState extends State<TripsTab> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
+        color: color.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.withOpacity(0.3)),
+        border: Border.all(color: color.withValues(alpha: 0.3)),
       ),
       child: Text(
         label,
@@ -1175,13 +1196,7 @@ class _TripsTabState extends State<TripsTab> {
         children: [
           Icon(icon, size: 14, color: Colors.grey[600]),
           const SizedBox(width: 4),
-          Text(
-            text,
-            style: TextStyle(
-              color: Colors.grey[600],
-              fontSize: 12,
-            ),
-          ),
+          Text(text, style: TextStyle(color: Colors.grey[600], fontSize: 12)),
         ],
       ),
     );
@@ -1189,7 +1204,7 @@ class _TripsTabState extends State<TripsTab> {
 }
 
 class ProfileTab extends StatelessWidget {
-  const ProfileTab({Key? key}) : super(key: key);
+  const ProfileTab({super.key});
 
   static String _formatDateForCard(DateTime date) {
     // Extract only date components to avoid timezone issues
@@ -1227,7 +1242,7 @@ class ProfileTab extends StatelessWidget {
                 onPressed: () async {
                   final currentUser = await userProvider.getCurrentUser();
                   if (currentUser != null) {
-                    await userProvider.getDetailedFollowStatus(currentUser.id);
+                    userProvider.getDetailedFollowStatus(currentUser.id);
                   }
                   if (context.mounted) {
                     context.go('/follow-requests');
@@ -1261,7 +1276,7 @@ class ProfileTab extends StatelessWidget {
                     borderRadius: BorderRadius.circular(16),
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.black.withOpacity(0.05),
+                        color: Colors.black.withValues(alpha: 0.05),
                         blurRadius: 10,
                         offset: const Offset(0, 2),
                       ),
@@ -1277,15 +1292,18 @@ class ProfileTab extends StatelessWidget {
                               : () {
                                   showDialog(
                                     context: context,
-                                    barrierColor: Colors.black.withOpacity(0.7),
+                                    barrierColor: Colors.black.withValues(
+                                      alpha: 0.7,
+                                    ),
                                     builder: (dialogContext) {
                                       return GestureDetector(
                                         onTap: () =>
                                             Navigator.of(dialogContext).pop(),
                                         child: Dialog(
                                           backgroundColor: Colors.transparent,
-                                          insetPadding:
-                                              const EdgeInsets.all(32),
+                                          insetPadding: const EdgeInsets.all(
+                                            32,
+                                          ),
                                           child: Container(
                                             padding: const EdgeInsets.all(16),
                                             decoration: BoxDecoration(
@@ -1295,7 +1313,7 @@ class ProfileTab extends StatelessWidget {
                                               boxShadow: [
                                                 BoxShadow(
                                                   color: Colors.black
-                                                      .withOpacity(0.4),
+                                                      .withValues(alpha: 0.4),
                                                   blurRadius: 20,
                                                   offset: const Offset(0, 8),
                                                 ),
@@ -1303,8 +1321,9 @@ class ProfileTab extends StatelessWidget {
                                             ),
                                             child: CircleAvatar(
                                               radius: 120,
-                                              backgroundImage:
-                                                  NetworkImage(user.avatarUrl!),
+                                              backgroundImage: NetworkImage(
+                                                user.avatarUrl!,
+                                              ),
                                             ),
                                           ),
                                         ),
@@ -1314,8 +1333,9 @@ class ProfileTab extends StatelessWidget {
                                 },
                           child: CircleAvatar(
                             radius: 40,
-                            backgroundColor:
-                                Theme.of(context).colorScheme.primary,
+                            backgroundColor: Theme.of(
+                              context,
+                            ).colorScheme.primary,
                             backgroundImage: user.avatarUrl != null
                                 ? NetworkImage(user.avatarUrl!)
                                 : null,
@@ -1374,13 +1394,18 @@ class ProfileTab extends StatelessWidget {
                             mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                             children: [
                               _buildStatColumn(
-                                  context, tripCount.toString(), 'Trips'),
+                                context,
+                                tripCount.toString(),
+                                'Trips',
+                              ),
                               _buildStatColumn(
-                                context, 
-                                '$followerCount', 
+                                context,
+                                '$followerCount',
                                 'Followers',
                                 onTap: () {
-                                  debugPrint('[ProfileTab] Navigating to followers for user: ${user.id}');
+                                  debugPrint(
+                                    '[ProfileTab] Navigating to followers for user: ${user.id}',
+                                  );
                                   context.push(
                                     '/profile/${user.id}/followers',
                                     extra: {'from': '/home'},
@@ -1388,11 +1413,13 @@ class ProfileTab extends StatelessWidget {
                                 },
                               ),
                               _buildStatColumn(
-                                context, 
-                                '$followingCount', 
+                                context,
+                                '$followingCount',
                                 'Following',
                                 onTap: () {
-                                  debugPrint('[ProfileTab] Navigating to following for user: ${user.id}');
+                                  debugPrint(
+                                    '[ProfileTab] Navigating to following for user: ${user.id}',
+                                  );
                                   context.push(
                                     '/profile/${user.id}/following',
                                     extra: {'from': '/home'},
@@ -1411,8 +1438,10 @@ class ProfileTab extends StatelessWidget {
                         width: double.infinity,
                         child: OutlinedButton(
                           onPressed: () {
-                            context.push('/edit-profile',
-                                extra: {'from': '/home'});
+                            context.push(
+                              '/edit-profile',
+                              extra: {'from': '/home'},
+                            );
                           },
                           child: const Text('Edit Profile'),
                         ),
@@ -1435,7 +1464,7 @@ class ProfileTab extends StatelessWidget {
                         borderRadius: BorderRadius.circular(16),
                         boxShadow: [
                           BoxShadow(
-                            color: Colors.black.withOpacity(0.05),
+                            color: Colors.black.withValues(alpha: 0.05),
                             blurRadius: 10,
                             offset: const Offset(0, 2),
                           ),
@@ -1448,15 +1477,18 @@ class ProfileTab extends StatelessWidget {
                             children: [
                               Text(
                                 'Recent Trips',
-                                style:
-                                    Theme.of(context).textTheme.headlineSmall,
+                                style: Theme.of(
+                                  context,
+                                ).textTheme.headlineSmall,
                               ),
                               const Spacer(),
                               if (tripProvider.trips.isNotEmpty)
                                 TextButton(
                                   onPressed: () {
-                                    context
-                                        .go('/trips', extra: {'from': '/home'});
+                                    context.go(
+                                      '/trips',
+                                      extra: {'from': '/home'},
+                                    );
                                   },
                                   child: const Text('View All'),
                                 ),
@@ -1483,9 +1515,7 @@ class ProfileTab extends StatelessWidget {
                                   SizedBox(height: 4),
                                   Text(
                                     'Start documenting your adventures!',
-                                    style: TextStyle(
-                                      color: Colors.grey,
-                                    ),
+                                    style: TextStyle(color: Colors.grey),
                                   ),
                                 ],
                               ),
@@ -1497,13 +1527,15 @@ class ProfileTab extends StatelessWidget {
                                 final isDark =
                                     theme.brightness == Brightness.dark;
                                 final cardColor = isDark
-                                    ? theme.colorScheme.surfaceVariant
-                                        .withOpacity(0.65)
+                                    ? theme.colorScheme.surfaceContainerHighest
+                                          .withValues(alpha: 0.65)
                                     : const Color(0xFF1A1F2B);
-                                final primaryText =
-                                    isDark ? Colors.white : Colors.white;
-                                final secondaryText =
-                                    primaryText.withOpacity(0.7);
+                                final primaryText = isDark
+                                    ? Colors.white
+                                    : Colors.white;
+                                final secondaryText = primaryText.withValues(
+                                  alpha: 0.7,
+                                );
 
                                 final coverUrl = trip.coverMedia?.url;
 
@@ -1523,15 +1555,19 @@ class ProfileTab extends StatelessWidget {
                                       borderRadius: BorderRadius.circular(12),
                                       border: Border.all(
                                         color: isDark
-                                            ? theme.dividerColor
-                                                .withOpacity(0.35)
-                                            : Colors.white.withOpacity(0.08),
+                                            ? theme.dividerColor.withValues(
+                                                alpha: 0.35,
+                                              )
+                                            : Colors.white.withValues(
+                                                alpha: 0.08,
+                                              ),
                                       ),
                                       boxShadow: [
                                         if (!isDark)
                                           BoxShadow(
-                                            color:
-                                                Colors.black.withOpacity(0.25),
+                                            color: Colors.black.withValues(
+                                              alpha: 0.25,
+                                            ),
                                             blurRadius: 12,
                                             offset: const Offset(0, 5),
                                           ),
@@ -1540,8 +1576,9 @@ class ProfileTab extends StatelessWidget {
                                     child: Row(
                                       children: [
                                         ClipRRect(
-                                          borderRadius:
-                                              BorderRadius.circular(10),
+                                          borderRadius: BorderRadius.circular(
+                                            10,
+                                          ),
                                           child: SizedBox(
                                             width: 64,
                                             height: 64,
@@ -1553,14 +1590,20 @@ class ProfileTab extends StatelessWidget {
                                                       height: 480,
                                                     ),
                                                     fit: BoxFit.cover,
-                                                    errorBuilder: (context,
-                                                        error, stackTrace) {
-                                                      return _buildRecentTripIcon(
-                                                          primaryText);
-                                                    },
+                                                    errorBuilder:
+                                                        (
+                                                          context,
+                                                          error,
+                                                          stackTrace,
+                                                        ) {
+                                                          return _buildRecentTripIcon(
+                                                            primaryText,
+                                                          );
+                                                        },
                                                   )
                                                 : _buildRecentTripIcon(
-                                                    primaryText),
+                                                    primaryText,
+                                                  ),
                                           ),
                                         ),
                                         const SizedBox(width: 12),
@@ -1572,11 +1615,13 @@ class ProfileTab extends StatelessWidget {
                                               Text(
                                                 trip.title,
                                                 style: theme
-                                                    .textTheme.titleMedium
+                                                    .textTheme
+                                                    .titleMedium
                                                     ?.copyWith(
-                                                  color: primaryText,
-                                                  fontWeight: FontWeight.w600,
-                                                ),
+                                                      color: primaryText,
+                                                      fontWeight:
+                                                          FontWeight.w600,
+                                                    ),
                                                 maxLines: 1,
                                                 overflow: TextOverflow.ellipsis,
                                               ),
@@ -1584,16 +1629,18 @@ class ProfileTab extends StatelessWidget {
                                                 Padding(
                                                   padding:
                                                       const EdgeInsets.only(
-                                                          top: 2.0),
+                                                        top: 2.0,
+                                                      ),
                                                   child: Text(
                                                     trip.destinations
                                                         .take(3)
                                                         .join(', '),
                                                     style: theme
-                                                        .textTheme.bodySmall
+                                                        .textTheme
+                                                        .bodySmall
                                                         ?.copyWith(
-                                                      color: secondaryText,
-                                                    ),
+                                                          color: secondaryText,
+                                                        ),
                                                     maxLines: 1,
                                                     overflow:
                                                         TextOverflow.ellipsis,
@@ -1601,7 +1648,8 @@ class ProfileTab extends StatelessWidget {
                                                 ),
                                               Padding(
                                                 padding: const EdgeInsets.only(
-                                                    top: 6.0),
+                                                  top: 6.0,
+                                                ),
                                                 child: Row(
                                                   children: [
                                                     Icon(
@@ -1614,10 +1662,12 @@ class ProfileTab extends StatelessWidget {
                                                       child: Text(
                                                         '${ProfileTab._formatDateForCard(trip.startDate)} - ${ProfileTab._formatDateForCard(trip.endDate)}',
                                                         style: theme
-                                                            .textTheme.bodySmall
+                                                            .textTheme
+                                                            .bodySmall
                                                             ?.copyWith(
-                                                          color: secondaryText,
-                                                        ),
+                                                              color:
+                                                                  secondaryText,
+                                                            ),
                                                       ),
                                                     ),
                                                   ],
@@ -1650,8 +1700,8 @@ class ProfileTab extends StatelessWidget {
   }
 
   Widget _buildStatColumn(
-    BuildContext context, 
-    String count, 
+    BuildContext context,
+    String count,
     String label, {
     VoidCallback? onTap,
   }) {
@@ -1660,17 +1710,12 @@ class ProfileTab extends StatelessWidget {
         Text(
           count,
           style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                fontWeight: FontWeight.bold,
-                color: onTap != null
-                    ? Theme.of(context).colorScheme.primary
-                    : null,
-              ),
+            fontWeight: FontWeight.bold,
+            color: onTap != null ? Theme.of(context).colorScheme.primary : null,
+          ),
         ),
         const SizedBox(height: 4),
-        Text(
-          label,
-          style: Theme.of(context).textTheme.bodySmall,
-        ),
+        Text(label, style: Theme.of(context).textTheme.bodySmall),
       ],
     );
 
@@ -1696,13 +1741,9 @@ class ProfileTab extends StatelessWidget {
 
   Widget _buildRecentTripIcon(Color iconColor) {
     return Container(
-      color: iconColor.withOpacity(0.12),
+      color: iconColor.withValues(alpha: 0.12),
       alignment: Alignment.center,
-      child: Icon(
-        Icons.travel_explore,
-        color: iconColor,
-        size: 28,
-      ),
+      child: Icon(Icons.travel_explore, color: iconColor, size: 28),
     );
   }
 }

@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/gestures.dart';
 import 'package:provider/provider.dart';
 import 'package:tripthread/providers/auth_provider.dart';
 import 'package:tripthread/providers/user_provider.dart';
@@ -10,10 +9,7 @@ import 'package:go_router/go_router.dart';
 class ProfileScreen extends StatefulWidget {
   final String userId;
 
-  const ProfileScreen({
-    Key? key,
-    required this.userId,
-  }) : super(key: key);
+  const ProfileScreen({super.key, required this.userId});
 
   @override
   State<ProfileScreen> createState() => _ProfileScreenState();
@@ -33,9 +29,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
   void _loadInitialData() {
     final authProvider = context.read<AuthProvider>();
     if (authProvider.currentUser != null) {
-      context
-          .read<UserProvider>()
-          .loadProfileData(widget.userId, authProvider.currentUser!.id);
+      context.read<UserProvider>().loadProfileData(
+        widget.userId,
+        authProvider.currentUser!.id,
+      );
     }
   }
 
@@ -43,9 +40,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Future<void> _refreshProfile() async {
     final authProvider = context.read<AuthProvider>();
     if (authProvider.currentUser != null) {
-      await context
-          .read<UserProvider>()
-          .loadProfileData(widget.userId, authProvider.currentUser!.id);
+      await context.read<UserProvider>().loadProfileData(
+        widget.userId,
+        authProvider.currentUser!.id,
+      );
     }
   }
 
@@ -62,10 +60,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
     String actionMessage = '';
 
     if (detailedStatus.isFollowing) {
-      success = await userProvider.unfollowUser(widget.userId,
-          currentUserId: authProvider.currentUser!.id);
-      actionMessage =
-          success ? 'Successfully unfollowed user' : 'Failed to unfollow user';
+      success = await userProvider.unfollowUser(
+        widget.userId,
+        currentUserId: authProvider.currentUser!.id,
+      );
+      actionMessage = success
+          ? 'Successfully unfollowed user'
+          : 'Failed to unfollow user';
     } else if (detailedStatus.isRequestPending) {
       success = await userProvider.cancelFollowRequest(
         widget.userId,
@@ -79,8 +80,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
         widget.userId,
         currentUserId: authProvider.currentUser!.id,
       );
-      actionMessage =
-          success ? 'Follow request sent' : 'Failed to send follow request';
+      actionMessage = success
+          ? 'Follow request sent'
+          : 'Failed to send follow request';
     }
 
     if (!mounted) return;
@@ -88,9 +90,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
     // Show appropriate message regardless of success/failure
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(success
-            ? actionMessage
-            : (userProvider.error ?? 'An error occurred')),
+        content: Text(
+          success ? actionMessage : (userProvider.error ?? 'An error occurred'),
+        ),
         backgroundColor: success ? Colors.green : Colors.red,
       ),
     );
@@ -98,14 +100,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
     // Force refresh of profile data to ensure UI is in sync
     if (success) {
       await userProvider.loadProfileData(
-          widget.userId, authProvider.currentUser!.id);
+        widget.userId,
+        authProvider.currentUser!.id,
+      );
     }
   }
 
   @override
   Widget build(BuildContext context) {
     debugPrint(
-        '[ProfileScreen] Build method called for userId: ${widget.userId}');
+      '[ProfileScreen] Build method called for userId: ${widget.userId}',
+    );
 
     // Consumer2 listens to both Auth and User providers for state changes.
     return Consumer3<AuthProvider, UserProvider, TripProvider>(
@@ -113,8 +118,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
         final currentUser = authProvider.currentUser;
         final user = userProvider.getUser(widget.userId);
         final stats = userProvider.getUserStats(widget.userId);
-        final detailedStatus =
-            userProvider.getDetailedFollowStatus(widget.userId);
+        final detailedStatus = userProvider.getDetailedFollowStatus(
+          widget.userId,
+        );
         final isOwnProfile = currentUser?.id == widget.userId;
 
         // Display a loading indicator only if the main user data is not yet available.
@@ -128,25 +134,25 @@ class _ProfileScreenState extends State<ProfileScreen> {
         debugPrint('[ProfileScreen] Build - widget.userId: ${widget.userId}');
         debugPrint('[ProfileScreen] Build - isOwnProfile: $isOwnProfile');
         debugPrint(
-            '[ProfileScreen] Build - currentUser exists: ${currentUser != null}');
+          '[ProfileScreen] Build - currentUser exists: ${currentUser != null}',
+        );
 
         // Handle the case where the user could not be found.
         if (user == null) {
           return Scaffold(
             appBar: AppBar(),
-            body: Center(
-              child: Text(userProvider.error ?? 'User not found.'),
-            ),
+            body: Center(child: Text(userProvider.error ?? 'User not found.')),
           );
         }
 
         debugPrint(
-            '[ProfileScreen] isOwnProfile: $isOwnProfile (currentUserId: ${currentUser?.id})');
+          '[ProfileScreen] isOwnProfile: $isOwnProfile (currentUserId: ${currentUser?.id})',
+        );
         // debugPrint('[ProfileScreen] pendingRequests: ${}');
 
         return PopScope(
           canPop: true,
-          onPopInvoked: (didPop) {
+          onPopInvokedWithResult: (didPop, result) {
             if (!didPop) {
               if (context.canPop()) {
                 context.pop();
@@ -235,16 +241,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   color: Colors.red,
                   borderRadius: BorderRadius.circular(6),
                 ),
-                constraints: const BoxConstraints(
-                  minWidth: 14,
-                  minHeight: 14,
-                ),
+                constraints: const BoxConstraints(minWidth: 14, minHeight: 14),
                 child: Text(
                   '${pendingTripInvitations.length}',
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 8,
-                  ),
+                  style: const TextStyle(color: Colors.white, fontSize: 8),
                   textAlign: TextAlign.center,
                 ),
               ),
@@ -269,16 +269,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   color: Colors.red,
                   borderRadius: BorderRadius.circular(6),
                 ),
-                constraints: const BoxConstraints(
-                  minWidth: 14,
-                  minHeight: 14,
-                ),
+                constraints: const BoxConstraints(minWidth: 14, minHeight: 14),
                 child: Text(
                   '${pendingRequests.length}',
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 8,
-                  ),
+                  style: const TextStyle(color: Colors.white, fontSize: 8),
                   textAlign: TextAlign.center,
                 ),
               ),
@@ -309,7 +303,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
+            color: Colors.black.withValues(alpha: 0.05),
             blurRadius: 10,
             offset: const Offset(0, 2),
           ),
@@ -321,8 +315,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
           CircleAvatar(
             radius: 40,
             backgroundColor: Theme.of(context).colorScheme.primary,
-            backgroundImage:
-                user.avatarUrl != null ? NetworkImage(user.avatarUrl!) : null,
+            backgroundImage: user.avatarUrl != null
+                ? NetworkImage(user.avatarUrl!)
+                : null,
             child: user.avatarUrl == null
                 ? Text(
                     user.name?.substring(0, 1).toUpperCase() ?? 'U',
@@ -387,29 +382,47 @@ class _ProfileScreenState extends State<ProfileScreen> {
           // Stats Row
           Builder(
             builder: (context) {
-              debugPrint('[ProfileScreen] Building stats row - stats: ${stats != null}, isOwnProfile: $isOwnProfile');
+              debugPrint(
+                '[ProfileScreen] Building stats row - stats: ${stats != null}, isOwnProfile: $isOwnProfile',
+              );
               if (stats != null) {
-                debugPrint('[ProfileScreen] Stats values - trips: ${stats.tripCount}, followers: ${stats.followerCount}, following: ${stats.followingCount}');
+                debugPrint(
+                  '[ProfileScreen] Stats values - trips: ${stats.tripCount}, followers: ${stats.followerCount}, following: ${stats.followingCount}',
+                );
                 return Row(
                   mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                   children: [
-                    _buildStatColumn(context, stats.tripCount.toString(), 'Trips'),
+                    _buildStatColumn(
+                      context,
+                      stats.tripCount.toString(),
+                      'Trips',
+                    ),
                     _buildStatColumn(
                       context,
                       stats.followerCount.toString(),
                       'Followers',
                       onTap: () {
-                        debugPrint('[ProfileScreen] Navigating to followers for user: ${widget.userId}, isOwnProfile: $isOwnProfile');
-                        debugPrint('[ProfileScreen] Stats - followerCount: ${stats.followerCount}');
+                        debugPrint(
+                          '[ProfileScreen] Navigating to followers for user: ${widget.userId}, isOwnProfile: $isOwnProfile',
+                        );
+                        debugPrint(
+                          '[ProfileScreen] Stats - followerCount: ${stats.followerCount}',
+                        );
                         try {
                           context.push(
                             '/profile/${widget.userId}/followers',
                             extra: {'from': '/profile/${widget.userId}'},
                           );
-                          debugPrint('[ProfileScreen] Navigation to followers successful');
+                          debugPrint(
+                            '[ProfileScreen] Navigation to followers successful',
+                          );
                         } catch (e, stackTrace) {
-                          debugPrint('[ProfileScreen] Navigation to followers failed: $e');
-                          debugPrint('[ProfileScreen] Stack trace: $stackTrace');
+                          debugPrint(
+                            '[ProfileScreen] Navigation to followers failed: $e',
+                          );
+                          debugPrint(
+                            '[ProfileScreen] Stack trace: $stackTrace',
+                          );
                         }
                       },
                     ),
@@ -418,24 +431,36 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       stats.followingCount.toString(),
                       'Following',
                       onTap: () {
-                        debugPrint('[ProfileScreen] Navigating to following for user: ${widget.userId}, isOwnProfile: $isOwnProfile');
-                        debugPrint('[ProfileScreen] Stats - followingCount: ${stats.followingCount}');
+                        debugPrint(
+                          '[ProfileScreen] Navigating to following for user: ${widget.userId}, isOwnProfile: $isOwnProfile',
+                        );
+                        debugPrint(
+                          '[ProfileScreen] Stats - followingCount: ${stats.followingCount}',
+                        );
                         try {
                           context.push(
                             '/profile/${widget.userId}/following',
                             extra: {'from': '/profile/${widget.userId}'},
                           );
-                          debugPrint('[ProfileScreen] Navigation to following successful');
+                          debugPrint(
+                            '[ProfileScreen] Navigation to following successful',
+                          );
                         } catch (e, stackTrace) {
-                          debugPrint('[ProfileScreen] Navigation to following failed: $e');
-                          debugPrint('[ProfileScreen] Stack trace: $stackTrace');
+                          debugPrint(
+                            '[ProfileScreen] Navigation to following failed: $e',
+                          );
+                          debugPrint(
+                            '[ProfileScreen] Stack trace: $stackTrace',
+                          );
                         }
                       },
                     ),
                   ],
                 );
               } else {
-                debugPrint('[ProfileScreen] Stats is null, showing placeholder');
+                debugPrint(
+                  '[ProfileScreen] Stats is null, showing placeholder',
+                );
                 // Show placeholder stats if not loaded yet
                 return Row(
                   mainAxisAlignment: MainAxisAlignment.spaceEvenly,
@@ -457,8 +482,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
               width: double.infinity,
               child: OutlinedButton(
                 onPressed: () {
-                  context.push('/edit-profile',
-                      extra: {'from': '/profile/${widget.userId}'});
+                  context.push(
+                    '/edit-profile',
+                    extra: {'from': '/profile/${widget.userId}'},
+                  );
                 },
                 child: const Text('Edit Profile'),
               ),
@@ -483,18 +510,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       const SizedBox(height: 8),
                       Text(
                         'This account is private',
-                        style:
-                            Theme.of(context).textTheme.titleMedium?.copyWith(
-                                  fontWeight: FontWeight.w600,
-                                  color: Colors.black87,
-                                ),
+                        style: Theme.of(context).textTheme.titleMedium
+                            ?.copyWith(
+                              fontWeight: FontWeight.w600,
+                              color: Colors.black87,
+                            ),
                       ),
                       const SizedBox(height: 4),
                       Text(
                         'Follow to see their trips and posts',
                         style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                              color: Colors.grey[800],
-                            ),
+                          color: Colors.grey[800],
+                        ),
                         textAlign: TextAlign.center,
                       ),
                     ],
@@ -520,8 +547,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
               width: double.infinity,
               child: Consumer<UserProvider>(
                 builder: (context, userProvider, child) {
-                  final detailedStatus =
-                      userProvider.getDetailedFollowStatus(widget.userId);
+                  final detailedStatus = userProvider.getDetailedFollowStatus(
+                    widget.userId,
+                  );
                   final actualIsFollowing =
                       detailedStatus?.isFollowing ?? false;
                   final actualIsRequestPending =
@@ -567,15 +595,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             width: 16,
                             child: CircularProgressIndicator(
                               strokeWidth: 2,
-                              valueColor:
-                                  AlwaysStoppedAnimation<Color>(Colors.white),
+                              valueColor: AlwaysStoppedAnimation<Color>(
+                                Colors.white,
+                              ),
                             ),
                           )
                         : Text(
                             user.isPrivate ? 'Send Request' : 'Follow',
-                            style: const TextStyle(
-                              fontWeight: FontWeight.w600,
-                            ),
+                            style: const TextStyle(fontWeight: FontWeight.w600),
                           ),
                   );
                 },
@@ -587,7 +614,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Widget _buildTripsSection(
-      BuildContext context, User user, bool isOwnProfile) {
+    BuildContext context,
+    User user,
+    bool isOwnProfile,
+  ) {
     return Container(
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
@@ -595,7 +625,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
+            color: Colors.black.withValues(alpha: 0.05),
             blurRadius: 10,
             offset: const Offset(0, 2),
           ),
@@ -612,18 +642,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
           const Center(
             child: Column(
               children: [
-                Icon(
-                  Icons.map_outlined,
-                  size: 48,
-                  color: Colors.grey,
-                ),
+                Icon(Icons.map_outlined, size: 48, color: Colors.grey),
                 SizedBox(height: 12),
                 Text(
                   'No trips yet',
-                  style: TextStyle(
-                    fontSize: 16,
-                    color: Colors.grey,
-                  ),
+                  style: TextStyle(fontSize: 16, color: Colors.grey),
                 ),
               ],
             ),
@@ -639,8 +662,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
     String label, {
     VoidCallback? onTap,
   }) {
-    debugPrint('[ProfileScreen] _buildStatColumn - label: $label, count: $count, onTap: ${onTap != null}');
-    
+    debugPrint(
+      '[ProfileScreen] _buildStatColumn - label: $label, count: $count, onTap: ${onTap != null}',
+    );
+
     final content = Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       child: Column(
@@ -657,13 +682,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ),
           ),
           const SizedBox(height: 4),
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: 14,
-              color: Colors.grey[600],
-            ),
-          ),
+          Text(label, style: TextStyle(fontSize: 14, color: Colors.grey[600])),
         ],
       ),
     );
@@ -672,8 +691,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
       return content;
     }
 
-    VoidCallback tapHandler = () {
-      debugPrint('[ProfileScreen] StatColumn tapped - label: $label, count: $count');
+    void tapHandler() {
+      debugPrint(
+        '[ProfileScreen] StatColumn tapped - label: $label, count: $count',
+      );
       try {
         onTap();
         debugPrint('[ProfileScreen] StatColumn onTap executed successfully');
@@ -681,7 +702,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         debugPrint('[ProfileScreen] StatColumn onTap error: $e');
         debugPrint('[ProfileScreen] Stack trace: $stackTrace');
       }
-    };
+    }
 
     return MouseRegion(
       cursor: SystemMouseCursors.click,

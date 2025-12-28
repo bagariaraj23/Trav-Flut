@@ -6,10 +6,11 @@ import { withAuth, withRateLimit, withLogging } from "@/lib/middleware";
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { userId: string } }
+  { params }: { params: Promise<{ userId: string }> }
 ) {
   try {
-    const followeeId = params.userId;
+    const { userId } = await params;
+    const followeeId = userId;
 
     // Verify authentication
     const authHeader = request.headers.get("authorization");
@@ -109,14 +110,15 @@ export async function GET(
 // Send follow request or follow user
 export async function POST(
   request: NextRequest,
-  { params }: { params: { userId: string } }
+  { params }: { params: Promise<{ userId: string }> }
 ) {
-  return withLogging(async (req) => {
+  const { userId } = await params;
+  const handler = async (req: NextRequest) => {
     return withRateLimit(req, async (rateLimitedReq) => {
       return withAuth(rateLimitedReq, async (authenticatedReq) => {
         try {
           const followerId = authenticatedReq.user!.userId;
-          const followeeId = params.userId;
+          const followeeId = userId;
 
           const result = await prisma.$transaction(async (tx) => {
             // Check followee exists
@@ -235,16 +237,19 @@ export async function POST(
         }
       });
     });
-  });
+  };
+
+  return withLogging(handler)(request);
 }
 
 // Unfollow a user
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { userId: string } }
+  { params }: { params: Promise<{ userId: string }> }
 ) {
   try {
-    const followeeId = params.userId;
+    const { userId } = await params;
+    const followeeId = userId;
 
     // Verify authentication
     const authHeader = request.headers.get("authorization");

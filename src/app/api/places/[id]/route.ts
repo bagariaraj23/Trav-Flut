@@ -4,9 +4,10 @@ import { ApiResponse } from "@/types/api";
 
 export async function GET(
   _req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
-  const place = await prisma.place.findUnique({ where: { id: params.id } });
+  const { id } = await params;
+  const place = await prisma.place.findUnique({ where: { id } });
   if (!place)
     return NextResponse.json<ApiResponse>(
       { success: false, error: "Not found" },

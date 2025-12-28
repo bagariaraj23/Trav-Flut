@@ -5,7 +5,7 @@ import 'package:tripthread/providers/user_provider.dart';
 import 'package:tripthread/models/follow_status.dart';
 
 class FollowRequestsScreen extends StatefulWidget {
-  const FollowRequestsScreen({Key? key}) : super(key: key);
+  const FollowRequestsScreen({super.key});
 
   @override
   State<FollowRequestsScreen> createState() => _FollowRequestsScreenState();
@@ -88,7 +88,7 @@ class _FollowRequestsScreenState extends State<FollowRequestsScreen> {
   Widget build(BuildContext context) {
     return PopScope(
       canPop: true,
-      onPopInvoked: (didPop) {
+      onPopInvokedWithResult: (didPop, result) {
         if (!didPop) {
           if (context.canPop()) {
             context.pop();
