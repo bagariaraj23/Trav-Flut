@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { bucketCoord } from "../../src/lib/cache";
+import { bucketCoord } from "../../src/lib/cacheUtils";
 
 describe("cache bucketCoord", () => {
   it("encodes coordinates to compact base62 buckets", () => {
