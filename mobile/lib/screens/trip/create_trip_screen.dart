@@ -240,8 +240,16 @@ class _CreateTripScreenState extends State<CreateTripScreen> {
     print('[DEBUG] CreateTripRequest created:');
     print('[DEBUG] request.toJson(): ${request.toJson()}');
 
+    // Check if user wants to replace existing trip
+    final routerState = GoRouterState.of(context);
+    final extra = routerState.extra;
+    final replaceExisting = extra is Map && extra['replaceExisting'] == true;
+
     final tripProvider = context.read<TripProvider>();
-    final success = await tripProvider.createTrip(request);
+    final success = await tripProvider.createTrip(
+      request,
+      replaceExisting: replaceExisting,
+    );
 
     if (success && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(

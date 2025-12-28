@@ -495,8 +495,258 @@ class _HomeFeedScreenState extends State<HomeFeedScreen> {
   }
 }
 
-class TripsTab extends StatelessWidget {
+class TripsTab extends StatefulWidget {
   const TripsTab({Key? key}) : super(key: key);
+
+  @override
+  State<TripsTab> createState() => _TripsTabState();
+}
+
+class _TripsTabState extends State<TripsTab> {
+  Future<void> _handleCreateTrip(
+      BuildContext context, TripProvider tripProvider) async {
+    // Check for existing trips
+    final conflictInfo = await tripProvider.checkTripConflicts();
+
+    if (conflictInfo == null) {
+      // No conflicts, proceed directly
+      if (context.mounted) {
+        context.push('/create-trip', extra: {'from': '/home'});
+      }
+      return;
+    }
+
+    // If there's an ongoing trip, button should be disabled (this shouldn't be called)
+    // But handle it just in case
+    if (conflictInfo.hasOngoingTrip) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('You have an ongoing trip. Please end it before starting a new one.'),
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+      return;
+    }
+
+    // Check if there's a future trip - show warning dialog
+    if (!conflictInfo.hasFutureTrip) {
+      // No conflicts, proceed directly
+      if (context.mounted) {
+        context.push('/create-trip', extra: {'from': '/home'});
+      }
+      return;
+    }
+
+    // Show warning dialog for future trip
+    if (!context.mounted) return;
+
+    final existingTrip = conflictInfo.futureTrip;
+
+    final shouldContinue = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => Dialog(
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Container(
+          constraints: const BoxConstraints(maxWidth: 400),
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Title
+              Text(
+                'Future Trip Scheduled',
+                style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 20,
+                    ),
+              ),
+              const SizedBox(height: 24),
+
+              // Trip Info Card
+              if (existingTrip != null)
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: Theme.of(context).colorScheme.outline.withOpacity(0.2),
+                    ),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.airplane_ticket_rounded,
+                            size: 20,
+                            color: Theme.of(context).colorScheme.primary,
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              existingTrip.title,
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .titleMedium
+                                  ?.copyWith(
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.calendar_month_rounded,
+                            size: 16,
+                            color: Theme.of(context).colorScheme.onSurfaceVariant,
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            '${_formatDate(existingTrip.startDate)}${existingTrip.endDate != null ? ' - ${_formatDate(existingTrip.endDate!)}' : ''}',
+                            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                                ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+
+              const SizedBox(height: 20),
+
+              // Warning Message
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                decoration: BoxDecoration(
+                  color: Theme.of(context)
+                      .colorScheme
+                      .errorContainer
+                      .withOpacity(0.2),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: Theme.of(context).colorScheme.error.withOpacity(0.3),
+                    width: 1,
+                  ),
+                ),
+                child: Text(
+                  'Creating a new trip will replace your scheduled trip. The scheduled trip will be cancelled.',
+                  textAlign: TextAlign.left,
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: Theme.of(context).colorScheme.onSurface,
+                        fontSize: 12,
+                        height: 1.4,
+                        fontWeight: FontWeight.w400,
+                        letterSpacing: 0.1,
+                      ),
+                ),
+              ),
+
+              const SizedBox(height: 24),
+
+              // Action Buttons - Bottom Right Aligned
+              Align(
+                alignment: Alignment.centerRight,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    if (existingTrip != null)
+                      OutlinedButton(
+                        onPressed: () {
+                          Navigator.of(context).pop(false);
+                          context.push('/trip/${existingTrip.id}');
+                        },
+                        style: OutlinedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 12),
+                          minimumSize: const Size(0, 32),
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        ),
+                        child: const Text('View Trip', style: TextStyle(fontSize: 13)),
+                      ),
+                    if (existingTrip != null) const SizedBox(height: 8),
+                    // Continue & replace and Cancel on same line
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        TextButton(
+                          onPressed: () => Navigator.of(context).pop(false),
+                          style: TextButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 12),
+                            minimumSize: const Size(0, 32),
+                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          ),
+                          child: const Text('Cancel', style: TextStyle(fontSize: 13)),
+                        ),
+                        const SizedBox(width: 8),
+                        ElevatedButton(
+                          onPressed: () => Navigator.of(context).pop(true),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Theme.of(context).colorScheme.error,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 12),
+                            minimumSize: const Size(0, 32),
+                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                            elevation: 0,
+                          ),
+                          child: const Text('Continue & replace', style: TextStyle(fontSize: 13)),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    if (shouldContinue == true && context.mounted) {
+      // Store replaceExisting flag in extra
+      context.push(
+        '/create-trip',
+        extra: {
+          'from': '/home',
+          'replaceExisting': true,
+        },
+      );
+    }
+  }
+
+  String _formatDate(DateTime date) {
+    // Extract only date components to avoid timezone issues
+    // Use UTC date components to ensure consistent display
+    final dateOnly = DateTime.utc(date.year, date.month, date.day);
+    final months = [
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec'
+    ];
+    return '${months[dateOnly.month - 1]} ${dateOnly.day}, ${dateOnly.year}';
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -506,12 +756,16 @@ class TripsTab extends StatelessWidget {
           actions: [
             Consumer<TripProvider>(
               builder: (context, tripProvider, child) {
+                // Check if there's an ongoing trip to disable the button
+                final hasOngoingTrip = tripProvider.hasOngoingTrip;
                 return IconButton(
                   icon: const Icon(Icons.add),
-                  onPressed: tripProvider.hasOngoingTrip
+                  onPressed: hasOngoingTrip
                       ? null
-                      : () => context
-                          .push('/create-trip', extra: {'from': '/home'}),
+                      : () => _handleCreateTrip(context, tripProvider),
+                  tooltip: hasOngoingTrip
+                      ? 'End your ongoing trip before creating a new one'
+                      : 'Create new trip',
                 );
               },
             ),
@@ -523,7 +777,8 @@ class TripsTab extends StatelessWidget {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                if (tripProvider.currentTrip != null)
+                if (tripProvider.currentTrip != null &&
+                    tripProvider.currentTrip!.status == TripStatus.ongoing)
                   _buildOngoingTripBanner(context, tripProvider.currentTrip!),
                 _buildTripsContent(context, tripProvider),
               ],
@@ -572,8 +827,7 @@ class TripsTab extends StatelessWidget {
               ElevatedButton.icon(
                 onPressed: tripProvider.hasOngoingTrip
                     ? null
-                    : () =>
-                        context.push('/create-trip', extra: {'from': '/home'}),
+                    : () => _handleCreateTrip(context, tripProvider),
                 icon: const Icon(Icons.add),
                 label: const Text('Start Your First Trip'),
               ),
@@ -936,6 +1190,12 @@ class TripsTab extends StatelessWidget {
 
 class ProfileTab extends StatelessWidget {
   const ProfileTab({Key? key}) : super(key: key);
+
+  static String _formatDateForCard(DateTime date) {
+    // Extract only date components to avoid timezone issues
+    final dateOnly = DateTime.utc(date.year, date.month, date.day);
+    return '${dateOnly.day}/${dateOnly.month}/${dateOnly.year}';
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -1352,7 +1612,7 @@ class ProfileTab extends StatelessWidget {
                                                     const SizedBox(width: 6),
                                                     Expanded(
                                                       child: Text(
-                                                        '${trip.startDate.day}/${trip.startDate.month}/${trip.startDate.year} - ${trip.endDate.day}/${trip.endDate.month}/${trip.endDate.year}',
+                                                        '${ProfileTab._formatDateForCard(trip.startDate)} - ${ProfileTab._formatDateForCard(trip.endDate)}',
                                                         style: theme
                                                             .textTheme.bodySmall
                                                             ?.copyWith(

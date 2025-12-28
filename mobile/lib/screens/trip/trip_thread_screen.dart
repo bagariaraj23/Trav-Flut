@@ -56,6 +56,7 @@ class _TripThreadScreenState extends State<TripThreadScreen> {
 
   Trip? _trip;
   bool _isLoading = true;
+  bool _isLoadingEntries = false;
   ThreadEntryType _selectedType = ThreadEntryType.text;
   MediaService? _mediaService;
   Media? _selectedMediaForEntry;
@@ -257,6 +258,18 @@ class _TripThreadScreenState extends State<TripThreadScreen> {
 
   Future<void> _loadTrip() async {
     final tripProvider = context.read<TripProvider>();
+    
+    // Clear entries immediately to prevent showing old trip's entries
+    tripProvider.clearCurrentTripEntries();
+    
+    // Set loading state
+    if (mounted) {
+      setState(() {
+        _isLoading = true;
+        _isLoadingEntries = true;
+      });
+    }
+    
     final trip = await tripProvider.getTrip(widget.tripId);
 
     if (mounted) {
@@ -267,6 +280,17 @@ class _TripThreadScreenState extends State<TripThreadScreen> {
 
       if (trip != null) {
         await tripProvider.loadCurrentTripEntries(widget.tripId);
+        if (mounted) {
+          setState(() {
+            _isLoadingEntries = false;
+          });
+        }
+      } else {
+        if (mounted) {
+          setState(() {
+            _isLoadingEntries = false;
+          });
+        }
       }
     }
   }
@@ -772,7 +796,14 @@ class _TripThreadScreenState extends State<TripThreadScreen> {
               Expanded(
                 child: Consumer<TripProvider>(
                   builder: (context, tripProvider, child) {
-                    final entries = tripProvider.currentTripEntries;
+                    // Only show entries if they belong to the current trip
+                    final allEntries = tripProvider.currentTripEntries;
+                    final entries = allEntries.where((entry) => entry.tripId == widget.tripId).toList();
+
+                    // Show loading indicator while entries are being loaded
+                    if (_isLoadingEntries && entries.isEmpty) {
+                      return const Center(child: CircularProgressIndicator());
+                    }
 
                     if (entries.isEmpty) {
                       return CustomScrollView(

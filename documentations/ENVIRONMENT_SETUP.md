@@ -150,17 +150,17 @@ JWT_SECRET="your-super-secret-jwt-key-change-in-production"
 JWT_REFRESH_SECRET="your-super-secret-refresh-key-change-in-production"
 SENDGRID_API_KEY="your-sendgrid-api-key"
 FROM_EMAIL="noreply@tripthread.com"
-NEXT_PUBLIC_API_BASE_URL=http://192.168.1.100:3000/api
-API_BASE_URL=http://192.168.1.100:3000/api
+NEXT_PUBLIC_API_BASE_URL=http://10.166.170.239/api
+API_BASE_URL=http://10.166.170.239/api
 NODE_ENV=development
-ALLOWED_ORIGINS=http://192.168.1.100:3000,http://192.168.1.100:3001,http://localhost:3000,http://localhost:3001,http://127.0.0.1:3000,http://127.0.0.1:3001
+ALLOWED_ORIGINS=http://10.166.170.239,http://10.166.170.239:3001,http://localhost:3000,http://localhost:3001,http://127.0.0.1:3000,http://127.0.0.1:3001
 PASSWORD_RESET_TTL_MINUTES=15
 ```
 
 **Mobile (.env):**
 
 ```
-API_BASE_URL=http://192.168.1.100:3000/api
+API_BASE_URL=http://10.166.170.239/api
 ENVIRONMENT=development
 ```
 
@@ -294,3 +294,4 @@ Duration timeout = AppConfig.connectTimeout;
 - Consider using different environment files for different build configurations
 - Regularly rotate JWT secrets in production
 - Monitor security events through the security event logging system
+

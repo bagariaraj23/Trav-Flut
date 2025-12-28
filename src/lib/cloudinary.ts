@@ -31,7 +31,7 @@ if (missingEnvVars.length > 0) {
 }
 
 const CLOUDINARY_UPLOAD_FOLDER =
-  process.env.CLOUDINARY_UPLOAD_FOLDER || "trav-flut/uploads";
+  process.env.CLOUDINARY_UPLOAD_FOLDER || "tripthread_uploads";
 
 const ALLOWED_FORMATS_BY_RESOURCE_TYPE: Record<string, string[]> = {
   image: ["jpeg", "jpg", "png", "gif"],

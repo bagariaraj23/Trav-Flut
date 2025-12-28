@@ -90,46 +90,24 @@ export async function POST(
       );
     }
 
-    // Generate final post summary
-    const textEntries = trip.threadEntries.filter(
-      (entry) => entry.type === "TEXT" && entry.contentText
-    );
-    const mediaEntries = trip.threadEntries.filter(
-      (entry) => entry.type === "MEDIA" && entry.mediaId
-    );
-    const locationEntries = trip.threadEntries.filter(
-      (entry) => entry.type === "LOCATION" && entry.locationName
-    );
-
-    // Create a simple summary (in production, this would use AI)
-    let summaryText = `Amazing trip to ${trip.destinations.join(", ")}! `;
-
-    if (locationEntries.length > 0) {
-      summaryText += `Visited ${locationEntries.length} amazing places. `;
-    }
-
-    if (textEntries.length > 0) {
-      summaryText += `Shared ${textEntries.length} memorable moments. `;
-    }
-
-    if (mediaEntries.length > 0) {
-      summaryText += `Captured ${mediaEntries.length} beautiful memories.`;
-    }
-
-    // Get curated media (first 6 media entries) - use media relation to get URLs
-    const curatedMedia = mediaEntries
-      .slice(0, 6)
-      .map((entry) => entry.media?.url)
-      .filter((url): url is string => Boolean(url));
-
     // Update trip status and create final post
+    // Note: We don't modify startDate - it should remain as originally set
+    const now = new Date();
+    const normalizedEndDate = new Date(Date.UTC(
+      now.getUTCFullYear(),
+      now.getUTCMonth(),
+      now.getUTCDate(),
+      0, 0, 0, 0
+    ));
+
     const [updatedTrip, finalPost] = await prisma.$transaction(async (tx) => {
       const trip = await tx.trip.findUnique({
         where: { id: tripId },
         include: {
           threadEntries: {
-            where: { type: "MEDIA", mediaId: { not: null } },
-            include: { media: true },
+            include: { 
+              media: true 
+            },
             orderBy: { createdAt: "asc" },
           },
         },
@@ -172,7 +150,7 @@ export async function POST(
         where: { id: tripId },
         data: {
           status: "ENDED",
-          endDate: new Date(),
+          endDate: normalizedEndDate,
           updatedAt: new Date(),
         },
         include: {

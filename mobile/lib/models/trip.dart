@@ -264,10 +264,7 @@ class GpsCoordinates {
   final double lat;
   final double lng;
 
-  const GpsCoordinates({
-    required this.lat,
-    required this.lng,
-  });
+  const GpsCoordinates({required this.lat, required this.lng});
 
   factory GpsCoordinates.fromJson(Map<String, dynamic> json) =>
       _$GpsCoordinatesFromJson(json);
@@ -365,7 +362,24 @@ class CreateTripRequest {
 
   factory CreateTripRequest.fromJson(Map<String, dynamic> json) =>
       _$CreateTripRequestFromJson(json);
-  Map<String, dynamic> toJson() => _$CreateTripRequestToJson(this);
+
+  Map<String, dynamic> toJson() {
+    final normalizedStartDate = startDate != null
+        ? DateTime.utc(startDate!.year, startDate!.month, startDate!.day)
+        : null;
+    final normalizedEndDate = endDate != null
+        ? DateTime.utc(endDate!.year, endDate!.month, endDate!.day)
+        : null;
+
+    final baseJson = _$CreateTripRequestToJson(this);
+    if (normalizedStartDate != null) {
+      baseJson['startDate'] = normalizedStartDate.toIso8601String();
+    }
+    if (normalizedEndDate != null) {
+      baseJson['endDate'] = normalizedEndDate.toIso8601String();
+    }
+    return baseJson;
+  }
 }
 
 @JsonSerializable()
@@ -393,4 +407,44 @@ class CreateThreadEntryRequest {
   factory CreateThreadEntryRequest.fromJson(Map<String, dynamic> json) =>
       _$CreateThreadEntryRequestFromJson(json);
   Map<String, dynamic> toJson() => _$CreateThreadEntryRequestToJson(this);
+}
+
+@JsonSerializable()
+class TripConflictInfo {
+  final bool hasOngoingTrip;
+  final bool hasFutureTrip;
+  final TripConflictTrip? ongoingTrip;
+  final TripConflictTrip? futureTrip;
+
+  const TripConflictInfo({
+    required this.hasOngoingTrip,
+    required this.hasFutureTrip,
+    this.ongoingTrip,
+    this.futureTrip,
+  });
+
+  factory TripConflictInfo.fromJson(Map<String, dynamic> json) =>
+      _$TripConflictInfoFromJson(json);
+  Map<String, dynamic> toJson() => _$TripConflictInfoToJson(this);
+}
+
+@JsonSerializable()
+class TripConflictTrip {
+  final String id;
+  final String title;
+  final DateTime startDate;
+  final DateTime? endDate;
+  final TripStatus status;
+
+  const TripConflictTrip({
+    required this.id,
+    required this.title,
+    required this.startDate,
+    this.endDate,
+    required this.status,
+  });
+
+  factory TripConflictTrip.fromJson(Map<String, dynamic> json) =>
+      _$TripConflictTripFromJson(json);
+  Map<String, dynamic> toJson() => _$TripConflictTripToJson(this);
 }

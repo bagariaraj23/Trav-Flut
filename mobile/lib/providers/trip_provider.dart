@@ -87,17 +87,38 @@ class TripProvider extends ChangeNotifier {
     }
   }
 
+  // Check for trip conflicts
+  Future<TripConflictInfo?> checkTripConflicts() async {
+    try {
+      final response = await _tripService.checkTripConflicts();
+      if (response.success && response.data != null) {
+        return response.data;
+      }
+      return null;
+    } catch (e) {
+      debugPrint('Check trip conflicts error: $e');
+      return null;
+    }
+  }
+
   // Create new trip
-  Future<bool> createTrip(CreateTripRequest request) async {
+  Future<bool> createTrip(
+    CreateTripRequest request, {
+    bool replaceExisting = false,
+  }) async {
     try {
       print('[DEBUG] TripProvider.createTrip called');
       print('[DEBUG] Request data: ${request.toJson()}');
+      print('[DEBUG] Replace existing: $replaceExisting');
 
       _isLoading = true;
       _error = null;
       notifyListeners();
 
-      final response = await _tripService.createTrip(request);
+      final response = await _tripService.createTrip(
+        request,
+        replaceExisting: replaceExisting,
+      );
 
       print('[DEBUG] API response received:');
       print('[DEBUG] Success: ${response.success}');
@@ -170,6 +191,10 @@ class TripProvider extends ChangeNotifier {
     final id = tripId ?? _currentTrip?.id;
     if (id == null) return;
 
+    // Clear entries immediately to prevent showing old trip's entries
+    _currentTripEntries = [];
+    notifyListeners();
+
     try {
       final response = await _tripService.getThreadEntries(id);
 
@@ -185,6 +210,12 @@ class TripProvider extends ChangeNotifier {
       notifyListeners();
       debugPrint('Load trip entries error: $e');
     }
+  }
+
+  // Clear current trip entries (useful when switching trips)
+  void clearCurrentTripEntries() {
+    _currentTripEntries = [];
+    notifyListeners();
   }
 
   // Add thread entry

@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'package:tripthread/models/place.dart';
 
 class PlaceSearchCache {
@@ -39,8 +38,5 @@ class _CacheEntry {
   final List<Place> results;
   final DateTime timestamp;
 
-  _CacheEntry({
-    required this.results,
-    required this.timestamp,
-  });
+  _CacheEntry({required this.results, required this.timestamp});
 }
