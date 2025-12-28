@@ -18,10 +18,11 @@ async function assertTripAccess(tripId: string, userId: string) {
 
 export async function GET(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const tripId = params.id;
+    const { id } = await params;
+    const tripId = id;
 
     // Optional: Check authentication for access control
     const authHeader = req.headers.get("authorization");
@@ -163,8 +164,9 @@ export async function GET(
 
 export async function POST(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
+  const { id } = await params;
   const authHeader = request.headers.get("authorization");
   if (!authHeader?.startsWith("Bearer ")) {
     return NextResponse.json<ApiResponse>(
@@ -181,7 +183,7 @@ export async function POST(
       { status: 401 }
     );
 
-  const tripId = params.id;
+  const tripId = id;
   const access = await assertTripAccess(tripId, payload.userId);
   if (!access.ok)
     return NextResponse.json<ApiResponse>(

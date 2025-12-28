@@ -76,7 +76,7 @@ export async function withRateLimit(
 ): Promise<NextResponse> {
   try {
     const clientIp =
-      request.ip || request.headers.get("x-forwarded-for") || "unknown";
+      request.headers.get("x-forwarded-for") || request.headers.get("x-real-ip") || "unknown";
     const key = `rate_limit:${clientIp}`;
     const now = Date.now();
 

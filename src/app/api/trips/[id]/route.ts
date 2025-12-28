@@ -6,10 +6,11 @@ import { ApiResponse, TripResponse } from "@/types/api";
 // Get trip by ID
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const tripId = params.id;
+    const { id } = await params;
+    const tripId = id;
 
     // Verify authentication
     const authHeader = request.headers.get("authorization");

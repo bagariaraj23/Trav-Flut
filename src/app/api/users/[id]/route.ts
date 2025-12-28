@@ -7,10 +7,11 @@ import { ApiResponse, UserProfile, UserStats } from "@/types/api";
 // Get user profile
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const userId = params.id;
+    const { id } = await params;
+    const userId = id;
 
     // Get current user from token (optional)
     const authHeader = request.headers.get("authorization");
@@ -126,10 +127,11 @@ export async function GET(
 // Update user profile
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const userId = params.id;
+    const { id } = await params;
+    const userId = id;
     const authHeader = request.headers.get("authorization");
     if (!authHeader?.startsWith("Bearer ")) {
       return NextResponse.json<ApiResponse>(

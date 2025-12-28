@@ -13,8 +13,9 @@ import { PerformanceMonitor, ErrorTracker } from "@/lib/monitoring";
 // Get user statistics (trip, follower, and following counts)
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
+  const { id } = await params;
   return withLogging(async (req: NextRequest) => {
     return withRateLimit(
       req,
@@ -26,7 +27,7 @@ export async function GET(
               PerformanceMonitor.getInstance().startTimer("get_user_stats");
 
             try {
-              const userId = params.id;
+              const userId = id;
 
               // Get follower count
               const followerCount = await prisma.follow.count({
@@ -59,7 +60,7 @@ export async function GET(
                 error,
                 {
                   operation: "get_user_stats",
-                  targetUserId: params.id,
+                  targetUserId: id,
                 },
                 authenticatedReq.user?.userId
               );

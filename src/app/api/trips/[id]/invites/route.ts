@@ -7,13 +7,14 @@ import { withAuth, withRateLimit, withLogging } from "@/lib/middleware";
 // Send trip invitation
 export async function POST(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
+  const { id } = await params;
   return withLogging(async (req) => {
     return withRateLimit(req, async (rateLimitedReq) => {
       return withAuth(rateLimitedReq, async (authenticatedReq) => {
         try {
-          const tripId = params.id;
+          const tripId = id;
           const senderId = authenticatedReq.user!.userId;
           console.log(`[API] POST /trips/${tripId}/invites - Sender: ${senderId}`);
           
@@ -74,13 +75,14 @@ export async function POST(
 // Get sent invitations for a trip (for trip owner)
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
+  const { id } = await params;
   return withLogging(async (req) => {
     return withRateLimit(req, async (rateLimitedReq) => {
       return withAuth(rateLimitedReq, async (authenticatedReq) => {
         try {
-          const tripId = params.id;
+          const tripId = id;
           const senderId = authenticatedReq.user!.userId;
 
           const sentInvitations =
@@ -104,7 +106,6 @@ export async function GET(
               throw new Error(`Invalid receiver data for invitation ${invite.id}`);
             }
 
-            // Ensure status is a valid string
             const status = invite.status || 'PENDING';
             
             const receiverData: any = {
@@ -115,7 +116,6 @@ export async function GET(
               updatedAt: receiver.updatedAt.toISOString(),
             };
             
-            // Only include optional fields if they exist
             if (receiver.username) receiverData.username = String(receiver.username);
             if (receiver.name) receiverData.name = String(receiver.name);
             if (receiver.avatarUrl) receiverData.avatarUrl = String(receiver.avatarUrl);
@@ -166,13 +166,14 @@ export async function GET(
 // Cancel a sent invitation
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
+  const { id } = await params;
   return withLogging(async (req) => {
     return withRateLimit(req, async (rateLimitedReq) => {
       return withAuth(rateLimitedReq, async (authenticatedReq) => {
         try {
-          const tripId = params.id;
+          const tripId = id;
           const senderId = authenticatedReq.user!.userId;
           
           const { searchParams } = new URL(request.url);

@@ -19,11 +19,12 @@ async function handler(
   {
     params,
   }: {
-    params: { id: string };
+    params: Promise<{ id: string }>;
   }
 ) {
+  const { id } = await params;
   try {
-    const tripId = params.id;
+    const tripId = id;
     const currentUserId = request.user!.userId;
     const body = await request.json();
     const { coverMediaId } = updateCoverSchema.parse(body);
@@ -154,8 +155,9 @@ async function handler(
 
 export async function PATCH(
   request: NextRequest,
-  context: { params: { id: string } }
+  context: { params: Promise<{ id: string }> }
 ) {
-  return withAuth(request, (authRequest) => handler(authRequest, context));
+  const params = await context.params;
+  return withAuth(request, (authRequest) => handler(authRequest, { params: Promise.resolve(params) }));
 }
 

@@ -6,10 +6,11 @@ import { ApiResponse, TripResponse } from "@/types/api";
 // End a trip
 export async function POST(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const tripId = params.id;
+    const { id } = await params;
+    const tripId = id;
 
     // Verify authentication
     const authHeader = request.headers.get("authorization");
