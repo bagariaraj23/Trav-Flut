@@ -951,7 +951,9 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
   }
 
   String _formatDate(DateTime date) {
-    return '${date.day}/${date.month}/${date.year}';
+    // Extract only date components to avoid timezone issues
+    final dateOnly = DateTime.utc(date.year, date.month, date.day);
+    return '${dateOnly.day}/${dateOnly.month}/${dateOnly.year}';
   }
 
   String _formatDateTime(DateTime dateTime) {

@@ -171,13 +171,36 @@ export async function POST(request: NextRequest) {
 
             // Create trip with transaction for data consistency
             const trip = await prisma.$transaction(async (tx) => {
+              // Normalize dates to UTC midnight to avoid timezone issues
+              // Parse the date string and extract only date components
+              const parsedStartDate = new Date(validatedData.startDate);
+              const parsedEndDate = tripData.endDate ? new Date(tripData.endDate) : parsedStartDate;
+              
+              // Create UTC dates at midnight (00:00:00 UTC) using only date components
+              const normalizedStartDate = new Date(Date.UTC(
+                parsedStartDate.getUTCFullYear(),
+                parsedStartDate.getUTCMonth(),
+                parsedStartDate.getUTCDate(),
+                0, 0, 0, 0
+              ));
+              
+              const normalizedEndDate = new Date(Date.UTC(
+                parsedEndDate.getUTCFullYear(),
+                parsedEndDate.getUTCMonth(),
+                parsedEndDate.getUTCDate(),
+                0, 0, 0, 0
+              ));
+
               // Calculate trip status based on start date
               const now = new Date();
-              const startDate = new Date(validatedData.startDate);
-              now.setHours(0, 0, 0, 0);
-              startDate.setHours(0, 0, 0, 0);
+              const today = new Date(Date.UTC(
+                now.getUTCFullYear(),
+                now.getUTCMonth(),
+                now.getUTCDate(),
+                0, 0, 0, 0
+              ));
 
-              const status = startDate > now ? TripStatus.UPCOMING : TripStatus.ONGOING;
+              const status = normalizedStartDate > today ? TripStatus.UPCOMING : TripStatus.ONGOING;
 
               // Create trip with required fields
               const newTrip = await tx.trip.create({
@@ -185,8 +208,8 @@ export async function POST(request: NextRequest) {
                   title: tripData.title,
                   userId,
                   status,
-                  startDate: new Date(tripData.startDate),
-                  endDate: tripData.endDate ? new Date(tripData.endDate) : new Date(tripData.startDate),
+                  startDate: normalizedStartDate,
+                  endDate: normalizedEndDate,
                   description: tripData.description ?? null,
                   type: tripData.type ?? null,
                   mood: tripData.mood ?? null,

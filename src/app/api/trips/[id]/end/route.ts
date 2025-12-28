@@ -123,12 +123,21 @@ export async function POST(
       .filter((url): url is string => Boolean(url));
 
     // Update trip status and create final post
+    // Note: We don't modify startDate - it should remain as originally set
+    const now = new Date();
+    const normalizedEndDate = new Date(Date.UTC(
+      now.getUTCFullYear(),
+      now.getUTCMonth(),
+      now.getUTCDate(),
+      0, 0, 0, 0
+    ));
+    
     const [updatedTrip, finalPost] = await prisma.$transaction([
       prisma.trip.update({
         where: { id: tripId },
         data: {
           status: "ENDED",
-          endDate: new Date(),
+          endDate: normalizedEndDate,
           updatedAt: new Date(),
         },
         include: {

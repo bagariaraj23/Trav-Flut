@@ -693,6 +693,9 @@ class _TripsTabState extends State<TripsTab> {
   }
 
   String _formatDate(DateTime date) {
+    // Extract only date components to avoid timezone issues
+    // Use UTC date components to ensure consistent display
+    final dateOnly = DateTime.utc(date.year, date.month, date.day);
     final months = [
       'Jan',
       'Feb',
@@ -707,8 +710,9 @@ class _TripsTabState extends State<TripsTab> {
       'Nov',
       'Dec'
     ];
-    return '${months[date.month - 1]} ${date.day}, ${date.year}';
+    return '${months[dateOnly.month - 1]} ${dateOnly.day}, ${dateOnly.year}';
   }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -1142,6 +1146,12 @@ class _TripsTabState extends State<TripsTab> {
 class ProfileTab extends StatelessWidget {
   const ProfileTab({Key? key}) : super(key: key);
 
+  static String _formatDateForCard(DateTime date) {
+    // Extract only date components to avoid timezone issues
+    final dateOnly = DateTime.utc(date.year, date.month, date.day);
+    return '${dateOnly.day}/${dateOnly.month}/${dateOnly.year}';
+  }
+
   @override
   Widget build(BuildContext context) {
     return Consumer<AuthProvider>(
@@ -1557,7 +1567,7 @@ class ProfileTab extends StatelessWidget {
                                                     const SizedBox(width: 6),
                                                     Expanded(
                                                       child: Text(
-                                                        '${trip.startDate.day}/${trip.startDate.month}/${trip.startDate.year} - ${trip.endDate.day}/${trip.endDate.month}/${trip.endDate.year}',
+                                                        '${ProfileTab._formatDateForCard(trip.startDate)} - ${ProfileTab._formatDateForCard(trip.endDate)}',
                                                         style: theme
                                                             .textTheme.bodySmall
                                                             ?.copyWith(
