@@ -55,58 +55,65 @@ export async function POST(
             throw new ConflictError("Trip is not ongoing");
           }
 
-          // Update trip status in a transaction
-          const updatedTrip = await prisma.$transaction(async (tx) => {
-            // Update trip status
-            return await tx.trip.update({
-              where: { id: tripId },
-              data: {
-                status: TripStatus.ENDED,
-                endDate: new Date(),
-                updatedAt: new Date(),
-              },
-              include: {
-                user: {
-                  select: {
-                    id: true,
-                    email: true,
-                    username: true,
-                    name: true,
-                    avatarUrl: true,
-                    bio: true,
-                    isPrivate: true,
-                    createdAt: true,
-                    updatedAt: true,
+          // Update trip status and generate final post atomically in a transaction
+          const [updatedTrip, finalPost] = await prisma.$transaction(
+            async (tx) => {
+              // Update trip status
+              const updated = await tx.trip.update({
+                where: { id: tripId },
+                data: {
+                  status: TripStatus.ENDED,
+                  endDate: new Date(),
+                  updatedAt: new Date(),
+                },
+                include: {
+                  user: {
+                    select: {
+                      id: true,
+                      email: true,
+                      username: true,
+                      name: true,
+                      avatarUrl: true,
+                      bio: true,
+                      isPrivate: true,
+                      createdAt: true,
+                      updatedAt: true,
+                    },
+                  },
+                  _count: {
+                    select: {
+                      threadEntries: true,
+                      media: true,
+                      participants: true,
+                    },
+                  },
+                  participants: {
+                    include: {
+                      user: true,
+                    },
+                  },
+                  threadEntries: {
+                    include: {
+                      media: true,
+                      taggedUsers: true,
+                      author: true,
+                    },
+                    orderBy: { createdAt: "asc" },
                   },
                 },
-                _count: {
-                  select: {
-                    threadEntries: true,
-                    media: true,
-                    participants: true,
-                  },
-                },
-                participants: {
-                  include: {
-                    user: true,
-                  },
-                },
-                threadEntries: {
-                  include: {
-                    media: true,
-                    taggedUsers: true,
-                    author: true,
-                  },
-                  orderBy: { createdAt: "asc" },
-                },
-              },
-            });
-          });
+              });
 
-          // Generate final post after transaction (service uses its own prisma instance)
-          const finalPost = await TripFinalizerService.generateFinalPost(
-            tripId,
-            userId
+              // Generate final post inside the same transaction
+              // This ensures atomicity and prevents race conditions
+              const generatedFinalPost =
+                await TripFinalizerService.generateFinalPost(
+                  tripId,
+                  userId,
+                  tx
+                );
+
+              return [updated, generatedFinalPost];
+            }
           );
 
           const finalPostResponse: TripFinalPostResponse = {
