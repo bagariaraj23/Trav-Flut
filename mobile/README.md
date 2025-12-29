@@ -46,12 +46,21 @@ flutter run
 
 - `lib/` - Main application code
   - `config/` - Configuration (environment variables)
-  - `models/` - Data models
+  - `models/` - Data models (User, Trip, TripFinalPost, etc.)
   - `screens/` - UI screens
+    - `trip/` - Trip management screens including `final_post_edit_screen.dart`
   - `services/` - API services
   - `widgets/` - Reusable widgets
-  - `providers/` - State management
+  - `providers/` - State management (including `final_post_provider.dart`)
   - `utils/` - Utility functions
+
+## Key Features
+
+- **Trip Management**: Create, edit, and manage trips
+- **Final Posts**: Edit and publish curated trip summaries with selected media
+- **Social Features**: Follow users, view profiles, discover trips
+- **Media Upload**: Cloudinary integration for images and videos
+- **Location Services**: Place search, check-ins, and map integration
 
 ## Documentation
 

@@ -55,14 +55,14 @@ src/
 │   │   ├── trips/
 │   │   │   ├── route.ts          # GET/POST /trips
 │   │   │   ├── [id]/route.ts     # GET /trips/:id (trip detail)
-│   │   │   ├── [id]/end/route.ts # POST /trips/:id/end (end trip)
+│   │   │   ├── [id]/end/route.ts # POST /trips/:id/end (end trip, auto-generate final post)
 │   │   │   ├── [id]/entries/route.ts  # GET /trips/:id/entries (thread entries)
 │   │   │   ├── [id]/participants/route.ts  # GET /trips/:id/participants
 │   │   │   ├── [id]/invites/route.ts  # GET/POST trip invitations
 │   │   │   ├── [id]/places/route.ts   # GET/POST places on trip
 │   │   │   ├── [id]/places/[placeOnTripId]/route.ts
-│   │   │   ├── [id]/final-post/route.ts  # GET final post
-│   │   │   ├── [id]/publish/route.ts # POST publish final post
+│   │   │   ├── [id]/final-post/route.ts  # GET/PUT /trips/:id/final-post (view/edit)
+│   │   │   ├── [id]/publish/route.ts # POST /trips/:id/publish (publish final post)
 │   │   │   ├── status/route.ts   # GET trip status
 │   │   │   └── status.ts         # Trip status logic (scheduler integration)
 │   │   ├── feed/
@@ -110,7 +110,9 @@ src/
 │   ├── security.ts              # Security utilities (file validation, CSRF)
 │   ├── errors.ts                # Custom error classes (AppError, ValidationError)
 │   ├── token_refresh_manager.ts # Token refresh logic
-│   └── validators.ts            # Input validation helpers
+│   ├── validators.ts            # Input validation helpers
+│   └── services/                 # Business logic services
+│       └── tripFinalizer.ts     # Final post generation, editing, publishing
 │
 ├── middleware.ts                # Next.js middleware (auth checks, token refresh)
 │
@@ -138,9 +140,12 @@ src/
 | GET | `/users` | Search users |
 | POST | `/trips` | Create trip |
 | GET | `/trips/:id` | Trip detail |
-| POST | `/trips/:id/end` | End trip |
+| POST | `/trips/:id/end` | End trip (auto-generates final post) |
 | GET | `/trips/:id/entries` | Thread entries in trip |
 | POST | `/trips/:id/entries` | Add entry to trip |
+| GET | `/trips/:id/final-post` | Get final post preview |
+| PUT | `/trips/:id/final-post` | Update final post content |
+| POST | `/trips/:id/publish` | Publish final post |
 | POST | `/media/cloudinary-signature` | Get signed upload params |
 | POST | `/media/confirm` | Confirm upload, create Media record |
 | GET | `/follow/:userId` | Follow status |
@@ -178,6 +183,7 @@ mobile/
 │   │   ├── trip_provider.dart   # Trip operations & state
 │   │   ├── user_provider.dart   # User search, follow, profile
 │   │   ├── feed_provider.dart   # Home feed & discover trips
+│   │   ├── final_post_provider.dart  # Final post editing & publishing
 │   │   ├── theme_provider.dart  # Dark/light mode
 │   │   └── app_provider.dart    # Global app state
 │   │
@@ -197,7 +203,8 @@ mobile/
 │   │   │   ├── trip_participants_screen.dart  # Manage participants
 │   │   │   ├── trip_map_screen.dart  # Map view of trip
 │   │   │   ├── create_trip_screen.dart  # Create/edit trip
-│   │   │   └── add_entry_screen.dart    # Add thread entry
+│   │   │   ├── add_entry_screen.dart    # Add thread entry
+│   │   │   └── final_post_edit_screen.dart  # Edit and publish final post
 │   │   ├── discover/
 │   │   │   ├── discover_tab.dart  # Discover trips & users
 │   │   │   ├── discover_detail_screen.dart  # Trip/user detail in discovery
@@ -367,6 +374,7 @@ prisma/
 │                               # - TripThreadEntry (timeline entries)
 │                               # - TripParticipant (trip members)
 │                               # - TripJoinRequest (invite system)
+│                               # - TripFinalPost (curated trip summaries)
 │                               # - Media (Cloudinary-backed files)
 │                               # - Place (POI, stay, food locations)
 │                               # - PlaceOnTrip (visited places on trip)
@@ -398,6 +406,7 @@ prisma/
 | `TripThreadEntry` | Timeline entries (text, media, location, checkin) |
 | `TripParticipant` | Trip member relationships |
 | `TripJoinRequest` | Invitation system for trip participation |
+| `TripFinalPost` | Curated trip summaries with selected media |
 | `Media` | Cloudinary-backed images/videos |
 | `Place` | Points of interest (Google/Mapbox sourced) |
 | `PlaceOnTrip` | Visited places linked to trips |
@@ -592,6 +601,7 @@ Return success (mobile shows confirmation)
 | TripDetailScreen | Trip overview | TripProvider |
 | TripThreadScreen | Trip timeline entries | TripProvider |
 | TripParticipantsScreen | Manage trip members | TripProvider |
+| FinalPostEditScreen | Edit and publish final post | FinalPostProvider |
 | EditProfileScreen | Edit profile + avatar upload | AuthProvider, CloudinaryService |
 | ProfileScreen | View user profile | UserProvider |
 

@@ -283,13 +283,21 @@ npm start
 - Automatic status transitions via scheduler
 - Trip participants and invitations
 - Trip publishing and privacy
+- **Final Posts**: Auto-generated trip summaries with curated media
+  - Generated automatically when trip ends
+  - Editable summary, media selection, and captions
+  - Publishing makes final posts visible in home feed
 
 ### Trip Threads
 - Real-time trip documentation
 - Text, media, and location entries
 - Place check-ins and tagging
 - Media uploads (images/videos) via Cloudinary
-- Final trip posts with curated media
+- **Final Posts**: Auto-generated trip summaries with curated media
+  - Intelligent summary generation from trip entries
+  - Media curation (one per day, up to 10 items)
+  - Editable before publishing
+  - Published final posts appear in home feed
 
 ### Places & Location
 - Place search and discovery

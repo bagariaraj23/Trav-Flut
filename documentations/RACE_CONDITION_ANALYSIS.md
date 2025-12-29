@@ -2,9 +2,11 @@
 
 ## 📋 Executive Summary
 
-This document provides a comprehensive analysis of the TripThread application's data consistency and race condition vulnerabilities. After analyzing all API endpoints, database workflows, and transaction patterns, **13 critical race conditions** have been identified, with **5 already fixed** and **8 requiring immediate attention**.
+This document provides a comprehensive analysis of the TripThread application's data consistency and race condition vulnerabilities. After analyzing all API endpoints, database workflows, transaction patterns, and external service integrations, **16 critical race conditions** have been identified, with **9 already fixed** and **7 requiring attention**.
 
-**Current Security Status**: 🚨 **38% Secure** (5/13 vulnerabilities addressed)
+**Current Security Status**: ✅ **56% Secure** (9/16 vulnerabilities addressed)
+
+**Last Updated**: After final post feature merge and comprehensive codebase review
 
 ---
 
@@ -52,743 +54,720 @@ This document provides a comprehensive analysis of the TripThread application's 
 - **Pattern Used**: Multi-operation transaction
 - **Impact**: Consistent state when removing participant with cascading cleanup
 
----
+### 6. **Follow Request Creation (POST /follow/requests)** - FIXED ✅
 
-## 🔍 **IDENTIFIED RACE CONDITIONS & ACID VIOLATIONS**
+- **File**: `src/app/api/follow/requests/route.ts` (POST handler)
+- **Previous Issue**: Race condition between checking existing follow and creating new request
+- **Fix**: Wrapped entire operation in `prisma.$transaction()` with all checks inside transaction
+- **Status**: ✅ **SECURE**
+- **Pattern Used**: Callback transaction with comprehensive checks
+- **Impact**: Prevents duplicate follow requests
+
+### 7. **Trip Join Request Creation** - FIXED ✅
+
+- **File**: `src/lib/tripInvitation.ts` (`sendInvitation` method)
+- **Previous Issue**: Multiple separate queries without transaction protection
+- **Fix**: Entire `sendInvitation` method wrapped in `prisma.$transaction()`
+- **Status**: ✅ **SECURE**
+- **Pattern Used**: Callback transaction with error handling for P2002
+- **Impact**: Prevents duplicate trip invitations
+
+### 8. **Thread Entry Tagging** - FIXED ✅
+
+- **File**: `src/app/api/trips/[id]/entries/route.ts` (POST handler)
+- **Previous Issue**: Tag creation happened outside main transaction
+- **Fix**: Tag creation moved inside transaction (lines 261-269)
+- **Status**: ✅ **SECURE**
+- **Pattern Used**: Tags created within same transaction as entry
+- **Impact**: Prevents orphaned entries without tags
+
+### 9. **Username/Email Uniqueness** - FIXED ✅
+
+- **Files**: 
+  - `src/app/api/auth/signup/route.ts` (email)
+  - `src/app/api/users/me/route.ts` (username)
+- **Previous Issue**: Check-then-insert pattern without transaction
+- **Fix**: Removed pre-check, rely on database unique constraint with proper error handling via `handlePrismaUniqueError`
+- **Status**: ✅ **SECURE**
+- **Pattern Used**: Try-catch with Prisma error mapper
+- **Impact**: Database enforces uniqueness, friendly error messages
+
+---
 
 ## 🔍 **IDENTIFIED RACE CONDITIONS & ACID VIOLATIONS**
 
 ### **HIGH PRIORITY** 🚨
 
-#### 1. **Follow Request Creation (POST /follow/requests)** - VULNERABLE ⚠️
+#### 1. **Final Post Generation (End Trip)** - VULNERABLE ⚠️
 
-**File**: `src/app/api/follow/requests/route.ts` (POST handler, lines 17-70)
+**File**: `src/app/api/trips/[id]/end/route.ts` (POST handler, lines 58-110)
 
-**Issue**: Race condition between checking existing follow and creating new request
-
-```typescript
-// VULNERABLE: Multiple queries with gaps between them
-const [follower, followee] = await Promise.all([
-  prisma.user.findUnique({ where: { id: followerId } }),
-  prisma.user.findUnique({ where: { id: followeeId } }),
-]);
-// ... validation code ...
-const existingFollow = await prisma.follow.findFirst({...});
-if (existingFollow) return;
-const existingRequest = await prisma.followRequest.findFirst({...});
-if (existingRequest) return;
-// CREATE - RACE WINDOW: Another request can be created here
-const followRequest = await prisma.followRequest.create({...});
-```
-
-**Race Scenario**:
-1. Request A checks: No existing follow ✓
-2. Request B checks: No existing follow ✓
-3. Request A checks: No existing request ✓
-4. Request B checks: No existing request ✓
-5. Request A creates: followRequest created
-6. Request B creates: DUPLICATE followRequest created ❌
-
-**Risk Level**: **HIGH** - Multiple follow requests can be sent between same users
-**Severity**: Users can spam follow requests (bypasses unique constraint if race completes before DB enforces it)
-
-**Affected Records**: 
-- `followRequest` table - duplicate entries possible
-- User experience: Multiple identical requests shown
-- Notification spam potential
-
-**Fix Required**: Use `SELECT FOR UPDATE` or wrap in transaction with unique constraint enforcement
-
-**Recommended Fix**:
-```typescript
-const result = await prisma.$transaction(async (tx) => {
-  // Check and prevent follow
-  const existingFollow = await tx.follow.findFirst({
-    where: { followerId, followeeId: followeeId }
-  });
-  if (existingFollow) {
-    throw new Error("Already following");
-  }
-
-  // Check and prevent duplicate request
-  const existingRequest = await tx.followRequest.findFirst({
-    where: { followerId, followeeId: followeeId, status: "PENDING" }
-  });
-  if (existingRequest) {
-    return existingRequest;
-  }
-
-  // Create request
-  return await tx.followRequest.create({
-    data: { followerId, followeeId, status: "PENDING" }
-  });
-});
-```
-
----
-
-#### 2. **Follow User (POST /follow/[userId])** - PARTIALLY VULNERABLE ⚠️
-
-**File**: `src/app/api/follow/[userId]/route.ts` (POST handler, lines 55-110)
-
-**Issue**: While this endpoint DOES use transactions, it checks for existing relationships BEFORE the transaction, creating a TOCTOU (Time-Of-Check-To-Use) vulnerability
+**Issue**: Final post generation happens OUTSIDE the transaction that updates trip status, creating a race window
 
 ```typescript
-// BEFORE transaction - NOT protected
-const followee = await prisma.user.findUnique({...});
-
-// Inside transaction - PROTECTED
-const result = await prisma.$transaction(async (tx) => {
-  const existingFollow = await tx.follow.findUnique({...});
-  if (existingFollow) {
-    return { /* existing */ };
-  }
-  const existingRequest = await tx.followRequest.findFirst({...});
-  if (existingRequest) {
-    return { /* pending */ };
-  }
-  // Create follow or request
-});
-```
-
-**Race Scenario**:
-1. Request A: Gets followee info ✓ (outside transaction)
-2. Request B: Gets followee info ✓ (outside transaction)
-3. Request A: Creates follow/request ✓ (inside transaction)
-4. Request B: Creates follow/request ✓ (inside transaction) - May create duplicate
-
-**Risk Level**: **MEDIUM** - Transaction protects most of creation, but minor race exists
-**Severity**: Minimal duplicate risk due to transaction, but not perfectly atomic
-
-**Status**: ✅ **PARTIALLY SECURE** - Transaction prevents most races but can be improved
-
-**Recommended Improvement**:
-```typescript
-const result = await prisma.$transaction(async (tx) => {
-  // Move ALL checks inside transaction
-  const followee = await tx.user.findUnique({
-    where: { id: followeeId },
-    select: { id: true, isPrivate: true }
-  });
-  if (!followee) throw new Error("User not found");
-  
-  // Rest of checks and creation
-  // ...
-});
-```
-
----
-
-#### 3. **Trip Join Request Creation (TripInvitationService.sendInvitation)** - VULNERABLE ⚠️
-
-**File**: `src/lib/tripInvitation.ts` (lines 5-68)
-
-**Issue**: Multiple separate queries without transaction protection
-
-```typescript
-// VULNERABLE: Each step is separate, unprotected query
-const trip = await prisma.trip.findUnique({ where: { id: tripId } });
-// Check trip ownership...
-const receiver = await prisma.user.findUnique({ where: { id: receiverId } });
-// Validate receiver...
-if (senderId === receiverId) throw error;
-const existingParticipant = await prisma.tripParticipant.findUnique({...});
-if (existingParticipant) throw error;
-const existingRequest = await prisma.tripJoinRequest.findUnique({...});
-if (existingRequest && existingRequest.status === "PENDING") {
-  return { id: existingRequest.id, status: "PENDING", ... };
-}
-if (existingRequest) {
-  await prisma.tripJoinRequest.delete({...}); // RACE WINDOW
-}
-// CREATE RACE WINDOW - Another request can be created here
-const newRequest = await prisma.tripJoinRequest.create({...});
-```
-
-**Race Scenario**:
-1. Request A: Checks - no existing request ✓
-2. Request B: Checks - no existing request ✓
-3. Request A: Deletes old request (if exists)
-4. Request B: Deletes old request (if exists)
-5. Request A: Creates new request
-6. Request B: Creates new request ❌ **DUPLICATE**
-
-**Risk Level**: **HIGH** - Multiple trip invitations to same user for same trip
-**Severity**: Database unique constraint may prevent, but violates application logic
-
-**Affected Records**:
-- `tripJoinRequest` table - duplicate pending invitations
-- User UI confusion - multiple invitation notifications
-- Database constraint violations
-
-**Fix Required**: Wrap all operations in a transaction
-
-**Recommended Fix**:
-```typescript
-const newRequest = await prisma.$transaction(async (tx) => {
-  const trip = await tx.trip.findUnique({ where: { id: tripId } });
-  if (!trip) throw new NotFoundError("Trip not found");
-  if (trip.userId !== senderId) throw new AuthorizationError(...);
-
-  const receiver = await tx.user.findUnique({ where: { id: receiverId } });
-  if (!receiver) throw new NotFoundError("User not found");
-
-  if (senderId === receiverId) throw new ConflictError(...);
-
-  const existingParticipant = await tx.tripParticipant.findUnique({...});
-  if (existingParticipant) throw new ConflictError(...);
-
-  const existingRequest = await tx.tripJoinRequest.findUnique({
-    where: { tripId_receiverId: { tripId, receiverId } }
-  });
-  if (existingRequest && existingRequest.status === "PENDING") {
-    return existingRequest;
-  }
-
-  if (existingRequest) {
-    await tx.tripJoinRequest.delete({ where: { id: existingRequest.id } });
-  }
-
-  return await tx.tripJoinRequest.create({
-    data: { tripId, senderId, receiverId, status: "PENDING" }
-  });
-});
-```
-
----
-
-#### 4. **Username Uniqueness Check** - VULNERABLE ⚠️
-
-**Files**:
-- `src/app/api/users/me/route.ts` (PUT handler, lines 68-81)
-- `src/app/api/users/[id]/route.ts` (PUT handler, lines 157-172)
-- `src/app/api/auth/signup/route.ts` (lines 18-27)
-
-**Issue**: Check-then-insert pattern without transaction or unique constraint lock
-
-```typescript
-// VULNERABLE: Check outside transaction
-if (username) {
-  const existingUser = await prisma.user.findUnique({
-    where: { username }
-  });
-  if (existingUser) {
-    return error("Username is already taken");
-  }
-}
-
-// UPDATE RACE WINDOW - Another update can use same username here
-const updatedUser = await prisma.user.update({
-  where: { id: currentUserId },
-  data: { username } // RACE - Database constraint may fail here
-});
-```
-
-**Race Scenario**:
-1. User A requests username "alice"
-2. User B requests username "alice"
-3. User A: Checks - no "alice" found ✓
-4. User B: Checks - no "alice" found ✓
-5. User A: Updates to "alice" ✓
-6. User B: Tries to update to "alice" ❌ **Constraint violation or silent failure**
-
-**Risk Level**: **HIGH** - Two users can get same username or database constraint error
-**Severity**: Data integrity violation, duplicate username possible
-
-**Current Database Constraint**: ✅ Exists
-```prisma
-model User {
-  username String? @unique
-}
-```
-
-**Affected Records**:
-- `users` table - duplicate usernames potentially allowed
-- System consistency - profile lookups by username break
-
-**Why Check Fails**: 
-1. `@unique` constraint exists but isn't being leveraged
-2. No transaction wrapping
-3. Check happens outside database lock
-
-**Recommended Fix** - Option A (Preferred):
-```typescript
-try {
-  const updatedUser = await prisma.user.update({
-    where: { id: currentUserId },
-    data: { username }
-  });
-  // Success
-} catch (error) {
-  if (error.code === "P2002" && error.meta?.target?.includes("username")) {
-    return error("Username is already taken");
-  }
-  throw error;
-}
-```
-
-**Recommended Fix** - Option B (Transaction):
-```typescript
-const updatedUser = await prisma.$transaction(async (tx) => {
-  const existing = await tx.user.findUnique({
-    where: { username }
-  });
-  if (existing && existing.id !== currentUserId) {
-    throw new Error("Username taken");
-  }
-  return await tx.user.update({
-    where: { id: currentUserId },
-    data: { username }
-  });
-});
-```
-
----
-
-#### 5. **Email Uniqueness Check** - VULNERABLE ⚠️
-
-**File**: `src/app/api/auth/signup/route.ts` (lines 13-18)
-
-**Issue**: Check-then-insert pattern without transaction
-
-```typescript
-// VULNERABLE: Check outside transaction
-const existingUser = await prisma.user.findUnique({
-  where: { email: email.toLowerCase() }
-});
-if (existingUser) {
-  return error("User with this email already exists");
-}
-
-// CREATE RACE WINDOW - Another user can be created here
-const user = await prisma.user.create({...});
-```
-
-**Race Scenario**:
-1. Request A: Check email "user@example.com" - not found ✓
-2. Request B: Check email "user@example.com" - not found ✓
-3. Request A: Create user with "user@example.com" ✓
-4. Request B: Tries to create user with "user@example.com" ❌ **Constraint violation**
-
-**Risk Level**: **HIGH** - Multiple users can be created with same email
-**Severity**: Critical security issue - account takeover possible
-
-**Current Database Constraint**: ✅ Exists
-```prisma
-model User {
-  email String @unique
-}
-```
-
-**Affected Records**:
-- `users` table - duplicate emails
-- Authentication system - multiple accounts per email
-- Data integrity - critical violation
-
-**Recommended Fix**:
-```typescript
-try {
-  const user = await prisma.user.create({
+// Update trip status in a transaction
+const updatedTrip = await prisma.$transaction(async (tx) => {
+  return await tx.trip.update({
+    where: { id: tripId },
     data: {
-      email: email.toLowerCase(),
-      password: hashedPassword,
-      name,
-      username
-    }
-  });
-  // Continue...
-} catch (error) {
-  if (error.code === "P2002") {
-    const field = error.meta?.target?.[0];
-    if (field === "email") {
-      return error("User with this email already exists");
-    } else if (field === "username") {
-      return error("Username is already taken");
-    }
-  }
-  throw error;
-}
-```
-
----
-
-#### 6. **Thread Entry Tagging** - MINOR ISSUE ⚠️
-
-**File**: `src/app/api/trips/[id]/entries/route.ts` (lines 158-166)
-
-**Issue**: Tag creation happens OUTSIDE main transaction
-
-```typescript
-// Inside transaction
-const createdEntry = await prisma.$transaction(async (tx) => {
-  // Entry creation code...
-  const entry = await tx.tripThreadEntry.create({...});
-  await tx.trip.update({...}); // Update entry count
-  return entry;
-});
-
-// OUTSIDE transaction - AFTER entry created
-// NEW RACE WINDOW if process crashes
-if (taggedUserIds.length > 0) {
-  await prisma.tripThreadTag.createMany({
-    data: taggedUserIds.map((taggedUserId) => ({
-      threadEntryId: createdEntry.id,
-      taggedUserId,
-    })),
-    skipDuplicates: true,
-  });
-}
-```
-
-**Race Scenario**:
-1. Entry created ✓
-2. Process crashes between entry creation and tag creation
-3. Entry exists without tags (orphaned entry)
-4. Tags never created, users not notified of tags
-
-**Risk Level**: **MEDIUM** - Orphaned entries without tags
-**Severity**: Data inconsistency - tags missing from entries
-
-**Affected Records**:
-- `tripThreadEntry` - entries without expected tags
-- `tripThreadTag` - potential missing associations
-- User notifications - tags not recorded
-
-**Recommended Fix**:
-```typescript
-const createdEntry = await prisma.$transaction(async (tx) => {
-  // Media update
-  if (mediaRecord && mediaRecord.tripId !== tripId) {
-    await tx.media.update({...});
-  }
-
-  // Entry creation
-  const entry = await tx.tripThreadEntry.create({...});
-
-  // Update trip count
-  await tx.trip.update({...});
-
-  // CREATE TAGS INSIDE TRANSACTION
-  if (taggedUserIds.length > 0) {
-    await tx.tripThreadTag.createMany({
-      data: taggedUserIds.map((taggedUserId) => ({
-        threadEntryId: entry.id,
-        taggedUserId,
-      })),
-      skipDuplicates: true,
-    });
-  }
-
-  return entry;
-});
-```
-
----
-
-#### 7. **Trip Status Auto-Update (Scheduler)** - VULNERABLE ⚠️
-
-**File**: `scheduler/src/tripStatus.ts` (lines 50-76)
-
-**Issue**: Batch updates without transaction per trip, plus final post creation logic separated
-
-```typescript
-// VULNERABLE: Multiple operations in sequence
-const tripsToEnd = await prisma.trip.findMany({...});
-
-// Each trip processed individually without isolation
-for (const trip of tripsToEnd) {
-  try {
-    await createFinalPostForTrip(prisma, trip.id, trip.destinations);
-    // RACE WINDOW - Trip data fetched separately for each operation
-  } catch (error) {
-    // Log error but continue
-  }
-}
-
-// Batch update - if scheduler crashes, partial updates
-await prisma.$transaction([
-  prisma.trip.updateMany({...}),
-  prisma.trip.updateMany({...}),
-]);
-```
-
-**Race Scenario**:
-1. Scheduler finds trip expiring at 2024-12-01 10:00
-2. Another request updates trip endDate to 2024-12-02
-3. Scheduler's transaction may use stale data
-4. Final post created with wrong trip state
-5. Multiple final posts possible for same trip
-
-**Risk Level**: **MEDIUM** - Partial state updates, orphaned operations
-**Severity**: Trip status inconsistency, multiple final posts
-
-**Affected Records**:
-- `trip` table - inconsistent status
-- `tripFinalPost` table - possible duplicates
-- Trip participants - notification confusion
-
-**Recommended Fix**:
-```typescript
-export async function updateTripStatuses(
-  prisma: PrismaClient,
-  now: Date
-): Promise<void> {
-  // Find trips to end FIRST
-  const tripsToEnd = await prisma.trip.findMany({
-    where: {
-      endDate: { lte: now },
-      status: { in: [TripStatus.UPCOMING, TripStatus.ONGOING] },
+      status: TripStatus.ENDED,
+      endDate: new Date(),
+      updatedAt: new Date(),
     },
-    select: { id: true, destinations: true },
+    // ... includes ...
+  });
+});
+
+// RACE WINDOW: Final post generated AFTER transaction commits
+// Another request could end the trip or modify data here
+const finalPost = await TripFinalizerService.generateFinalPost(
+  tripId,
+  userId
+);
+```
+
+**Race Scenario**:
+1. Request A: Updates trip status to ENDED ✓ (transaction commits)
+2. Request B: Updates trip status to ENDED ✓ (transaction commits) - duplicate
+3. Request A: Generates final post ✓
+4. Request B: Generates final post ✓ - **DUPLICATE FINAL POST** ❌
+   - OR: Request B: Adds new thread entry
+   - Request A: Generates final post with stale data ❌
+
+**Risk Level**: **HIGH** - Duplicate final posts or stale data in final post
+**Severity**: Data inconsistency, incomplete final posts, duplicate final posts
+
+**Affected Records**:
+- `tripFinalPost` table - possible duplicates (though unique constraint on tripId prevents)
+- Final post content - may be based on stale thread entries
+- User experience - incomplete or outdated final posts
+
+**Current Protection**: `TripFinalizerService.generateFinalPost` checks for existing final post, but race window exists between trip update and final post check
+
+**Recommended Fix**:
+```typescript
+const [updatedTrip, finalPost] = await prisma.$transaction(async (tx) => {
+  // Update trip status
+  const updated = await tx.trip.update({
+    where: { id: tripId },
+    data: {
+      status: TripStatus.ENDED,
+      endDate: new Date(),
+      updatedAt: new Date(),
+    },
+    include: {
+      threadEntries: {
+        include: { media: true, place: true },
+        orderBy: { createdAt: "asc" },
+      },
+      media: true,
+    },
   });
 
-  // Create final posts and update status in individual transactions
-  for (const trip of tripsToEnd) {
-    try {
-      await prisma.$transaction(async (tx) => {
-        // Check if final post already exists
-        const existing = await tx.tripFinalPost.findUnique({
-          where: { tripId: trip.id }
-        });
-        if (existing) return;
+  // Check if final post exists (inside transaction)
+  const existing = await tx.tripFinalPost.findUnique({
+    where: { tripId },
+  });
+  
+  if (existing) {
+    return [updated, existing];
+  }
 
-        // Create final post
-        await createFinalPostForTrip(tx, trip.id, trip.destinations);
+  // Generate final post inside transaction with fresh data
+  const summaryText = buildSummary(updated);
+  const curatedMedia = selectCuratedMedia(updated);
+  const finalPost = await tx.tripFinalPost.create({
+    data: {
+      tripId,
+      summaryText,
+      curatedMedia,
+      caption: generateDefaultCaption(updated),
+      coverMediaUrl: curatedMedia[0] ?? updated.media.find(m => m.url)?.url ?? null,
+      generationStatus: GenerationStatus.READY,
+    },
+  });
 
-        // Update trip status
-        await tx.trip.update({
-          where: { id: trip.id },
-          data: { status: TripStatus.ENDED }
-        });
-      });
-    } catch (error) {
-      console.error(`Failed to end trip ${trip.id}:`, error);
-      // Continue with other trips
+  return [updated, finalPost];
+});
+```
+
+---
+
+#### 2. **Media Storage Quota Tracking** - VULNERABLE ⚠️
+
+**File**: `src/lib/cloudinary.ts` (`confirmUpload` method, lines 303-316)
+
+**Issue**: Quota check happens OUTSIDE transaction, then media creation happens separately
+
+```typescript
+// OUTSIDE transaction - RACE WINDOW
+if (USER_STORAGE_QUOTA_BYTES > 0) {
+  const currentUsage = await prisma.media.aggregate({
+    _sum: { size: true },
+    where: { uploadedById: userId },
+  });
+  const usedBytes = currentUsage._sum.size ?? 0;
+  if (usedBytes + data.bytes > USER_STORAGE_QUOTA_BYTES) {
+    throw new ValidationError("Storage quota exceeded");
+  }
+}
+
+// CREATE - Another upload could happen here, exceeding quota
+const media = await prisma.media.create({
+  data: {
+    url: data.secure_url,
+    publicId: data.public_id,
+    size: data.bytes,
+    uploadedById: userId,
+    // ...
+  },
+});
+```
+
+**Race Scenario**:
+1. Upload A: Checks quota - 4.8GB used, 200MB available ✓
+2. Upload B: Checks quota - 4.8GB used, 200MB available ✓
+3. Upload A: Creates media (200MB) - Total: 5.0GB ✓
+4. Upload B: Creates media (200MB) - Total: 5.2GB ❌ **QUOTA EXCEEDED**
+
+**Risk Level**: **HIGH** - Users can exceed storage quota
+**Severity**: Storage quota bypass, potential cost overruns
+
+**Affected Records**:
+- `media` table - quota exceeded
+- Cloudinary storage - over quota usage
+- Billing - unexpected costs
+
+**Recommended Fix**:
+```typescript
+const media = await prisma.$transaction(async (tx) => {
+  // Check quota INSIDE transaction
+  if (USER_STORAGE_QUOTA_BYTES > 0) {
+    const currentUsage = await tx.media.aggregate({
+      _sum: { size: true },
+      where: { uploadedById: userId },
+    });
+    const usedBytes = currentUsage._sum.size ?? 0;
+    if (usedBytes + data.bytes > USER_STORAGE_QUOTA_BYTES) {
+      throw new ValidationError("Storage quota exceeded");
     }
   }
 
-  // Update upcoming trips in a single transaction
-  await prisma.$transaction(async (tx) => {
-    await tx.trip.updateMany({
-      where: {
-        startDate: { lte: now },
-        endDate: { gt: now },
-        status: TripStatus.UPCOMING,
-      },
-      data: { status: TripStatus.ONGOING },
-    });
+  // Create media inside same transaction
+  return await tx.media.create({
+    data: {
+      url: data.secure_url,
+      publicId: data.public_id,
+      size: data.bytes,
+      uploadedById: userId,
+      // ...
+    },
   });
+});
+```
+
+---
+
+#### 3. **Follow User (POST /follow/[userId])** - MOSTLY SECURE ✅
+
+**File**: `src/app/api/follow/[userId]/route.ts` (POST handler, lines 111-283)
+
+**Status**: ✅ **SECURE** - All checks and creation happen inside transaction
+
+**Implementation**: User lookup, follow checks, and request creation all within `prisma.$transaction()`
+- Checks followee existence inside transaction
+- Checks existing follow inside transaction
+- Checks existing requests inside transaction
+- Creates follow/request inside transaction
+
+**Risk Level**: **LOW** - Well protected by transaction
+**Note**: Minor improvement possible by moving initial user lookup inside transaction, but current implementation is secure due to transaction protection.
+
+---
+
+#### 4. **Cache Get-Or-Set Race Condition** - VULNERABLE ⚠️
+
+**File**: `src/lib/redis.ts` (`getOrSet` function, lines 30-69)
+
+**Issue**: Classic cache stampede / thundering herd problem - multiple concurrent requests can all miss cache and trigger expensive operations
+
+```typescript
+export async function getOrSet<T>(
+    key: string,
+    getter: () => Promise<T>,
+    ttl: number = DEFAULT_CACHE_TTL
+): Promise<T> {
+    // Try memory cache first
+    const memValue = memoryCache.get(key) as T | undefined;
+    if (memValue !== undefined) {
+        return memValue;
+    }
+
+    if (redis) {
+        // Try Redis cache next
+        const cachedValue = await redis.get<RedisValue<T>>(key);
+        if (cachedValue && cachedValue.timestamp + ttl > Date.now()) {
+            memoryCache.set(key, cachedValue.data, ttl);
+            return cachedValue.data;
+        }
+    }
+
+    // RACE WINDOW: Multiple requests can reach here simultaneously
+    // All will call getter() and set cache, wasting resources
+    const value = await getter();
+
+    // Update both caches
+    if (value !== undefined && value !== null) {
+        const redisValue: RedisValue<T> = {
+            data: value,
+            timestamp: Date.now()
+        };
+        if (redis) {
+            await redis.set(key, redisValue, { ex: Math.floor(ttl / 1000) });
+        }
+        memoryCache.set(key, value, ttl);
+    }
+
+    return value;
+}
+```
+
+**Race Scenario**:
+1. Request A: Cache miss, calls `getter()` (expensive DB query)
+2. Request B: Cache miss, calls `getter()` (expensive DB query) - **DUPLICATE WORK**
+3. Request C: Cache miss, calls `getter()` (expensive DB query) - **DUPLICATE WORK**
+4. All three set cache with same value - wasted resources
+
+**Risk Level**: **MEDIUM** - Performance degradation, resource waste
+**Severity**: Cache stampede can overwhelm database/external services
+
+**Affected Operations**:
+- Place searches (Mapbox API calls)
+- Place resolution (database queries)
+- Any expensive operation using `getOrSet`
+
+**Recommended Fix** - Use mutex/lock for cache misses:
+```typescript
+export async function getOrSet<T>(
+    key: string,
+    getter: () => Promise<T>,
+    ttl: number = DEFAULT_CACHE_TTL
+): Promise<T> {
+    // Try memory cache first
+    const memValue = memoryCache.get(key) as T | undefined;
+    if (memValue !== undefined) {
+        return memValue;
+    }
+
+    if (redis) {
+        // Try Redis cache next
+        const cachedValue = await redis.get<RedisValue<T>>(key);
+        if (cachedValue && cachedValue.timestamp + ttl > Date.now()) {
+            memoryCache.set(key, cachedValue.data, ttl);
+            return cachedValue.data;
+        }
+    }
+
+    // Use mutex to prevent cache stampede
+    return await withLock(`cache:${key}`, async () => {
+        // Double-check cache after acquiring lock
+        const memValue = memoryCache.get(key) as T | undefined;
+        if (memValue !== undefined) {
+            return memValue;
+        }
+
+        if (redis) {
+            const cachedValue = await redis.get<RedisValue<T>>(key);
+            if (cachedValue && cachedValue.timestamp + ttl > Date.now()) {
+                memoryCache.set(key, cachedValue.data, ttl);
+                return cachedValue.data;
+            }
+        }
+
+        // Only one request will reach here
+        const value = await getter();
+
+        if (value !== undefined && value !== null) {
+            const redisValue: RedisValue<T> = {
+                data: value,
+                timestamp: Date.now()
+            };
+            if (redis) {
+                await redis.set(key, redisValue, { ex: Math.floor(ttl / 1000) });
+            }
+            memoryCache.set(key, value, ttl);
+        }
+
+        return value;
+    });
 }
 ```
 
 ---
 
-#### 8. **Trip Entry Creation (Entry Count Increment)** - POTENTIALLY VULNERABLE ⚠️
+#### 5. **Place Cache Invalidation Race Condition** - VULNERABLE ⚠️
 
-**File**: `src/app/api/trips/[id]/entries/route.ts` (lines 105-155)
+**File**: `src/lib/place.ts` (`resolvePlace` function, lines 426-524)
 
-**Issue**: While entry creation itself is wrapped in transaction, media association has a race window
+**Issue**: Cache invalidation and place creation can race, leading to stale cache entries
 
 ```typescript
-// Check media ownership OUTSIDE transaction
-if (validatedData.mediaId) {
-  mediaRecord = await prisma.media.findUnique({
-    where: { id: validatedData.mediaId },
-    select: { id: true, uploadedById: true, tripId: true },
+export async function resolvePlace(input: PlaceInput) {
+  // Check cache
+  const refResults = await cacheGetJsonBatch<string>(cacheKeys);
+  
+  // ... cache lookup logic ...
+  
+  // If cache miss, use mutex for creation
+  return await withLock(`place:resolve:${spatialKey}`, async () => {
+    // Check external ID
+    if (input.externalId) {
+      const existing = await prisma.place.findUnique({
+        where: { externalId: input.externalId },
+      });
+      if (existing) {
+        await cacheResults(existing, cacheKeys); // Cache set
+        return existing;
+      }
+    }
+
+    // Try spatial match
+    const spatialMatches = await prisma.place.findMany({...});
+    const match = spatialMatches.find((p) => arePlacesClose(p, input));
+    if (match) {
+      await cacheResults(match, cacheKeys); // Cache set
+      return match;
+    }
+
+    // Create new place
+    const created = await prisma.place.create({ data: placeData });
+    
+    // RACE WINDOW: Another request could invalidate cache here
+    await cacheResults(created, cacheKeys); // Cache set
+    return created;
   });
-  if (!mediaRecord) return error(...);
-  if (mediaRecord.uploadedById !== userId) return error(...);
-  if (mediaRecord.tripId && mediaRecord.tripId !== tripId) return error(...);
 }
-
-// Inside transaction
-const createdEntry = await prisma.$transaction(async (tx) => {
-  // RACE WINDOW: Media ownership could change here
-  if (mediaRecord && mediaRecord.tripId !== tripId) {
-    await tx.media.update({
-      where: { id: mediaRecord.id },
-      data: { tripId },
-    });
-  }
-
-  const entry = await tx.tripThreadEntry.create({...});
-  await tx.trip.update({...});
-  return entry;
-});
 ```
 
 **Race Scenario**:
-1. Check: Media belongs to user A ✓
-2. Another request: Deletes or reassigns media
-3. Transaction tries to update media ❌ (media deleted or ownership changed)
-4. Entry created but without correct media reference
+1. Request A: Cache miss, acquires lock, creates place, sets cache
+2. Request B: Cache miss, waits for lock
+3. Request A: Releases lock, cache set
+4. Request C: Invalidates cache (e.g., place update)
+5. Request B: Acquires lock, finds place exists, sets cache with potentially stale data
 
-**Risk Level**: **MEDIUM** - Permission bypass possible
-**Severity**: User can access media they don't own, data inconsistency
+**Risk Level**: **MEDIUM** - Stale cache data, inconsistent place resolution
+**Severity**: Users may see outdated place information
 
-**Recommended Fix**:
+**Recommended Fix** - Ensure cache operations are atomic:
 ```typescript
-const createdEntry = await prisma.$transaction(async (tx) => {
-  // MOVE VALIDATION INSIDE TRANSACTION
-  if (validatedData.mediaId) {
-    const media = await tx.media.findUnique({
-      where: { id: validatedData.mediaId }
-    });
-    if (!media) throw new Error("Media not found");
-    if (media.uploadedById !== userId) throw new Error("Permission denied");
-    if (media.tripId && media.tripId !== tripId) throw new Error("Media in different trip");
-
-    if (media.tripId !== tripId) {
-      await tx.media.update({
-        where: { id: media.id },
-        data: { tripId }
-      });
-    }
-  }
-
-  // Rest of creation...
+return await withLock(`place:resolve:${spatialKey}`, async () => {
+  // Double-check cache after acquiring lock
+  const refResults = await cacheGetJsonBatch<string>(cacheKeys);
+  // ... check cache again ...
+  
+  // Create place
+  const created = await prisma.place.create({ data: placeData });
+  
+  // Set cache atomically (already using pipeline, which is good)
+  await cacheResults(created, cacheKeys);
+  return created;
 });
 ```
+
+**Note**: Current implementation uses mutex which helps, but cache invalidation timing can still cause issues.
+
+---
+
+#### 6. **Media Cleanup Orphaned Media** - POTENTIAL ISSUE ⚠️
+
+**File**: `src/lib/cloudinary.ts` (`cleanupOrphanedMedia` method, lines 341-365)
+
+**Issue**: Cleanup happens asynchronously after media confirmation, creating potential race conditions
+
+```typescript
+// In confirmUpload route
+const { media } = await CloudinaryService.confirmUpload({...}, userId);
+
+// OUTSIDE transaction - async cleanup
+await CloudinaryService.cleanupOrphanedMedia(userId);
+```
+
+**Race Scenario**:
+1. Upload A: Confirms media, creates Media record
+2. Upload B: Confirms media, creates Media record
+3. Upload A: Cleanup runs, finds media without tripId (from Upload A)
+4. Upload B: Cleanup runs, finds media without tripId (from Upload B)
+5. Both cleanup operations may delete media that's about to be used
+
+**Risk Level**: **LOW-MEDIUM** - Media may be deleted before being attached to trip/entry
+**Severity**: Orphaned media cleanup may be too aggressive
+
+**Current Protection**: Cleanup only targets media older than 24 hours, which helps
+**Recommendation**: Ensure cleanup doesn't run too frequently or consider moving to scheduled job
+
+---
+
+#### 7. **Cache Set Operations (Memory + Redis)** - MINOR ISSUE ⚠️
+
+**File**: `src/lib/cache.ts` (`cacheSetJson` function, lines 534-574)
+
+**Issue**: Memory cache and Redis cache updated separately, potential inconsistency
+
+```typescript
+export async function cacheSetJson<T = any>(
+  key: string,
+  value: T,
+  ttlSeconds?: number
+): Promise<boolean> {
+  // Set in Redis
+  const payload = ttlSeconds
+    ? ["setex", key, ttlSeconds, stringValue]
+    : ["set", key, stringValue];
+  const result = await upstashFetch<string | string[]>("pipeline", [payload]);
+
+  // RACE WINDOW: Redis set succeeds, but memory cache update fails
+  // Or: Memory cache updated but Redis fails
+  if (success) {
+    memoryCache.set(key, {
+      value: stringValue,
+      expiresAt: Date.now() + (ttlSeconds ? ttlSeconds * 1000 : DEFAULT_MEMORY_TTL),
+    });
+  }
+}
+```
+
+**Race Scenario**:
+1. Request A: Sets cache in Redis ✓
+2. Request B: Sets cache in Redis ✓ (overwrites A)
+3. Request A: Sets memory cache with old value ❌
+4. Memory cache now has stale data
+
+**Risk Level**: **LOW** - Cache inconsistency, but not data corruption
+**Severity**: Minor - cache may be temporarily inconsistent between memory and Redis
+
+**Current Mitigation**: Memory cache TTL is shorter, so inconsistencies self-correct
+**Recommendation**: Consider making operations more atomic, but current implementation is acceptable for cache layer
+
+---
+
+#### 8. **Trip Status Auto-Update (Scheduler)** - MOSTLY SECURE ✅
+
+**File**: `scheduler/src/tripStatus.ts` (`updateTripStatuses` function, lines 104-201)
+
+**Status**: ✅ **MOSTLY SECURE** - Each trip update wrapped in individual transaction
+
+**Current Implementation**:
+- Each trip ending is processed in its own transaction
+- Final post creation and status update are atomic per trip
+- Final post existence check happens inside transaction
+- Thread entries fetched inside transaction for fresh data
+
+**Remaining Issue**: Final post generation logic in scheduler differs from manual end trip logic
+- Scheduler uses simpler summary generation
+- Manual end uses `TripFinalizerService` with more sophisticated logic
+- **Recommendation**: Use same `TripFinalizerService` in scheduler for consistency
+
+**Risk Level**: **LOW** - Well protected, but logic inconsistency
+**Severity**: Low - functional but inconsistent final post quality
+
+---
+
+#### 9. **Trip Entry Creation (Media Validation)** - MOSTLY SECURE ✅
+
+**File**: `src/app/api/trips/[id]/entries/route.ts` (POST handler, lines 197-270)
+
+**Status**: ✅ **SECURE** - Media validation re-checked inside transaction
+
+**Current Implementation**:
+- Initial media check outside transaction (for early validation)
+- **Media re-validated inside transaction** (lines 199-212) - prevents TOCTOU
+- Tags created inside transaction (lines 261-269)
+- Entry count updated inside transaction
+
+**Risk Level**: **LOW** - Well protected by transaction with re-validation
+**Note**: Initial check outside transaction is acceptable for early error return, as transaction re-validates
 
 ---
 
 ### **MEDIUM PRIORITY** ⚠️
 
-#### 9. **Trip Final Post Creation (End Trip)** - POTENTIAL ISSUE ⚠️
+#### 10. **Final Post Update/Publish Race Condition** - POTENTIAL ISSUE ⚠️
 
-**File**: `src/app/api/trips/[id]/end/route.ts`
+**File**: `src/lib/services/tripFinalizer.ts` (`updateFinalPost` and `publishFinalPost` methods)
 
-**Issue**: Thread entries fetched OUTSIDE transaction, then final post created INSIDE transaction
+**Issue**: Check-then-update pattern without transaction protection
 
 ```typescript
-// OUTSIDE transaction
-const trip = await prisma.trip.findUnique({
-  where: { id: tripId },
-  include: {
-    threadEntries: {
-      where: { type: "MEDIA", mediaId: { not: null } },
-      include: { media: {...} },
-      orderBy: { createdAt: "asc" },
-    },
-  },
-});
+// updateFinalPost - lines 117-179
+static async updateFinalPost(tripId: string, updates: FinalPostUpdates) {
+  // Check if published OUTSIDE any protection
+  const finalPost = await prisma.tripFinalPost.findUnique({
+    where: { tripId },
+  });
+  if (finalPost.isPublished) {
+    throw new ConflictError("Published posts cannot be edited");
+  }
+  
+  // RACE WINDOW: Another request could publish here
+  return prisma.tripFinalPost.update({
+    where: { tripId },
+    data: { ...updates, generationStatus: GenerationStatus.READY },
+  });
+}
 
-// Data may be stale - another thread entry could be added here
-// INSIDE transaction - creates summary based on stale data
-const [updatedTrip, finalPost] = await prisma.$transaction([
-  prisma.trip.update({...}),
-  prisma.tripFinalPost.create({
+// publishFinalPost - lines 181-244
+static async publishFinalPost(tripId: string, userId: string) {
+  // Multiple checks OUTSIDE transaction
+  const trip = await prisma.trip.findUnique({
+    where: { id: tripId },
+    include: { finalPost: true },
+  });
+  if (trip.finalPost.isPublished) {
+    throw new ConflictError("Final post has already been published");
+  }
+  
+  // RACE WINDOW: Another request could publish here
+  return prisma.tripFinalPost.update({
+    where: { tripId },
     data: {
-      tripId,
-      summaryText, // Based on stale data
-      curatedMedia, // Based on stale data
+      isPublished: true,
+      publishedAt: new Date(),
+      generationStatus: GenerationStatus.PUBLISHED,
     },
-  }),
-]);
+  });
+}
 ```
 
 **Race Scenario**:
-1. Fetch thread entries (5 media entries)
-2. User adds new media entry (6th entry)
-3. Generate summary based on 5 entries
-4. Create final post with outdated summary ❌
+1. Request A: Checks - not published ✓
+2. Request B: Checks - not published ✓
+3. Request A: Publishes ✓
+4. Request B: Publishes ✓ - **DUPLICATE PUBLISH** ❌ (though unique constraint prevents)
 
-**Risk Level**: **MEDIUM** - Stale data, incomplete final post
-**Severity**: Final post missing recent content
+**Risk Level**: **LOW** - Database unique constraint on tripId prevents duplicate final posts
+**Severity**: Low - constraint prevents actual duplicates, but error handling could be better
 
-**Recommended Fix**:
+**Recommended Fix** - Wrap in transaction:
 ```typescript
-const [updatedTrip, finalPost] = await prisma.$transaction(async (tx) => {
-  // Fetch trip and entries INSIDE transaction
-  const trip = await tx.trip.findUnique({
-    where: { id: tripId },
-    include: {
-      threadEntries: {
-        include: { media: {...} }
-      }
+static async publishFinalPost(tripId: string, userId: string) {
+  return await prisma.$transaction(async (tx) => {
+    const trip = await tx.trip.findUnique({
+      where: { id: tripId },
+      include: { finalPost: true },
+    });
+    // All checks inside transaction
+    if (!trip) throw new NotFoundError("Trip not found");
+    if (trip.userId !== userId) throw new AuthorizationError(...);
+    if (!trip.finalPost) throw new NotFoundError("Final post not found");
+    if (trip.finalPost.isPublished) {
+      throw new ConflictError("Final post has already been published");
     }
+    // Validation checks...
+    
+    // Update inside transaction
+    return await tx.tripFinalPost.update({
+      where: { tripId },
+      data: {
+        isPublished: true,
+        publishedAt: new Date(),
+        generationStatus: GenerationStatus.PUBLISHED,
+      },
+    });
   });
-
-  // Generate summary based on current data
-  const textEntries = trip.threadEntries.filter(e => e.type === "TEXT");
-  const mediaEntries = trip.threadEntries.filter(e => e.type === "MEDIA");
-  // ... rest of summary ...
-
-  // Create final post
-  const finalPost = await tx.tripFinalPost.create({...});
-
-  // Update trip
-  const updatedTrip = await tx.trip.update({...});
-
-  return [updatedTrip, finalPost];
-});
+}
 ```
 
 ---
 
-#### 10. **Media Upload Quota Tracking** - POTENTIAL ISSUE ⚠️
+#### 11. **Media Upload Quota Tracking** - POTENTIAL ISSUE ⚠️
 
-**File**: `src/app/api/media/confirm/route.ts` (lines 48-54)
+**File**: `src/app/api/media/confirm/route.ts` (lines 35-65)
 
-**Issue**: Media ownership verified OUTSIDE transaction, cleanup logic OUTSIDE transaction
+**Issue**: Trip access check happens OUTSIDE transaction, then media creation happens separately
 
 ```typescript
-// Check media ownership OUTSIDE transaction
+// OUTSIDE transaction
 if (tripId) {
-  const trip = await prisma.trip.findFirst({...});
-  if (!trip) return error(...);
+  const trip = await prisma.trip.findFirst({
+    where: {
+      id: tripId,
+      OR: [
+        { userId: request.user!.userId },
+        { participants: { some: { userId: request.user!.userId } } },
+      ],
+    },
+  });
+  if (!trip) return error("Trip not found or access denied");
 }
 
-// Confirm media upload INSIDE some operation
-const { media } = await CloudinaryService.confirmUpload({...});
-
-// CLEANUP OUTSIDE transaction - async operation
-await CloudinaryService.cleanupOrphanedMedia(userId);
+// RACE WINDOW: User could be removed from trip here
+// Or trip could be deleted
+const { media } = await CloudinaryService.confirmUpload({
+  ...cloudinaryPayload,
+  tripId,
+  usage,
+}, request.user!.userId);
 ```
 
-**Risk Scenario**:
-1. Process crashes between media confirmation and cleanup
-2. Orphaned media records remain in database
-3. Storage quota grows indefinitely
-4. Users hit quota limits unexpectedly
+**Race Scenario**:
+1. Check: User is participant ✓
+2. User removed from trip
+3. Media created with tripId ❌ - Media attached to trip user no longer has access to
 
-**Risk Level**: **MEDIUM** - Resource leak, quota issues
-**Severity**: Storage bloat, user unable to upload
+**Risk Level**: **LOW-MEDIUM** - Media attached to trip user can't access
+**Severity**: Low - Media orphaned but not security issue (user can't see it)
+
+**Current Protection**: Media creation doesn't fail if trip access changes, but media becomes inaccessible
+**Recommendation**: Consider re-checking trip access inside `confirmUpload` transaction, but current behavior is acceptable
 
 ---
 
-#### 11. **Unique Constraint Violations on Database Errors** - SYSTEMATIC ISSUE ⚠️
+#### 12. **Cloudinary Delete Media Race Condition** - POTENTIAL ISSUE ⚠️
 
-**Identified in Multiple Endpoints**:
-- Follow creation: No unique constraint enforcement
-- Trip invitation: Unique constraint exists but not properly utilized
-- Username/email signup: Unique constraints exist but error handling inconsistent
+**File**: `src/lib/cloudinary.ts` (`deleteMedia` method, lines 335-339)
 
-**Issue**: Relying on database constraints without proper error handling
+**Issue**: Cloudinary deletion and database deletion not atomic
 
 ```typescript
-// CURRENT PATTERN - Database constraint enforced but app logic doesn't handle
-try {
-  await prisma.followRequest.create({
-    data: { followerId, followeeId, status: "PENDING" }
-    // @@unique([followerId, followeeId]) exists in schema
-  });
-} catch (error) {
-  // Error thrown but app may not catch or handle properly
-  if (error.code === "P2002") {
-    return error("Already sent request"); // Not always handled
-  }
+static async deleteMedia(publicId: string): Promise<void> {
+  ensureConfigured();
+  await cloudinary.uploader.destroy(publicId); // External API call
+  await prisma.media.deleteMany({ where: { publicId } }); // DB deletion
 }
 ```
 
-**Risk Level**: **MEDIUM** - Cascading errors, poor UX
-**Severity**: User sees database errors instead of friendly messages
+**Race Scenario**:
+1. Delete A: Deletes from Cloudinary ✓
+2. Delete B: Deletes from Cloudinary ✓ (may fail if already deleted)
+3. Delete A: Deletes from DB ✓
+4. Delete B: Deletes from DB ✓ - **ORPHANED DB RECORD** if Cloudinary delete failed
+
+**Risk Level**: **LOW** - Orphaned database records, but not critical
+**Severity**: Low - Database records without Cloudinary assets (cleanup job can handle)
+
+**Current Protection**: `deleteMany` is idempotent
+**Recommendation**: Consider transaction-like behavior, but current implementation acceptable
+
+---
+
+#### 13. **SendGrid Email Race Conditions** - LOW PRIORITY ℹ️
+
+**File**: Email sending operations (password reset, notifications)
+
+**Issue**: Email sending is fire-and-forget, no idempotency checks
+
+**Risk Level**: **LOW** - Users may receive duplicate emails
+**Severity**: Low - UX issue, not data integrity
+
+**Current Status**: Acceptable - email sending is idempotent by nature (external service)
+**Recommendation**: Consider rate limiting per user per email type, but not critical
 
 ---
 
 ### **LOW PRIORITY** ℹ️
 
-#### 12. **Trip Participant Count Mismatch** - EDGE CASE ⚠️
+#### 14. **Trip Participant Count Mismatch** - EDGE CASE ⚠️
 
 **File**: `src/app/api/trips/[id]/participants/route.ts`
 
@@ -824,7 +803,7 @@ if (actualCount !== trip.participantCount) {
 
 ---
 
-#### 13. **User Account Deletion (Cascading Deletes)** - PROTECTED ⚠️
+#### 15. **User Account Deletion (Cascading Deletes)** - PROTECTED ⚠️
 
 **File**: `src/app/api/users/me/route.ts` (DELETE handler, lines 125-175)
 
@@ -865,35 +844,52 @@ if (duration > 5000) {
 
 Priority fixes that directly impact data integrity:
 
-#### Task 1.1: Fix Follow Request Creation
-- **File**: `src/app/api/follow/requests/route.ts`
-- **Change**: Wrap POST handler in transaction
-- **Estimated Effort**: 30 minutes
-- **Risk**: Low - isolated endpoint
+#### Task 1.1: Fix Final Post Generation (End Trip)
+- **File**: `src/app/api/trips/[id]/end/route.ts`
+- **Change**: Move final post generation inside transaction with trip update
+- **Estimated Effort**: 1 hour
+- **Risk**: Medium - affects trip ending flow
+- **Impact**: Prevents duplicate final posts and stale data
 
-#### Task 1.2: Fix Trip Join Request Creation
-- **File**: `src/lib/tripInvitation.ts`
-- **Change**: Wrap `sendInvitation` method in transaction
+#### Task 1.2: Fix Media Quota Tracking
+- **File**: `src/lib/cloudinary.ts` (`confirmUpload` method)
+- **Change**: Move quota check inside transaction with media creation
 - **Estimated Effort**: 45 minutes
 - **Risk**: Low - isolated service method
+- **Impact**: Prevents quota bypass
 
-#### Task 1.3: Fix Email Uniqueness
-- **File**: `src/app/api/auth/signup/route.ts`
-- **Change**: Use error handling for unique constraint
-- **Estimated Effort**: 20 minutes
-- **Risk**: Low - changes error handling only
+#### Task 1.3: Fix Cache Get-Or-Set Stampede
+- **File**: `src/lib/redis.ts` (`getOrSet` function)
+- **Change**: Add mutex/lock for cache misses to prevent thundering herd
+- **Estimated Effort**: 1 hour
+- **Risk**: Low - cache layer only
+- **Impact**: Prevents resource waste and API overload
 
-#### Task 1.4: Fix Username Uniqueness
-- **Files**: `src/app/api/users/me/route.ts`, `src/app/api/users/[id]/route.ts`
-- **Change**: Use error handling for unique constraint or wrap in transaction
-- **Estimated Effort**: 40 minutes
-- **Risk**: Low - affects two endpoints
-
-**Phase 1 Total Effort**: ~2.5 hours
+**Phase 1 Total Effort**: ~2.75 hours
 
 ---
 
-### **Phase 2: Database Schema Enhancements (Week 2)**
+### **Phase 2: Final Post Service Improvements (Week 1-2)**
+
+#### Task 2.1: Fix Final Post Update/Publish Race Conditions
+- **File**: `src/lib/services/tripFinalizer.ts`
+- **Change**: Wrap `updateFinalPost` and `publishFinalPost` in transactions
+- **Estimated Effort**: 45 minutes
+- **Risk**: Low - service layer only
+
+#### Task 2.2: Unify Final Post Generation Logic
+- **Files**: 
+  - `src/app/api/trips/[id]/end/route.ts`
+  - `scheduler/src/tripStatus.ts`
+- **Change**: Use `TripFinalizerService.generateFinalPost` in both places
+- **Estimated Effort**: 30 minutes
+- **Risk**: Low - improves consistency
+
+**Phase 2 Total Effort**: ~1.25 hours
+
+---
+
+### **Phase 3: Database Schema Enhancements (Week 2)**
 
 #### Task 2.1: Add Missing Unique Constraints
 ```sql
@@ -911,35 +907,21 @@ ALTER TABLE trip_join_requests ADD CONSTRAINT trip_join_requests_unique UNIQUE (
 
 ---
 
-### **Phase 3: Transaction Wrapping (Week 2-3)**
+### **Phase 4: Transaction Wrapping (Week 2-3)**
 
-#### Task 3.1: Follow User Endpoint
-- **File**: `src/app/api/follow/[userId]/route.ts`
-- **Change**: Move pre-transaction checks inside transaction
+#### Task 4.1: Place Cache Invalidation
+- **File**: `src/lib/place.ts`
+- **Change**: Improve cache invalidation timing and atomicity
 - **Estimated Effort**: 30 minutes
+- **Risk**: Low - cache layer only
 
-#### Task 3.2: Thread Entry Tagging
-- **File**: `src/app/api/trips/[id]/entries/route.ts`
-- **Change**: Include tag creation in main transaction
-- **Estimated Effort**: 30 minutes
-
-#### Task 3.3: Trip Final Post Creation
-- **File**: `src/app/api/trips/[id]/end/route.ts`
-- **Change**: Fetch all data inside transaction
-- **Estimated Effort**: 45 minutes
-
-#### Task 3.4: Trip Status Scheduler
-- **File**: `scheduler/src/tripStatus.ts`
-- **Change**: Wrap each trip update in individual transaction
-- **Estimated Effort**: 60 minutes
-
-**Phase 3 Total Effort**: ~2.5 hours
+**Phase 4 Total Effort**: ~30 minutes
 
 ---
 
-### **Phase 4: Error Handling Improvements (Week 3)**
+### **Phase 5: Error Handling Improvements (Week 3)**
 
-#### Task 4.1: Standardize Unique Constraint Error Handling
+#### Task 5.1: Standardize Unique Constraint Error Handling
 - Create utility function for Prisma error handling
 - Apply to all endpoints with unique constraints
 
@@ -959,7 +941,7 @@ export function handleUniqueConstraintError(error: any, fieldNames: Record<strin
 
 ---
 
-### **Phase 5: Testing & Validation (Week 4)**
+### **Phase 6: Testing & Validation (Week 4)**
 
 #### Task 5.1: Load Testing
 - Concurrent request simulation for all critical endpoints
@@ -982,28 +964,34 @@ export function handleUniqueConstraintError(error: any, fieldNames: Record<strin
 | Feature | Endpoint | Current Status | Transaction Type | Risk Level |
 |---------|----------|----------------|------------------|-----------|
 | Follow Request Accept | `/follow/requests/[id]/accept` | ✅ SECURE | Array transaction | LOW |
-| Follow/Unfollow | `/follow/[userId]` | ✅ MOSTLY SECURE | Tx with TOCTOU | LOW-MEDIUM |
-| Follow Request Send | `/follow/requests` | ❌ VULNERABLE | None | HIGH |
+| Follow/Unfollow | `/follow/[userId]` | ✅ SECURE | Full transaction | LOW |
+| Follow Request Send | `/follow/requests` | ✅ SECURE | Full transaction | LOW |
 | Trip Participant Add | `/trips/[id]/participants` (POST) | ✅ SECURE | Array transaction | LOW |
 | Trip Participant Remove | `/trips/[id]/participants` (DELETE) | ✅ SECURE | Array transaction | LOW |
-| Trip Join Request Send | `/trips/[id]/invites` | ❌ VULNERABLE | None | HIGH |
+| Trip Join Request Send | `/trips/[id]/invites` | ✅ SECURE | Full transaction | LOW |
 | Trip Join Request Accept | `/trips/[id]/invites/accept` | ✅ SECURE | Callback transaction | LOW |
-| Thread Entry Create | `/trips/[id]/entries` (POST) | ✅ PARTIALLY SECURE | Tx but tags outside | MEDIUM |
+| Thread Entry Create | `/trips/[id]/entries` (POST) | ✅ SECURE | Tx with tags inside | LOW |
 | Thread Entry List | `/trips/[id]/entries` (GET) | ✅ SECURE | Read-only | LOW |
-| Trip End | `/trips/[id]/end` | ⚠️ PARTIALLY SECURE | Tx but stale data | MEDIUM |
+| Trip End | `/trips/[id]/end` | ⚠️ PARTIALLY SECURE | Tx but final post outside | MEDIUM |
+| Trip Final Post Get | `/trips/[id]/final-post` (GET) | ✅ SECURE | Read-only | LOW |
+| Trip Final Post Update | `/trips/[id]/final-post` (PUT) | ⚠️ PARTIALLY SECURE | No transaction | LOW |
+| Trip Final Post Publish | `/trips/[id]/publish` (POST) | ⚠️ PARTIALLY SECURE | No transaction | LOW |
 | Trip Create | `/trips` (POST) | ✅ SECURE | Callback transaction | LOW |
-| User Profile Update | `/users/me` (PUT) | ❌ VULNERABLE | None (check outside) | HIGH |
-| User Profile Update | `/users/[id]` (PUT) | ❌ VULNERABLE | None (check outside) | HIGH |
-| User Signup | `/auth/signup` | ❌ VULNERABLE | None (check outside) | HIGH |
+| User Profile Update | `/users/me` (PUT) | ✅ SECURE | Error handling | LOW |
+| User Signup | `/auth/signup` | ✅ SECURE | Error handling | LOW |
 | User Account Delete | `/users/me` (DELETE) | ✅ SECURE | Single transaction | LOW |
 | Password Reset | `resetWithToken()` | ✅ SECURE | SELECT FOR UPDATE | LOW |
-| Scheduler Trip Status | `updateTripStatuses()` | ❌ VULNERABLE | Batch update | MEDIUM |
+| Media Upload Confirm | `/media/confirm` (POST) | ⚠️ PARTIALLY SECURE | Quota check outside | MEDIUM |
+| Media Delete | `/media/delete` (POST) | ✅ MOSTLY SECURE | External + DB | LOW |
+| Scheduler Trip Status | `updateTripStatuses()` | ✅ MOSTLY SECURE | Per-trip transaction | LOW |
+| Place Resolution | `resolvePlace()` | ✅ MOSTLY SECURE | Mutex lock | LOW |
+| Cache Get-Or-Set | `getOrSet()` | ⚠️ VULNERABLE | No mutex | MEDIUM |
 
 **Summary Statistics**:
-- ✅ **SECURE**: 6 endpoints (38%)
-- ⚠️ **PARTIALLY SECURE**: 2 endpoints (12%)
-- ❌ **VULNERABLE**: 7 endpoints (44%)
-- ⚠️ **POTENTIAL ISSUES**: 2 edge cases (12%)
+- ✅ **SECURE**: 15 endpoints/services (65%)
+- ⚠️ **PARTIALLY SECURE**: 5 endpoints/services (22%)
+- ❌ **VULNERABLE**: 1 service (4%)
+- ⚠️ **POTENTIAL ISSUES**: 2 edge cases (9%)
 
 ---
 
@@ -1011,27 +999,27 @@ export function handleUniqueConstraintError(error: any, fieldNames: Record<strin
 
 ### **Current Vulnerabilities**
 
-| Vulnerability | Impact | Exploitability | Affected Records |
-|---------------|--------|-----------------|------------------|
-| Follow Request Spam | User experience degradation | Medium | `followRequest` table |
-| Trip Invitation Spam | Notification spam | Medium | `tripJoinRequest` table |
-| Duplicate Username | Account confusion, lookup failures | High | `users` table |
-| Duplicate Email | Authentication bypass, account takeover | Critical | `users` table |
-| Orphaned Media Tags | Incomplete data, missing notifications | Low | `tripThreadTag` table |
-| Incomplete Final Posts | Missing content, stale summaries | Medium | `tripFinalPost` table |
-| Inconsistent Trip Status | Notification failures, UI confusion | Medium | `trip` table |
+| Vulnerability | Impact | Exploitability | Affected Records | Status |
+|---------------|--------|-----------------|------------------|--------|
+| Final Post Generation Race | Duplicate/stale final posts | Medium | `tripFinalPost` table | ⚠️ TO FIX |
+| Media Quota Bypass | Storage quota exceeded | Medium | `media` table, Cloudinary | ⚠️ TO FIX |
+| Cache Stampede | Resource waste, API overload | Low | External APIs (Mapbox) | ⚠️ TO FIX |
+| Final Post Update Race | Concurrent publish attempts | Low | `tripFinalPost` table | ⚠️ TO FIX |
+| Place Cache Invalidation | Stale cache data | Low | Cache layer | ⚠️ TO FIX |
+| Media Cleanup Timing | Orphaned media | Low | `media` table | ✅ ACCEPTABLE |
+| Cloudinary Delete Race | Orphaned DB records | Low | `media` table | ✅ ACCEPTABLE |
 
-### **After Fixes Implementation**
+### **Fixed Vulnerabilities**
 
 | Vulnerability | Status | Protection Method | Impact Reduction |
 |---------------|--------|-------------------|------------------|
-| Follow Request Spam | FIXED | Transaction + Unique Constraint | 100% |
-| Trip Invitation Spam | FIXED | Transaction + Unique Constraint | 100% |
-| Duplicate Username | FIXED | Error Handling + Unique Constraint | 100% |
-| Duplicate Email | FIXED | Error Handling + Unique Constraint | 100% |
-| Orphaned Media Tags | FIXED | Transaction Inclusion | 100% |
-| Incomplete Final Posts | FIXED | Transactional Read + Create | 95% |
-| Inconsistent Trip Status | FIXED | Per-Trip Transaction | 95% |
+| Follow Request Spam | ✅ FIXED | Transaction + Unique Constraint | 100% |
+| Trip Invitation Spam | ✅ FIXED | Transaction + Unique Constraint | 100% |
+| Duplicate Username | ✅ FIXED | Error Handling + Unique Constraint | 100% |
+| Duplicate Email | ✅ FIXED | Error Handling + Unique Constraint | 100% |
+| Orphaned Media Tags | ✅ FIXED | Transaction Inclusion | 100% |
+| Thread Entry Media Validation | ✅ FIXED | Re-validation inside transaction | 100% |
+| Follow User Race | ✅ FIXED | Full transaction protection | 100% |
 
 ---
 
@@ -1093,33 +1081,40 @@ CHECK (participant_count >= 1);
 
 ## 📈 **ACID Compliance Checklist (Post-Fixes)**
 
-### **Atomicity** ✅ → 🔄 (Improving)
+### **Atomicity** ✅ → 🔄 (Significantly Improved)
 
 - [x] Password reset (FIXED)
 - [x] Trip participant management (GOOD)
-- [x] Trip entry creation (GOOD)
+- [x] Trip entry creation (GOOD - tags inside transaction)
 - [x] Follow request acceptance (GOOD)
-- [ ] **Follow request creation** (TO FIX)
-- [ ] **Trip join request creation** (TO FIX)
-- [ ] **Username updates** (TO FIX)
-- [ ] **Thread entry tagging** (TO FIX)
-- [ ] **Trip status updates** (TO FIX)
+- [x] Follow request creation (FIXED)
+- [x] Trip join request creation (FIXED)
+- [x] Username/email updates (FIXED - error handling)
+- [x] Thread entry tagging (FIXED)
+- [x] Follow user operations (FIXED)
+- [ ] **Final post generation** (TO FIX - move inside transaction)
+- [ ] **Media quota tracking** (TO FIX - move inside transaction)
+- [x] Trip status updates (MOSTLY GOOD - per-trip transactions)
 
-### **Consistency** ✅ → 🔄 (Strong)
+### **Consistency** ✅ (Strong)
 
 - [x] Foreign key constraints enforced
 - [x] Enum constraints enforced
 - [x] Unique constraints for email, username, follows (VERIFIED)
-- [ ] **Email error handling standardized** (TO IMPROVE)
-- [ ] **Username error handling standardized** (TO IMPROVE)
+- [x] Email error handling standardized (FIXED - `handlePrismaUniqueError`)
+- [x] Username error handling standardized (FIXED - `handlePrismaUniqueError`)
+- [x] Final post unique constraint (tripId unique)
 
-### **Isolation** ⚠️ → ✅ (Good Progress)
+### **Isolation** ✅ (Excellent)
 
 - [x] Password reset (FIXED with SELECT FOR UPDATE)
-- [x] Follow endpoints (MOSTLY GOOD with tx)
+- [x] Follow endpoints (FIXED with full transactions)
 - [x] Trip participants (GOOD with tx)
-- [ ] **Follow requests** (TO FIX)
-- [ ] **Trip join requests** (TO FIX)
+- [x] Follow requests (FIXED)
+- [x] Trip join requests (FIXED)
+- [x] Thread entries (GOOD with re-validation)
+- [ ] **Final post operations** (TO IMPROVE - add transactions)
+- [ ] **Media quota** (TO IMPROVE - add transaction)
 
 ### **Durability** ✅ (Excellent)
 
@@ -1263,8 +1258,22 @@ try {
 
 ## 🔍 **Conclusion**
 
-The application has a solid foundation with **5 out of 13 critical operations already protected** by transactions. However, **8 high-priority vulnerabilities** require immediate attention to ensure complete ACID compliance and data integrity.
+The application has made **significant progress** with **9 out of 16 critical operations now protected** by transactions or proper error handling. The codebase shows strong ACID compliance in most areas, with **7 remaining issues** that require attention.
 
-**Recommended Action**: Implement Phase 1 fixes immediately (2.5 hours work) to eliminate critical race conditions affecting user authentication and follow systems.
+**Key Improvements Since Last Review**:
+- ✅ Follow request creation now uses transactions
+- ✅ Trip invitation creation now uses transactions  
+- ✅ Thread entry tagging moved inside transactions
+- ✅ Username/email uniqueness uses proper error handling
+- ✅ Follow user operations fully transactional
 
-**Estimated Total Effort for Complete Fix**: 12-16 hours across 4 weeks with proper testing and validation.
+**Remaining High-Priority Issues**:
+1. Final post generation race condition (end trip route)
+2. Media quota tracking race condition
+3. Cache stampede in getOrSet function
+
+**Recommended Action**: Implement Phase 1 fixes immediately (2.75 hours work) to eliminate the remaining critical race conditions affecting final posts and media quota.
+
+**Estimated Total Effort for Complete Fix**: 6-8 hours across 2-3 weeks with proper testing and validation.
+
+**Overall Security Status**: ✅ **56% Secure** → Target: **90%+ Secure** after Phase 1 fixes
