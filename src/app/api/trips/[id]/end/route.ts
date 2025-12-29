@@ -129,14 +129,14 @@ export async function POST(
             updatedAt: updatedTrip.updatedAt.toISOString(),
             user: updatedTrip.user
               ? {
-                  ...updatedTrip.user,
-                  username: updatedTrip.user.username ?? undefined,
-                  name: updatedTrip.user.name ?? undefined,
-                  avatarUrl: updatedTrip.user.avatarUrl ?? undefined,
-                  bio: updatedTrip.user.bio ?? undefined,
-                  createdAt: updatedTrip.user.createdAt.toISOString(),
-                  updatedAt: updatedTrip.user.updatedAt.toISOString(),
-                }
+                ...updatedTrip.user,
+                username: updatedTrip.user.username ?? undefined,
+                name: updatedTrip.user.name ?? undefined,
+                avatarUrl: updatedTrip.user.avatarUrl ?? undefined,
+                bio: updatedTrip.user.bio ?? undefined,
+                createdAt: updatedTrip.user.createdAt.toISOString(),
+                updatedAt: updatedTrip.user.updatedAt.toISOString(),
+              }
               : undefined,
             finalPost: finalPostResponse,
             description: updatedTrip.description ?? undefined,
@@ -172,9 +172,9 @@ export async function POST(
               })),
               media: entry.media
                 ? {
-                    ...entry.media,
-                    createdAt: entry.media.createdAt.toISOString(),
-                  }
+                  ...entry.media,
+                  createdAt: entry.media.createdAt.toISOString(),
+                }
                 : undefined,
             })),
             _count: {
