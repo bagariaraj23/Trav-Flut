@@ -88,6 +88,13 @@ export class TripInvitationService {
     } catch (error: any) {
       // If a concurrent create hits the DB unique constraint, map to existing request
       if (error?.code === "P2002") {
+        // Use centralized error handler for consistent messaging
+        const { handlePrismaUniqueError } = await import("@/lib/prismaErrors");
+        const uniqueError = handlePrismaUniqueError(error, {
+          tripId_receiverId: "Trip invitation",
+        });
+        
+        // Try to fetch existing request for more context
         const existing = await prisma.tripJoinRequest.findUnique({
           where: { tripId_receiverId: { tripId, receiverId } },
         });
@@ -97,14 +104,14 @@ export class TripInvitationService {
             status: existing.status,
             message:
               existing.status === TripJoinRequestStatus.PENDING
-                ? "Invitation already pending"
-                : `Existing invitation with status ${existing.status}`,
+                ? uniqueError || "Invitation already pending"
+                : uniqueError || `Existing invitation with status ${existing.status}`,
           };
         }
         return {
           id: null,
           status: TripJoinRequestStatus.PENDING,
-          message: "Invitation already exists",
+          message: uniqueError || "Invitation already exists",
         };
       }
       throw error;

@@ -144,9 +144,14 @@ export async function POST(request: NextRequest) {
             { status: 500 }
           );
         } catch (error: any) {
-          if (error.code === "P2002") {
+          // Use centralized error handler for unique constraint violations
+          const { handlePrismaUniqueError } = await import("@/lib/prismaErrors");
+          const uniqueError = handlePrismaUniqueError(error, {
+            followerId_followeeId: "Follow request",
+          });
+          if (uniqueError) {
             return NextResponse.json(
-              { success: false, error: "Follow request already exists." },
+              { success: false, error: uniqueError },
               { status: 409 }
             );
           }
