@@ -10,10 +10,7 @@ import 'package:tripthread/services/api_service.dart';
 class TripParticipantsScreen extends StatefulWidget {
   final String tripId;
 
-  const TripParticipantsScreen({
-    Key? key,
-    required this.tripId,
-  }) : super(key: key);
+  const TripParticipantsScreen({super.key, required this.tripId});
 
   @override
   State<TripParticipantsScreen> createState() => _TripParticipantsScreenState();
@@ -103,88 +100,139 @@ class _TripParticipantsScreenState extends State<TripParticipantsScreen> {
   Future<void> _sendInvitation(String receiverId) async {
     try {
       final tripProvider = context.read<TripProvider>();
-      final success =
-          await tripProvider.sendTripInvitation(widget.tripId, receiverId);
+      final success = await tripProvider.sendTripInvitation(
+        widget.tripId,
+        receiverId,
+      );
 
       if (mounted) {
         if (success) {
+          await tripProvider.loadSentTripInvitations(widget.tripId);
+          setState(() {});
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text('Invitation sent successfully!')),
           );
-          _searchController.clear();
-          setState(() {
-            _searchResults = [];
-          });
         } else {
           final error = tripProvider.error ?? '';
           if (error.contains('Unique constraint failed') ||
               error.contains('pending invitation')) {
             ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(
-                  content: Text(
-                      'User already has a pending invitation or is already a participant.')),
+                content: Text(
+                  'User already has a pending invitation or is already a participant.',
+                ),
+              ),
             );
           } else {
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
-                  content: Text(
-                      error.isNotEmpty ? error : 'Failed to send invitation')),
+                content: Text(
+                  error.isNotEmpty ? error : 'Failed to send invitation',
+                ),
+              ),
             );
           }
         }
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error: $e')));
       }
     }
   }
 
-  bool _hasInvitationBeenSent(String userId) {
-    final tripProvider = context.read<TripProvider>();
-    return tripProvider.sentTripInvitations.any(
-      (invitation) =>
-          invitation.receiverId == userId && invitation.tripId == widget.tripId,
-    );
+  Future<void> _cancelInvitation(String inviteId) async {
+    try {
+      final tripProvider = context.read<TripProvider>();
+      final success = await tripProvider.cancelTripInvitation(
+        widget.tripId,
+        inviteId,
+      );
+
+      if (mounted) {
+        if (success) {
+          await tripProvider.loadSentTripInvitations(widget.tripId);
+          setState(() {});
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Invitation cancelled successfully!')),
+          );
+        } else {
+          final error = tripProvider.error ?? '';
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                error.isNotEmpty ? error : 'Failed to cancel invitation',
+              ),
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error: $e')));
+      }
+    }
   }
 
   Widget _getInvitationButtonForSearch(String userId) {
-    final hasInvitationBeenSent = _hasInvitationBeenSent(userId);
+    final tripProvider = context.watch<TripProvider>();
+    final matchingInvitations = tripProvider.sentTripInvitations
+        .where(
+          (invitation) =>
+              invitation.receiverId == userId &&
+              invitation.tripId == widget.tripId,
+        )
+        .toList();
 
-    if (hasInvitationBeenSent) {
-      return Container(
-        padding: const EdgeInsets.all(8),
-        decoration: BoxDecoration(
-          color: Colors.grey[200],
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              Icons.check_circle_outline,
-              color: Colors.grey[600],
-              size: 16,
-            ),
-            const SizedBox(width: 4),
-            Text(
-              'Sent',
-              style: TextStyle(
-                color: Colors.grey[600],
-                fontSize: 12,
-                fontWeight: FontWeight.w500,
+    if (matchingInvitations.isNotEmpty) {
+      final invitation = matchingInvitations.first;
+      return InkWell(
+        onTap: tripProvider.isLoading
+            ? null
+            : () => _cancelInvitation(invitation.id),
+        borderRadius: BorderRadius.circular(8),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          decoration: BoxDecoration(
+            color: Colors.amber.shade50,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: Colors.amber.shade200, width: 1),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.access_time, color: Colors.amber.shade700, size: 16),
+              const SizedBox(width: 4),
+              Text(
+                'Pending',
+                style: TextStyle(
+                  color: Colors.amber.shade900,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w500,
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       );
     }
 
     return IconButton(
-      onPressed: () => _sendInvitation(userId),
-      icon: const Icon(Icons.person_add),
+      onPressed: tripProvider.isLoading ? null : () => _sendInvitation(userId),
+      icon: tripProvider.isLoading
+          ? SizedBox(
+              width: 20,
+              height: 20,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                color: Theme.of(context).colorScheme.primary,
+              ),
+            )
+          : const Icon(Icons.person_add),
       color: Theme.of(context).colorScheme.primary,
     );
   }
@@ -195,7 +243,8 @@ class _TripParticipantsScreenState extends State<TripParticipantsScreen> {
       builder: (context) => AlertDialog(
         title: const Text('Remove Participant'),
         content: const Text(
-            'Are you sure you want to remove this participant from the trip?'),
+          'Are you sure you want to remove this participant from the trip?',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
@@ -228,7 +277,8 @@ class _TripParticipantsScreenState extends State<TripParticipantsScreen> {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-                content: Text('Failed to remove participant: ${e.toString()}')),
+              content: Text('Failed to remove participant: ${e.toString()}'),
+            ),
           );
         }
       }
@@ -241,6 +291,8 @@ class _TripParticipantsScreenState extends State<TripParticipantsScreen> {
     final username = user['username'] ?? 'No username';
     final userId = user['id'] as String;
 
+    final isParticipant = _participants.any((p) => p.userId == userId);
+
     return Container(
       width: 200,
       margin: const EdgeInsets.only(right: 12),
@@ -252,14 +304,11 @@ class _TripParticipantsScreenState extends State<TripParticipantsScreen> {
               CircleAvatar(
                 radius: 20,
                 backgroundColor: Theme.of(context).colorScheme.primary,
-                backgroundImage:
-                    avatarUrl != null ? NetworkImage(avatarUrl) : null,
+                backgroundImage: avatarUrl != null
+                    ? NetworkImage(avatarUrl)
+                    : null,
                 child: avatarUrl == null
-                    ? Icon(
-                        Icons.person,
-                        color: Colors.white,
-                        size: 20,
-                      )
+                    ? Icon(Icons.person, color: Colors.white, size: 20)
                     : null,
               ),
               const SizedBox(width: 12),
@@ -270,25 +319,52 @@ class _TripParticipantsScreenState extends State<TripParticipantsScreen> {
                   children: [
                     Text(
                       name,
-                      style: const TextStyle(
-                        fontWeight: FontWeight.w600,
-                      ),
+                      style: const TextStyle(fontWeight: FontWeight.w600),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
                     Text(
                       '@$username',
-                      style: TextStyle(
-                        color: Colors.grey[600],
-                        fontSize: 12,
-                      ),
+                      style: TextStyle(color: Colors.grey[600], fontSize: 12),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
                   ],
                 ),
               ),
-              _getInvitationButtonForSearch(userId),
+              if (isParticipant)
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 6,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.green.shade50,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.green.shade200, width: 1),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.check_circle,
+                        color: Colors.green.shade700,
+                        size: 16,
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        'Member',
+                        style: TextStyle(
+                          color: Colors.green.shade900,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ),
+                )
+              else
+                _getInvitationButtonForSearch(userId),
             ],
           ),
         ),
@@ -307,18 +383,12 @@ class _TripParticipantsScreenState extends State<TripParticipantsScreen> {
             ? NetworkImage(participant.user!.avatarUrl!)
             : null,
         child: participant.user?.avatarUrl == null
-            ? Icon(
-                Icons.person,
-                color: Colors.white,
-                size: 20,
-              )
+            ? Icon(Icons.person, color: Colors.white, size: 20)
             : null,
       ),
       title: Text(
         participant.user?.name ?? 'Unknown User',
-        style: const TextStyle(
-          fontWeight: FontWeight.w600,
-        ),
+        style: const TextStyle(fontWeight: FontWeight.w600),
       ),
       subtitle: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -327,28 +397,21 @@ class _TripParticipantsScreenState extends State<TripParticipantsScreen> {
             Text('@${participant.user!.username}'),
           Text(
             'Role: ${participant.role}',
-            style: TextStyle(
-              color: Colors.grey[600],
-              fontSize: 12,
-            ),
+            style: TextStyle(color: Colors.grey[600], fontSize: 12),
           ),
           Text(
             'Joined: ${_formatDate(participant.joinedAt)}',
-            style: TextStyle(
-              color: Colors.grey[600],
-              fontSize: 12,
-            ),
+            style: TextStyle(color: Colors.grey[600], fontSize: 12),
           ),
         ],
       ),
       trailing: isOwner
           ? Container(
-              padding: const EdgeInsets.symmetric(
-                horizontal: 8,
-                vertical: 4,
-              ),
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
               decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.primary.withOpacity(0.1),
+                color: Theme.of(
+                  context,
+                ).colorScheme.primary.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Text(
@@ -370,142 +433,151 @@ class _TripParticipantsScreenState extends State<TripParticipantsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      resizeToAvoidBottomInset: true,
-      appBar: AppBar(
-        title: const Text('Manage Participants'),
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
-          onPressed: () {
-            if (context.canPop()) {
-              context.pop();
-            } else {
-              context.go('/trip/${widget.tripId}');
-            }
-          },
+    return PopScope(
+      canPop: true,
+      onPopInvokedWithResult: (didPop, result) {
+        if (!didPop) {
+          if (context.canPop()) {
+            context.pop();
+          } else {
+            context.go('/trip/${widget.tripId}');
+          }
+        }
+      },
+      child: Scaffold(
+        resizeToAvoidBottomInset: true,
+        appBar: AppBar(
+          title: const Text('Manage Participants'),
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back),
+            onPressed: () {
+              if (context.canPop()) {
+                context.pop();
+              } else {
+                context.go('/trip/${widget.tripId}');
+              }
+            },
+          ),
         ),
-      ),
-      body: SafeArea(
-        child: Column(
-          children: [
-            // Search Section
-            Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Invite Participants',
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.w600,
-                        ),
-                  ),
-                  const SizedBox(height: 8),
-                  TextField(
-                    controller: _searchController,
-                    decoration: InputDecoration(
-                      hintText: 'Search users by name or username...',
-                      prefixIcon: const Icon(Icons.search),
-                      suffixIcon: _isSearching
-                          ? const SizedBox(
-                              width: 20,
-                              height: 20,
-                              child: Padding(
-                                padding: EdgeInsets.all(8.0),
-                                child:
-                                    CircularProgressIndicator(strokeWidth: 2),
-                              ),
-                            )
-                          : _searchController.text.isNotEmpty
-                              ? IconButton(
-                                  icon: const Icon(Icons.clear),
-                                  onPressed: () {
-                                    _searchController.clear();
-                                    setState(() {
-                                      _searchResults = [];
-                                    });
-                                  },
-                                )
-                              : null,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            // Search Results and Participants List
-            Expanded(
-              child: SingleChildScrollView(
+        body: SafeArea(
+          child: Column(
+            children: [
+              // Search Section
+              Padding(
+                padding: const EdgeInsets.all(16),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    if (_searchResults.isNotEmpty)
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 16),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Search Results',
-                              style: Theme.of(context)
-                                  .textTheme
-                                  .titleSmall
-                                  ?.copyWith(
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                            ),
-                            const SizedBox(height: 8),
-                            ListView.builder(
-                              shrinkWrap: true,
-                              physics: const NeverScrollableScrollPhysics(),
-                              itemCount: _searchResults.length,
-                              itemBuilder: (context, index) {
-                                final user = _searchResults[index];
-                                return _buildUserSearchResult(user);
-                              },
-                            ),
-                          ],
-                        ),
+                    Text(
+                      'Invite Participants',
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w600,
                       ),
-                    // Participants List
-                    Padding(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 16, vertical: 16),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Current Participants',
-                            style: Theme.of(context)
-                                .textTheme
-                                .titleSmall
-                                ?.copyWith(
-                                  fontWeight: FontWeight.w600,
+                    ),
+                    const SizedBox(height: 8),
+                    TextField(
+                      controller: _searchController,
+                      decoration: InputDecoration(
+                        hintText: 'Search users by name or username...',
+                        prefixIcon: const Icon(Icons.search),
+                        suffixIcon: _isSearching
+                            ? const SizedBox(
+                                width: 20,
+                                height: 20,
+                                child: Padding(
+                                  padding: EdgeInsets.all(8.0),
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
                                 ),
-                          ),
-                          const SizedBox(height: 8),
-                          ListView.builder(
-                            shrinkWrap: true,
-                            physics: const NeverScrollableScrollPhysics(),
-                            itemCount: _participants.length,
-                            itemBuilder: (context, index) {
-                              final participant = _participants[index];
-                              return _buildParticipantTile(participant);
-                            },
-                          ),
-                        ],
+                              )
+                            : _searchController.text.isNotEmpty
+                            ? IconButton(
+                                icon: const Icon(Icons.clear),
+                                onPressed: () {
+                                  _searchController.clear();
+                                  setState(() {
+                                    _searchResults = [];
+                                  });
+                                },
+                              )
+                            : null,
                       ),
                     ),
                   ],
                 ),
               ),
-            ),
-          ],
+              // Search Results and Participants List
+              Expanded(
+                child: SingleChildScrollView(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      if (_searchResults.isNotEmpty)
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 16),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Search Results',
+                                style: Theme.of(context).textTheme.titleSmall
+                                    ?.copyWith(fontWeight: FontWeight.w600),
+                              ),
+                              const SizedBox(height: 8),
+                              ListView.builder(
+                                shrinkWrap: true,
+                                physics: const NeverScrollableScrollPhysics(),
+                                itemCount: _searchResults.length,
+                                itemBuilder: (context, index) {
+                                  final user = _searchResults[index];
+                                  return _buildUserSearchResult(user);
+                                },
+                              ),
+                            ],
+                          ),
+                        ),
+                      // Participants List
+                      Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 16,
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Current Participants',
+                              style: Theme.of(context).textTheme.titleSmall
+                                  ?.copyWith(fontWeight: FontWeight.w600),
+                            ),
+                            const SizedBox(height: 8),
+                            ListView.builder(
+                              shrinkWrap: true,
+                              physics: const NeverScrollableScrollPhysics(),
+                              itemCount: _participants.length,
+                              itemBuilder: (context, index) {
+                                final participant = _participants[index];
+                                return _buildParticipantTile(participant);
+                              },
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
   }
 
   String _formatDate(DateTime date) {
-    return '${date.day}/${date.month}/${date.year}';
+    // Extract only date components to avoid timezone issues
+    final dateOnly = DateTime.utc(date.year, date.month, date.day);
+    return '${dateOnly.day}/${dateOnly.month}/${dateOnly.year}';
   }
 }

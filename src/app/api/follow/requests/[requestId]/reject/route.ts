@@ -7,13 +7,13 @@ import { withAuth, withRateLimit, withLogging } from "@/lib/middleware";
 // Reject a follow request
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { requestId: string } }
+  { params }: { params: Promise<{ requestId: string }> }
 ) {
+  const { requestId } = await params;
   return withLogging(async (req) => {
     return withRateLimit(req, async (rateLimitedReq) => {
       return withAuth(rateLimitedReq, async (authenticatedReq) => {
         try {
-          const requestId = params.requestId;
           const currentUserId = authenticatedReq.user!.userId;
 
           // Find the follow request
@@ -53,7 +53,6 @@ export async function PUT(
             );
           }
 
-          // Update request status to rejected
           await prisma.followRequest.update({
             where: { id: requestId },
             data: {

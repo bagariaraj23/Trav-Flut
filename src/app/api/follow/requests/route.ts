@@ -14,7 +14,6 @@ export async function POST(request: NextRequest) {
           const { followeeId } = body;
           const followerId = authenticatedReq.user!.userId;
 
-          // Validate input
           if (!followeeId) {
             return NextResponse.json(
               { success: false, error: "followeeId is required" },
@@ -22,92 +21,135 @@ export async function POST(request: NextRequest) {
             );
           }
 
-          // Check if users exist
-          const [follower, followee] = await Promise.all([
-            prisma.user.findUnique({ where: { id: followerId } }),
-            prisma.user.findUnique({ where: { id: followeeId } }),
-          ]);
+          const result = await prisma.$transaction(async (tx) => {
+            const [follower, followee] = await Promise.all([
+              tx.user.findUnique({ where: { id: followerId } }),
+              tx.user.findUnique({ where: { id: followeeId } }),
+            ]);
+            if (!follower || !followee) return { code: "NOT_FOUND" };
+            if (followerId === followeeId) return { code: "SELF_FOLLOW" };
+            const existingFollow = await tx.follow.findFirst({
+              where: { followerId, followeeId },
+            });
+            if (existingFollow)
+              return { code: "ALREADY_FOLLOW", id: existingFollow.id };
+            
+            // Check for existing pending request
+            const existingPendingRequest = await tx.followRequest.findFirst({
+              where: { followerId, followeeId, status: "PENDING" },
+            });
+            if (existingPendingRequest)
+              return { code: "PENDING", request: existingPendingRequest };
+            
+            // Check for ACCEPTED request - if exists, verify follow relationship exists
+            // If ACCEPTED request exists but no follow relationship, it's orphaned (user unfollowed)
+            // In that case, delete it and allow new request
+            const existingAcceptedRequest = await tx.followRequest.findFirst({
+              where: { followerId, followeeId, status: "ACCEPTED" },
+            });
+            if (existingAcceptedRequest) {
+              // Verify follow relationship exists - if not, delete orphaned ACCEPTED request
+              const followExists = await tx.follow.findFirst({
+                where: { followerId, followeeId },
+              });
+              if (followExists) {
+                // Follow relationship exists, so they're already following
+                return { code: "ALREADY_FOLLOW" };
+              } else {
+                // Orphaned ACCEPTED request (user unfollowed), delete it
+                await tx.followRequest.deleteMany({
+                  where: {
+                    followerId,
+                    followeeId,
+                    status: "ACCEPTED",
+                  },
+                });
+              }
+            }
+            
+            // Delete REJECTED requests to allow re-requesting after rejection
+            await tx.followRequest.deleteMany({
+              where: {
+                followerId,
+                followeeId,
+                status: "REJECTED",
+              },
+            });
+            
+            const followRequest = await tx.followRequest.create({
+              data: { followerId, followeeId, status: "PENDING" },
+            });
+            return { code: "CREATED", request: followRequest };
+          });
 
-          if (!follower || !followee) {
+          if (result.code === "NOT_FOUND") {
             return NextResponse.json(
               { success: false, error: "User not found" },
               { status: 404 }
             );
           }
-
-          // Prevent self-following
-          if (followerId === followeeId) {
+          if (result.code === "SELF_FOLLOW") {
             return NextResponse.json(
               { success: false, error: "Cannot follow yourself" },
               { status: 400 }
             );
           }
-
-          // Check if already following
-          const existingFollow = await prisma.follow.findFirst({
-            where: {
-              followerId,
-              followeeId: followeeId,
-            },
-          });
-
-          if (existingFollow) {
+          if (result.code === "ALREADY_FOLLOW") {
             return NextResponse.json(
               {
                 success: false,
                 error: "Already following this user",
-                data: { id: existingFollow.id, status: "FOLLOWING" },
+                data: { id: result.id, status: "FOLLOWING" },
               },
               { status: 400 }
             );
           }
-
-          // Check if follow request already exists
-          const existingRequest = await prisma.followRequest.findFirst({
-            where: {
-              followerId,
-              followeeId: followeeId,
-              status: "PENDING",
-            },
-          });
-
-          if (existingRequest) {
+          if (result.code === "PENDING" && result.request) {
             return NextResponse.json(
               {
                 success: true,
                 message: "Follow request already pending",
                 data: {
-                  id: existingRequest.id,
-                  status: existingRequest.status,
-                  createdAt: existingRequest.createdAt,
+                  id: result.request.id,
+                  status: result.request.status,
+                  createdAt:
+                    typeof result.request.createdAt === "string"
+                      ? result.request.createdAt
+                      : result.request.createdAt.toISOString(),
                 },
               },
               { status: 200 }
             );
           }
-
-          // Create follow request
-          const followRequest = await prisma.followRequest.create({
-            data: {
-              followerId,
-              followeeId: followeeId,
-              status: "PENDING",
-            },
-          });
-
-          return NextResponse.json(
-            {
-              success: true,
-              message: "Follow request sent successfully",
-              data: {
-                id: followRequest.id,
-                status: followRequest.status,
-                createdAt: followRequest.createdAt,
+          if (result.code === "CREATED" && result.request) {
+            return NextResponse.json(
+              {
+                success: true,
+                message: "Follow request sent successfully",
+                data: {
+                  id: result.request.id,
+                  status: result.request.status,
+                  createdAt:
+                    typeof result.request.createdAt === "string"
+                      ? result.request.createdAt
+                      : result.request.createdAt.toISOString(),
+                },
               },
-            },
-            { status: 201 }
+              { status: 201 }
+            );
+          }
+          // Fallback for any unexpected branch
+          return NextResponse.json(
+            { success: false, error: "Unknown internal error." },
+            { status: 500 }
           );
-        } catch (error) {
+        } catch (error: any) {
+          if (error.code === "P2002") {
+            return NextResponse.json(
+              { success: false, error: "Follow request already exists." },
+              { status: 409 }
+            );
+          }
           console.error("Error creating follow request:", error);
           return NextResponse.json(
             { success: false, error: "Internal server error" },
@@ -143,7 +185,7 @@ export async function GET(request: NextRequest) {
                   isPrivate: true,
                   createdAt: true,
                   updatedAt: true,
-                }
+                },
               },
             },
             orderBy: {
@@ -152,7 +194,7 @@ export async function GET(request: NextRequest) {
           });
 
           // Transform the data to match the expected API response format
-          const transformedRequests = followRequests.map(request => ({
+          const transformedRequests = followRequests.map((request) => ({
             id: request.id,
             followerId: request.followerId,
             followeeId: request.followeeId,
@@ -168,7 +210,7 @@ export async function GET(request: NextRequest) {
               isPrivate: request.follower.isPrivate,
               createdAt: request.follower.createdAt.toISOString(),
               updatedAt: request.follower.updatedAt.toISOString(),
-            }
+            },
           }));
 
           return NextResponse.json<ApiResponse>(
@@ -212,12 +254,10 @@ export async function DELETE(request: NextRequest) {
             );
           }
 
-          // Find and delete the follow request
           const deletedRequest = await prisma.followRequest.deleteMany({
             where: {
               id: requestId,
               followerId: currentUserId,
-              status: "PENDING",
             },
           });
 

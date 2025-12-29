@@ -17,7 +17,7 @@ interface AuthSession {
 
 // Get the authenticated session from cookies
 export async function getAuthSession(): Promise<AuthSession> {
-  const cookieStore = cookies();
+  const cookieStore = await cookies();
   const token = cookieStore.get('auth_token')?.value;
 
   if (!token) {

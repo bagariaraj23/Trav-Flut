@@ -26,6 +26,7 @@ import 'package:tripthread/screens/auth/reset_password_success_screen.dart';
 import 'package:tripthread/screens/home/home_screen.dart';
 import 'package:tripthread/screens/profile/profile_screen.dart';
 import 'package:tripthread/screens/profile/edit_profile_screen.dart';
+import 'package:tripthread/screens/profile/followers_following_screen.dart';
 import 'package:tripthread/screens/trip/create_trip_screen.dart';
 import 'package:tripthread/screens/trip/trip_detail_screen.dart';
 import 'package:tripthread/screens/trip/trip_thread_screen.dart';
@@ -58,7 +59,7 @@ void main() async {
       debugPrint('[main] StorageService initialized');
     } catch (e) {
       debugPrint('[main] StorageService initialization failed: $e');
-      throw e;
+      rethrow;
     }
 
     debugPrint('[main] Creating ConnectivityService');
@@ -69,7 +70,7 @@ void main() async {
       debugPrint('[main] ConnectivityService initialized');
     } catch (e) {
       debugPrint('[main] ConnectivityService initialization failed: $e');
-      throw e;
+      rethrow;
     }
 
     debugPrint('[main] Creating core services');
@@ -169,7 +170,7 @@ void main() async {
 }
 
 class TripThreadAppRouter extends StatefulWidget {
-  TripThreadAppRouter({Key? key}) : super(key: key);
+  const TripThreadAppRouter({super.key});
 
   static String? _lastLocation;
 
@@ -302,14 +303,14 @@ class _TripThreadAppRouterState extends State<TripThreadAppRouter> {
           final location = state.uri.toString();
 
           if (location != TripThreadAppRouter._lastLocation) {
-            print('[GoRouter] location changed to: $location');
-            print('[GoRouter] isLoading: $isLoading, isLoggedIn: $isLoggedIn');
+            debugPrint('[GoRouter] location changed to: $location');
+            debugPrint('[GoRouter] isLoading: $isLoading, isLoggedIn: $isLoggedIn');
             TripThreadAppRouter._lastLocation = location;
           }
 
           // Don't redirect while loading
           if (isLoading) {
-            print('[GoRouter] Still loading, no redirect');
+            debugPrint('[GoRouter] Still loading, no redirect');
             return null;
           }
 
@@ -319,7 +320,7 @@ class _TripThreadAppRouterState extends State<TripThreadAppRouter> {
               location != '/signup' &&
               location != '/forgot-password' &&
               !location.startsWith('/reset-password')) {
-            print('[GoRouter] Not logged in, redirecting to /login');
+            debugPrint('[GoRouter] Not logged in, redirecting to /login');
             return '/login';
           }
 
@@ -329,11 +330,11 @@ class _TripThreadAppRouterState extends State<TripThreadAppRouter> {
                   location == '/signup' ||
                   location == '/forgot-password' ||
                   location.startsWith('/reset-password'))) {
-            print('[GoRouter] Already logged in, redirecting to /home');
+            debugPrint('[GoRouter] Already logged in, redirecting to /home');
             return '/home';
           }
 
-          print('[GoRouter] No redirect needed');
+          debugPrint('[GoRouter] No redirect needed');
           return null;
         },
         routes: [
@@ -372,6 +373,28 @@ class _TripThreadAppRouterState extends State<TripThreadAppRouter> {
             builder: (context, state) {
               final userId = state.pathParameters['userId']!;
               return ProfileScreen(userId: userId);
+            },
+          ),
+          GoRoute(
+            path: '/profile/:userId/followers',
+            builder: (context, state) {
+              final userId = state.pathParameters['userId']!;
+              debugPrint('[GoRouter] Building FollowersFollowingScreen - followers for user: $userId');
+              return FollowersFollowingScreen(
+                userId: userId,
+                showFollowers: true,
+              );
+            },
+          ),
+          GoRoute(
+            path: '/profile/:userId/following',
+            builder: (context, state) {
+              final userId = state.pathParameters['userId']!;
+              debugPrint('[GoRouter] Building FollowersFollowingScreen - following for user: $userId');
+              return FollowersFollowingScreen(
+                userId: userId,
+                showFollowers: false,
+              );
             },
           ),
           GoRoute(
@@ -481,8 +504,9 @@ class _TripThreadAppRouterState extends State<TripThreadAppRouter> {
             AnimatedBuilder(
               animation: context.watch<AuthProvider>().routingNotifier,
               builder: (context, _) {
-                if (!context.read<AuthProvider>().isLoading)
+                if (!context.read<AuthProvider>().isLoading) {
                   return const SizedBox.shrink();
+                }
                 debugPrint('Rendering SplashScreen');
                 return const IgnorePointer(
                   ignoring: false,

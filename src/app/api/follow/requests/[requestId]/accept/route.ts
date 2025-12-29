@@ -7,13 +7,13 @@ import { withAuth, withRateLimit, withLogging } from "@/lib/middleware";
 // Accept a follow request
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { requestId: string } }
+  { params }: { params: Promise<{ requestId: string }> }
 ) {
+  const { requestId } = await params;
   return withLogging(async (req) => {
     return withRateLimit(req, async (rateLimitedReq) => {
       return withAuth(rateLimitedReq, async (authenticatedReq) => {
         try {
-          const requestId = params.requestId;
           const currentUserId = authenticatedReq.user!.userId;
 
           // Find the follow request
@@ -53,28 +53,46 @@ export async function PUT(
             );
           }
 
-          // Use transaction to create follow relationship and update request status
-          const [follow, updatedRequest] = await prisma.$transaction([
-            prisma.follow.create({
-              data: {
-                followerId: followRequest.followerId,
-                followeeId: followRequest.followeeId,
+          // Use transaction to handle race conditions
+          const result = await prisma.$transaction(async (tx) => {
+            // Check if follow relationship already exists (race condition protection)
+            const existingFollow = await tx.follow.findUnique({
+              where: {
+                followerId_followeeId: {
+                  followerId: followRequest.followerId,
+                  followeeId: followRequest.followeeId,
+                },
               },
-            }),
-            prisma.followRequest.update({
+            });
+
+            let follow;
+            if (existingFollow) {
+              follow = existingFollow;
+            } else {
+              follow = await tx.follow.create({
+                data: {
+                  followerId: followRequest.followerId,
+                  followeeId: followRequest.followeeId,
+                },
+              });
+            }
+
+            const updatedRequest = await tx.followRequest.update({
               where: { id: requestId },
               data: {
                 status: "ACCEPTED",
                 updatedAt: new Date(),
               },
-            }),
-          ]);
+            });
+
+            return { follow, updatedRequest };
+          });
 
           const followResponse: FollowResponse = {
-            id: follow.id,
-            followerId: follow.followerId,
-            followeeId: follow.followeeId,
-            createdAt: follow.createdAt.toISOString(),
+            id: result.follow.id,
+            followerId: result.follow.followerId,
+            followeeId: result.follow.followeeId,
+            createdAt: result.follow.createdAt.toISOString(),
           };
 
           return NextResponse.json<ApiResponse<FollowResponse>>(

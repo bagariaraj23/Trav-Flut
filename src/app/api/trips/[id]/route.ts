@@ -6,10 +6,11 @@ import { ApiResponse, TripResponse } from "@/types/api";
 // Get trip by ID
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const tripId = params.id;
+    const { id } = await params;
+    const tripId = id;
 
     // Verify authentication
     const authHeader = request.headers.get("authorization");
@@ -219,11 +220,13 @@ export async function GET(
           createdAt: entry.author.createdAt.toISOString(),
           updatedAt: entry.author.updatedAt.toISOString(),
         },
-        taggedUsers: entry.taggedUsers.map((tag) => ({
-          ...tag.taggedUser,
-          createdAt: tag.taggedUser.createdAt.toISOString(),
-          updatedAt: tag.taggedUser.updatedAt.toISOString(),
-        })),
+        taggedUsers: entry.taggedUsers && entry.taggedUsers.length > 0
+          ? entry.taggedUsers.map((tag) => ({
+              ...tag.taggedUser,
+              createdAt: tag.taggedUser.createdAt.toISOString(),
+              updatedAt: tag.taggedUser.updatedAt.toISOString(),
+            }))
+          : [],
         media: entry.media
           ? {
               ...entry.media,

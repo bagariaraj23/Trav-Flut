@@ -65,14 +65,14 @@ TripJoinRequestTrip _$TripJoinRequestTripFromJson(Map<String, dynamic> json) =>
     );
 
 Map<String, dynamic> _$TripJoinRequestTripToJson(
-        TripJoinRequestTrip instance) =>
-    <String, dynamic>{
-      'id': instance.id,
-      'title': instance.title,
-      'coverMediaId': instance.coverMediaId,
-      'userId': instance.userId,
-      'destinations': instance.destinations,
-      'status': instance.status,
-      'startDate': instance.startDate?.toIso8601String(),
-      'endDate': instance.endDate?.toIso8601String(),
-    };
+  TripJoinRequestTrip instance,
+) => <String, dynamic>{
+  'id': instance.id,
+  'title': instance.title,
+  'coverMediaId': instance.coverMediaId,
+  'userId': instance.userId,
+  'destinations': instance.destinations,
+  'status': instance.status,
+  'startDate': instance.startDate?.toIso8601String(),
+  'endDate': instance.endDate?.toIso8601String(),
+};

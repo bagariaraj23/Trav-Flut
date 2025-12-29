@@ -9,55 +9,50 @@ part of 'api_response.dart';
 ApiResponse<T> _$ApiResponseFromJson<T>(
   Map<String, dynamic> json,
   T Function(Object? json) fromJsonT,
-) =>
-    ApiResponse<T>(
-      success: json['success'] as bool,
-      data: _$nullableGenericFromJson(json['data'], fromJsonT),
-      error: json['error'] as String?,
-      message: json['message'] as String?,
-    );
+) => ApiResponse<T>(
+  success: json['success'] as bool,
+  data: _$nullableGenericFromJson(json['data'], fromJsonT),
+  error: json['error'] as String?,
+  message: json['message'] as String?,
+);
 
 Map<String, dynamic> _$ApiResponseToJson<T>(
   ApiResponse<T> instance,
   Object? Function(T value) toJsonT,
-) =>
-    <String, dynamic>{
-      'success': instance.success,
-      'data': _$nullableGenericToJson(instance.data, toJsonT),
-      'error': instance.error,
-      'message': instance.message,
-    };
+) => <String, dynamic>{
+  'success': instance.success,
+  'data': _$nullableGenericToJson(instance.data, toJsonT),
+  'error': instance.error,
+  'message': instance.message,
+};
 
 T? _$nullableGenericFromJson<T>(
   Object? input,
   T Function(Object? json) fromJson,
-) =>
-    input == null ? null : fromJson(input);
+) => input == null ? null : fromJson(input);
 
 Object? _$nullableGenericToJson<T>(
   T? input,
   Object? Function(T value) toJson,
-) =>
-    input == null ? null : toJson(input);
+) => input == null ? null : toJson(input);
 
 PaginatedResponse<T> _$PaginatedResponseFromJson<T>(
   Map<String, dynamic> json,
   T Function(Object? json) fromJsonT,
-) =>
-    PaginatedResponse<T>(
-      data: (json['data'] as List<dynamic>).map(fromJsonT).toList(),
-      pagination:
-          PaginationInfo.fromJson(json['pagination'] as Map<String, dynamic>),
-    );
+) => PaginatedResponse<T>(
+  data: (json['data'] as List<dynamic>).map(fromJsonT).toList(),
+  pagination: PaginationInfo.fromJson(
+    json['pagination'] as Map<String, dynamic>,
+  ),
+);
 
 Map<String, dynamic> _$PaginatedResponseToJson<T>(
   PaginatedResponse<T> instance,
   Object? Function(T value) toJsonT,
-) =>
-    <String, dynamic>{
-      'data': instance.data.map(toJsonT).toList(),
-      'pagination': instance.pagination,
-    };
+) => <String, dynamic>{
+  'data': instance.data.map(toJsonT).toList(),
+  'pagination': instance.pagination,
+};
 
 PaginationInfo _$PaginationInfoFromJson(Map<String, dynamic> json) =>
     PaginationInfo(

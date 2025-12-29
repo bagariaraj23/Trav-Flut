@@ -44,6 +44,28 @@ class ApiService {
     _onUnauthorized = callback;
   }
 
+  // Helper method to sanitize sensitive data from logs
+  dynamic _sanitizeRequestData(dynamic data) {
+    if (data == null) return null;
+    
+    if (data is Map) {
+      final sanitized = Map<String, dynamic>.from(data);
+      // Remove or mask sensitive fields
+      if (sanitized.containsKey('password')) {
+        sanitized['password'] = '***REDACTED***';
+      }
+      if (sanitized.containsKey('newPassword')) {
+        sanitized['newPassword'] = '***REDACTED***';
+      }
+      if (sanitized.containsKey('currentPassword')) {
+        sanitized['currentPassword'] = '***REDACTED***';
+      }
+      return sanitized;
+    }
+    
+    return data;
+  }
+
   void _setupInterceptors() {
     debugPrint('[ApiService] Setting up interceptors');
 
@@ -53,7 +75,8 @@ class ApiService {
         debugPrint('[ApiService] Request: ${options.method} ${options.path}');
         debugPrint('[ApiService] Request headers: ${options.headers}');
         if (options.data != null) {
-          debugPrint('[ApiService] Request data: ${options.data}');
+          final sanitizedData = _sanitizeRequestData(options.data);
+          debugPrint('[ApiService] Request data: $sanitizedData');
         }
 
         if (_storageService != null) {
@@ -589,14 +612,20 @@ class ApiService {
       debugPrint('[ApiService] Getting followers for user: $userId');
       final response =
           await _dio.get('/users/$userId/followers', queryParameters: {
-        'page': page,
-        'limit': limit,
+        'page': page.toString(),
+        'limit': limit.toString(),
       });
       debugPrint('[ApiService] Get followers response: ${response.statusCode}');
+      debugPrint('[ApiService] Get followers response data: ${response.data}');
 
       if (response.data['success'] && response.data['data'] != null) {
         final data = response.data['data'];
-        final users = (data['followers'] as List<dynamic>)
+        debugPrint('[ApiService] Followers data keys: ${data.keys}');
+        debugPrint('[ApiService] Followers array: ${data['followers']}');
+        
+        // Handle both 'followers' and 'items' keys for compatibility
+        final followersList = data['followers'] ?? data['items'] ?? [];
+        final users = (followersList as List<dynamic>)
             .map((follower) => User.fromJson(follower))
             .toList();
 
@@ -649,10 +678,16 @@ class ApiService {
         'limit': limit.toString(),
       });
       debugPrint('[ApiService] Get following response: ${response.statusCode}');
+      debugPrint('[ApiService] Get following response data: ${response.data}');
 
       if (response.data['success'] && response.data['data'] != null) {
         final data = response.data['data'];
-        final users = (data['following'] as List<dynamic>)
+        debugPrint('[ApiService] Following data keys: ${data.keys}');
+        debugPrint('[ApiService] Following array: ${data['following']}');
+        
+        // Handle both 'following' and 'items' keys for compatibility
+        final followingList = data['following'] ?? data['items'] ?? [];
+        final users = (followingList as List<dynamic>)
             .map((user) => User.fromJson(user))
             .toList();
 
@@ -1281,6 +1316,15 @@ class ApiService {
       });
       debugPrint('[ApiService] Get home feed response: ${response.statusCode}');
 
+      // Check if response is valid JSON
+      if (response.data is! Map<String, dynamic>) {
+        debugPrint('[ApiService] Get home feed: Invalid response format (expected JSON)');
+        return ApiResponse<Map<String, dynamic>>(
+          success: false,
+          error: 'Invalid server response format',
+        );
+      }
+
       if (response.data['success'] && response.data['data'] != null) {
         return ApiResponse<Map<String, dynamic>>(
           success: true,
@@ -1296,9 +1340,18 @@ class ApiService {
       }
     } on DioException catch (e) {
       debugPrint('[ApiService] Get home feed DioException: ${e.message}');
+      String errorMessage = 'Network error occurred';
+      if (e.response?.data != null) {
+        if (e.response!.data is Map<String, dynamic>) {
+          errorMessage = e.response!.data['error'] ?? 'Network error occurred';
+        } else if (e.response!.data is String) {
+          // Server returned HTML error page (e.g., 500 error)
+          errorMessage = 'Server error (${e.response?.statusCode ?? 'unknown'})';
+        }
+      }
       return ApiResponse<Map<String, dynamic>>(
         success: false,
-        error: e.response?.data['error'] ?? 'Network error occurred',
+        error: errorMessage,
       );
     } catch (e) {
       debugPrint('[ApiService] Get home feed unexpected error: $e');
@@ -2020,6 +2073,39 @@ class ApiService {
     } catch (e) {
       debugPrint('[ApiService] Get sent trip invitations unexpected error: $e');
       return ApiResponse<List<TripJoinRequest>>(
+        success: false,
+        error: 'An unexpected error occurred',
+      );
+    }
+  }
+
+  Future<ApiResponse<void>> cancelTripInvitation(
+      String tripId, String inviteId) async {
+    try {
+      debugPrint(
+          '[ApiService] Cancelling trip invitation $inviteId for trip: $tripId');
+      final response = await _dio.delete(
+        '/trips/$tripId/invites',
+        queryParameters: {'inviteId': inviteId},
+      );
+      debugPrint(
+          '[ApiService] Cancel trip invitation response: ${response.statusCode}');
+
+      return ApiResponse<void>(
+        success: response.data['success'],
+        error: response.data['error'],
+        message: response.data['message'],
+      );
+    } on DioException catch (e) {
+      debugPrint(
+          '[ApiService] Cancel trip invitation DioException: ${e.message}');
+      return ApiResponse<void>(
+        success: false,
+        error: e.response?.data['error'] ?? 'Network error occurred',
+      );
+    } catch (e) {
+      debugPrint('[ApiService] Cancel trip invitation unexpected error: $e');
+      return ApiResponse<void>(
         success: false,
         error: 'An unexpected error occurred',
       );

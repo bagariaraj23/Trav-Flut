@@ -5,7 +5,7 @@ import 'package:tripthread/providers/trip_provider.dart';
 import 'package:tripthread/models/trip_join_request.dart';
 
 class TripInvitationsScreen extends StatefulWidget {
-  const TripInvitationsScreen({Key? key}) : super(key: key);
+  const TripInvitationsScreen({super.key});
 
   @override
   State<TripInvitationsScreen> createState() => _TripInvitationsScreenState();
@@ -51,20 +51,31 @@ class _TripInvitationsScreenState extends State<TripInvitationsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Trip Invitations'),
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
-          onPressed: () {
-            if (context.canPop()) {
-              context.pop();
-            } else {
-              context.go('/home');
-            }
-          },
+    return PopScope(
+      canPop: true,
+      onPopInvokedWithResult: (didPop, result) {
+        if (!didPop) {
+          if (context.canPop()) {
+            context.pop();
+          } else {
+            context.go('/home');
+          }
+        }
+      },
+      child: Scaffold(
+        appBar: AppBar(
+          title: const Text('Trip Invitations'),
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back),
+            onPressed: () {
+              if (context.canPop()) {
+                context.pop();
+              } else {
+                context.go('/home');
+              }
+            },
+          ),
         ),
-      ),
       body: Consumer<TripProvider>(
         builder: (context, tripProvider, child) {
           if (tripProvider.isTripInvitesLoading &&
@@ -153,6 +164,7 @@ class _TripInvitationsScreenState extends State<TripInvitationsScreen> {
             ),
           );
         },
+      ),
       ),
     );
   }
@@ -355,6 +367,8 @@ class _TripInvitationsScreenState extends State<TripInvitationsScreen> {
   }
 
   String _formatDate(DateTime date) {
-    return '${date.day}/${date.month}/${date.year}';
+    // Extract only date components to avoid timezone issues
+    final dateOnly = DateTime.utc(date.year, date.month, date.day);
+    return '${dateOnly.day}/${dateOnly.month}/${dateOnly.year}';
   }
 }

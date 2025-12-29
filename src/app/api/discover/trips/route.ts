@@ -134,6 +134,7 @@ export async function GET(request: NextRequest) {
                   updatedAt: true,
                 },
               },
+              coverMedia: true,
               _count: {
                 select: {
                   threadEntries: true,
@@ -142,12 +143,7 @@ export async function GET(request: NextRequest) {
                 },
               },
             },
-            orderBy: [
-              // Prioritize ongoing trips
-              { status: "asc" },
-              { updatedAt: "desc" },
-              { createdAt: "desc" },
-            ],
+            // Note: We'll sort in memory to prioritize followed users and engagement
             skip: offset,
             take: limitNum,
           });
@@ -155,6 +151,36 @@ export async function GET(request: NextRequest) {
           console.log(
             `[API] GET /discover/trips - Found ${trips.length} trips`
           );
+
+          // Sort trips: followed users first, then by engagement (participants, media, entries)
+          trips.sort((a, b) => {
+            // 1. Prioritize trips from followed users
+            const aIsFollowed = followedUserIds.includes(a.userId);
+            const bIsFollowed = followedUserIds.includes(b.userId);
+            if (aIsFollowed && !bIsFollowed) return -1;
+            if (!aIsFollowed && bIsFollowed) return 1;
+
+            // 2. Then by engagement: participants + media + entries
+            const aEngagement = 
+              (a._count?.participants ?? 0) + 
+              (a._count?.media ?? 0) + 
+              (a._count?.threadEntries ?? 0);
+            const bEngagement = 
+              (b._count?.participants ?? 0) + 
+              (b._count?.media ?? 0) + 
+              (b._count?.threadEntries ?? 0);
+            const engagementDiff = bEngagement - aEngagement;
+            if (engagementDiff !== 0) return engagementDiff;
+
+            // 3. Then by status (ongoing before ended)
+            if (a.status !== b.status) {
+              if (a.status === "ONGOING") return -1;
+              if (b.status === "ONGOING") return 1;
+            }
+
+            // 4. Finally by updated date
+            return b.updatedAt.getTime() - a.updatedAt.getTime();
+          });
 
           // Transform to response format
           const tripsResponse: TripResponse[] = trips.map((trip) => ({
@@ -176,6 +202,18 @@ export async function GET(request: NextRequest) {
                   bio: trip.user.bio ?? undefined,
                   createdAt: trip.user.createdAt.toISOString(),
                   updatedAt: trip.user.updatedAt.toISOString(),
+                }
+              : undefined,
+            coverMedia: trip.coverMedia
+              ? {
+                  ...trip.coverMedia,
+                  filename: trip.coverMedia.filename ?? undefined,
+                  size: trip.coverMedia.size ?? undefined,
+                  width: trip.coverMedia.width ?? undefined,
+                  height: trip.coverMedia.height ?? undefined,
+                  duration: trip.coverMedia.duration ?? undefined,
+                  tripId: trip.coverMedia.tripId ?? undefined,
+                  createdAt: trip.coverMedia.createdAt.toISOString(),
                 }
               : undefined,
           }));

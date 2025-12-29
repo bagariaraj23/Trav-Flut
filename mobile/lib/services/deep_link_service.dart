@@ -19,21 +19,24 @@ class DeepLinkService {
   Future<void> initialize() async {
     try {
       // Handle initial link if app was launched from a link
-      final initialLink = await _appLinks.getInitialAppLink();
+      final initialLink = await _appLinks.getInitialLink();
       if (initialLink != null) {
         debugPrint('[DeepLinkService] Initial link: $initialLink');
         _handleLink(initialLink.toString());
       }
 
       // Listen to incoming links
-      _subscription = _appLinks.uriLinkStream.listen((Uri? uri) {
-        if (uri != null) {
-          debugPrint('[DeepLinkService] Incoming link: $uri');
-          _handleLink(uri.toString());
-        }
-      }, onError: (err) {
-        debugPrint('[DeepLinkService] Error handling deep link: $err');
-      });
+      _subscription = _appLinks.uriLinkStream.listen(
+        (Uri? uri) {
+          if (uri != null) {
+            debugPrint('[DeepLinkService] Incoming link: $uri');
+            _handleLink(uri.toString());
+          }
+        },
+        onError: (err) {
+          debugPrint('[DeepLinkService] Error handling deep link: $err');
+        },
+      );
     } catch (e) {
       debugPrint('[DeepLinkService] Error initializing deep links: $e');
     }
@@ -47,15 +50,19 @@ class DeepLinkService {
 
     try {
       final uri = Uri.parse(link);
-      
+
       // Handle password reset links
       if (uri.path.contains('reset') || uri.queryParameters.containsKey('t')) {
         final token = uri.queryParameters['t'];
         if (token != null) {
-          debugPrint('[DeepLinkService] Navigating to reset password with token');
+          debugPrint(
+            '[DeepLinkService] Navigating to reset password with token',
+          );
           _router!.go('/reset-password?t=$token');
         } else {
-          debugPrint('[DeepLinkService] Reset link without token, navigating to forgot password');
+          debugPrint(
+            '[DeepLinkService] Reset link without token, navigating to forgot password',
+          );
           _router!.go('/forgot-password');
         }
         return;

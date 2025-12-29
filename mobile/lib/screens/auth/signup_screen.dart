@@ -8,7 +8,7 @@ import 'package:tripthread/widgets/loading_button.dart';
 import 'package:flutter/services.dart';
 
 class SignupScreen extends StatefulWidget {
-  const SignupScreen({Key? key}) : super(key: key);
+  const SignupScreen({super.key});
 
   @override
   State<SignupScreen> createState() => _SignupScreenState();
@@ -54,10 +54,10 @@ class _SignupScreenState extends State<SignupScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return WillPopScope(
-      onWillPop: () async {
+    return PopScope(
+      canPop: true,
+      onPopInvokedWithResult: (didPop, result) {
         SystemNavigator.pop();
-        return false;
       },
       child: Scaffold(
         body: SafeArea(
@@ -110,9 +110,11 @@ class _SignupScreenState extends State<SignupScreen> {
                     prefixIcon: Icons.person_outlined,
                     validator: MultiValidator([
                       RequiredValidator(errorText: 'Name is required'),
-                      MinLengthValidator(2,
-                          errorText: 'Name must be at least 2 characters'),
-                    ]),
+                      MinLengthValidator(
+                        2,
+                        errorText: 'Name must be at least 2 characters',
+                      ),
+                    ]).call,
                     onChanged: (_) {
                       final authProvider = context.read<AuthProvider>();
                       if (authProvider.error != null) {
@@ -156,7 +158,7 @@ class _SignupScreenState extends State<SignupScreen> {
                     validator: MultiValidator([
                       RequiredValidator(errorText: 'Email is required'),
                       EmailValidator(errorText: 'Please enter a valid email'),
-                    ]),
+                    ]).call,
                     onChanged: (_) {
                       final authProvider = context.read<AuthProvider>();
                       if (authProvider.error != null) {
@@ -187,9 +189,11 @@ class _SignupScreenState extends State<SignupScreen> {
                     ),
                     validator: MultiValidator([
                       RequiredValidator(errorText: 'Password is required'),
-                      MinLengthValidator(8,
-                          errorText: 'Password must be at least 8 characters'),
-                    ]),
+                      MinLengthValidator(
+                        8,
+                        errorText: 'Password must be at least 8 characters',
+                      ),
+                    ]).call,
                     onChanged: (_) {
                       final authProvider = context.read<AuthProvider>();
                       if (authProvider.error != null) {
@@ -220,16 +224,14 @@ class _SignupScreenState extends State<SignupScreen> {
                             margin: const EdgeInsets.only(bottom: 16),
                             padding: const EdgeInsets.all(12),
                             decoration: BoxDecoration(
-                              color: Theme.of(context)
-                                  .colorScheme
-                                  .error
-                                  .withOpacity(0.1),
+                              color: Theme.of(
+                                context,
+                              ).colorScheme.error.withValues(alpha: 0.1),
                               borderRadius: BorderRadius.circular(8),
                               border: Border.all(
-                                color: Theme.of(context)
-                                    .colorScheme
-                                    .error
-                                    .withOpacity(0.3),
+                                color: Theme.of(
+                                  context,
+                                ).colorScheme.error.withValues(alpha: 0.3),
                               ),
                             ),
                             child: Row(
@@ -244,8 +246,9 @@ class _SignupScreenState extends State<SignupScreen> {
                                   child: Text(
                                     authProvider.error!,
                                     style: TextStyle(
-                                      color:
-                                          Theme.of(context).colorScheme.error,
+                                      color: Theme.of(
+                                        context,
+                                      ).colorScheme.error,
                                       fontSize: 14,
                                     ),
                                   ),

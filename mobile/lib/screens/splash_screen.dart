@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_spinkit/flutter_spinkit.dart';
 
 class SplashScreen extends StatelessWidget {
-  const SplashScreen({Key? key}) : super(key: key);
+  const SplashScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -33,9 +33,9 @@ class SplashScreen extends StatelessWidget {
             Text(
               'TripThread',
               style: Theme.of(context).textTheme.displayMedium?.copyWith(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                  ),
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+              ),
             ),
 
             const SizedBox(height: 8),
@@ -44,8 +44,8 @@ class SplashScreen extends StatelessWidget {
             Text(
               'Document your journey',
               style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                    color: Colors.white.withOpacity(0.8),
-                  ),
+                color: Colors.white.withValues(alpha: 0.8),
+              ),
             ),
 
             const SizedBox(height: 48),
@@ -54,10 +54,7 @@ class SplashScreen extends StatelessWidget {
             const SizedBox(
               width: 60, // enough horizontal space for the three dots
               height: 24,
-              child: SpinKitThreeBounce(
-                color: Colors.white,
-                size: 16,
-              ),
+              child: SpinKitThreeBounce(color: Colors.white, size: 16),
             ),
           ],
         ),

@@ -87,22 +87,43 @@ class TripProvider extends ChangeNotifier {
     }
   }
 
-  // Create new trip
-  Future<bool> createTrip(CreateTripRequest request) async {
+  // Check for trip conflicts
+  Future<TripConflictInfo?> checkTripConflicts() async {
     try {
-      print('[DEBUG] TripProvider.createTrip called');
-      print('[DEBUG] Request data: ${request.toJson()}');
+      final response = await _tripService.checkTripConflicts();
+      if (response.success && response.data != null) {
+        return response.data;
+      }
+      return null;
+    } catch (e) {
+      debugPrint('Check trip conflicts error: $e');
+      return null;
+    }
+  }
+
+  // Create new trip
+  Future<bool> createTrip(
+    CreateTripRequest request, {
+    bool replaceExisting = false,
+  }) async {
+    try {
+      debugPrint('[DEBUG] TripProvider.createTrip called');
+      debugPrint('[DEBUG] Request data: ${request.toJson()}');
+      debugPrint('[DEBUG] Replace existing: $replaceExisting');
 
       _isLoading = true;
       _error = null;
       notifyListeners();
 
-      final response = await _tripService.createTrip(request);
+      final response = await _tripService.createTrip(
+        request,
+        replaceExisting: replaceExisting,
+      );
 
-      print('[DEBUG] API response received:');
-      print('[DEBUG] Success: ${response.success}');
-      print('[DEBUG] Error: ${response.error}');
-      print('[DEBUG] Data: ${response.data}');
+      debugPrint('[DEBUG] API response received:');
+      debugPrint('[DEBUG] Success: ${response.success}');
+      debugPrint('[DEBUG] Error: ${response.error}');
+      debugPrint('[DEBUG] Data: ${response.data}');
 
       if (response.success && response.data != null) {
         _currentTrip = response.data;
@@ -121,7 +142,7 @@ class TripProvider extends ChangeNotifier {
         return false;
       }
     } catch (e) {
-      print('[DEBUG] Exception in createTrip: $e');
+      debugPrint('[DEBUG] Exception in createTrip: $e');
       _error = 'An unexpected error occurred';
       _isLoading = false;
       notifyListeners();
@@ -173,6 +194,10 @@ class TripProvider extends ChangeNotifier {
     final id = tripId ?? _currentTrip?.id;
     if (id == null) return;
 
+    // Clear entries immediately to prevent showing old trip's entries
+    _currentTripEntries = [];
+    notifyListeners();
+
     try {
       final response = await _tripService.getThreadEntries(id);
 
@@ -188,6 +213,12 @@ class TripProvider extends ChangeNotifier {
       notifyListeners();
       debugPrint('Load trip entries error: $e');
     }
+  }
+
+  // Clear current trip entries (useful when switching trips)
+  void clearCurrentTripEntries() {
+    _currentTripEntries = [];
+    notifyListeners();
   }
 
   // Add thread entry
@@ -220,23 +251,25 @@ class TripProvider extends ChangeNotifier {
   }
 
   // Add text entry
-  Future<bool> addTextEntry(String text, {String? tripId}) async {
+  Future<bool> addTextEntry(String text, {String? tripId, List<String>? taggedUsernames}) async {
     return await addThreadEntry(
         CreateThreadEntryRequest(
           type: ThreadEntryType.text,
           contentText: text,
+          taggedUsernames: taggedUsernames,
         ),
         tripId: tripId);
   }
 
   // Add media entry
   Future<bool> addMediaEntry(String mediaId,
-      {String? caption, String? tripId}) async {
+      {String? caption, String? tripId, List<String>? taggedUsernames}) async {
     return await addThreadEntry(
         CreateThreadEntryRequest(
           type: ThreadEntryType.media,
           mediaId: mediaId,
           contentText: caption,
+          taggedUsernames: taggedUsernames,
         ),
         tripId: tripId);
   }
@@ -248,8 +281,13 @@ class TripProvider extends ChangeNotifier {
     String? contentText,
     String? placeId,
     List<String>? taggedUserIds,
+    List<String>? taggedUsernames,
   }) async {
     try {
+      // Clear any previous errors
+      _error = null;
+      notifyListeners();
+      
       debugPrint(
           '[TripProvider] Adding thread entry: type=$type, placeId=$placeId');
 
@@ -265,6 +303,7 @@ class TripProvider extends ChangeNotifier {
         mediaId: null,
         placeId: placeId,
         taggedUserIds: taggedUserIds,
+        taggedUsernames: taggedUsernames,
       );
 
       final response = await _tripService.createThreadEntry(
@@ -273,8 +312,10 @@ class TripProvider extends ChangeNotifier {
       );
 
       debugPrint('[TripProvider] Create entry response: ${response.success}');
+      debugPrint('[TripProvider] Create entry error: ${response.error}');
 
       if (response.success && response.data != null) {
+        _error = null;
         _currentTripEntries.add(response.data!);
 
         // Update current trip if loaded
@@ -289,12 +330,14 @@ class TripProvider extends ChangeNotifier {
         return true;
       } else {
         _error = response.error ?? 'Failed to add entry';
+        debugPrint('[TripProvider] Entry creation failed: $_error');
         notifyListeners();
         return false;
       }
-    } catch (e) {
-      _error = 'An unexpected error occurred';
+    } catch (e, stackTrace) {
+      _error = 'An unexpected error occurred: ${e.toString()}';
       debugPrint('[TripProvider] Add thread entry error: $e');
+      debugPrint('[TripProvider] Stack trace: $stackTrace');
       notifyListeners();
       return false;
     }
@@ -341,6 +384,72 @@ class TripProvider extends ChangeNotifier {
     }
   }
 
+  Future<bool> updateTripCover({
+    required String tripId,
+    required String coverMediaId,
+    Media? fallbackMedia,
+  }) async {
+    try {
+      final response = await _tripService.updateTripCover(
+        tripId,
+        coverMediaId,
+      );
+
+      if (!response.success) {
+        _error = response.error ?? 'Failed to update trip cover';
+        notifyListeners();
+        return false;
+      }
+
+      final media = response.data ?? fallbackMedia;
+      if (media == null) {
+        _error = 'Trip cover updated but media payload was missing';
+        notifyListeners();
+        return false;
+      }
+
+      try {
+        if (_currentTrip?.id == tripId) {
+          _currentTrip = _currentTrip!.copyWith(
+            coverMediaId: media.id,
+            coverMedia: media,
+          );
+        }
+
+        // Update trips list safely
+        final updatedTrips = <Trip>[];
+        for (final trip in _trips) {
+          if (trip.id == tripId) {
+            updatedTrips.add(
+              trip.copyWith(
+                coverMediaId: media.id,
+                coverMedia: media,
+              ),
+            );
+          } else {
+            updatedTrips.add(trip);
+          }
+        }
+        _trips = updatedTrips;
+
+        notifyListeners();
+        return true;
+      } catch (e, stackTrace) {
+        debugPrint('Update trip cover error updating state: $e');
+        debugPrint('Stack trace: $stackTrace');
+        _error = 'Failed to update trip cover state: $e';
+        notifyListeners();
+        return false;
+      }
+    } catch (e, stackTrace) {
+      _error = 'Failed to update trip cover';
+      notifyListeners();
+      debugPrint('Update trip cover error: $e');
+      debugPrint('Stack trace: $stackTrace');
+      return false;
+    }
+  }
+
   // Trip invitation methods
   Future<bool> sendTripInvitation(String tripId, String receiverId) async {
     try {
@@ -368,6 +477,36 @@ class TripProvider extends ChangeNotifier {
       _isLoading = false;
       notifyListeners();
       debugPrint('Send trip invitation error: $e');
+      return false;
+    }
+  }
+
+  Future<bool> cancelTripInvitation(String tripId, String inviteId) async {
+    try {
+      _isLoading = true;
+      _error = null;
+      notifyListeners();
+
+      final response =
+          await _tripService.cancelTripInvitation(tripId, inviteId);
+
+      if (response.success) {
+        // Remove the cancelled invitation from the list
+        _sentTripInvitations.removeWhere((invite) => invite.id == inviteId);
+        _isLoading = false;
+        notifyListeners();
+        return true;
+      } else {
+        _error = response.error ?? 'Failed to cancel invitation';
+        _isLoading = false;
+        notifyListeners();
+        return false;
+      }
+    } catch (e) {
+      _error = 'An unexpected error occurred';
+      _isLoading = false;
+      notifyListeners();
+      debugPrint('Cancel trip invitation error: $e');
       return false;
     }
   }

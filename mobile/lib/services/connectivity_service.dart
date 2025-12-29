@@ -20,12 +20,14 @@ class ConnectivityService extends ChangeNotifier {
   Future<void> initialize() async {
     try {
       final results = await _connectivity.checkConnectivity();
-      _connectionStatus =
-          results.isNotEmpty ? results.first : ConnectivityResult.none;
+      _connectionStatus = results.isNotEmpty
+          ? results.first
+          : ConnectivityResult.none;
       _connectivitySubscription = _connectivity.onConnectivityChanged.listen(
         (results) {
           _updateConnectionStatus(
-              results.isNotEmpty ? results.first : ConnectivityResult.none);
+            results.isNotEmpty ? results.first : ConnectivityResult.none,
+          );
         },
         onError: (error) {
           debugPrint('Connectivity error: $error');
@@ -47,14 +49,16 @@ class ConnectivityService extends ChangeNotifier {
 
   Future<bool> hasInternetConnection() async {
     try {
-      final result = await _connectivity.checkConnectivity();
-      return result != ConnectivityResult.none;
+      final List<ConnectivityResult> result = await _connectivity
+          .checkConnectivity();
+      return result.isNotEmpty && !result.contains(ConnectivityResult.none);
     } catch (e) {
       debugPrint('Error checking internet connection: $e');
       return false;
     }
   }
 
+  @override
   void dispose() {
     _connectivitySubscription.cancel();
     super.dispose();

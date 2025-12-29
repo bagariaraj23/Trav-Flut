@@ -73,12 +73,38 @@ export class TripFinalizerService {
         coverMediaUrl,
         generationStatus: GenerationStatus.READY,
       },
+      select: {
+        id: true,
+        tripId: true,
+        summaryText: true,
+        curatedMedia: true,
+        caption: true,
+        coverMediaUrl: true,
+        generationStatus: true,
+        isPublished: true,
+        publishedAt: true,
+        createdAt: true,
+        updatedAt: true,
+      },
     });
   }
 
   static async getFinalPost(tripId: string) {
     const finalPost = await prisma.tripFinalPost.findUnique({
       where: { tripId },
+      select: {
+        id: true,
+        tripId: true,
+        summaryText: true,
+        curatedMedia: true,
+        caption: true,
+        coverMediaUrl: true,
+        generationStatus: true,
+        isPublished: true,
+        publishedAt: true,
+        createdAt: true,
+        updatedAt: true,
+      },
     });
 
     if (!finalPost) {
@@ -136,6 +162,19 @@ export class TripFinalizerService {
         ...data,
         generationStatus: GenerationStatus.READY,
       },
+      select: {
+        id: true,
+        tripId: true,
+        summaryText: true,
+        curatedMedia: true,
+        caption: true,
+        coverMediaUrl: true,
+        generationStatus: true,
+        isPublished: true,
+        publishedAt: true,
+        createdAt: true,
+        updatedAt: true,
+      },
     });
   }
 
@@ -187,6 +226,19 @@ export class TripFinalizerService {
         isPublished: true,
         publishedAt: new Date(),
         generationStatus: GenerationStatus.PUBLISHED,
+      },
+      select: {
+        id: true,
+        tripId: true,
+        summaryText: true,
+        curatedMedia: true,
+        caption: true,
+        coverMediaUrl: true,
+        generationStatus: true,
+        isPublished: true,
+        publishedAt: true,
+        createdAt: true,
+        updatedAt: true,
       },
     });
   }

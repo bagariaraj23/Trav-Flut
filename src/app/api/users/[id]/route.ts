@@ -7,10 +7,11 @@ import { ApiResponse, UserProfile, UserStats } from "@/types/api";
 // Get user profile
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const userId = params.id;
+    const { id } = await params;
+    const userId = id;
 
     // Get current user from token (optional)
     const authHeader = request.headers.get("authorization");
@@ -126,12 +127,11 @@ export async function GET(
 // Update user profile
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const userId = params.id;
-
-    // Verify authentication
+    const { id } = await params;
+    const userId = id;
     const authHeader = request.headers.get("authorization");
     if (!authHeader?.startsWith("Bearer ")) {
       return NextResponse.json<ApiResponse>(
@@ -142,10 +142,8 @@ export async function PUT(
         { status: 401 }
       );
     }
-
     const token = authHeader.substring(7);
     const payload = AuthService.verifyAccessToken(token);
-
     if (!payload || payload.userId !== userId) {
       return NextResponse.json<ApiResponse>(
         {
@@ -155,19 +153,28 @@ export async function PUT(
         { status: 403 }
       );
     }
-
     const body = await request.json();
-
-    // Validate input
     const validatedData = updateProfileSchema.parse(body);
-
-    // Check username uniqueness if provided
-    if (validatedData.username) {
-      const existingUser = await prisma.user.findUnique({
-        where: { username: validatedData.username },
+    // Remove manual check; try update and catch P2002 unique error
+    let updatedUser;
+    try {
+      updatedUser = await prisma.user.update({
+        where: { id: userId },
+        data: { ...validatedData, updatedAt: new Date() },
+        select: {
+          id: true,
+          email: true,
+          username: true,
+          name: true,
+          avatarUrl: true,
+          bio: true,
+          isPrivate: true,
+          createdAt: true,
+          updatedAt: true,
+        },
       });
-
-      if (existingUser && existingUser.id !== userId) {
+    } catch (error: any) {
+      if (error.code === "P2002" && error.meta?.target?.includes("username")) {
         return NextResponse.json<ApiResponse>(
           {
             success: false,
@@ -176,41 +183,18 @@ export async function PUT(
           { status: 400 }
         );
       }
+      throw error;
     }
-
-    // Update user
-    const updatedUser = await prisma.user.update({
-      where: { id: userId },
-      data: {
-        ...validatedData,
-        updatedAt: new Date(),
-      },
-      select: {
-        id: true,
-        email: true,
-        username: true,
-        name: true,
-        avatarUrl: true,
-        bio: true,
-        isPrivate: true,
-        createdAt: true,
-        updatedAt: true,
-      },
-    });
-
     const userProfile: UserProfile = {
       ...updatedUser,
       createdAt: updatedUser.createdAt.toISOString(),
       updatedAt: updatedUser.updatedAt.toISOString(),
     };
-
     return NextResponse.json<ApiResponse<UserProfile>>({
       success: true,
       data: userProfile,
     });
   } catch (error: any) {
-    console.error("Update user error:", error);
-
     if (error.name === "ZodError") {
       return NextResponse.json<ApiResponse>(
         {
@@ -220,7 +204,6 @@ export async function PUT(
         { status: 400 }
       );
     }
-
     return NextResponse.json<ApiResponse>(
       {
         success: false,

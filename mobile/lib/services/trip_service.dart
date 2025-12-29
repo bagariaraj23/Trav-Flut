@@ -1,5 +1,6 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/foundation.dart';
 import 'package:tripthread/models/api_response.dart';
 import 'package:tripthread/models/trip.dart';
 import 'package:tripthread/models/trip_join_request.dart';
@@ -77,36 +78,77 @@ class TripService {
     ));
   }
 
-  // Trip CRUD operations
-  Future<ApiResponse<Trip>> createTrip(CreateTripRequest request) async {
+  // Check for trip conflicts (ongoing/future trips)
+  Future<ApiResponse<TripConflictInfo>> checkTripConflicts() async {
     try {
-      print('[DEBUG] TripService.createTrip called');
-      print('[DEBUG] Request data: ${request.toJson()}');
-      print('[DEBUG] Request JSON: ${jsonEncode(request.toJson())}');
+      final response = await _dio.get('/trips/check-conflicts');
+      
+      if (response.data['success'] && response.data['data'] != null) {
+        final data = response.data['data'];
+        final conflictInfo = TripConflictInfo.fromJson(data as Map<String, dynamic>);
+        
+        return ApiResponse<TripConflictInfo>(
+          success: true,
+          data: conflictInfo,
+        );
+      }
+      
+      return ApiResponse<TripConflictInfo>(
+        success: false,
+        error: response.data['error'] ?? 'Failed to check trip conflicts',
+      );
+    } on DioException catch (e) {
+      return ApiResponse<TripConflictInfo>(
+        success: false,
+        error: e.response?.data['error'] ?? 'Network error occurred',
+      );
+    } catch (e) {
+      return ApiResponse<TripConflictInfo>(
+        success: false,
+        error: 'An unexpected error occurred',
+      );
+    }
+  }
 
-      final response = await _dio.post('/trips', data: request.toJson());
+  // Trip CRUD operations
+  Future<ApiResponse<Trip>> createTrip(
+    CreateTripRequest request, {
+    bool replaceExisting = false,
+  }) async {
+    try {
+      debugPrint('[DEBUG] TripService.createTrip called');
+      debugPrint('[DEBUG] Request data: ${request.toJson()}');
+      debugPrint('[DEBUG] Request JSON: ${jsonEncode(request.toJson())}');
+      debugPrint('[DEBUG] Replace existing: $replaceExisting');
 
-      print('[DEBUG] HTTP response received:');
-      print('[DEBUG] Status code: ${response.statusCode}');
-      print('[DEBUG] Response data: ${response.data}');
+      final requestData = request.toJson();
+      if (replaceExisting) {
+        requestData['replaceExisting'] = true;
+      }
+
+      final response = await _dio.post('/trips', data: requestData);
+
+      debugPrint('[DEBUG] HTTP response received:');
+      debugPrint('[DEBUG] Status code: ${response.statusCode}');
+      debugPrint('[DEBUG] Response data: ${response.data}');
 
       return ApiResponse<Trip>.fromJson(
         response.data,
         (json) => Trip.fromJson(json as Map<String, dynamic>),
       );
     } on DioException catch (e) {
-      print('[DEBUG] DioException in createTrip:');
-      print('[DEBUG] Error type: ${e.type}');
-      print('[DEBUG] Error message: ${e.message}');
-      print('[DEBUG] Response status: ${e.response?.statusCode}');
-      print('[DEBUG] Response data: ${e.response?.data}');
+      debugPrint('[DEBUG] DioException in createTrip:');
+      debugPrint('[DEBUG] Error type: ${e.type}');
+      debugPrint('[DEBUG] Error message: ${e.message}');
+      debugPrint('[DEBUG] Response status: ${e.response?.statusCode}');
+      debugPrint('[DEBUG] Response data: ${e.response?.data}');
 
       return ApiResponse<Trip>(
         success: false,
         error: e.response?.data['error'] ?? 'Network error occurred',
       );
     } catch (e) {
-      print('[DEBUG] Unexpected error in createTrip: $e');
+      debugPrint('[DEBUG] Unexpected error in createTrip: $e');
       return ApiResponse<Trip>(
         success: false,
         error: 'An unexpected error occurred',
@@ -196,18 +238,108 @@ class TripService {
     }
   }
 
+  Future<ApiResponse<Media?>> updateTripCover(
+    String tripId,
+    String coverMediaId,
+  ) async {
+    try {
+      final response = await _dio.patch(
+        '/trips/$tripId/cover',
+        data: {'coverMediaId': coverMediaId},
+      );
+
+      Media? media;
+      try {
+        final responseData = response.data;
+        if (responseData is Map<String, dynamic>) {
+          final data = responseData['data'];
+          if (data != null && data is Map<String, dynamic>) {
+            final coverMediaData = data['coverMedia'];
+            if (coverMediaData != null && coverMediaData is Map<String, dynamic>) {
+              media = Media.fromJson(coverMediaData);
+            } else {
+              debugPrint('[TripService] CoverMedia is null or not a Map');
+            }
+          } else {
+            debugPrint('[TripService] Response data.data is null or not a Map');
+          }
+        } else {
+          debugPrint('[TripService] Response data is not a Map: ${responseData.runtimeType}');
+        }
+      } catch (e, stackTrace) {
+        debugPrint('[TripService] Error parsing coverMedia: $e');
+        debugPrint('[TripService] Stack trace: $stackTrace');
+        debugPrint('[TripService] Response data: ${response.data}');
+        // Continue without media, will use fallbackMedia
+      }
+
+      final responseData = response.data;
+      final success = responseData is Map<String, dynamic> 
+          ? (responseData['success'] as bool? ?? false)
+          : false;
+      final error = responseData is Map<String, dynamic>
+          ? (responseData['error'] as String?)
+          : null;
+      final message = responseData is Map<String, dynamic>
+          ? (responseData['message'] as String?)
+          : null;
+
+      return ApiResponse<Media?>(
+        success: success,
+        data: media,
+        error: error,
+        message: message,
+      );
+    } on DioException catch (e) {
+      debugPrint('[TripService] DioException in updateTripCover: $e');
+      debugPrint('[TripService] Status code: ${e.response?.statusCode}');
+      debugPrint('[TripService] Response data: ${e.response?.data}');
+      
+      String errorMessage = 'Network error occurred';
+      if (e.response != null) {
+        if (e.response!.statusCode == 404) {
+          errorMessage = 'Trip cover endpoint not found. Please check if the backend is updated.';
+        } else if (e.response!.data != null) {
+          try {
+            final responseData = e.response!.data;
+            if (responseData is Map<String, dynamic> && responseData.containsKey('error')) {
+              errorMessage = responseData['error'] as String? ?? errorMessage;
+            } else if (responseData is String) {
+              errorMessage = responseData;
+            }
+          } catch (_) {
+            // If parsing fails, use default message
+          }
+        }
+      }
+      
+      return ApiResponse<Media?>(
+        success: false,
+        error: errorMessage,
+      );
+    } catch (e, stackTrace) {
+      debugPrint('[TripService] Unexpected error in updateTripCover: $e');
+      debugPrint('[TripService] Stack trace: $stackTrace');
+      return ApiResponse<Media?>(
+        success: false,
+        error: 'An unexpected error occurred: $e',
+      );
+    }
+  }
+
   // Thread entries
   Future<ApiResponse<TripThreadEntry>> createThreadEntry({
       required String tripId,
       required CreateThreadEntryRequest request,
     }) async {
     try {
-      print('[TripService] Creating thread entry: ${request.toJson()}');
+      debugPrint('[TripService] Creating thread entry: ${request.toJson()}');
 
       final response =
           await _dio.post('/trips/$tripId/entries', data: request.toJson());
 
       debugPrint('[TripService] Create entry response: ${response.statusCode}');
+      debugPrint('[TripService] Create entry response data: ${response.data}');
 
       if (response.statusCode == 201 && response.data['success']) {
         return ApiResponse<TripThreadEntry>(
@@ -216,21 +348,44 @@ class TripService {
         );
       }
       
+      // Handle non-201 responses that still return data
+      final errorMessage = response.data['error'] ?? 
+                          response.data['message'] ?? 
+                          'Failed to create entry';
+      debugPrint('[TripService] Create entry failed: $errorMessage');
       return ApiResponse<TripThreadEntry>(
         success: false,
-        error: response.data['error'] ?? 'Failed to create entry',
+        error: errorMessage,
       );
     } on DioException catch (e) {
-      debugPrint('[TripService] Create entry error: ${e.message}');
+      debugPrint('[TripService] Create entry DioException: ${e.message}');
+      debugPrint('[TripService] Create entry response status: ${e.response?.statusCode}');
+      debugPrint('[TripService] Create entry response data: ${e.response?.data}');
+      
+      // Extract error message from response
+      String errorMessage = 'Network error occurred';
+      if (e.response?.data != null) {
+        if (e.response!.data is Map) {
+          errorMessage = e.response!.data['error'] ?? 
+                        e.response!.data['message'] ?? 
+                        'Failed to create entry';
+        } else if (e.response!.data is String) {
+          errorMessage = e.response!.data;
+        }
+      } else if (e.message != null) {
+        errorMessage = e.message!;
+      }
+      
       return ApiResponse<TripThreadEntry>(
         success: false,
-        error: e.response?.data['error'] ?? 'Network error occurred',
+        error: errorMessage,
       );
-    } catch (e) {
+    } catch (e, stackTrace) {
       debugPrint('[TripService] Create entry unexpected error: $e');
+      debugPrint('[TripService] Stack trace: $stackTrace');
       return ApiResponse<TripThreadEntry>(
         success: false,
-        error: 'An unexpected error occurred',
+        error: 'An unexpected error occurred: ${e.toString()}',
       );
     }
   }
@@ -442,6 +597,27 @@ class TripService {
       );
     } on DioException catch (e) {
       return ApiResponse<List<TripJoinRequest>>(
+        success: false,
+        error: e.response?.data['error'] ?? 'Network error occurred',
+      );
+    }
+  }
+
+  Future<ApiResponse<void>> cancelTripInvitation(
+      String tripId, String inviteId) async {
+    try {
+      final response = await _dio.delete(
+        '/trips/$tripId/invites',
+        queryParameters: {'inviteId': inviteId},
+      );
+
+      return ApiResponse<void>(
+        success: response.data['success'],
+        error: response.data['error'],
+        message: response.data['message'],
+      );
+    } on DioException catch (e) {
+      return ApiResponse<void>(
         success: false,
         error: e.response?.data['error'] ?? 'Network error occurred',
       );

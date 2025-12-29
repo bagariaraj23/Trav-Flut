@@ -76,7 +76,7 @@ export async function withRateLimit(
 ): Promise<NextResponse> {
   try {
     const clientIp =
-      request.ip || request.headers.get("x-forwarded-for") || "unknown";
+      request.headers.get("x-forwarded-for") || request.headers.get("x-real-ip") || "unknown";
     const key = `rate_limit:${clientIp}`;
     const now = Date.now();
 
@@ -84,18 +84,22 @@ export async function withRateLimit(
 
     if (record) {
       if (now < record.resetTime) {
+        // Still within the window
         if (record.count >= options.maxRequests) {
           throw new RateLimitError("Rate limit exceeded");
         }
+        // Increment and save the count
         record.count++;
+        rateLimitStore.set(key, record);
       } else {
-        // Reset window
+        // Window expired, reset
         rateLimitStore.set(key, {
           count: 1,
           resetTime: now + options.windowMs,
         });
       }
     } else {
+      // First request, initialize
       rateLimitStore.set(key, { count: 1, resetTime: now + options.windowMs });
     }
 

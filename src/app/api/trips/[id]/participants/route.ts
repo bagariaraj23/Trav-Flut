@@ -7,10 +7,11 @@ import { ApiResponse, TripParticipantResponse } from "@/types/api";
 // Add participant to trip
 export async function POST(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const tripId = params.id;
+    const { id } = await params;
+    const tripId = id;
 
     // Verify authentication
     const authHeader = request.headers.get("authorization");
@@ -180,10 +181,11 @@ export async function POST(
 // DELETE handler to remove a participant
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const tripId = params.id;
+    const { id } = await params;
+    const tripId = id;
     const url = new URL(request.url);
     const userIdToRemove = url.searchParams.get("userId");
     if (!userIdToRemove) {
@@ -289,10 +291,11 @@ export async function DELETE(
 // Get trip participants
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const tripId = params.id;
+    const { id } = await params;
+    const tripId = id;
 
     // Verify authentication
     const authHeader = request.headers.get("authorization");

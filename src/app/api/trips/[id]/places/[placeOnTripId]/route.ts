@@ -5,8 +5,9 @@ import { ApiResponse } from "@/types/api";
 
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string; placeOnTripId: string } }
+  { params }: { params: Promise<{ id: string; placeOnTripId: string }> }
 ) {
+  const { id, placeOnTripId } = await params;
   const authHeader = request.headers.get("authorization");
   if (!authHeader?.startsWith("Bearer ")) {
     return NextResponse.json<ApiResponse>(
@@ -23,9 +24,9 @@ export async function DELETE(
     );
 
   const pot = await prisma.placeOnTrip.findUnique({
-    where: { id: params.placeOnTripId },
+    where: { id: placeOnTripId },
   });
-  if (!pot || pot.tripId !== params.id) {
+  if (!pot || pot.tripId !== id) {
     return NextResponse.json<ApiResponse>(
       { success: false, error: "Not found" },
       { status: 404 }

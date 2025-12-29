@@ -13,7 +13,7 @@ class PlaceSearchField extends StatefulWidget {
   final double? longitude;
 
   const PlaceSearchField({
-    Key? key,
+    super.key,
     required this.controller,
     this.initialValue,
     required this.onPlaceSelected,
@@ -22,7 +22,7 @@ class PlaceSearchField extends StatefulWidget {
     this.placeType,
     this.latitude,
     this.longitude,
-  }) : super(key: key);
+  });
 
   @override
   State<PlaceSearchField> createState() => _PlaceSearchFieldState();

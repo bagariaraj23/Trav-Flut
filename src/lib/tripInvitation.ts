@@ -14,77 +14,109 @@ export class TripInvitationService {
     senderId: string,
     receiverId: string
   ) {
-    // 1. Validate trip ownership
-    const trip = await prisma.trip.findUnique({ where: { id: tripId } });
-    if (!trip) {
-      throw new NotFoundError("Trip not found");
-    }
-    if (trip.userId !== senderId) {
-      throw new AuthorizationError("Only the trip owner can send invitations");
-    }
+    try {
+      return await prisma.$transaction(async (tx) => {
+        // 1. Validate trip ownership
+        const trip = await tx.trip.findUnique({ where: { id: tripId } });
+        if (!trip) {
+          throw new NotFoundError("Trip not found");
+        }
+        if (trip.userId !== senderId) {
+          throw new AuthorizationError(
+            "Only the trip owner can send invitations"
+          );
+        }
 
-    // 2. Validate receiver exists
-    const receiver = await prisma.user.findUnique({
-      where: { id: receiverId },
-    });
-    if (!receiver) {
-      throw new NotFoundError("Invited user not found");
-    }
+        // 2. Validate receiver exists
+        const receiver = await tx.user.findUnique({
+          where: { id: receiverId },
+        });
+        if (!receiver) {
+          throw new NotFoundError("Invited user not found");
+        }
 
-    // 3. Prevent self-invitation
-    if (senderId === receiverId) {
-      throw new ConflictError("Cannot invite yourself to a trip");
-    }
+        // 3. Prevent self-invitation
+        if (senderId === receiverId) {
+          throw new ConflictError("Cannot invite yourself to a trip");
+        }
 
-    // 4. Check if receiver is already a participant
-    const existingParticipant = await prisma.tripParticipant.findUnique({
-      where: { tripId_userId: { tripId, userId: receiverId } },
-    });
-    if (existingParticipant) {
-      throw new ConflictError("User is already a participant of this trip");
-    }
+        // 4. Check if receiver is already a participant
+        const existingParticipant = await tx.tripParticipant.findUnique({
+          where: { tripId_userId: { tripId, userId: receiverId } },
+        });
+        if (existingParticipant) {
+          throw new ConflictError("User is already a participant of this trip");
+        }
 
-    // 5. Check for existing pending invitation
-    const existingRequest = await prisma.tripJoinRequest.findUnique({
-      where: { tripId_receiverId: { tripId, receiverId } },
-    });
-    if (
-      existingRequest &&
-      existingRequest.status === TripJoinRequestStatus.PENDING
-    ) {
-      return {
-        id: existingRequest.id,
-        status: existingRequest.status,
-        message: "Invitation already pending",
-      };
-    }
-    // If an old request exists (rejected/accepted), delete it before creating a new one
-    if (existingRequest) {
-      await prisma.tripJoinRequest.delete({
-        where: { id: existingRequest.id },
+        // 5. Check for existing pending invitation
+        const existingRequest = await tx.tripJoinRequest.findUnique({
+          where: { tripId_receiverId: { tripId, receiverId } },
+        });
+        if (
+          existingRequest &&
+          existingRequest.status === TripJoinRequestStatus.PENDING
+        ) {
+          return {
+            id: existingRequest.id,
+            status: existingRequest.status,
+            message: "Invitation already pending",
+          };
+        }
+        // If an old request exists (rejected/accepted), delete it before creating a new one
+        if (existingRequest) {
+          await tx.tripJoinRequest.delete({
+            where: { id: existingRequest.id },
+          });
+        }
+
+        // 6. Create new invitation
+        const newRequest = await tx.tripJoinRequest.create({
+          data: {
+            tripId,
+            senderId,
+            receiverId,
+            status: TripJoinRequestStatus.PENDING,
+          },
+        });
+
+        return {
+          id: newRequest.id,
+          status: newRequest.status,
+          message: "Invitation sent successfully",
+        };
       });
+    } catch (error: any) {
+      // If a concurrent create hits the DB unique constraint, map to existing request
+      if (error?.code === "P2002") {
+        const existing = await prisma.tripJoinRequest.findUnique({
+          where: { tripId_receiverId: { tripId, receiverId } },
+        });
+        if (existing) {
+          return {
+            id: existing.id,
+            status: existing.status,
+            message:
+              existing.status === TripJoinRequestStatus.PENDING
+                ? "Invitation already pending"
+                : `Existing invitation with status ${existing.status}`,
+          };
+        }
+        return {
+          id: null,
+          status: TripJoinRequestStatus.PENDING,
+          message: "Invitation already exists",
+        };
+      }
+      throw error;
     }
-
-    // 6. Create new invitation
-    const newRequest = await prisma.tripJoinRequest.create({
-      data: {
-        tripId,
-        senderId,
-        receiverId,
-        status: TripJoinRequestStatus.PENDING,
-      },
-    });
-
-    return {
-      id: newRequest.id,
-      status: newRequest.status,
-      message: "Invitation sent successfully",
-    };
   }
 
   // Get pending invitations for a user
   static async getPendingInvitations(userId: string) {
-    return prisma.tripJoinRequest.findMany({
+    console.log(
+      `[TripInvitationService] Getting pending invitations for user: ${userId}`
+    );
+    const invitations = await prisma.tripJoinRequest.findMany({
       where: {
         receiverId: userId,
         status: TripJoinRequestStatus.PENDING,
@@ -105,6 +137,7 @@ export class TripInvitationService {
         sender: {
           select: {
             id: true,
+            email: true,
             username: true,
             name: true,
             avatarUrl: true,
@@ -117,6 +150,11 @@ export class TripInvitationService {
       },
       orderBy: { createdAt: "desc" },
     });
+
+    console.log(
+      `[TripInvitationService] Found ${invitations.length} pending invitations for user: ${userId}`
+    );
+    return invitations;
   }
 
   // Respond to an invitation (accept/reject)
@@ -197,6 +235,7 @@ export class TripInvitationService {
         receiver: {
           select: {
             id: true,
+            email: true,
             username: true,
             name: true,
             avatarUrl: true,
@@ -209,5 +248,55 @@ export class TripInvitationService {
       },
       orderBy: { createdAt: "desc" },
     });
+  }
+
+  // Cancel a sent invitation (for trip owner)
+  static async cancelInvitation(
+    inviteId: string,
+    tripId: string,
+    senderId: string
+  ) {
+    // 1. Verify trip ownership
+    const trip = await prisma.trip.findUnique({ where: { id: tripId } });
+    if (!trip) {
+      throw new NotFoundError("Trip not found");
+    }
+    if (trip.userId !== senderId) {
+      throw new AuthorizationError(
+        "Only the trip owner can cancel invitations"
+      );
+    }
+
+    // 2. Find the invitation
+    const request = await prisma.tripJoinRequest.findUnique({
+      where: { id: inviteId },
+    });
+
+    if (!request) {
+      throw new NotFoundError("Invitation not found");
+    }
+
+    // 3. Verify the invitation belongs to this trip and sender
+    if (request.tripId !== tripId || request.senderId !== senderId) {
+      throw new AuthorizationError("Unauthorized to cancel this invitation");
+    }
+
+    // 4. Only allow cancelling pending invitations
+    if (request.status !== TripJoinRequestStatus.PENDING) {
+      throw new ConflictError("Can only cancel pending invitations");
+    }
+
+    // 5. Delete the invitation
+    console.log(
+      `[TripInvitationService] Cancelling invitation ${inviteId} for trip ${tripId}`
+    );
+    await prisma.tripJoinRequest.delete({
+      where: { id: inviteId },
+    });
+
+    console.log(
+      `[TripInvitationService] Invitation ${inviteId} cancelled successfully`
+    );
+    return { message: "Invitation cancelled successfully" };
   }
 }

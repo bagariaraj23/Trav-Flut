@@ -10,9 +10,12 @@ export async function GET(request: NextRequest) {
       return withAuth(rateLimitedReq, async (authenticatedReq) => {
         try {
           const userId = authenticatedReq.user!.userId;
+          console.log(`[API] GET /users/me/trip-invites - User: ${userId}`);
 
           const pendingInvitations =
             await TripInvitationService.getPendingInvitations(userId);
+          
+          console.log(`[API] GET /users/me/trip-invites - Found ${pendingInvitations.length} pending invitations`);
 
           // Transform to response format
           const invitationsResponse = pendingInvitations.map((invite: any) => ({
@@ -37,17 +40,20 @@ export async function GET(request: NextRequest) {
               : undefined,
             sender: invite.sender
               ? {
-                  ...invite.sender,
+                  id: invite.sender.id,
+                  email: invite.sender.email,
                   username: invite.sender.username ?? undefined,
                   name: invite.sender.name ?? undefined,
                   avatarUrl: invite.sender.avatarUrl ?? undefined,
                   bio: invite.sender.bio ?? undefined,
+                  isPrivate: invite.sender.isPrivate,
                   createdAt: invite.sender.createdAt.toISOString(),
                   updatedAt: invite.sender.updatedAt.toISOString(),
                 }
               : undefined,
           }));
 
+          console.log(`[API] GET /users/me/trip-invites - Returning ${invitationsResponse.length} invitations`);
           return NextResponse.json<ApiResponse>({
             success: true,
             data: invitationsResponse,

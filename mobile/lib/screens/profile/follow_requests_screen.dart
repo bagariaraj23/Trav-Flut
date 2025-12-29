@@ -2,10 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
 import 'package:tripthread/providers/user_provider.dart';
+import 'package:tripthread/providers/auth_provider.dart';
 import 'package:tripthread/models/follow_status.dart';
 
 class FollowRequestsScreen extends StatefulWidget {
-  const FollowRequestsScreen({Key? key}) : super(key: key);
+  const FollowRequestsScreen({super.key});
 
   @override
   State<FollowRequestsScreen> createState() => _FollowRequestsScreenState();
@@ -25,6 +26,9 @@ class _FollowRequestsScreenState extends State<FollowRequestsScreen> {
     if (!mounted) return;
 
     final userProvider = context.read<UserProvider>();
+    final authProvider = context.read<AuthProvider>();
+    final currentUserId = authProvider.currentUser?.id;
+    
     final success = await userProvider.acceptFollowRequest(requestId);
 
     if (!mounted) return;
@@ -37,9 +41,12 @@ class _FollowRequestsScreenState extends State<FollowRequestsScreen> {
         ),
       );
 
-      // Refresh follow requests list
-      if (mounted) {
-        await userProvider.loadPendingFollowRequests();
+      // Refresh follow requests list and current user's profile stats
+      if (mounted && currentUserId != null) {
+        await Future.wait([
+          userProvider.loadPendingFollowRequests(),
+          userProvider.loadProfileData(currentUserId, currentUserId),
+        ]);
       }
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -57,6 +64,9 @@ class _FollowRequestsScreenState extends State<FollowRequestsScreen> {
     if (!mounted) return;
 
     final userProvider = context.read<UserProvider>();
+    final authProvider = context.read<AuthProvider>();
+    final currentUserId = authProvider.currentUser?.id;
+    
     final success = await userProvider.rejectFollowRequest(requestId);
 
     if (!mounted) return;
@@ -69,9 +79,12 @@ class _FollowRequestsScreenState extends State<FollowRequestsScreen> {
         ),
       );
 
-      // Refresh follow requests list
-      if (mounted) {
-        await userProvider.loadPendingFollowRequests();
+      // Refresh follow requests list and current user's profile stats
+      if (mounted && currentUserId != null) {
+        await Future.wait([
+          userProvider.loadPendingFollowRequests(),
+          userProvider.loadProfileData(currentUserId, currentUserId),
+        ]);
       }
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -86,24 +99,31 @@ class _FollowRequestsScreenState extends State<FollowRequestsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Follow Requests'),
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
-          onPressed: () {
-            // This is the standard and most reliable way to navigate back.
-            // It preserves the state of the previous screen, including the selected tab.
-            if (context.canPop()) {
-              context.pop();
-            } else {
-              // This is a fallback in case there's no screen to pop to,
-              // which is unlikely in this flow but good practice to have.
-              context.go('/home');
-            }
-          },
+    return PopScope(
+      canPop: true,
+      onPopInvokedWithResult: (didPop, result) {
+        if (!didPop) {
+          if (context.canPop()) {
+            context.pop();
+          } else {
+            context.go('/home');
+          }
+        }
+      },
+      child: Scaffold(
+        appBar: AppBar(
+          title: const Text('Follow Requests'),
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back),
+            onPressed: () {
+              if (context.canPop()) {
+                context.pop();
+              } else {
+                context.go('/home');
+              }
+            },
+          ),
         ),
-      ),
       body: Consumer<UserProvider>(
         builder: (context, userProvider, child) {
           if (userProvider.isFollowRequestsLoading &&
@@ -192,6 +212,7 @@ class _FollowRequestsScreenState extends State<FollowRequestsScreen> {
             ),
           );
         },
+      ),
       ),
     );
   }

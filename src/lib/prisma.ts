@@ -9,14 +9,15 @@ const prismaClient = globalForPrisma.prisma ??
     log: process.env.NODE_ENV === 'development' ? ['query', 'error', 'warn'] : ['error'],
   });
 
-// Test the connection on startup
+// Connection will be tested by startup logger
+// Don't exit on error here - let the startup logger handle it
 prismaClient.$connect()
   .then(() => {
-    console.log('Successfully connected to the database');
+    // Connection successful - startup logger will log this
   })
   .catch((e) => {
-    console.error('Failed to connect to the database:', e);
-    process.exit(1);
+    // Error will be caught and logged by startup logger
+    console.error('Database connection error (will be logged by startup logger):', e);
   });
 
 if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = prismaClient;

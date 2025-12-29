@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import { AuthService } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import {
   ApiResponse,
@@ -7,7 +6,12 @@ import {
   UpdateFinalPostRequest,
 } from "@/types/api";
 import { TripFinalizerService } from "@/lib/services/tripFinalizer";
-import { handleError } from "@/lib/errors";
+import {
+  withAuth,
+  withRateLimit,
+  withLogging,
+  handleApiError,
+} from "@/lib/middleware";
 
 function toResponse(finalPost: Awaited<
   ReturnType<typeof TripFinalizerService.getFinalPost>
@@ -50,89 +54,67 @@ async function ensureOwner(tripId: string, userId: string) {
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
-  try {
-    const authHeader = request.headers.get("authorization");
-    if (!authHeader?.startsWith("Bearer ")) {
-      return NextResponse.json<ApiResponse>(
-        { success: false, error: "Authorization token required" },
-        { status: 401 }
-      );
-    }
+  return withLogging(async (req) => {
+    return withRateLimit(req, async (rateLimitedReq) => {
+      return withAuth(rateLimitedReq, async (authenticatedReq) => {
+        try {
+          const { id } = await params;
+          const tripId = id;
+          const userId = authenticatedReq.user!.userId;
 
-    const token = authHeader.substring(7);
-    const payload = AuthService.verifyAccessToken(token);
-    if (!payload) {
-      return NextResponse.json<ApiResponse>(
-        { success: false, error: "Invalid token" },
-        { status: 401 }
-      );
-    }
+          const permissionError = await ensureOwner(tripId, userId);
+          if (permissionError) {
+            return permissionError;
+          }
 
-    const permissionError = await ensureOwner(params.id, payload.userId);
-    if (permissionError) {
-      return permissionError;
-    }
+          const finalPost = await TripFinalizerService.getFinalPost(tripId);
 
-    const finalPost = await TripFinalizerService.getFinalPost(params.id);
-
-    return NextResponse.json<ApiResponse<TripFinalPostResponse>>({
-      success: true,
-      data: toResponse(finalPost),
+          return NextResponse.json<ApiResponse<TripFinalPostResponse>>({
+            success: true,
+            data: toResponse(finalPost),
+          });
+        } catch (error) {
+          return handleApiError(error);
+        }
+      });
     });
-  } catch (error) {
-    const appError = handleError(error);
-    return NextResponse.json<ApiResponse>(
-      { success: false, error: appError.message },
-      { status: appError.statusCode }
-    );
-  }
+  })(request);
 }
 
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
-  try {
-    const authHeader = request.headers.get("authorization");
-    if (!authHeader?.startsWith("Bearer ")) {
-      return NextResponse.json<ApiResponse>(
-        { success: false, error: "Authorization token required" },
-        { status: 401 }
-      );
-    }
+  return withLogging(async (req) => {
+    return withRateLimit(req, async (rateLimitedReq) => {
+      return withAuth(rateLimitedReq, async (authenticatedReq) => {
+        try {
+          const { id } = await params;
+          const tripId = id;
+          const userId = authenticatedReq.user!.userId;
 
-    const token = authHeader.substring(7);
-    const payload = AuthService.verifyAccessToken(token);
-    if (!payload) {
-      return NextResponse.json<ApiResponse>(
-        { success: false, error: "Invalid token" },
-        { status: 401 }
-      );
-    }
+          const permissionError = await ensureOwner(tripId, userId);
+          if (permissionError) {
+            return permissionError;
+          }
 
-    const permissionError = await ensureOwner(params.id, payload.userId);
-    if (permissionError) {
-      return permissionError;
-    }
+          const body = (await authenticatedReq.json()) as UpdateFinalPostRequest;
+          const finalPost = await TripFinalizerService.updateFinalPost(
+            tripId,
+            body
+          );
 
-    const body = (await request.json()) as UpdateFinalPostRequest;
-    const finalPost = await TripFinalizerService.updateFinalPost(
-      params.id,
-      body
-    );
-
-    return NextResponse.json<ApiResponse<TripFinalPostResponse>>({
-      success: true,
-      data: toResponse(finalPost),
-      message: "Final post updated",
+          return NextResponse.json<ApiResponse<TripFinalPostResponse>>({
+            success: true,
+            data: toResponse(finalPost),
+            message: "Final post updated",
+          });
+        } catch (error) {
+          return handleApiError(error);
+        }
+      });
     });
-  } catch (error) {
-    const appError = handleError(error);
-    return NextResponse.json<ApiResponse>(
-      { success: false, error: appError.message },
-      { status: appError.statusCode }
-    );
-  }
+  })(request);
 }

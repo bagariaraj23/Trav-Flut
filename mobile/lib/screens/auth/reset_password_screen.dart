@@ -9,7 +9,7 @@ import 'package:tripthread/widgets/loading_button.dart';
 class ResetPasswordScreen extends StatefulWidget {
   final String? token;
 
-  const ResetPasswordScreen({Key? key, this.token}) : super(key: key);
+  const ResetPasswordScreen({super.key, this.token});
 
   @override
   State<ResetPasswordScreen> createState() => _ResetPasswordScreenState();
@@ -164,12 +164,16 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
                   ),
                   validator: MultiValidator([
                     RequiredValidator(errorText: 'Password is required'),
-                    MinLengthValidator(8, errorText: 'Password must be at least 8 characters'),
+                    MinLengthValidator(
+                      8,
+                      errorText: 'Password must be at least 8 characters',
+                    ),
                     PatternValidator(
                       r'^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)',
-                      errorText: 'Password must contain at least one lowercase letter, one uppercase letter, and one number',
+                      errorText:
+                          'Password must contain at least one lowercase letter, one uppercase letter, and one number',
                     ),
-                  ]),
+                  ]).call,
                   onChanged: (_) {
                     // Clear error when user starts typing after an error
                     final authProvider = context.read<AuthProvider>();
@@ -239,16 +243,14 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
                           margin: const EdgeInsets.only(bottom: 16),
                           padding: const EdgeInsets.all(12),
                           decoration: BoxDecoration(
-                            color: Theme.of(context)
-                                .colorScheme
-                                .error
-                                .withOpacity(0.1),
+                            color: Theme.of(
+                              context,
+                            ).colorScheme.error.withValues(alpha: 0.1),
                             borderRadius: BorderRadius.circular(8),
                             border: Border.all(
-                              color: Theme.of(context)
-                                  .colorScheme
-                                  .error
-                                  .withOpacity(0.3),
+                              color: Theme.of(
+                                context,
+                              ).colorScheme.error.withValues(alpha: 0.3),
                             ),
                           ),
                           child: Row(

@@ -128,11 +128,17 @@ export async function GET(request: NextRequest) {
             where: { followeeId: currentUserId },
             select: { id: true },
           },
+          _count: {
+            select: {
+              followers: true,
+            },
+          },
         },
-        orderBy: { createdAt: "desc" },
         take: limit,
       });
 
+      // Sort followed users by follower count (most popular first)
+      followedUsers.sort((a, b) => (b._count?.followers ?? 0) - (a._count?.followers ?? 0));
       users.push(...followedUsers);
 
       // 2. If limit not reached, search other users
@@ -169,11 +175,17 @@ export async function GET(request: NextRequest) {
               where: { followeeId: currentUserId },
               select: { id: true },
             },
+            _count: {
+              select: {
+                followers: true,
+              },
+            },
           },
-          orderBy: { createdAt: "desc" },
           skip: offset > 0 ? Math.max(0, offset - followedUsers.length) : 0,
           take: remainingLimit,
         });
+        // Sort other users by follower count (most popular first)
+        otherUsers.sort((a, b) => (b._count?.followers ?? 0) - (a._count?.followers ?? 0));
         users.push(...otherUsers);
       }
 
@@ -229,10 +241,20 @@ export async function GET(request: NextRequest) {
             where: { followeeId: currentUserId },
             select: { id: true },
           },
+          _count: {
+            select: {
+              followers: true,
+            },
+          },
         },
-        orderBy: { createdAt: "desc" },
         skip: offset,
         take: limit,
+      });
+      // Sort by follower count (most popular first), then by creation date
+      users.sort((a, b) => {
+        const followerDiff = (b._count?.followers ?? 0) - (a._count?.followers ?? 0);
+        if (followerDiff !== 0) return followerDiff;
+        return b.createdAt.getTime() - a.createdAt.getTime();
       });
     }
 
