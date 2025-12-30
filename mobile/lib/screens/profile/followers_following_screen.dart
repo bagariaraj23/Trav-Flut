@@ -528,6 +528,7 @@ class _FollowersFollowingScreenState extends State<FollowersFollowingScreen> {
         // Refresh the following count in the profile
         await userProvider.fetchUserStats(widget.userId);
 
+        if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Successfully unfollowed user'),

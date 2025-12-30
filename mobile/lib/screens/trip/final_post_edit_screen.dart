@@ -295,13 +295,13 @@ class _FinalPostEditScreenState extends State<FinalPostEditScreen> {
     return Container(
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(18),
-        color: theme.colorScheme.surfaceVariant.withOpacity(0.6),
+        color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.6),
         border: Border.all(
-          color: theme.colorScheme.outlineVariant.withOpacity(0.5),
+          color: theme.colorScheme.outlineVariant.withValues(alpha: 0.5),
         ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black12.withOpacity(0.05),
+            color: Colors.black12.withValues(alpha: 0.05),
             blurRadius: 8,
             offset: const Offset(0, 4),
           )
@@ -417,7 +417,7 @@ class _FinalPostEditScreenState extends State<FinalPostEditScreen> {
                 child: ListView.separated(
                   scrollDirection: Axis.horizontal,
                   itemCount: mediaItems.length,
-                  separatorBuilder: (_, __) => const SizedBox(width: 12),
+                  separatorBuilder: (_, _) => const SizedBox(width: 12),
                   itemBuilder: (context, index) {
                     final media = mediaItems[index];
                     final url = media.url;
@@ -460,7 +460,7 @@ class _FinalPostEditScreenState extends State<FinalPostEditScreen> {
                                 padding: const EdgeInsets.symmetric(
                                     horizontal: 8, vertical: 4),
                                 decoration: BoxDecoration(
-                                  color: Colors.black87.withOpacity(0.7),
+                                  color: Colors.black87.withValues(alpha: 0.7),
                                   borderRadius: BorderRadius.circular(12),
                                 ),
                                 child: const Text(
@@ -566,9 +566,11 @@ class _FinalPostEditScreenState extends State<FinalPostEditScreen> {
                 onPressed: provider.isSaving
                     ? null
                     : () async {
+                        final messenger = ScaffoldMessenger.of(context);
                         final success = await provider.saveDraft();
-                        if (success && mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
+                        if (!mounted) return;
+                        if (success) {
+                          messenger.showSnackBar(
                             const SnackBar(
                               content: Text('Draft saved'),
                             ),
@@ -590,14 +592,17 @@ class _FinalPostEditScreenState extends State<FinalPostEditScreen> {
                 onPressed: provider.isPublishing
                     ? null
                     : () async {
+                        final messenger = ScaffoldMessenger.of(context);
+                        final navigator = context;
                         final success = await provider.publish();
-                        if (success && mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
+                        if (!mounted) return;
+                        if (success) {
+                          messenger.showSnackBar(
                             const SnackBar(
                               content: Text('Trip published to your feed!'),
                             ),
                           );
-                          context.go('/home');
+                          navigator.go('/home');
                         }
                       },
                 style: ElevatedButton.styleFrom(

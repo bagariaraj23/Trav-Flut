@@ -71,14 +71,18 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
 
     if (confirmed == true && mounted) {
       final tripProvider = context.read<TripProvider>();
+      final navigator = context;
+      final messenger = ScaffoldMessenger.of(context);
       final success = await tripProvider.endTrip(tripId: widget.tripId);
 
-      if (success && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
+      if (!mounted) return;
+      if (success) {
+        messenger.showSnackBar(
           const SnackBar(content: Text('Trip ended successfully! 🎉')),
         );
         await _loadTrip();
-        context.go('/trip/${widget.tripId}/final-post');
+        if (!mounted) return;
+        navigator.go('/trip/${widget.tripId}/final-post');
       }
     }
   }
@@ -441,26 +445,28 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
       }
 
       final tripProvider = context.read<TripProvider>();
+      final messenger = ScaffoldMessenger.of(context);
+      final tripId = widget.tripId;
       final success = await tripProvider.updateTripCover(
-        tripId: widget.tripId,
+        tripId: tripId,
         coverMediaId: uploadedMedia.id,
         fallbackMedia: uploadedMedia,
       );
+      
+      if (!mounted) return;
 
       if (!success) {
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
+        messenger.showSnackBar(
           SnackBar(
             content: Text(tripProvider.error ?? 'Failed to update cover photo'),
           ),
         );
       } else {
         await _loadTrip();
-        if (mounted) {
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(const SnackBar(content: Text('Trip cover updated')));
-        }
+        if (!mounted) return;
+        messenger.showSnackBar(
+          const SnackBar(content: Text('Trip cover updated')),
+        );
       }
     } catch (e) {
       if (mounted) {
