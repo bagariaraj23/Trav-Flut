@@ -267,7 +267,8 @@ class _TripParticipantsScreenState extends State<TripParticipantsScreen> {
       try {
         final apiService = context.read<ApiService>();
         final messenger = ScaffoldMessenger.of(context);
-        await apiService.removeTripParticipant(widget.tripId, userId);
+        final tripId = widget.tripId;
+        await apiService.removeTripParticipant(tripId, userId);
 
         if (!mounted) return;
         messenger.showSnackBar(
