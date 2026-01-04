@@ -203,8 +203,12 @@ class TripFinalPost {
   final String summaryText;
   final List<String> curatedMedia;
   final String? caption;
+  final String? coverMediaUrl;
+  final GenerationStatus generationStatus;
   final bool isPublished;
+  final DateTime? publishedAt;
   final DateTime createdAt;
+  final DateTime updatedAt;
   final Trip? trip;
 
   const TripFinalPost({
@@ -213,14 +217,46 @@ class TripFinalPost {
     required this.summaryText,
     required this.curatedMedia,
     this.caption,
+    this.coverMediaUrl,
+    this.generationStatus = GenerationStatus.draft,
     required this.isPublished,
+    this.publishedAt,
     required this.createdAt,
+    required this.updatedAt,
     this.trip,
   });
 
   factory TripFinalPost.fromJson(Map<String, dynamic> json) =>
       _$TripFinalPostFromJson(json);
   Map<String, dynamic> toJson() => _$TripFinalPostToJson(this);
+
+  TripFinalPost copyWith({
+    String? summaryText,
+    List<String>? curatedMedia,
+    String? caption,
+    String? coverMediaUrl,
+    GenerationStatus? generationStatus,
+    bool? isPublished,
+    DateTime? publishedAt,
+    DateTime? createdAt,
+    DateTime? updatedAt,
+    Trip? trip,
+  }) {
+    return TripFinalPost(
+      id: id,
+      tripId: tripId,
+      summaryText: summaryText ?? this.summaryText,
+      curatedMedia: curatedMedia ?? this.curatedMedia,
+      caption: caption ?? this.caption,
+      coverMediaUrl: coverMediaUrl ?? this.coverMediaUrl,
+      generationStatus: generationStatus ?? this.generationStatus,
+      isPublished: isPublished ?? this.isPublished,
+      publishedAt: publishedAt ?? this.publishedAt,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+      trip: trip ?? this.trip,
+    );
+  }
 }
 
 @JsonSerializable()
@@ -331,6 +367,19 @@ enum MediaProcessingStatus {
   processing,
   @JsonValue('COMPLETED')
   completed,
+  @JsonValue('FAILED')
+  failed,
+}
+
+enum GenerationStatus {
+  @JsonValue('DRAFT')
+  draft,
+  @JsonValue('GENERATING')
+  generating,
+  @JsonValue('READY')
+  ready,
+  @JsonValue('PUBLISHED')
+  published,
   @JsonValue('FAILED')
   failed,
 }

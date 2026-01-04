@@ -1,93 +1,82 @@
-import { NextRequest, NextResponse } from 'next/server'
-import { prisma } from '@/lib/prisma'
-import { AuthService } from '@/lib/auth'
-import { ApiResponse } from '@/types/api'
+import { NextRequest, NextResponse } from "next/server";
+import { prisma } from "@/lib/prisma";
+import { ApiResponse, TripFinalPostResponse } from "@/types/api";
+import { TripFinalizerService } from "@/lib/services/tripFinalizer";
+import {
+  withAuth,
+  withRateLimit,
+  withLogging,
+  handleApiError,
+} from "@/lib/middleware";
+import { NotFoundError, ConflictError } from "@/lib/errors";
+
+function toResponse(finalPost: Awaited<
+  ReturnType<typeof TripFinalizerService.publishFinalPost>
+>): TripFinalPostResponse {
+  return {
+    ...finalPost,
+    caption: finalPost.caption ?? undefined,
+    coverMediaUrl: finalPost.coverMediaUrl ?? undefined,
+    publishedAt: finalPost.publishedAt
+      ? finalPost.publishedAt.toISOString()
+      : undefined,
+    createdAt: finalPost.createdAt.toISOString(),
+    updatedAt: finalPost.updatedAt.toISOString(),
+    generationStatus: finalPost.generationStatus,
+  };
+}
 
 // Publish final post
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  try {
-    const { id } = await params;
-    const tripId = id
-    
-    // Verify authentication
-    const authHeader = request.headers.get('authorization')
-    if (!authHeader?.startsWith('Bearer ')) {
-      return NextResponse.json<ApiResponse>({
-        success: false,
-        error: 'Authorization token required'
-      }, { status: 401 })
-    }
+  return withLogging(async (req) => {
+    return withRateLimit(req, async (rateLimitedReq) => {
+      return withAuth(rateLimitedReq, async (authenticatedReq) => {
+        try {
+          const { id } = await params;
+          const tripId = id;
+          const userId = authenticatedReq.user!.userId;
 
-    const token = authHeader.substring(7)
-    const payload = AuthService.verifyAccessToken(token)
+          // Check if trip exists and user is owner
+          const trip = await prisma.trip.findUnique({
+            where: { id: tripId },
+            include: {
+              finalPost: true,
+            },
+          });
 
-    if (!payload) {
-      return NextResponse.json<ApiResponse>({
-        success: false,
-        error: 'Invalid token'
-      }, { status: 401 })
-    }
+          if (!trip) {
+            throw new NotFoundError("Trip not found");
+          }
 
-    const userId = payload.userId
+          if (trip.userId !== userId) {
+            throw new ConflictError("Only trip owner can publish final post");
+          }
 
-    // Check if trip exists and user is owner
-    const trip = await prisma.trip.findUnique({
-      where: { id: tripId },
-      include: {
-        finalPost: true
-      }
-    })
+          if (!trip.finalPost) {
+            throw new NotFoundError("Final post not found");
+          }
 
-    if (!trip) {
-      return NextResponse.json<ApiResponse>({
-        success: false,
-        error: 'Trip not found'
-      }, { status: 404 })
-    }
+          if (trip.finalPost.isPublished) {
+            throw new ConflictError("Final post is already published");
+          }
 
-    if (trip.userId !== userId) {
-      return NextResponse.json<ApiResponse>({
-        success: false,
-        error: 'Only trip owner can publish final post'
-      }, { status: 403 })
-    }
+          const published = await TripFinalizerService.publishFinalPost(
+            tripId,
+            userId
+          );
 
-    if (!trip.finalPost) {
-      return NextResponse.json<ApiResponse>({
-        success: false,
-        error: 'Final post not found'
-      }, { status: 404 })
-    }
-
-    if (trip.finalPost.isPublished) {
-      return NextResponse.json<ApiResponse>({
-        success: false,
-        error: 'Final post is already published'
-      }, { status: 400 })
-    }
-
-    // Publish final post
-    await prisma.tripFinalPost.update({
-      where: { tripId },
-      data: {
-        isPublished: true
-      }
-    })
-
-    return NextResponse.json<ApiResponse>({
-      success: true,
-      message: 'Final post published successfully'
-    })
-
-  } catch (error: any) {
-    console.error('Publish final post error:', error)
-    
-    return NextResponse.json<ApiResponse>({
-      success: false,
-      error: 'Internal server error'
-    }, { status: 500 })
-  }
+          return NextResponse.json<ApiResponse<TripFinalPostResponse>>({
+            success: true,
+            data: toResponse(published),
+            message: "Final post published successfully",
+          });
+        } catch (error) {
+          return handleApiError(error);
+        }
+      });
+    });
+  })(request);
 }

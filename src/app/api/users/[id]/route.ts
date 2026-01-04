@@ -174,11 +174,17 @@ export async function PUT(
         },
       });
     } catch (error: any) {
-      if (error.code === "P2002" && error.meta?.target?.includes("username")) {
+      // Use centralized error handler for unique constraint violations
+      const { handlePrismaUniqueError } = await import("@/lib/prismaErrors");
+      const uniqueError = handlePrismaUniqueError(error, {
+        username: "Username",
+        email: "Email",
+      });
+      if (uniqueError) {
         return NextResponse.json<ApiResponse>(
           {
             success: false,
-            error: "Username is already taken",
+            error: uniqueError,
           },
           { status: 400 }
         );

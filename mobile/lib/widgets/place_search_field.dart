@@ -67,6 +67,7 @@ class _PlaceSearchFieldState extends State<PlaceSearchField> {
       }
     } catch (e) {
       debugPrint('Error searching places: $e');
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Error searching places: $e')),
       );

@@ -102,9 +102,10 @@ class _CreateTripScreenState extends State<CreateTripScreen> {
         });
       }
     } catch (e) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Error picking image: $e')));
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error picking image: $e')),
+      );
     }
   }
 
@@ -205,13 +206,15 @@ class _CreateTripScreenState extends State<CreateTripScreen> {
           });
         }
       } catch (e) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to upload cover image: $e')),
-        );
-        setState(() {
-          _isUploadingCover = false;
-          _coverUploadProgress = null;
-        });
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Failed to upload cover image: $e')),
+          );
+          setState(() {
+            _isUploadingCover = false;
+            _coverUploadProgress = null;
+          });
+        }
         return;
       } finally {
         if (mounted) {
@@ -248,6 +251,8 @@ class _CreateTripScreenState extends State<CreateTripScreen> {
     final routerState = GoRouterState.of(context);
     final extra = routerState.extra;
     final replaceExisting = extra is Map && extra['replaceExisting'] == true;
+    final navigator = context;
+    final messenger = ScaffoldMessenger.of(context);
 
     final tripProvider = context.read<TripProvider>();
     final success = await tripProvider.createTrip(
@@ -255,11 +260,12 @@ class _CreateTripScreenState extends State<CreateTripScreen> {
       replaceExisting: replaceExisting,
     );
 
-    if (success && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
+    if (!mounted) return;
+    if (success) {
+      messenger.showSnackBar(
         const SnackBar(content: Text('Trip started successfully! 🎉')),
       );
-      context.go('/home');
+      navigator.go('/home');
     }
   }
 

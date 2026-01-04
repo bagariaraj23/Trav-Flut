@@ -350,6 +350,7 @@ class _TripThreadScreenState extends State<TripThreadScreen> {
               placeId: _selectedPlace!.id,
               taggedUsernames: usernamesToSend,
             );
+            if (!mounted) return;
             if (success) {
               setState(() {
                 _selectedPlace = null;
@@ -452,9 +453,10 @@ class _TripThreadScreenState extends State<TripThreadScreen> {
         });
       }
     } catch (e) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Error picking image: $e')));
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error picking image: $e')),
+      );
     }
   }
 
@@ -495,6 +497,7 @@ class _TripThreadScreenState extends State<TripThreadScreen> {
           _pendingMediaBatch.length +
           newMediaItems.length;
       if (totalCount > maxQueued) {
+        if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
@@ -526,9 +529,10 @@ class _TripThreadScreenState extends State<TripThreadScreen> {
         });
       }
     } catch (e) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Error picking media: $e')));
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error picking media: $e')),
+      );
     }
   }
 
@@ -560,9 +564,10 @@ class _TripThreadScreenState extends State<TripThreadScreen> {
         });
       }
     } catch (e) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Error picking video: $e')));
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error picking video: $e')),
+      );
     }
   }
 
