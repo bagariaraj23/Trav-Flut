@@ -60,6 +60,12 @@ export async function GET(request: NextRequest) {
           const whereClause: any = {
             isPublished: true,
             OR: [
+              // Posts from current user (always show own posts)
+              {
+                trip: {
+                  userId: currentUserId,
+                },
+              },
               // Posts from followed users
               ...(followedUserIds.length > 0
                 ? [
