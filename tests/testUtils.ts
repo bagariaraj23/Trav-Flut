@@ -59,6 +59,9 @@ function assertTestDatabase() {
 export async function cleanDb() {
   assertTestDatabase();
   await prisma.$transaction([
+    prisma.comment.deleteMany(),
+    prisma.like.deleteMany(),
+    prisma.share.deleteMany(),
     prisma.tripThreadTag.deleteMany(),
     prisma.tripThreadEntry.deleteMany(),
     prisma.tripFinalPost.deleteMany(),
@@ -179,8 +182,14 @@ export async function createTrip(
 }
 
 export async function getAuthToken(user: { id: string; email?: string }) {
-  return AuthService.generateAccessToken({
-    id: user.id,
-    email: user.email ?? "",
-  } as any);
+  const fullUser = await prisma.user.findUnique({
+    where: { id: user.id },
+    select: { id: true, email: true },
+  });
+  if (!fullUser) {
+    throw new Error(`User ${user.id} not found`);
+  }
+  
+  // Generate token - the middleware has a 1-second buffer to handle timing differences
+  return AuthService.generateAccessToken(fullUser as any);
 }

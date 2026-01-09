@@ -4,11 +4,7 @@ import path from "path";
 // Set NODE_ENV=test BEFORE any imports to ensure test mode is active
 // This prevents env.ts from loading production environment
 if (!process.env.NODE_ENV) {
-  Object.defineProperty(process.env, 'NODE_ENV', {
-    value: 'test',
-    writable: true,
-    configurable: true
-  });
+  (process.env as any).NODE_ENV = 'test';
 }
 
 export default defineConfig({

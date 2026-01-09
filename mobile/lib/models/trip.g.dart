@@ -169,6 +169,9 @@ TripThreadEntry _$TripThreadEntryFromJson(Map<String, dynamic> json) =>
       media: json['media'] == null
           ? null
           : Media.fromJson(json['media'] as Map<String, dynamic>),
+      likeCount: (json['likeCount'] as num?)?.toInt() ?? 0,
+      commentCount: (json['commentCount'] as num?)?.toInt() ?? 0,
+      hasLiked: json['hasLiked'] as bool? ?? false,
     );
 
 Map<String, dynamic> _$TripThreadEntryToJson(TripThreadEntry instance) =>
@@ -187,6 +190,9 @@ Map<String, dynamic> _$TripThreadEntryToJson(TripThreadEntry instance) =>
       'author': instance.author,
       'taggedUsers': instance.taggedUsers,
       'media': instance.media,
+      'likeCount': instance.likeCount,
+      'commentCount': instance.commentCount,
+      'hasLiked': instance.hasLiked,
     };
 
 const _$ThreadEntryTypeEnumMap = {
@@ -210,6 +216,10 @@ TripFinalPost _$TripFinalPostFromJson(Map<String, dynamic> json) =>
       trip: json['trip'] == null
           ? null
           : Trip.fromJson(json['trip'] as Map<String, dynamic>),
+      likeCount: (json['likeCount'] as num?)?.toInt() ?? 0,
+      commentCount: (json['commentCount'] as num?)?.toInt() ?? 0,
+      shareCount: (json['shareCount'] as num?)?.toInt() ?? 0,
+      hasLiked: json['hasLiked'] as bool? ?? false,
     );
 
 Map<String, dynamic> _$TripFinalPostToJson(TripFinalPost instance) =>
@@ -222,6 +232,10 @@ Map<String, dynamic> _$TripFinalPostToJson(TripFinalPost instance) =>
       'isPublished': instance.isPublished,
       'createdAt': instance.createdAt.toIso8601String(),
       'trip': instance.trip,
+      'likeCount': instance.likeCount,
+      'commentCount': instance.commentCount,
+      'shareCount': instance.shareCount,
+      'hasLiked': instance.hasLiked,
     };
 
 Media _$MediaFromJson(Map<String, dynamic> json) => Media(

@@ -9,6 +9,12 @@ import 'package:tripthread/providers/place_provider.dart';
 import 'package:tripthread/providers/user_provider.dart';
 import 'package:tripthread/providers/trip_provider.dart';
 import 'package:tripthread/providers/feed_provider.dart';
+import 'package:tripthread/providers/engagement_provider.dart';
+import 'package:tripthread/providers/comment_provider.dart';
+import 'package:tripthread/providers/share_provider.dart';
+import 'package:tripthread/services/like_service.dart';
+import 'package:tripthread/services/comment_service.dart';
+import 'package:tripthread/services/share_service.dart';
 import 'package:tripthread/screens/trip/trip_map_screen.dart';
 import 'package:tripthread/services/api_service.dart';
 import 'package:tripthread/services/storage_service.dart';
@@ -76,6 +82,9 @@ void main() async {
     final tripService = TripService();
     final mediaService = MediaService(apiService);
     final deepLinkService = DeepLinkService();
+    final likeService = LikeService();
+    final commentService = CommentService();
+    final shareService = ShareService();
     debugPrint('[main] Core services created');
 
     debugPrint('[main] Setting up providers');
@@ -87,6 +96,9 @@ void main() async {
           Provider<TripService>.value(value: tripService),
           Provider<MediaService>.value(value: mediaService),
           Provider<DeepLinkService>.value(value: deepLinkService),
+          Provider<LikeService>.value(value: likeService),
+          Provider<CommentService>.value(value: commentService),
+          Provider<ShareService>.value(value: shareService),
           ChangeNotifierProvider<ConnectivityService>.value(
               value: connectivityService),
           ChangeNotifierProvider<AuthProvider>(
@@ -137,6 +149,27 @@ void main() async {
           ChangeNotifierProvider<PlaceProvider>(create: (context) {
             debugPrint('[main] Creating PlaceProvider');
             return PlaceProvider(apiService: apiService);
+          }),
+          ChangeNotifierProvider<EngagementProvider>(create: (context) {
+            debugPrint('[main] Creating EngagementProvider');
+            final provider = EngagementProvider(likeService: likeService);
+            likeService.setStorageService(storageService);
+            return provider;
+          }),
+          ChangeNotifierProvider<CommentProvider>(create: (context) {
+            debugPrint('[main] Creating CommentProvider');
+            final provider = CommentProvider(commentService: commentService);
+            commentService.setStorageService(storageService);
+            return provider;
+          }),
+          ChangeNotifierProvider<ShareProvider>(create: (context) {
+            debugPrint('[main] Creating ShareProvider');
+            final provider = ShareProvider(
+              shareService: shareService,
+              deepLinkService: deepLinkService,
+            );
+            shareService.setStorageService(storageService);
+            return provider;
           })
         ],
         child: TripThreadAppRouter(),

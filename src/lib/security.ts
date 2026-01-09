@@ -1,6 +1,6 @@
 import crypto from 'crypto'
 import { NextRequest } from 'next/server'
-import { rateLimit as redisRateLimit } from "./rateLimit";
+import { rateLimit as redisRateLimit } from "./rateLimit"; // Legacy function for backward compatibility
 
 // Input sanitization
 export function sanitizeInput(input: string): string {

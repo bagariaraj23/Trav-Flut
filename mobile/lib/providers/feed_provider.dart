@@ -32,6 +32,14 @@ class FeedProvider extends ChangeNotifier {
   String? get discoverTripsError => _discoverTripsError;
   bool get hasMoreDiscoverTrips => _hasMoreDiscoverTrips;
 
+  // Update a post in the home feed
+  void updatePost(int index, TripFinalPost updatedPost) {
+    if (index >= 0 && index < _homeFeedPosts.length) {
+      _homeFeedPosts[index] = updatedPost;
+      notifyListeners();
+    }
+  }
+
   // Home Feed Methods
   Future<void> loadHomeFeed({bool refresh = false}) async {
     try {
@@ -120,6 +128,9 @@ class FeedProvider extends ChangeNotifier {
         _homeFeedError = null;
 
         debugPrint('[FeedProvider] Home feed updated: ${_homeFeedPosts.length} posts, hasNext: $_hasMoreHomeFeedPosts, page: $_homeFeedPage');
+        
+        // Sync engagement data with EngagementProvider
+        // Note: This will be done in the UI layer when cards are built
       } else {
         _homeFeedError = response.error ?? 'Failed to load home feed';
         debugPrint('[FeedProvider] Home feed failed: $_homeFeedError');

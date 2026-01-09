@@ -36,35 +36,51 @@ model User {
   createdPlaceShares       PlaceShare[]
   sentTripJoinRequests     TripJoinRequest[] @relation("SentTripJoinRequests")
   receivedTripJoinRequests TripJoinRequest[] @relation("ReceivedTripJoinRequests")
+  likes                    Like[]            @relation("UserLikes")
+  comments                 Comment[]         @relation("UserComments")
+  shares                   Share[]           @relation("UserShares")
+  securityEvents           SecurityEvent[]
 
   @@map("users")
 }
 
 model PasswordReset {
-  id          String    @id @default(uuid())
+  id          String   @id @default(uuid())
   userId      String
-  tokenHash   Bytes     @unique
+  tokenHash   Bytes    @unique
   otpCodeHash Bytes?
   expiresAt   DateTime
-  usedAt      DateTime?
-  createdAt   DateTime  @default(now())
+  createdAt   DateTime @default(now())
   createdIp   String?
   userAgent   String?
-  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, expiresAt])
   @@map("password_resets")
 }
 
-model SecurityEvent {
-  id        String   @id @default(uuid())
-  userId    String?
-  type      String
-  meta      Json?
-  createdAt DateTime @default(now())
-  user      User?    @relation(fields: [userId], references: [id])
+enum SecurityEventType {
+  COMMENT_REPORT
+  PROFANITY_DETECTED
+  RATE_LIMIT_HIT
+  ABUSE_DETECTED
+  UNAUTHORIZED_ACCESS
+}
 
+model SecurityEvent {
+  id         String            @id @default(uuid())
+  eventType  SecurityEventType
+  userId     String?
+  entityType EntityType?
+  entityId   String?
+  ipAddress  String?
+  metadata   Json
+  createdAt  DateTime          @default(now())
+  user       User?             @relation(fields: [userId], references: [id])
+
+  @@index([eventType, createdAt])
   @@index([userId, createdAt])
+  @@index([entityType, entityId])
   @@map("security_events")
 }
 
@@ -182,18 +198,19 @@ model TripThreadEntry {
   authorId       String
   type           ThreadEntryType
   contentText    String?
-  mediaId        String?         // Link to Media model
+  mediaId        String? // Link to Media model
   locationName   String?
   gpsCoordinates Json?
   createdAt      DateTime        @default(now())
   author         User            @relation(fields: [authorId], references: [id], onDelete: Cascade)
-  media           Media?             @relation(fields: [mediaId], references: [id], onDelete: SetNull)
+  media          Media?          @relation(fields: [mediaId], references: [id], onDelete: SetNull)
   trip           Trip            @relation(fields: [tripId], references: [id], onDelete: Cascade)
   taggedUsers    TripThreadTag[]
-
+  likeCount      Int             @default(0)
+  commentCount   Int             @default(0)
   // Canonical place link for location/check-in entries
-  placeId String?
-  place   Place?  @relation(fields: [placeId], references: [id])
+  placeId        String?
+  place          Place?          @relation(fields: [placeId], references: [id])
 
   // Shares
   placeShares PlaceShare[]
@@ -297,29 +314,32 @@ model TripFinalPost {
   isPublished  Boolean  @default(false)
   createdAt    DateTime @default(now())
   trip         Trip     @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  likeCount    Int      @default(0)
+  commentCount Int      @default(0)
+  shareCount   Int      @default(0)
 
   @@map("trip_final_posts")
 }
 
 model Media {
-  id              String             @id @default(uuid())
-  url             String
-  publicId        String             @unique // Cloudinary public_id for management
-  type            MediaType
-  filename        String?
-  size            Int?
-  width           Int?
-  height          Int?
-  duration        Float?
+  id               String                @id @default(uuid())
+  url              String
+  publicId         String                @unique // Cloudinary public_id for management
+  type             MediaType
+  filename         String?
+  size             Int?
+  width            Int?
+  height           Int?
+  duration         Float?
   processingStatus MediaProcessingStatus @default(COMPLETED)
-  uploadedById    String
-  tripId          String?
-  createdAt       DateTime           @default(now())
+  uploadedById     String
+  tripId           String?
+  createdAt        DateTime              @default(now())
 
-  uploadedBy      User               @relation(fields: [uploadedById], references: [id], onDelete: Cascade)
-  trip            Trip?              @relation(fields: [tripId], references: [id], onDelete: Cascade)
-  threadEntries   TripThreadEntry[]
-  tripCover       Trip[]             @relation("TripCoverMedia")
+  uploadedBy    User              @relation(fields: [uploadedById], references: [id], onDelete: Cascade)
+  trip          Trip?             @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  threadEntries TripThreadEntry[]
+  tripCover     Trip[]            @relation("TripCoverMedia")
 
   @@map("media")
 }
@@ -396,4 +416,63 @@ enum TripJoinRequestStatus {
   PENDING
   ACCEPTED
   REJECTED
+}
+
+enum EntityType {
+  TRIP_FINAL_POST
+  TRIP_THREAD_ENTRY
+  COMMENT
+}
+
+enum ShareType {
+  DEEP_LINK
+  WEB_LINK
+  EXTERNAL
+}
+
+model Like {
+  id         String     @id @default(uuid())
+  userId     String
+  entityType EntityType
+  entityId   String
+  createdAt  DateTime   @default(now())
+  user       User       @relation("UserLikes", fields: [userId], references: [id])
+
+  @@unique([userId, entityType, entityId])
+  @@index([entityType, entityId, createdAt])
+  @@index([userId])
+}
+
+model Comment {
+  id              String     @id @default(uuid())
+  userId          String
+  entityType      EntityType
+  entityId        String
+  contentText     String     @db.VarChar(250)
+  parentCommentId String?
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+  user            User       @relation("UserComments", fields: [userId], references: [id])
+  parentComment   Comment?   @relation("CommentReplies", fields: [parentCommentId], references: [id])
+  replies         Comment[]  @relation("CommentReplies")
+
+  @@index([entityType, entityId, createdAt])
+  @@index([parentCommentId])
+  @@index([userId])
+}
+
+model Share {
+  id         String     @id @default(uuid())
+  userId     String
+  entityType EntityType
+  entityId   String
+  shareToken String     @unique
+  shareType  ShareType
+  expiresAt  DateTime?
+  metadata   Json
+  createdAt  DateTime   @default(now())
+  user       User       @relation("UserShares", fields: [userId], references: [id])
+
+  @@index([userId, createdAt])
+  @@index([entityType, entityId])
 }

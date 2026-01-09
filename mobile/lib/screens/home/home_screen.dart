@@ -5,9 +5,13 @@ import 'package:tripthread/providers/auth_provider.dart';
 import 'package:tripthread/providers/trip_provider.dart';
 import 'package:tripthread/providers/feed_provider.dart';
 import 'package:tripthread/providers/user_provider.dart';
+import 'package:tripthread/providers/engagement_provider.dart';
 import 'package:tripthread/models/trip.dart';
 import 'package:tripthread/screens/discover/discover_tab.dart';
 import 'package:tripthread/utils/cloudinary_utils.dart';
+import 'package:tripthread/ui/widgets/engagement_action_bar.dart';
+import 'package:tripthread/ui/sheets/comment_bottom_sheet.dart';
+import 'package:tripthread/ui/sheets/share_bottom_sheet.dart';
 
 class HomeScreen extends StatefulWidget {
   final int initialTab;
@@ -313,6 +317,15 @@ class _HomeFeedScreenState extends State<HomeFeedScreen> {
   }
 
   Widget _buildFinalPostCard(BuildContext context, TripFinalPost post) {
+    // Initialize engagement state for this post when card is built
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final engagementProvider = context.read<EngagementProvider>();
+      // Only initialize if not already set (to preserve user interactions)
+      if (!engagementProvider.likeStatus.containsKey(post.id)) {
+        engagementProvider.setLikeStatus(post.id, post.hasLiked, count: post.likeCount);
+      }
+    });
+
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       elevation: 2,
@@ -431,38 +444,68 @@ class _HomeFeedScreenState extends State<HomeFeedScreen> {
 
                 const SizedBox(height: 12),
 
-                // Action buttons
-                Row(
-                  children: [
-                    IconButton(
-                      icon: const Icon(Icons.favorite_border),
-                      onPressed: () {
-                        // TODO: Implement like functionality
-                      },
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.comment_outlined),
-                      onPressed: () {
-                        // TODO: Implement comment functionality
-                      },
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.share_outlined),
-                      onPressed: () {
-                        // TODO: Implement share functionality
-                      },
-                    ),
-                    const Spacer(),
-                    TextButton(
-                      onPressed: () {
-                        context.push(
-                          '/trip/${post.tripId}',
-                          extra: {'from': '/home'},
-                        );
-                      },
-                      child: const Text('View Trip'),
-                    ),
-                  ],
+                // Engagement action bar
+                EngagementActionBar(
+                  entityType: 'TRIP_FINAL_POST',
+                  entityId: post.id,
+                  likeCount: post.likeCount,
+                  commentCount: post.commentCount,
+                  shareCount: post.shareCount,
+                  hasLiked: post.hasLiked,
+                  onCommentTap: () {
+                    showModalBottomSheet(
+                      context: context,
+                      isScrollControlled: true,
+                      backgroundColor: Colors.transparent,
+                      builder: (context) => CommentBottomSheet(
+                        entityType: 'TRIP_FINAL_POST',
+                        entityId: post.id,
+                      ),
+                    );
+                  },
+                  onShareTap: () {
+                    showModalBottomSheet(
+                      context: context,
+                      backgroundColor: Colors.transparent,
+                      builder: (context) => ShareBottomSheet(
+                        entityType: 'TRIP_FINAL_POST',
+                        entityId: post.id,
+                      ),
+                    );
+                  },
+                  onLikeChanged: () {
+                    // Update the post in FeedProvider with new like count
+                    final engagementProvider = context.read<EngagementProvider>();
+                    final newLikeCount = engagementProvider.getLikeCount(post.id);
+                    final newHasLiked = engagementProvider.isLiked(post.id);
+                    
+                    // Update the post in the feed
+                    final feedProvider = context.read<FeedProvider>();
+                    final updatedPost = post.copyWith(
+                      likeCount: newLikeCount,
+                      hasLiked: newHasLiked,
+                    );
+                    final index = feedProvider.homeFeedPosts.indexWhere((p) => p.id == post.id);
+                    if (index >= 0) {
+                      feedProvider.updatePost(index, updatedPost);
+                    }
+                  },
+                ),
+                
+                const SizedBox(height: 8),
+                
+                // View Trip button
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: TextButton(
+                    onPressed: () {
+                      context.push(
+                        '/trip/${post.tripId}',
+                        extra: {'from': '/home'},
+                      );
+                    },
+                    child: const Text('View Trip'),
+                  ),
                 ),
               ],
             ),
