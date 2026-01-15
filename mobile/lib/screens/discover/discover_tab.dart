@@ -149,6 +149,7 @@ class _DiscoverTabState extends State<DiscoverTab> {
       if (success) {
         // Refresh status after action
         await userProvider.fetchDetailedFollowStatus(userId);
+        if (!mounted) return;
         final status = userProvider.getDetailedFollowStatus(userId);
         if (status != null) {
           final newState = status.isRequestPending

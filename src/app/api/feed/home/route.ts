@@ -62,6 +62,12 @@ export async function GET(request: NextRequest) {
           const whereClause: any = {
             isPublished: true,
             OR: [
+              // Posts from current user (always show own posts)
+              {
+                trip: {
+                  userId: currentUserId,
+                },
+              },
               // Posts from followed users
               ...(followedUserIds.length > 0
                 ? [
@@ -136,6 +142,7 @@ export async function GET(request: NextRequest) {
             `[API] GET /feed/home - Found ${finalPosts.length} final posts`
           );
 
+          // Get like status for all posts
           const postIds = finalPosts.map((p) => p.id);
           const likeStatusMap = await checkLikeStatus(
             currentUserId,
@@ -143,6 +150,7 @@ export async function GET(request: NextRequest) {
             postIds
           );
 
+          // Transform to response format with engagement data
           const finalPostsResponse: (TripFinalPostResponse & {
             likeCount: number;
             commentCount: number;
@@ -154,8 +162,14 @@ export async function GET(request: NextRequest) {
             summaryText: post.summaryText,
             curatedMedia: post.curatedMedia,
             caption: post.caption ?? undefined,
+            coverMediaUrl: post.coverMediaUrl ?? undefined,
+            generationStatus: post.generationStatus,
             isPublished: post.isPublished,
+            publishedAt: post.publishedAt
+              ? post.publishedAt.toISOString()
+              : undefined,
             createdAt: post.createdAt.toISOString(),
+            updatedAt: post.updatedAt.toISOString(),
             likeCount: post.likeCount,
             commentCount: post.commentCount,
             shareCount: post.shareCount,

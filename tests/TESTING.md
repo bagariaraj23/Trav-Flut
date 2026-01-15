@@ -1,6 +1,8 @@
 # TripThread Testing Documentation
 
-This document provides comprehensive information about the testing strategy, setup, current coverage, and guidelines for the TripThread application.
+This document provides comprehensive information about the testing strategy, setup, current coverage, and guidelines for the TripThread backend application.
+
+**Note**: This documentation covers backend API and service testing. For mobile app testing, see Flutter testing documentation.
 
 ---
 
@@ -477,12 +479,28 @@ describe('My Test Suite', () => {
    - [ ] Transaction rollback on failure
 
 4. **`/api/trips/[id]/end` Route**
-   - [ ] Final post creation
+   - [ ] Final post auto-generation on trip end
    - [ ] Reads up-to-date data inside transaction
-   - [ ] Trip status transition
+   - [ ] Trip status transition (ONGOING → ENDED)
    - [ ] Participant count accuracy
+   - [ ] Final post includes summary, curated media, and caption
 
-5. **`/api/trips/[id]/invites` Route**
+5. **`/api/trips/[id]/final-post` Route**
+   - [ ] GET: Retrieve final post preview (owner only)
+   - [ ] PUT: Update final post content (summary, media, caption)
+   - [ ] Validation: Empty summary rejection
+   - [ ] Validation: Max 10 media items
+   - [ ] Validation: Published posts cannot be edited
+   - [ ] Authorization: Only trip owner can access
+
+6. **`/api/trips/[id]/publish` Route**
+   - [ ] POST: Publish final post
+   - [ ] Validation: Minimum 50 characters summary
+   - [ ] Validation: At least 1 media item required
+   - [ ] Validation: Cannot publish already published post
+   - [ ] Status update: generationStatus → PUBLISHED, isPublished → true
+
+7. **`/api/trips/[id]/invites` Route**
    - [ ] Accept/reject trip invitations
    - [ ] Participant creation
    - [ ] Participant count updates
@@ -512,12 +530,24 @@ describe('My Test Suite', () => {
    - [ ] Concurrent delete handling
    - [ ] Permission validation
 
+5. **Trip Finalizer Service** (`src/lib/services/tripFinalizer.ts`)
+   - [ ] Summary generation from trip data
+   - [ ] Media curation algorithm (one per day, then fill)
+   - [ ] Default caption generation
+   - [ ] Validation: minimum summary length
+   - [ ] Validation: minimum media count for publishing
+   - [ ] Idempotency: generateFinalPost returns existing if present
+   - [ ] Authorization: only owner can generate/update/publish
+
 #### Integration Tests (Missing)
 
-1. **Trip Lifecycle**
+1. **Trip Lifecycle & Final Posts**
    - [ ] Trip creation → active → ended flow
-   - [ ] Status transitions
-   - [ ] Final post creation
+   - [ ] Status transitions (UPCOMING → ONGOING → ENDED)
+   - [ ] Final post auto-generation on trip end
+   - [ ] Final post summary generation from thread entries
+   - [ ] Final post media curation (one per day, max 10)
+   - [ ] Final post editing and publishing workflow
 
 2. **Media Management**
    - [ ] Cloudinary upload integration

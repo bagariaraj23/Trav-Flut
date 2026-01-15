@@ -212,8 +212,12 @@ class TripFinalPost {
   final String summaryText;
   final List<String> curatedMedia;
   final String? caption;
+  final String? coverMediaUrl;
+  final GenerationStatus generationStatus;
   final bool isPublished;
+  final DateTime? publishedAt;
   final DateTime createdAt;
+  final DateTime updatedAt;
   final Trip? trip;
   @JsonKey(defaultValue: 0)
   final int likeCount;
@@ -230,8 +234,12 @@ class TripFinalPost {
     required this.summaryText,
     required this.curatedMedia,
     this.caption,
+    this.coverMediaUrl,
+    this.generationStatus = GenerationStatus.draft,
     required this.isPublished,
+    this.publishedAt,
     required this.createdAt,
+    required this.updatedAt,
     this.trip,
     this.likeCount = 0,
     this.commentCount = 0,
@@ -249,8 +257,12 @@ class TripFinalPost {
     String? summaryText,
     List<String>? curatedMedia,
     String? caption,
+    String? coverMediaUrl,
+    GenerationStatus? generationStatus,
     bool? isPublished,
+    DateTime? publishedAt,
     DateTime? createdAt,
+    DateTime? updatedAt,
     Trip? trip,
     int? likeCount,
     int? commentCount,
@@ -263,8 +275,12 @@ class TripFinalPost {
       summaryText: summaryText ?? this.summaryText,
       curatedMedia: curatedMedia ?? this.curatedMedia,
       caption: caption ?? this.caption,
+      coverMediaUrl: coverMediaUrl ?? this.coverMediaUrl,
+      generationStatus: generationStatus ?? this.generationStatus,
       isPublished: isPublished ?? this.isPublished,
+      publishedAt: publishedAt ?? this.publishedAt,
       createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
       trip: trip ?? this.trip,
       likeCount: likeCount ?? this.likeCount,
       commentCount: commentCount ?? this.commentCount,
@@ -382,6 +398,19 @@ enum MediaProcessingStatus {
   processing,
   @JsonValue('COMPLETED')
   completed,
+  @JsonValue('FAILED')
+  failed,
+}
+
+enum GenerationStatus {
+  @JsonValue('DRAFT')
+  draft,
+  @JsonValue('GENERATING')
+  generating,
+  @JsonValue('READY')
+  ready,
+  @JsonValue('PUBLISHED')
+  published,
   @JsonValue('FAILED')
   failed,
 }

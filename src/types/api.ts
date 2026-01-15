@@ -155,9 +155,17 @@ export interface TripFinalPostResponse {
   summaryText: string;
   curatedMedia: string[];
   caption?: string | null;
+  coverMediaUrl?: string | null;
+  generationStatus: "DRAFT" | "GENERATING" | "READY" | "PUBLISHED" | "FAILED";
   isPublished: boolean;
+  publishedAt?: string | null;
   createdAt: string;
+  updatedAt: string;
   trip?: TripResponse | null;
+  likeCount?: number;
+  commentCount?: number;
+  shareCount?: number;
+  hasLiked?: boolean;
 }
 
 export interface MediaResponse {
@@ -208,9 +216,10 @@ export interface AddParticipantRequest {
 }
 
 export interface UpdateFinalPostRequest {
-  summaryText: string;
-  curatedMedia: string[];
+  summaryText?: string;
+  curatedMedia?: string[];
   caption?: string | null;
+  coverMediaUrl?: string | null;
 }
 
 // Trip Join Request Types

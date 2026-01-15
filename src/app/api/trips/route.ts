@@ -380,8 +380,7 @@ export async function POST(request: NextRequest) {
             endTimer();
           }
         });
-      },
-      { maxRequests: 5, windowMs: 60000 }
+      }
     );
   })(request);
 }

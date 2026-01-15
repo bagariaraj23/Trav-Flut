@@ -105,33 +105,34 @@ class _TripParticipantsScreenState extends State<TripParticipantsScreen> {
         receiverId,
       );
 
-      if (mounted) {
-        if (success) {
-          await tripProvider.loadSentTripInvitations(widget.tripId);
-          setState(() {});
+      if (!mounted) return;
+      if (success) {
+        final messenger = ScaffoldMessenger.of(context);
+        await tripProvider.loadSentTripInvitations(widget.tripId);
+        if (!mounted) return;
+        setState(() {});
+        messenger.showSnackBar(
+          const SnackBar(content: Text('Invitation sent successfully!')),
+        );
+      } else {
+        final error = tripProvider.error ?? '';
+        if (error.contains('Unique constraint failed') ||
+            error.contains('pending invitation')) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Invitation sent successfully!')),
+            const SnackBar(
+              content: Text(
+                'User already has a pending invitation or is already a participant.',
+              ),
+            ),
           );
         } else {
-          final error = tripProvider.error ?? '';
-          if (error.contains('Unique constraint failed') ||
-              error.contains('pending invitation')) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text(
-                  'User already has a pending invitation or is already a participant.',
-                ),
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                error.isNotEmpty ? error : 'Failed to send invitation',
               ),
-            );
-          } else {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text(
-                  error.isNotEmpty ? error : 'Failed to send invitation',
-                ),
-              ),
-            );
-          }
+            ),
+          );
         }
       }
     } catch (e) {
@@ -151,23 +152,23 @@ class _TripParticipantsScreenState extends State<TripParticipantsScreen> {
         inviteId,
       );
 
-      if (mounted) {
-        if (success) {
-          await tripProvider.loadSentTripInvitations(widget.tripId);
-          setState(() {});
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Invitation cancelled successfully!')),
-          );
-        } else {
-          final error = tripProvider.error ?? '';
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                error.isNotEmpty ? error : 'Failed to cancel invitation',
-              ),
+      if (!mounted) return;
+      if (success) {
+        await tripProvider.loadSentTripInvitations(widget.tripId);
+        if (!mounted) return;
+        setState(() {});
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Invitation cancelled successfully!')),
+        );
+      } else {
+        final error = tripProvider.error ?? '';
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              error.isNotEmpty ? error : 'Failed to cancel invitation',
             ),
-          );
-        }
+          ),
+        );
       }
     } catch (e) {
       if (mounted) {
@@ -265,14 +266,15 @@ class _TripParticipantsScreenState extends State<TripParticipantsScreen> {
     if (confirmed == true) {
       try {
         final apiService = context.read<ApiService>();
-        await apiService.removeTripParticipant(widget.tripId, userId);
+        final messenger = ScaffoldMessenger.of(context);
+        final tripId = widget.tripId;
+        await apiService.removeTripParticipant(tripId, userId);
 
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Participant removed successfully!')),
-          );
-          await _loadParticipants();
-        }
+        if (!mounted) return;
+        messenger.showSnackBar(
+          const SnackBar(content: Text('Participant removed successfully!')),
+        );
+        await _loadParticipants();
       } catch (e) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(

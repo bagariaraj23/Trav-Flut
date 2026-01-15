@@ -151,19 +151,22 @@ class TripProvider extends ChangeNotifier {
     }
   }
 
-  // End current trip
-  Future<bool> endTrip() async {
-    if (_currentTrip == null) return false;
+  // End trip (defaults to current ongoing trip)
+  Future<bool> endTrip({String? tripId}) async {
+    final targetTripId = tripId ?? _currentTrip?.id;
+    if (targetTripId == null) return false;
 
     try {
       _isLoading = true;
       _error = null;
       notifyListeners();
 
-      final response = await _tripService.endTrip(_currentTrip!.id);
+      final response = await _tripService.endTrip(targetTripId);
 
       if (response.success && response.data != null) {
-        _currentTrip = response.data;
+        if (_currentTrip?.id == targetTripId) {
+          _currentTrip = response.data;
+        }
 
         // Refresh trips list
         await loadTrips();

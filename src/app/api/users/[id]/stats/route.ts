@@ -72,9 +72,7 @@ export async function GET(
             }
           }
         );
-      },
-      // Define specific rate limit options for this route
-      { maxRequests: 50, windowMs: 60000 } // 50 requests per minute
+      }
     );
   })(request);
 }

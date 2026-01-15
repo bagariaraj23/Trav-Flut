@@ -129,10 +129,10 @@ export async function checkRateLimit(
     } catch (error) {
       // Fallback to memory cache if Redis fails
       console.warn("[RateLimit] Redis error, falling back to memory cache:", error);
-      const cached = memoryCache.get<{ count: number; resetTime: number }>(key);
+      const cached = memoryCache.get(key) as { count: number; resetTime: number } | null;
       if (cached && cached.resetTime > now) {
         count = cached.count + 1;
-        memoryCache.set(key, { count, resetTime }, config.windowMs);
+        memoryCache.set(key, { count, resetTime: cached.resetTime }, config.windowMs);
       } else {
         count = 1;
         memoryCache.set(key, { count, resetTime: resetAt }, config.windowMs);
@@ -140,7 +140,7 @@ export async function checkRateLimit(
     }
   } else {
     // Use memory cache as fallback
-    const cached = memoryCache.get<{ count: number; resetTime: number }>(key);
+    const cached = memoryCache.get(key) as { count: number; resetTime: number } | null;
     if (cached && cached.resetTime > now) {
       count = cached.count + 1;
       memoryCache.set(key, { count, resetTime: cached.resetTime }, config.windowMs);
@@ -264,7 +264,7 @@ export async function withRateLimit(
 ): Promise<NextResponse> {
   // Handle overloaded function signatures
   let config: RateLimitConfig;
-  let handler: (req: NextRequest) => Promise<NextResponse>;
+  let handler: ((req: NextRequest) => Promise<NextResponse>) | undefined;
   let opts: { userId?: string; skipIfNoIdentifier?: boolean } | undefined;
 
   try {
