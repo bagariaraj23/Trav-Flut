@@ -317,15 +317,6 @@ class _HomeFeedScreenState extends State<HomeFeedScreen> {
   }
 
   Widget _buildFinalPostCard(BuildContext context, TripFinalPost post) {
-    // Initialize engagement state for this post when card is built
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      final engagementProvider = context.read<EngagementProvider>();
-      // Only initialize if not already set (to preserve user interactions)
-      if (!engagementProvider.likeStatus.containsKey(post.id)) {
-        engagementProvider.setLikeStatus(post.id, post.hasLiked, count: post.likeCount);
-      }
-    });
-
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       elevation: 2,
