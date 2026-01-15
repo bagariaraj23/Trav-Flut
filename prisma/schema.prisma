@@ -39,21 +39,21 @@ model User {
   likes                    Like[]            @relation("UserLikes")
   comments                 Comment[]         @relation("UserComments")
   shares                   Share[]           @relation("UserShares")
-  securityEvents           SecurityEvent[]
 
   @@map("users")
 }
 
 model PasswordReset {
-  id          String   @id @default(uuid())
+  id          String    @id @default(uuid())
   userId      String
-  tokenHash   Bytes    @unique
+  tokenHash   Bytes     @unique
   otpCodeHash Bytes?
   expiresAt   DateTime
-  createdAt   DateTime @default(now())
+  usedAt      DateTime?
+  createdAt   DateTime  @default(now())
   createdIp   String?
   userAgent   String?
-  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, expiresAt])
   @@map("password_resets")
