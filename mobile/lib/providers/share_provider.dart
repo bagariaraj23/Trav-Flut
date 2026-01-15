@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'package:share_plus/share_plus.dart';
 import 'package:tripthread/services/share_service.dart';
 import 'package:tripthread/services/deep_link_service.dart';
 import 'package:tripthread/utils/error_handler.dart';
@@ -76,11 +77,24 @@ class ShareProvider extends ChangeNotifier {
     }
   }
 
-  Future<void> openNativeShare(String shareUrl) async {
+  Future<void> openNativeShare(
+    String shareUrl, {
+    String? subject,
+    String? text,
+  }) async {
     try {
-      // Use platform channel or share_plus package
-      // For now, just log - UI layer will handle native share
-      debugPrint('[ShareProvider] Share URL: $shareUrl');
+      debugPrint('[ShareProvider] Opening native share with URL: $shareUrl');
+
+      // Create share text with optional custom message
+      final shareText = text != null ? '$text\n\n$shareUrl' : shareUrl;
+
+      // Use share_plus to open the native share dialog
+      await Share.share(
+        shareText,
+        subject: subject ?? 'Check this out on TripThread!',
+      );
+
+      debugPrint('[ShareProvider] Share dialog opened successfully');
     } catch (e) {
       debugPrint('[ShareProvider] openNativeShare error: $e');
       _error = ErrorHandler.handleError(e).message;

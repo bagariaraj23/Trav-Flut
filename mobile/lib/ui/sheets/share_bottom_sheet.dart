@@ -54,15 +54,12 @@ class ShareBottomSheet extends StatelessWidget {
                           entityType,
                           entityId,
                         );
-                        // TODO: Add share_plus package for native share dialog
-                        // For now, just copy to clipboard
-                        await Clipboard.setData(ClipboardData(text: shareUrl));
+                        // Open native share dialog
+                        await provider.openNativeShare(
+                          shareUrl,
+                          text: 'Check out this amazing travel story on TripThread!',
+                        );
                         if (context.mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text('Share link copied to clipboard'),
-                            ),
-                          );
                           Navigator.of(context).pop();
                         }
                       } catch (e) {
