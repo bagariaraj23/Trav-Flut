@@ -5,7 +5,7 @@ publish_to: "none"
 version: 1.0.0+1
 
 environment:
-  sdk: '>=3.8.0 <4.0.0'
+  sdk: ">=3.8.0 <4.0.0"
   flutter: ">=3.10.0"
 
 dependencies:
@@ -64,7 +64,7 @@ dependencies:
 
   another_flushbar: ^1.12.30
   firebase_core: ^4.3.0
-  http_parser: ^4.1.2
+  http_parser: ^4.1.2 
   crypto: ^3.0.7
 
 dev_dependencies:

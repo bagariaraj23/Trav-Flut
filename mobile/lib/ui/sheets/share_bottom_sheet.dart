@@ -33,10 +33,7 @@ class ShareBottomSheet extends StatelessWidget {
               borderRadius: BorderRadius.circular(2),
             ),
           ),
-          Text(
-            'Share',
-            style: Theme.of(context).textTheme.titleLarge,
-          ),
+          Text('Share', style: Theme.of(context).textTheme.titleLarge),
           const SizedBox(height: 24),
           Consumer<ShareProvider>(
             builder: (context, provider, child) {
@@ -57,7 +54,8 @@ class ShareBottomSheet extends StatelessWidget {
                         // Open native share dialog
                         await provider.openNativeShare(
                           shareUrl,
-                          text: 'Check out this amazing travel story on TripThread!',
+                          text:
+                              'Check out this amazing travel story on TripThread!',
                         );
                         if (context.mounted) {
                           Navigator.of(context).pop();
@@ -99,7 +97,9 @@ class ShareBottomSheet extends StatelessWidget {
                         if (context.mounted) {
                           ScaffoldMessenger.of(context).showSnackBar(
                             SnackBar(
-                              content: Text('Failed to copy link: ${e.toString()}'),
+                              content: Text(
+                                'Failed to copy link: ${e.toString()}',
+                              ),
                               backgroundColor: Colors.red,
                             ),
                           );
@@ -167,4 +167,3 @@ class _ShareOption extends StatelessWidget {
     );
   }
 }
-

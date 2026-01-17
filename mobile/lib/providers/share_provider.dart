@@ -28,8 +28,8 @@ class ShareProvider extends ChangeNotifier {
   ShareProvider({
     required ShareService shareService,
     required DeepLinkService deepLinkService,
-  })  : _shareService = shareService,
-        _deepLinkService = deepLinkService;
+  }) : _shareService = shareService,
+       _deepLinkService = deepLinkService;
 
   final List<ShareRecord> _userShares = [];
   final Map<String, bool> _isCreating = {};
@@ -39,10 +39,7 @@ class ShareProvider extends ChangeNotifier {
   String? get error => _error;
   bool isCreating(String entityId) => _isCreating[entityId] ?? false;
 
-  Future<String> createShare(
-    String entityType,
-    String entityId,
-  ) async {
+  Future<String> createShare(String entityType, String entityId) async {
     final cacheKey = '$entityType:$entityId';
 
     if (_isCreating[cacheKey] == true) {
@@ -106,7 +103,7 @@ class ShareProvider extends ChangeNotifier {
   Future<Map<String, dynamic>> resolveShare(String shareToken) async {
     try {
       final sharedEntity = await _shareService.resolveShare(shareToken);
-      
+
       return {
         'entityType': sharedEntity.entityType,
         'entityId': sharedEntity.entityId,
@@ -125,4 +122,3 @@ class ShareProvider extends ChangeNotifier {
     notifyListeners();
   }
 }
-
