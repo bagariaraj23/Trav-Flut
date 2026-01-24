@@ -77,6 +77,10 @@ class _CommentComposerState extends State<CommentComposer> {
   Widget build(BuildContext context) {
     return Consumer<CommentProvider>(
       builder: (context, provider, child) {
+        final theme = Theme.of(context);
+        final colorScheme = theme.colorScheme;
+        final isDark = theme.brightness == Brightness.dark;
+
         final entityKey = '${widget.entityType}:${widget.entityId}';
         final isCreating = provider.isCreating(entityKey);
 
@@ -88,7 +92,7 @@ class _CommentComposerState extends State<CommentComposer> {
             top: 8,
           ),
           decoration: BoxDecoration(
-            color: Theme.of(context).scaffoldBackgroundColor,
+            color: theme.scaffoldBackgroundColor,
             boxShadow: [
               BoxShadow(
                 color: Colors.black.withOpacity(0.05),
@@ -106,17 +110,25 @@ class _CommentComposerState extends State<CommentComposer> {
                   margin: const EdgeInsets.only(bottom: 8),
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
-                    color: Colors.grey[100],
+                    color: colorScheme.onSurface.withValues(
+                      alpha: isDark ? 0.08 : 0.04,
+                    ),
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Row(
                     children: [
-                      Icon(Icons.reply, size: 16, color: Colors.grey[600]),
+                      Icon(
+                        Icons.reply,
+                        size: 16,
+                        color: colorScheme.onSurfaceVariant,
+                      ),
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
                           'Replying to ${widget.parentComment?.user?.name ?? 'user'}',
-                          style: Theme.of(context).textTheme.bodySmall,
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: colorScheme.onSurfaceVariant,
+                          ),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
@@ -136,9 +148,7 @@ class _CommentComposerState extends State<CommentComposer> {
                   Expanded(
                     child: Builder(
                       builder: (context) {
-                        final theme = Theme.of(context);
                         final textTheme = theme.textTheme;
-                        final colorScheme = theme.colorScheme;
                         
                         // Create base text styles with all required properties (fontSize and textBaseline for inherit: false)
                         final baseBodyLarge = textTheme.bodyLarge ?? const TextStyle(fontSize: 16, textBaseline: TextBaseline.alphabetic);
@@ -206,7 +216,7 @@ class _CommentComposerState extends State<CommentComposer> {
                           : const Icon(Icons.send),
                       onPressed:
                           (_isSubmitting || isCreating) ? null : _submitComment,
-                      color: Theme.of(context).colorScheme.primary,
+                      color: colorScheme.primary,
                     ),
                 ],
               ),

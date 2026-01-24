@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:tripthread/models/comment.dart';
 import 'package:tripthread/providers/comment_provider.dart';
+import 'package:tripthread/ui/widgets/centered_scrollable.dart';
 import 'package:tripthread/ui/widgets/comment_composer.dart';
 import 'package:tripthread/ui/widgets/comment_list_item.dart';
 
@@ -110,6 +111,11 @@ class _CommentBottomSheetState extends State<CommentBottomSheet> {
       minChildSize: 0.5,
       maxChildSize: 0.95,
       builder: (context, scrollController) {
+        final theme = Theme.of(context);
+        final colorScheme = theme.colorScheme;
+        final isKeyboardOpen = MediaQuery.of(context).viewInsets.bottom > 0;
+        final isDark = theme.brightness == Brightness.dark;
+
         return Container(
           decoration: BoxDecoration(
             color: Theme.of(context).scaffoldBackgroundColor,
@@ -117,6 +123,9 @@ class _CommentBottomSheetState extends State<CommentBottomSheet> {
           ),
           child: SafeArea(
             top: false,
+            // Avoid extra bottom safe-area padding when keyboard is open.
+            // This prevents small bottom overflows (e.g. ~29px) in the sheet.
+            bottom: !isKeyboardOpen,
             child: Column(
               children: [
                 Container(
@@ -124,7 +133,9 @@ class _CommentBottomSheetState extends State<CommentBottomSheet> {
                   width: 40,
                   height: 4,
                   decoration: BoxDecoration(
-                    color: Colors.grey[300],
+                    color: colorScheme.onSurface.withValues(
+                      alpha: isDark ? 0.20 : 0.14,
+                    ),
                     borderRadius: BorderRadius.circular(2),
                   ),
                 ),
@@ -158,9 +169,10 @@ class _CommentBottomSheetState extends State<CommentBottomSheet> {
                     }
 
                     if (error != null && comments.isEmpty) {
-                      return Center(
+                      return CenteredScrollable(
+                        controller: scrollController,
                         child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
+                          mainAxisSize: MainAxisSize.min,
                           children: [
                             Text(error),
                             const SizedBox(height: 16),
@@ -174,12 +186,16 @@ class _CommentBottomSheetState extends State<CommentBottomSheet> {
                     }
 
                     if (comments.isEmpty) {
-                      return Center(
+                      return CenteredScrollable(
+                        controller: scrollController,
                         child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
+                          mainAxisSize: MainAxisSize.min,
                           children: [
-                            Icon(Icons.comment_outlined,
-                                size: 64, color: Colors.grey[400]),
+                            Icon(
+                              Icons.comment_outlined,
+                              size: 64,
+                              color: Colors.grey[400],
+                            ),
                             const SizedBox(height: 16),
                             Text(
                               'No comments yet',

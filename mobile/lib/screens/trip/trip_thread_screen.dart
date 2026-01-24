@@ -1158,14 +1158,24 @@ class _TripThreadScreenState extends State<TripThreadScreen> {
                     ? Theme.of(
                         context,
                       ).colorScheme.primary.withValues(alpha: 0.12)
-                    : const Color(0xFFFAF9F6),
+                    : (Theme.of(context).brightness == Brightness.dark
+                        ? Theme.of(context)
+                            .colorScheme
+                            .onSurface
+                            .withValues(alpha: 0.06)
+                        : const Color(0xFFFAF9F6)),
                 borderRadius: BorderRadius.circular(16),
                 border: Border.all(
                   color: isCurrentUser
                       ? Theme.of(
                           context,
                         ).colorScheme.primary.withValues(alpha: 0.3)
-                      : Colors.grey[300]!,
+                      : (Theme.of(context).brightness == Brightness.dark
+                          ? Theme.of(context)
+                              .colorScheme
+                              .onSurface
+                              .withValues(alpha: 0.18)
+                          : Colors.grey[300]!),
                   width: 1.5,
                 ),
                 boxShadow: [
@@ -1194,7 +1204,7 @@ class _TripThreadScreenState extends State<TripThreadScreen> {
                                 fontWeight: FontWeight.w600,
                                 color: isCurrentUser
                                     ? Theme.of(context).colorScheme.primary
-                                    : Colors.black87,
+                                    : Theme.of(context).colorScheme.onSurface,
                               ),
                           overflow: TextOverflow.ellipsis,
                           maxLines: 1,
@@ -1211,7 +1221,9 @@ class _TripThreadScreenState extends State<TripThreadScreen> {
                                 color: isCurrentUser
                                     ? Theme.of(context).colorScheme.primary
                                           .withValues(alpha: 0.8)
-                                    : Colors.grey[700],
+                                    : Theme.of(context)
+                                        .colorScheme
+                                        .onSurfaceVariant,
                                 fontWeight: FontWeight.w500,
                               ),
                           overflow: TextOverflow.ellipsis,
@@ -1228,7 +1240,7 @@ class _TripThreadScreenState extends State<TripThreadScreen> {
                     Text(
                       entry.contentText!,
                       style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: Colors.black87,
+                        color: Theme.of(context).colorScheme.onSurface,
                         height: 1.5,
                       ),
                       overflow: TextOverflow.visible,

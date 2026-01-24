@@ -36,7 +36,8 @@ class EngagementActionBar extends StatelessWidget {
         final currentShareCount = shareCount ?? 0;
 
         return Row(
-          mainAxisAlignment: MainAxisAlignment.spaceAround,
+          mainAxisSize: MainAxisSize.min,
+          mainAxisAlignment: MainAxisAlignment.start,
           children: [
             LikeButton(
               entityType: entityType,
@@ -45,6 +46,7 @@ class EngagementActionBar extends StatelessWidget {
               initialLiked: hasLiked,
               onLikeChanged: onLikeChanged,
             ),
+            const SizedBox(width: 20),
             _ActionButton(
               icon: Icons.comment_outlined,
               count: currentCommentCount,
@@ -53,6 +55,7 @@ class EngagementActionBar extends StatelessWidget {
                 onCommentTap?.call();
               },
             ),
+            const SizedBox(width: 20),
             _ActionButton(
               icon: Icons.share_outlined,
               count: currentShareCount,

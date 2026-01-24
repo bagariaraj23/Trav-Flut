@@ -474,9 +474,25 @@ class _FollowersFollowingScreenState extends State<FollowersFollowingScreen> {
                       ? null
                       : () => _handleUnfollow(user.id, currentUserId),
                   style: OutlinedButton.styleFrom(
-                    foregroundColor: Colors.grey[800],
-                    backgroundColor: Colors.grey[100],
-                    side: BorderSide(color: Colors.grey[300]!),
+                    foregroundColor: Theme.of(context).colorScheme.onSurface,
+                    backgroundColor: Theme.of(context)
+                        .colorScheme
+                        .onSurface
+                        .withValues(
+                          alpha: Theme.of(context).brightness == Brightness.dark
+                              ? 0.08
+                              : 0.04,
+                        ),
+                    side: BorderSide(
+                      color: Theme.of(context)
+                          .colorScheme
+                          .onSurface
+                          .withValues(
+                            alpha: Theme.of(context).brightness == Brightness.dark
+                                ? 0.18
+                                : 0.10,
+                          ),
+                    ),
                     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                     minimumSize: const Size(0, 32),
                   ),
