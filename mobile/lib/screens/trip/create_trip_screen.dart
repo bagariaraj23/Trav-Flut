@@ -623,14 +623,18 @@ class _CreateTripScreenState extends State<CreateTripScreen> {
                               child: Container(
                                 padding: const EdgeInsets.all(16),
                                 decoration: BoxDecoration(
-                                  border: Border.all(color: Colors.grey[300]!),
+                                  border: Border.all(
+                                    color: Theme.of(context).colorScheme.onSurface.withValues(
+                                      alpha: Theme.of(context).brightness == Brightness.dark ? 0.18 : 0.10,
+                                    ),
+                                  ),
                                   borderRadius: BorderRadius.circular(8),
                                 ),
                                 child: Row(
                                   children: [
                                     Icon(
                                       Icons.calendar_today,
-                                      color: Colors.grey[600],
+                                      color: Theme.of(context).colorScheme.onSurfaceVariant,
                                     ),
                                     const SizedBox(width: 12),
                                     Expanded(
@@ -641,7 +645,7 @@ class _CreateTripScreenState extends State<CreateTripScreen> {
                                         style: TextStyle(
                                           color: _startDate != null
                                               ? null
-                                              : Colors.grey[600],
+                                              : Theme.of(context).colorScheme.onSurfaceVariant,
                                         ),
                                         overflow: TextOverflow.ellipsis,
                                       ),
@@ -669,14 +673,18 @@ class _CreateTripScreenState extends State<CreateTripScreen> {
                               child: Container(
                                 padding: const EdgeInsets.all(16),
                                 decoration: BoxDecoration(
-                                  border: Border.all(color: Colors.grey[300]!),
+                                  border: Border.all(
+                                    color: Theme.of(context).colorScheme.onSurface.withValues(
+                                      alpha: Theme.of(context).brightness == Brightness.dark ? 0.18 : 0.10,
+                                    ),
+                                  ),
                                   borderRadius: BorderRadius.circular(8),
                                 ),
                                 child: Row(
                                   children: [
                                     Icon(
                                       Icons.calendar_today,
-                                      color: Colors.grey[600],
+                                      color: Theme.of(context).colorScheme.onSurfaceVariant,
                                     ),
                                     const SizedBox(width: 12),
                                     Expanded(
@@ -687,7 +695,7 @@ class _CreateTripScreenState extends State<CreateTripScreen> {
                                         style: TextStyle(
                                           color: _endDate != null
                                               ? null
-                                              : Colors.grey[600],
+                                              : Theme.of(context).colorScheme.onSurfaceVariant,
                                         ),
                                         overflow: TextOverflow.ellipsis,
                                       ),

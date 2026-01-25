@@ -164,8 +164,11 @@ class _CommentsScreenState extends State<CommentsScreen> {
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Icon(Icons.comment_outlined,
-                            size: 64, color: Colors.grey[400]),
+                        Icon(
+                          Icons.comment_outlined,
+                          size: 64,
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        ),
                         const SizedBox(height: 16),
                         Text(
                           'No comments yet',

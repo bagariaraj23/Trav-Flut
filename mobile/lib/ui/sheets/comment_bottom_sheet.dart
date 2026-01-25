@@ -126,154 +126,159 @@ class _CommentBottomSheetState extends State<CommentBottomSheet> {
             // Avoid extra bottom safe-area padding when keyboard is open.
             // This prevents small bottom overflows (e.g. ~29px) in the sheet.
             bottom: !isKeyboardOpen,
-            child: Column(
-              children: [
-                Container(
-                  margin: const EdgeInsets.only(top: 12),
-                  width: 40,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: colorScheme.onSurface.withValues(
-                      alpha: isDark ? 0.20 : 0.14,
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                return Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      margin: const EdgeInsets.only(top: 12),
+                      width: 40,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: colorScheme.onSurface.withValues(
+                          alpha: isDark ? 0.20 : 0.14,
+                        ),
+                        borderRadius: BorderRadius.circular(2),
+                      ),
                     ),
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
-                Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Row(
-                    children: [
-                      Text(
-                        'Comments',
-                        style: Theme.of(context).textTheme.titleLarge,
+                    Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Row(
+                        children: [
+                          Text(
+                            'Comments',
+                            style: Theme.of(context).textTheme.titleLarge,
+                          ),
+                          const Spacer(),
+                          IconButton(
+                            icon: const Icon(Icons.close),
+                            onPressed: () => Navigator.of(context).pop(),
+                          ),
+                        ],
                       ),
-                      const Spacer(),
-                      IconButton(
-                        icon: const Icon(Icons.close),
-                        onPressed: () => Navigator.of(context).pop(),
-                      ),
-                    ],
-                  ),
-                ),
-                Expanded(
-                  child: Consumer<CommentProvider>(
-                  builder: (context, provider, child) {
-                    final entityKey =
-                        '${widget.entityType}:${widget.entityId}';
-                    final comments = provider.getCommentsList(entityKey);
-                    final isLoading = provider.isLoading(entityKey);
-                    final error = provider.error;
+                    ),
+                    Flexible(
+                      child: Consumer<CommentProvider>(
+                        builder: (context, provider, child) {
+                          final entityKey =
+                              '${widget.entityType}:${widget.entityId}';
+                          final comments = provider.getCommentsList(entityKey);
+                          final isLoading = provider.isLoading(entityKey);
+                          final error = provider.error;
 
-                    if (isLoading && comments.isEmpty) {
-                      return const Center(child: CircularProgressIndicator());
-                    }
+                          if (isLoading && comments.isEmpty) {
+                            return const Center(child: CircularProgressIndicator());
+                          }
 
-                    if (error != null && comments.isEmpty) {
-                      return CenteredScrollable(
-                        controller: scrollController,
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text(error),
-                            const SizedBox(height: 16),
-                            ElevatedButton(
-                              onPressed: _loadComments,
-                              child: const Text('Retry'),
-                            ),
-                          ],
-                        ),
-                      );
-                    }
-
-                    if (comments.isEmpty) {
-                      return CenteredScrollable(
-                        controller: scrollController,
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(
-                              Icons.comment_outlined,
-                              size: 64,
-                              color: Colors.grey[400],
-                            ),
-                            const SizedBox(height: 16),
-                            Text(
-                              'No comments yet',
-                              style: Theme.of(context).textTheme.titleMedium,
-                            ),
-                            const SizedBox(height: 8),
-                            Text(
-                              'Be the first to comment!',
-                              style: Theme.of(context).textTheme.bodyMedium,
-                            ),
-                          ],
-                        ),
-                      );
-                    }
-
-                    return RefreshIndicator(
-                      onRefresh: _loadComments,
-                      child: ListView.builder(
-                        controller: scrollController,
-                        padding: const EdgeInsets.symmetric(horizontal: 16),
-                        itemCount: comments.length + (isLoading ? 1 : 0),
-                        itemBuilder: (context, index) {
-                          if (index == comments.length) {
-                            return const Padding(
-                              padding: EdgeInsets.all(16),
-                              child: Center(child: CircularProgressIndicator()),
+                          if (error != null && comments.isEmpty) {
+                            return CenteredScrollable(
+                              controller: scrollController,
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text(error),
+                                  const SizedBox(height: 16),
+                                  ElevatedButton(
+                                    onPressed: _loadComments,
+                                    child: const Text('Retry'),
+                                  ),
+                                ],
+                              ),
                             );
                           }
 
-                          final comment = comments[index];
-                          final isExpanded = _expandedReplies[comment.id] ?? false;
-                          final replies = provider.getRepliesList(comment.id);
-                          final hasReplies = comment.replyCount != null && comment.replyCount! > 0;
-
-                          return Column(
-                            children: [
-                              CommentListItem(
-                                comment: comment,
-                                isExpanded: isExpanded,
-                                onReplyTap: () => _startReply(comment.id),
-                                onViewReplies: hasReplies
-                                    ? () => _toggleReplies(comment.id)
-                                    : null,
-                              ),
-                              if (isExpanded && replies.isNotEmpty)
-                                ...replies.map(
-                                  (reply) => CommentListItem(
-                                    comment: reply,
-                                    isReply: true,
+                          if (comments.isEmpty) {
+                            return CenteredScrollable(
+                              controller: scrollController,
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(
+                                    Icons.comment_outlined,
+                                    size: 64,
+                                    color: colorScheme.onSurfaceVariant,
                                   ),
-                                ),
-                              if (isExpanded && replies.isEmpty && provider.isLoadingReplies(comment.id))
-                                const Padding(
-                                  padding: EdgeInsets.only(left: 48, bottom: 8),
-                                  child: CircularProgressIndicator(),
-                                ),
-                            ],
+                                  const SizedBox(height: 16),
+                                  Text(
+                                    'No comments yet',
+                                    style: Theme.of(context).textTheme.titleMedium,
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Text(
+                                    'Be the first to comment!',
+                                    style: Theme.of(context).textTheme.bodyMedium,
+                                  ),
+                                ],
+                              ),
+                            );
+                          }
+
+                          return RefreshIndicator(
+                            onRefresh: _loadComments,
+                            child: ListView.builder(
+                              controller: scrollController,
+                              padding: const EdgeInsets.symmetric(horizontal: 16),
+                              itemCount: comments.length + (isLoading ? 1 : 0),
+                              itemBuilder: (context, index) {
+                                if (index == comments.length) {
+                                  return const Padding(
+                                    padding: EdgeInsets.all(16),
+                                    child: Center(child: CircularProgressIndicator()),
+                                  );
+                                }
+
+                                final comment = comments[index];
+                                final isExpanded = _expandedReplies[comment.id] ?? false;
+                                final replies = provider.getRepliesList(comment.id);
+                                final hasReplies = comment.replyCount != null && comment.replyCount! > 0;
+
+                                return Column(
+                                  children: [
+                                    CommentListItem(
+                                      comment: comment,
+                                      isExpanded: isExpanded,
+                                      onReplyTap: () => _startReply(comment.id),
+                                      onViewReplies: hasReplies
+                                          ? () => _toggleReplies(comment.id)
+                                          : null,
+                                    ),
+                                    if (isExpanded && replies.isNotEmpty)
+                                      ...replies.map(
+                                        (reply) => CommentListItem(
+                                          comment: reply,
+                                          isReply: true,
+                                        ),
+                                      ),
+                                    if (isExpanded && replies.isEmpty && provider.isLoadingReplies(comment.id))
+                                      const Padding(
+                                        padding: EdgeInsets.only(left: 48, bottom: 8),
+                                        child: CircularProgressIndicator(),
+                                      ),
+                                  ],
+                                );
+                              },
+                            ),
                           );
                         },
                       ),
-                    );
-                  },
-                ),
-              ),
-              CommentComposer(
-                entityType: widget.entityType,
-                entityId: widget.entityId,
-                parentCommentId: _currentParentCommentId,
-                parentComment: _currentParentCommentId != null
-                    ? _findComment(_currentParentCommentId!)
-                    : null,
-                onCommentPosted: () {
-                  _cancelReply();
-                  _loadComments();
-                },
-                onCancel: _cancelReply,
-              ),
-              ],
+                    ),
+                    CommentComposer(
+                      entityType: widget.entityType,
+                      entityId: widget.entityId,
+                      parentCommentId: _currentParentCommentId,
+                      parentComment: _currentParentCommentId != null
+                          ? _findComment(_currentParentCommentId!)
+                          : null,
+                      onCommentPosted: () {
+                        _cancelReply();
+                        _loadComments();
+                      },
+                      onCancel: _cancelReply,
+                    ),
+                  ],
+                );
+              },
             ),
           ),
         );

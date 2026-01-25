@@ -591,7 +591,7 @@ class _DiscoverTabState extends State<DiscoverTab> {
                     Text(
                       trip.destinations.first,
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: Colors.grey[600],
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
                         fontSize: 10,
                       ),
                       maxLines: 1,
@@ -838,7 +838,9 @@ class _DiscoverTabState extends State<DiscoverTab> {
                       '@$username',
                       style: Theme.of(
                         context,
-                      ).textTheme.bodyMedium?.copyWith(color: Colors.grey[600]),
+                      ).textTheme.bodyMedium?.copyWith(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
                       overflow: TextOverflow.ellipsis,
                       maxLines: 1,
                     ),
@@ -847,7 +849,7 @@ class _DiscoverTabState extends State<DiscoverTab> {
                       Text(
                         bio,
                         style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: Colors.grey[600],
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
                         ),
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,

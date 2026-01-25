@@ -128,13 +128,13 @@ class _TripInvitationsScreenState extends State<TripInvitationsScreen> {
                   Icon(
                     Icons.mail_outline,
                     size: 64,
-                    color: Colors.grey[400],
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
                   ),
                   const SizedBox(height: 16),
                   Text(
                     'No Trip Invitations',
                     style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                          color: Colors.grey[600],
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
                         ),
                   ),
                   const SizedBox(height: 8),
@@ -142,7 +142,7 @@ class _TripInvitationsScreenState extends State<TripInvitationsScreen> {
                     'When someone invites you to a trip,\nthey will appear here',
                     textAlign: TextAlign.center,
                     style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          color: Colors.grey[500],
+                          color: Theme.of(context).colorScheme.onSurfaceVariant.withValues(alpha: 0.6),
                         ),
                   ),
                 ],
@@ -235,7 +235,7 @@ class _TripInvitationsScreenState extends State<TripInvitationsScreen> {
                                 .textTheme
                                 .bodyMedium
                                 ?.copyWith(
-                                  color: Colors.grey[600],
+                                  color: Theme.of(context).colorScheme.onSurfaceVariant,
                                 ),
                           ),
                         const SizedBox(height: 4),
@@ -243,7 +243,7 @@ class _TripInvitationsScreenState extends State<TripInvitationsScreen> {
                           'Invited you to: "${trip.title}"',
                           style:
                               Theme.of(context).textTheme.bodySmall?.copyWith(
-                                    color: Colors.grey[500],
+                                    color: Theme.of(context).colorScheme.onSurfaceVariant.withValues(alpha: 0.6),
                                   ),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,

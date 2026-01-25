@@ -354,7 +354,7 @@ class _HomeFeedScreenState extends State<HomeFeedScreen> {
                       Text(
                         _formatDateTime(post.createdAt),
                         style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: Colors.grey[600],
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
                         ),
                       ),
                     ],
@@ -380,7 +380,9 @@ class _HomeFeedScreenState extends State<HomeFeedScreen> {
                   return Container(
                     margin: const EdgeInsets.symmetric(horizontal: 4),
                     decoration: BoxDecoration(
-                      color: Colors.grey[200],
+                      color: Theme.of(context).colorScheme.onSurface.withValues(
+                        alpha: Theme.of(context).brightness == Brightness.dark ? 0.06 : 0.03,
+                      ),
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: ClipRRect(
@@ -393,7 +395,9 @@ class _HomeFeedScreenState extends State<HomeFeedScreen> {
                         fit: BoxFit.cover,
                         errorBuilder: (context, error, stackTrace) {
                           return Container(
-                            color: Colors.grey[200],
+                            color: Theme.of(context).colorScheme.onSurface.withValues(
+                        alpha: Theme.of(context).brightness == Brightness.dark ? 0.06 : 0.03,
+                      ),
                             child: const Center(
                               child: Icon(
                                 Icons.image_not_supported,
@@ -429,7 +433,9 @@ class _HomeFeedScreenState extends State<HomeFeedScreen> {
                     post.caption!,
                     style: Theme.of(
                       context,
-                    ).textTheme.bodyMedium?.copyWith(color: Colors.grey[700]),
+                    ).textTheme.bodyMedium?.copyWith(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant.withValues(alpha: 0.9),
+                    ),
                   ),
                 ],
 
@@ -868,13 +874,19 @@ class _TripsTabState extends State<TripsTab> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(Icons.map_outlined, size: 64, color: Colors.grey[400]),
+              Icon(
+                Icons.map_outlined,
+                size: 64,
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
               const SizedBox(height: 16),
               Text(
                 'No Trips Yet',
                 style: Theme.of(
                   context,
-                ).textTheme.headlineSmall?.copyWith(color: Colors.grey[600]),
+                ).textTheme.headlineSmall?.copyWith(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
               ),
               const SizedBox(height: 8),
               Text(
@@ -882,7 +894,9 @@ class _TripsTabState extends State<TripsTab> {
                 textAlign: TextAlign.center,
                 style: Theme.of(
                   context,
-                ).textTheme.bodyMedium?.copyWith(color: Colors.grey[500]),
+                ).textTheme.bodyMedium?.copyWith(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant.withValues(alpha: 0.6),
+                ),
               ),
               const SizedBox(height: 24),
               ElevatedButton.icon(
@@ -1051,7 +1065,9 @@ class _TripsTabState extends State<TripsTab> {
                 borderRadius: const BorderRadius.vertical(
                   top: Radius.circular(12),
                 ),
-                color: Colors.grey[200],
+                color: Theme.of(context).colorScheme.onSurface.withValues(
+                  alpha: Theme.of(context).brightness == Brightness.dark ? 0.06 : 0.03,
+                ),
               ),
               child: () {
                 final coverUrl = trip.coverMedia?.url;
@@ -1100,14 +1116,16 @@ class _TripsTabState extends State<TripsTab> {
                       Icon(
                         Icons.location_on,
                         size: 16,
-                        color: Colors.grey[600],
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
                       ),
                       const SizedBox(width: 4),
                       Expanded(
                         child: Text(
                           trip.destinations.join(', '),
                           style: Theme.of(context).textTheme.bodyMedium
-                              ?.copyWith(color: Colors.grey[600]),
+                              ?.copyWith(
+                                color: Theme.of(context).colorScheme.onSurfaceVariant,
+                              ),
                           overflow: TextOverflow.ellipsis,
                           maxLines: 1,
                         ),
@@ -1568,7 +1586,9 @@ class ProfileTab extends StatelessWidget {
                                   SizedBox(height: 4),
                                   Text(
                                     'Start documenting your adventures!',
-                                    style: TextStyle(color: Colors.grey),
+                                    style: TextStyle(
+                                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                                    ),
                                   ),
                                 ],
                               ),

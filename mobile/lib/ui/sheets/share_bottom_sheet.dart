@@ -3,7 +3,9 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:tripthread/providers/share_provider.dart';
 
-class ShareBottomSheet extends StatelessWidget {
+enum _ShareAction { shareVia, copyLink }
+
+class ShareBottomSheet extends StatefulWidget {
   final String entityType;
   final String entityId;
 
@@ -12,6 +14,26 @@ class ShareBottomSheet extends StatelessWidget {
     required this.entityType,
     required this.entityId,
   });
+
+  @override
+  State<ShareBottomSheet> createState() => _ShareBottomSheetState();
+}
+
+class _ShareBottomSheetState extends State<ShareBottomSheet> {
+  _ShareAction? _activeAction;
+
+  Future<void> _runAction(
+    _ShareAction action,
+    Future<void> Function() fn,
+  ) async {
+    if (_activeAction != null) return;
+    setState(() => _activeAction = action);
+    try {
+      await fn();
+    } finally {
+      if (mounted) setState(() => _activeAction = null);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -43,7 +65,8 @@ class ShareBottomSheet extends StatelessWidget {
           const SizedBox(height: 24),
           Consumer<ShareProvider>(
             builder: (context, provider, child) {
-              final isCreating = provider.isCreating('$entityType:$entityId');
+              final cacheKey = '${widget.entityType}:${widget.entityId}';
+              final isCreating = provider.isCreating(cacheKey);
 
               return Column(
                 children: [
@@ -52,32 +75,36 @@ class ShareBottomSheet extends StatelessWidget {
                     label: 'Share via...',
                     onTap: () async {
                       if (isCreating) return;
-                      try {
-                        final shareUrl = await provider.createShare(
-                          entityType,
-                          entityId,
-                        );
-                        // Open native share dialog
-                        await provider.openNativeShare(
-                          shareUrl,
-                          text:
-                              'Check out this amazing travel story on TripThread!',
-                        );
-                        if (context.mounted) {
-                          Navigator.of(context).pop();
-                        }
-                      } catch (e) {
-                        if (context.mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text('Failed to share: ${e.toString()}'),
-                              backgroundColor: Colors.red,
-                            ),
+                      await _runAction(_ShareAction.shareVia, () async {
+                        try {
+                          final shareUrl = await provider.createShare(
+                            widget.entityType,
+                            widget.entityId,
                           );
+                          // Open native share dialog
+                          await provider.openNativeShare(
+                            shareUrl,
+                            text:
+                                'Check out this amazing travel story on TripThread!',
+                          );
+                          if (context.mounted) {
+                            Navigator.of(context).pop();
+                          }
+                        } catch (e) {
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content:
+                                    Text('Failed to share: ${e.toString()}'),
+                                backgroundColor: Colors.red,
+                              ),
+                            );
+                          }
                         }
-                      }
+                      });
                     },
-                    isLoading: isCreating,
+                    isLoading:
+                        isCreating && _activeAction == _ShareAction.shareVia,
                   ),
                   const SizedBox(height: 12),
                   _ShareOption(
@@ -85,34 +112,39 @@ class ShareBottomSheet extends StatelessWidget {
                     label: 'Copy Link',
                     onTap: () async {
                       if (isCreating) return;
-                      try {
-                        final shareUrl = await provider.createShare(
-                          entityType,
-                          entityId,
-                        );
-                        await Clipboard.setData(ClipboardData(text: shareUrl));
-                        if (context.mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text('Link copied to clipboard'),
-                            ),
+                      await _runAction(_ShareAction.copyLink, () async {
+                        try {
+                          final shareUrl = await provider.createShare(
+                            widget.entityType,
+                            widget.entityId,
                           );
-                          Navigator.of(context).pop();
-                        }
-                      } catch (e) {
-                        if (context.mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text(
-                                'Failed to copy link: ${e.toString()}',
+                          await Clipboard.setData(
+                            ClipboardData(text: shareUrl),
+                          );
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('Link copied to clipboard'),
                               ),
-                              backgroundColor: Colors.red,
-                            ),
-                          );
+                            );
+                            Navigator.of(context).pop();
+                          }
+                        } catch (e) {
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text(
+                                  'Failed to copy link: ${e.toString()}',
+                                ),
+                                backgroundColor: Colors.red,
+                              ),
+                            );
+                          }
                         }
-                      }
+                      });
                     },
-                    isLoading: isCreating,
+                    isLoading:
+                        isCreating && _activeAction == _ShareAction.copyLink,
                   ),
                 ],
               );

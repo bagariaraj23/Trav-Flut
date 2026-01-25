@@ -327,7 +327,10 @@ class _TripParticipantsScreenState extends State<TripParticipantsScreen> {
                     ),
                     Text(
                       '@$username',
-                      style: TextStyle(color: Colors.grey[600], fontSize: 12),
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        fontSize: 12,
+                      ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -399,11 +402,17 @@ class _TripParticipantsScreenState extends State<TripParticipantsScreen> {
             Text('@${participant.user!.username}'),
           Text(
             'Role: ${participant.role}',
-            style: TextStyle(color: Colors.grey[600], fontSize: 12),
+            style: TextStyle(
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+              fontSize: 12,
+            ),
           ),
           Text(
             'Joined: ${_formatDate(participant.joinedAt)}',
-            style: TextStyle(color: Colors.grey[600], fontSize: 12),
+            style: TextStyle(
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+              fontSize: 12,
+            ),
           ),
         ],
       ),
