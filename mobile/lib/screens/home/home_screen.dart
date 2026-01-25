@@ -436,67 +436,73 @@ class _HomeFeedScreenState extends State<HomeFeedScreen> {
                 const SizedBox(height: 12),
 
                 // Engagement action bar
-                EngagementActionBar(
-                  entityType: 'TRIP_FINAL_POST',
-                  entityId: post.id,
-                  likeCount: post.likeCount,
-                  commentCount: post.commentCount,
-                  shareCount: post.shareCount,
-                  hasLiked: post.hasLiked,
-                  onCommentTap: () {
-                    showModalBottomSheet(
-                      context: context,
-                      isScrollControlled: true,
-                      backgroundColor: Colors.transparent,
-                      builder: (context) => CommentBottomSheet(
-                        entityType: 'TRIP_FINAL_POST',
-                        entityId: post.id,
+                Row(
+                  children: [
+                    Expanded(
+                      child: Align(
+                        alignment: Alignment.centerLeft,
+                        child: EngagementActionBar(
+                          entityType: 'TRIP_FINAL_POST',
+                          entityId: post.id,
+                          likeCount: post.likeCount,
+                          commentCount: post.commentCount,
+                          shareCount: post.shareCount,
+                          hasLiked: post.hasLiked,
+                          onCommentTap: () {
+                            showModalBottomSheet(
+                              context: context,
+                              isScrollControlled: true,
+                              backgroundColor: Colors.transparent,
+                              builder: (context) => CommentBottomSheet(
+                                entityType: 'TRIP_FINAL_POST',
+                                entityId: post.id,
+                              ),
+                            );
+                          },
+                          onShareTap: () {
+                            showModalBottomSheet(
+                              context: context,
+                              backgroundColor: Colors.transparent,
+                              builder: (context) => ShareBottomSheet(
+                                entityType: 'TRIP_FINAL_POST',
+                                entityId: post.id,
+                              ),
+                            );
+                          },
+                          onLikeChanged: () {
+                            // Update the post in FeedProvider with new like count
+                            final engagementProvider =
+                                context.read<EngagementProvider>();
+                            final newLikeCount =
+                                engagementProvider.getLikeCount(post.id);
+                            final newHasLiked =
+                                engagementProvider.isLiked(post.id);
+
+                            // Update the post in the feed
+                            final feedProvider = context.read<FeedProvider>();
+                            final updatedPost = post.copyWith(
+                              likeCount: newLikeCount,
+                              hasLiked: newHasLiked,
+                            );
+                            final index = feedProvider.homeFeedPosts
+                                .indexWhere((p) => p.id == post.id);
+                            if (index >= 0) {
+                              feedProvider.updatePost(index, updatedPost);
+                            }
+                          },
+                        ),
                       ),
-                    );
-                  },
-                  onShareTap: () {
-                    showModalBottomSheet(
-                      context: context,
-                      backgroundColor: Colors.transparent,
-                      builder: (context) => ShareBottomSheet(
-                        entityType: 'TRIP_FINAL_POST',
-                        entityId: post.id,
-                      ),
-                    );
-                  },
-                  onLikeChanged: () {
-                    // Update the post in FeedProvider with new like count
-                    final engagementProvider = context.read<EngagementProvider>();
-                    final newLikeCount = engagementProvider.getLikeCount(post.id);
-                    final newHasLiked = engagementProvider.isLiked(post.id);
-                    
-                    // Update the post in the feed
-                    final feedProvider = context.read<FeedProvider>();
-                    final updatedPost = post.copyWith(
-                      likeCount: newLikeCount,
-                      hasLiked: newHasLiked,
-                    );
-                    final index = feedProvider.homeFeedPosts.indexWhere((p) => p.id == post.id);
-                    if (index >= 0) {
-                      feedProvider.updatePost(index, updatedPost);
-                    }
-                  },
-                ),
-                
-                const SizedBox(height: 8),
-                
-                // View Trip button
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: TextButton(
-                    onPressed: () {
-                      context.push(
-                        '/trip/${post.tripId}',
-                        extra: {'from': '/home'},
-                      );
-                    },
-                    child: const Text('View Trip'),
-                  ),
+                    ),
+                    TextButton(
+                      onPressed: () {
+                        context.push(
+                          '/trip/${post.tripId}',
+                          extra: {'from': '/home'},
+                        );
+                      },
+                      child: const Text('View Trip'),
+                    ),
+                  ],
                 ),
               ],
             ),
@@ -1222,18 +1228,28 @@ class _TripsTabState extends State<TripsTab> {
   }
 
   Widget _buildStatChip(BuildContext context, IconData icon, String text) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
-        color: Colors.grey[100],
+        color: colorScheme.onSurface.withValues(alpha: isDark ? 0.08 : 0.04),
         borderRadius: BorderRadius.circular(12),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 14, color: Colors.grey[600]),
+          Icon(icon, size: 14, color: colorScheme.onSurfaceVariant),
           const SizedBox(width: 4),
-          Text(text, style: TextStyle(color: Colors.grey[600], fontSize: 12)),
+          Text(
+            text,
+            style: TextStyle(
+              color: colorScheme.onSurfaceVariant,
+              fontSize: 12,
+            ),
+          ),
         ],
       ),
     );
