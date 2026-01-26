@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
+import 'package:go_router/go_router.dart';
 import 'package:tripthread/providers/engagement_provider.dart';
 
 class LikeButton extends StatefulWidget {
@@ -41,10 +42,7 @@ class _LikeButtonState extends State<LikeButton>
     _colorAnimation = ColorTween(
       begin: Colors.grey,
       end: Colors.red,
-    ).animate(CurvedAnimation(
-      parent: _controller,
-      curve: Curves.easeInOut,
-    ));
+    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeInOut));
   }
 
   @override
@@ -55,7 +53,7 @@ class _LikeButtonState extends State<LikeButton>
     final isLiked = provider.likeStatus.containsKey(widget.entityId)
         ? provider.isLiked(widget.entityId)
         : (widget.initialLiked ?? false);
-    
+
     if (isLiked && _controller.value != 1.0) {
       _controller.value = 1.0;
     } else if (!isLiked && _controller.value != 0.0) {
@@ -101,7 +99,9 @@ class _LikeButtonState extends State<LikeButton>
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Failed to ${wasLiked ? 'unlike' : 'like'}: ${e.toString()}'),
+            content: Text(
+              'Failed to ${wasLiked ? 'unlike' : 'like'}: ${e.toString()}',
+            ),
             backgroundColor: Colors.red,
           ),
         );
@@ -116,8 +116,8 @@ class _LikeButtonState extends State<LikeButton>
         // Use provider state if available, otherwise fall back to initial values
         final providerLiked = provider.isLiked(widget.entityId);
         final providerCount = provider.getLikeCount(widget.entityId);
-        final isLiked = provider.likeStatus.containsKey(widget.entityId) 
-            ? providerLiked 
+        final isLiked = provider.likeStatus.containsKey(widget.entityId)
+            ? providerLiked
             : (widget.initialLiked ?? false);
         final likeCount = provider.likeCounts.containsKey(widget.entityId)
             ? providerCount
@@ -132,7 +132,7 @@ class _LikeButtonState extends State<LikeButton>
               // Clamp animation value to prevent errors
               final animationValue = _controller.value.clamp(0.0, 1.0);
               final scale = isLiked ? 1.0 + (animationValue * 0.2) : 1.0;
-              
+
               return Transform.scale(
                 scale: scale,
                 child: Row(
@@ -147,12 +147,20 @@ class _LikeButtonState extends State<LikeButton>
                     ),
                     const SizedBox(width: 4),
                     if (likeCount > 0)
-                      Text(
-                        _formatCount(likeCount),
-                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                              color: isLiked ? Colors.red : Colors.grey,
-                              fontWeight: FontWeight.w500,
-                            ),
+                      GestureDetector(
+                        onTap: () {
+                          context.push(
+                            '/likes/${widget.entityType}/${widget.entityId}',
+                          );
+                        },
+                        child: Text(
+                          _formatCount(likeCount),
+                          style: Theme.of(context).textTheme.bodyMedium
+                              ?.copyWith(
+                                color: isLiked ? Colors.red : Colors.grey,
+                                fontWeight: FontWeight.w500,
+                              ),
+                        ),
                       ),
                     if (isToggling)
                       const Padding(
@@ -179,4 +187,3 @@ class _LikeButtonState extends State<LikeButton>
     return '${(count / 1000000).toStringAsFixed(1)}M';
   }
 }
-
