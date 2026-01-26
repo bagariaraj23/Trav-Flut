@@ -4,8 +4,8 @@ import 'package:tripthread/providers/trip_provider.dart';
 import 'package:tripthread/providers/auth_provider.dart';
 import 'package:tripthread/models/trip.dart';
 import 'package:tripthread/models/place.dart';
-import 'package:tripthread/widgets/map_picker_sheet.dart';
-import 'package:tripthread/widgets/place_search_sheet.dart';
+import 'package:tripthread/widgets/sheets/map_picker_sheet.dart';
+import 'package:tripthread/widgets/sheets/place_search_sheet.dart';
 import 'package:tripthread/services/media_service.dart';
 import 'package:tripthread/services/api_service.dart';
 import 'package:tripthread/utils/cloudinary_utils.dart';
@@ -1502,7 +1502,7 @@ class _TripThreadScreenState extends State<TripThreadScreen> {
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        const Icon(
+                        Icon(
                           Icons.broken_image,
                           size: 48,
                           color: Theme.of(context).colorScheme.onSurfaceVariant,

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
-import 'package:tripthread/ui/widgets/comment_list_item.dart';
+import 'package:tripthread/widgets/engagement/comment_list_item.dart';
 import 'package:tripthread/models/comment.dart';
 import 'package:tripthread/models/user.dart';
 import 'package:tripthread/providers/comment_provider.dart';

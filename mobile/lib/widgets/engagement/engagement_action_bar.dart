@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:tripthread/providers/engagement_provider.dart';
-import 'package:tripthread/ui/widgets/like_button.dart';
+import 'package:tripthread/widgets/engagement/like_button.dart';
 
 class EngagementActionBar extends StatelessWidget {
   final String entityType;

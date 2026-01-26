@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
-import 'package:tripthread/ui/sheets/share_bottom_sheet.dart';
+import 'package:tripthread/widgets/sheets/share_bottom_sheet.dart';
 import 'package:tripthread/providers/share_provider.dart';
 import 'package:tripthread/services/share_service.dart';
 import 'package:tripthread/services/deep_link_service.dart';

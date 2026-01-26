@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
-import 'package:tripthread/ui/widgets/engagement_action_bar.dart';
+import 'package:tripthread/widgets/engagement/engagement_action_bar.dart';
 import 'package:tripthread/providers/engagement_provider.dart';
 import 'package:tripthread/services/like_service.dart';
 

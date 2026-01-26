@@ -9,9 +9,9 @@ import 'package:tripthread/providers/engagement_provider.dart';
 import 'package:tripthread/models/trip.dart';
 import 'package:tripthread/screens/discover/discover_tab.dart';
 import 'package:tripthread/utils/cloudinary_utils.dart';
-import 'package:tripthread/ui/widgets/engagement_action_bar.dart';
-import 'package:tripthread/ui/sheets/comment_bottom_sheet.dart';
-import 'package:tripthread/ui/sheets/share_bottom_sheet.dart';
+import 'package:tripthread/widgets/engagement/engagement_action_bar.dart';
+import 'package:tripthread/widgets/sheets/comment_bottom_sheet.dart';
+import 'package:tripthread/widgets/sheets/share_bottom_sheet.dart';
 
 class HomeScreen extends StatefulWidget {
   final int initialTab;
@@ -1567,15 +1567,16 @@ class ProfileTab extends StatelessWidget {
                           ),
                           const SizedBox(height: 16),
                           if (recentTrips.isEmpty)
-                            const Center(
+                            Center(
                               child: Column(
+                                mainAxisSize: MainAxisSize.min,
                                 children: [
                                   Icon(
                                     Icons.map_outlined,
                                     size: 48,
                                     color: Colors.grey,
                                   ),
-                                  SizedBox(height: 12),
+                                  const SizedBox(height: 12),
                                   Text(
                                     'No trips yet',
                                     style: TextStyle(
@@ -1583,11 +1584,13 @@ class ProfileTab extends StatelessWidget {
                                       color: Colors.grey,
                                     ),
                                   ),
-                                  SizedBox(height: 4),
-                                  Text(
-                                    'Start documenting your adventures!',
-                                    style: TextStyle(
-                                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                                  const SizedBox(height: 4),
+                                  Builder(
+                                    builder: (context) => Text(
+                                      'Start documenting your adventures!',
+                                      style: TextStyle(
+                                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                                      ),
                                     ),
                                   ),
                                 ],
