@@ -129,7 +129,12 @@ export async function getLikesByEntity(
   }
 
   const likes = await prisma.like.findMany({
-    where,
+    where: {
+      ...where,
+      user: {
+        deletedAt: null
+      }
+    },
     take: limit + 1,
     orderBy: { createdAt: 'desc' },
     select: {
@@ -138,15 +143,25 @@ export async function getLikesByEntity(
       user: {
         select: {
           id: true,
+          email: true,
           username: true,
-          avatarUrl: true
+          name: true,
+          avatarUrl: true,
+          bio: true,
+          isPrivate: true,
+          createdAt: true,
+          updatedAt: true,
+          deletedAt: true,
+          deleteMeta: true
         }
       }
     }
   })
 
-  const hasMore = likes.length > limit
-  const items = hasMore ? likes.slice(0, limit) : likes
+  // Filter out any likes with null users (safety check)
+  const validLikes = likes.filter(like => like.user !== null)
+  const hasMore = validLikes.length > limit
+  const items = hasMore ? validLikes.slice(0, limit) : validLikes
   const nextCursor = hasMore ? items[items.length - 1].id : null
 
   return {
@@ -198,22 +213,37 @@ export async function getUserLikes(
   }
 
   const likes = await prisma.like.findMany({
-    where,
+    where: {
+      ...where,
+      user: {
+        deletedAt: null
+      }
+    },
     take: limit + 1,
     orderBy: { createdAt: 'desc' },
     include: {
       user: {
         select: {
           id: true,
+          email: true,
           username: true,
-          avatarUrl: true
+          name: true,
+          avatarUrl: true,
+          bio: true,
+          isPrivate: true,
+          createdAt: true,
+          updatedAt: true,
+          deletedAt: true,
+          deleteMeta: true
         }
       }
     }
   })
 
-  const hasMore = likes.length > limit
-  const items = hasMore ? likes.slice(0, limit) : likes
+  // Filter out any likes with null users (safety check)
+  const validLikes = likes.filter(like => like.user !== null)
+  const hasMore = validLikes.length > limit
+  const items = hasMore ? validLikes.slice(0, limit) : validLikes
   const nextCursor = hasMore ? items[items.length - 1].id : null
 
   return {

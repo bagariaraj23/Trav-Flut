@@ -1,7 +1,6 @@
 import { sanitizeInput } from '../security';
 
 const PROFANITY_WORDS = [
-  'damn',
   'hell',
   'crap',
   'ass',

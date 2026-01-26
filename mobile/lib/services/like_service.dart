@@ -130,8 +130,23 @@ class LikeService {
           
           if (items != null) {
             return items.map((item) {
-              final userData = item['user'] as Map<String, dynamic>;
-              return User.fromJson(userData);
+              try {
+                final userData = item['user'] as Map<String, dynamic>?;
+                if (userData == null) {
+                  debugPrint('[LikeService] User data is null for like item: $item');
+                  throw AppException('User data is missing in like response');
+                }
+                // Validate required fields before parsing
+                if (userData['id'] == null || userData['email'] == null) {
+                  debugPrint('[LikeService] Missing required user fields: $userData');
+                  throw AppException('User data is incomplete: missing id or email');
+                }
+                return User.fromJson(userData);
+              } catch (e) {
+                debugPrint('[LikeService] Error parsing user data: $e');
+                debugPrint('[LikeService] User data: ${item['user']}');
+                rethrow;
+              }
             }).toList();
           }
         }
