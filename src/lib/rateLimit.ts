@@ -76,6 +76,13 @@ export const RATE_LIMIT_PRESETS: Record<string, RateLimitConfig> = {
     keyPrefix: "rl:search",
     logEvent: false,
   },
+  // Places endpoints
+  places: {
+    maxRequests: 100,
+    windowMs: 60 * 1000, // 1 minute
+    keyPrefix: "rl:places",
+    logEvent: false,
+  },
 };
 
 /**
@@ -389,41 +396,3 @@ export async function withEngagementRateLimit(
   return withRateLimit(request, actionType, handler, { userId });
 }
 
-/**
- * Legacy function for backward compatibility
- * @deprecated Use withRateLimit with preset or config instead
- */
-export async function rateLimit(
-  key: string,
-  limit: number,
-  windowSeconds: number
-): Promise<{ allowed: boolean; remaining: number; resetAt: number }> {
-  const config: RateLimitConfig = {
-    maxRequests: limit,
-    windowMs: windowSeconds * 1000,
-    keyPrefix: key.split(":")[0] || "rl",
-  };
-
-  const identifier = key.split(":").slice(1).join(":") || "unknown";
-  const result = await checkRateLimit(config, identifier);
-
-  return {
-    allowed: result.allowed,
-    remaining: result.remaining,
-    resetAt: Math.floor(result.resetAt / 1000), // Convert to seconds
-  };
-}
-
-/**
- * Legacy function for backward compatibility
- * @deprecated Use getRequestIdentifier instead
- */
-export function rlKeyFromUserOrIp(
-  userId?: string,
-  ip?: string,
-  scope?: string
-): string {
-  const prefix = scope || "gen";
-  const identifier = userId || ip || "anon";
-  return `rl:${prefix}:${identifier}`;
-}

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { withAuth, withLogging, handleApiError } from "@/lib/middleware";
-import { withEngagementRateLimit } from "@/middleware/rateLimit";
+import { withEngagementRateLimit } from "@/lib/middleware";
 import { createCommentSchema } from "@/lib/validation";
 import { createComment } from "@/lib/services/comment";
 import { canCommentOnEntity } from "@/lib/auth/permissions";

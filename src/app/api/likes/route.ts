@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { withAuth, withLogging, handleApiError } from "@/lib/middleware";
-import { withEngagementRateLimit } from "@/middleware/rateLimit";
+import { withEngagementRateLimit } from "@/lib/middleware";
 import { createLikeSchema } from "@/lib/validation";
 import { createLike } from "@/lib/services/like";
 import { canLikeEntity } from "@/lib/auth/permissions";
