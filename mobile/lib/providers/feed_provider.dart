@@ -317,7 +317,9 @@ class FeedProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  // Sync engagement data with EngagementProvider
+  // Sync engagement data with EngagementProvider from server truth.
+  // Overwrite from feed so multi-user and refresh show correct state,
+  // but skip posts currently being toggled (in-flight like/unlike).
   void _syncEngagementData(List<TripFinalPost> posts) {
     final engagementProvider = _engagementProvider;
     if (engagementProvider == null) {
@@ -328,17 +330,15 @@ class FeedProvider extends ChangeNotifier {
     }
 
     for (final post in posts) {
-      // Only initialize if not already set (to preserve user interactions)
-      if (!engagementProvider.likeStatus.containsKey(post.id)) {
-        engagementProvider.setLikeStatus(
-          post.id,
-          post.hasLiked,
-          count: post.likeCount,
-        );
-        debugPrint(
-          '[FeedProvider] Synced engagement for post ${post.id}: liked=${post.hasLiked}, count=${post.likeCount}',
-        );
-      }
+      if (engagementProvider.isToggling(post.id)) continue;
+      engagementProvider.setLikeStatus(
+        post.id,
+        post.hasLiked,
+        count: post.likeCount,
+      );
+      debugPrint(
+        '[FeedProvider] Synced engagement for post ${post.id}: liked=${post.hasLiked}, count=${post.likeCount}',
+      );
     }
   }
 }

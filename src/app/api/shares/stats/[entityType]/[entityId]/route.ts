@@ -24,7 +24,13 @@ export async function GET(
         }
 
         let shareCount = 0;
-        let metadata: any = null;
+
+        interface ShareMetadata {
+          totalShares: number;
+          totalOpens: number;
+          platforms: Record<string, number>;
+        }
+        let metadata: ShareMetadata | null = null;
 
         if (entityType === "TRIP_FINAL_POST") {
           const post = await prisma.tripFinalPost.findUnique({

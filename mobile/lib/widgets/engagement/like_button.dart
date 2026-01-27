@@ -153,13 +153,20 @@ class _LikeButtonState extends State<LikeButton>
                             '/likes/${widget.entityType}/${widget.entityId}',
                           );
                         },
-                        child: Text(
-                          _formatCount(likeCount),
-                          style: Theme.of(context).textTheme.bodyMedium
-                              ?.copyWith(
-                                color: isLiked ? Colors.red : Colors.grey,
-                                fontWeight: FontWeight.w500,
-                              ),
+                        behavior: HitTestBehavior.opaque,
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 8,
+                          ),
+                          child: Text(
+                            _formatCount(likeCount),
+                            style: Theme.of(context).textTheme.bodyMedium
+                                ?.copyWith(
+                                  color: isLiked ? Colors.red : Colors.grey,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                          ),
                         ),
                       ),
                     if (isToggling)

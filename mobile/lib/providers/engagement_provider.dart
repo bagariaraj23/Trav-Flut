@@ -124,5 +124,17 @@ class EngagementProvider extends ChangeNotifier {
     _error = null;
     notifyListeners();
   }
+
+  /// Clear all engagement state. Call on logout so the next user's feed
+  /// and like state are not mixed with the previous user's cached data.
+  void clear() {
+    _likeStatus.clear();
+    _likeCounts.clear();
+    _isToggling.clear();
+    _likeUsers.clear();
+    _isLoadingUsers.clear();
+    _error = null;
+    notifyListeners();
+  }
 }
 

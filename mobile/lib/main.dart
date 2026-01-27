@@ -155,8 +155,14 @@ void main() async {
           ChangeNotifierProvider<EngagementProvider>(
             create: (context) {
               debugPrint('[main] Creating EngagementProvider');
+              final authProvider = context.read<AuthProvider>();
               final provider = EngagementProvider(likeService: likeService);
               likeService.setStorageService(storageService);
+              authProvider.addListener(() {
+                if (!authProvider.isAuthenticated) {
+                  provider.clear();
+                }
+              });
               return provider;
             },
           ),
