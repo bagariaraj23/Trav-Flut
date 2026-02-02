@@ -36,10 +36,10 @@ export interface RateLimitResult {
  * Predefined rate limit configurations for common use cases
  */
 export const RATE_LIMIT_PRESETS: Record<string, RateLimitConfig> = {
-  // Engagement actions
+  // Engagement actions - Per-user limits
   comment: {
-    maxRequests: 10,
-    windowMs: 60 * 60 * 1000, // 1 hour
+    maxRequests: 15, // 15 comments per 15 minutes (60/hour effective)
+    windowMs: 15 * 60 * 1000, // 15 minutes
     keyPrefix: "rl:comment",
     logEvent: true,
   },
@@ -55,6 +55,45 @@ export const RATE_LIMIT_PRESETS: Record<string, RateLimitConfig> = {
     keyPrefix: "rl:like",
     logEvent: true,
   },
+
+  // Authentication endpoints - Strict limits to prevent brute force
+  auth_login: {
+    maxRequests: 3,
+    windowMs: 15 * 60 * 1000, // 15 minutes (3 attempts, then 15min cool-down)
+    keyPrefix: "rl:auth:login",
+    logEvent: true,
+  },
+  auth_signup: {
+    maxRequests: 2,
+    windowMs: 60 * 60 * 1000, // 1 hour (2 sign-ups per hour prevents spam)
+    keyPrefix: "rl:auth:signup",
+    logEvent: true,
+  },
+  auth_forgot: {
+    maxRequests: 2,
+    windowMs: 60 * 60 * 1000, // 1 hour (2 requests/hour prevents email bombing)
+    keyPrefix: "rl:auth:forgot",
+    logEvent: true,
+  },
+  auth_reset: {
+    maxRequests: 2,
+    windowMs: 60 * 60 * 1000, // 1 hour (2 resets/hour)
+    keyPrefix: "rl:auth:reset",
+    logEvent: true,
+  },
+  auth_refresh: {
+    maxRequests: 10,
+    windowMs: 60 * 60 * 1000, // 1 hour (10 refreshes/hour for normal usage)
+    keyPrefix: "rl:auth:refresh",
+    logEvent: true,
+  },
+  auth_validate: {
+    maxRequests: 20,
+    windowMs: 60 * 60 * 1000, // 1 hour (20 validations/hour)
+    keyPrefix: "rl:auth:validate",
+    logEvent: false, // Less critical, no need to log
+  },
+
   // General API endpoints
   general: {
     maxRequests: 100,
@@ -62,13 +101,7 @@ export const RATE_LIMIT_PRESETS: Record<string, RateLimitConfig> = {
     keyPrefix: "rl:general",
     logEvent: false,
   },
-  // Authentication endpoints
-  auth: {
-    maxRequests: 5,
-    windowMs: 15 * 60 * 1000, // 15 minutes
-    keyPrefix: "rl:auth",
-    logEvent: true,
-  },
+
   // Search endpoints
   search: {
     maxRequests: 30,
@@ -76,6 +109,7 @@ export const RATE_LIMIT_PRESETS: Record<string, RateLimitConfig> = {
     keyPrefix: "rl:search",
     logEvent: false,
   },
+
   // Places endpoints
   places: {
     maxRequests: 100,
@@ -95,8 +129,10 @@ export function getRateLimitKey(
 ): string {
   const prefix = config.keyPrefix || "rl:default";
   // Ensure windowStart is a valid number
-  const validWindowStart = isNaN(windowStart) || windowStart <= 0 ? 0 : windowStart;
-  const validWindowMs = config.windowMs && config.windowMs > 0 ? config.windowMs : 60000; // Default 1 minute
+  const validWindowStart =
+    isNaN(windowStart) || windowStart <= 0 ? 0 : windowStart;
+  const validWindowMs =
+    config.windowMs && config.windowMs > 0 ? config.windowMs : 60000; // Default 1 minute
   const windowKey = Math.floor(validWindowStart / validWindowMs);
   return `${prefix}:${identifier}:${windowKey}`;
 }
@@ -111,10 +147,14 @@ export async function checkRateLimit(
 ): Promise<RateLimitResult> {
   // Validate config
   if (!config || !config.windowMs || config.windowMs <= 0) {
-    throw new Error(`Invalid rate limit config: windowMs must be > 0, got ${config?.windowMs}`);
+    throw new Error(
+      `Invalid rate limit config: windowMs must be > 0, got ${config?.windowMs}`
+    );
   }
   if (!config.maxRequests || config.maxRequests <= 0) {
-    throw new Error(`Invalid rate limit config: maxRequests must be > 0, got ${config?.maxRequests}`);
+    throw new Error(
+      `Invalid rate limit config: maxRequests must be > 0, got ${config?.maxRequests}`
+    );
   }
 
   const now = Date.now();
@@ -135,11 +175,21 @@ export async function checkRateLimit(
       count = result;
     } catch (error) {
       // Fallback to memory cache if Redis fails
-      console.warn("[RateLimit] Redis error, falling back to memory cache:", error);
-      const cached = memoryCache.get(key) as { count: number; resetTime: number } | null;
+      console.warn(
+        "[RateLimit] Redis error, falling back to memory cache:",
+        error
+      );
+      const cached = memoryCache.get(key) as {
+        count: number;
+        resetTime: number;
+      } | null;
       if (cached && cached.resetTime > now) {
         count = cached.count + 1;
-        memoryCache.set(key, { count, resetTime: cached.resetTime }, config.windowMs);
+        memoryCache.set(
+          key,
+          { count, resetTime: cached.resetTime },
+          config.windowMs
+        );
       } else {
         count = 1;
         memoryCache.set(key, { count, resetTime: resetAt }, config.windowMs);
@@ -147,10 +197,17 @@ export async function checkRateLimit(
     }
   } else {
     // Use memory cache as fallback
-    const cached = memoryCache.get(key) as { count: number; resetTime: number } | null;
+    const cached = memoryCache.get(key) as {
+      count: number;
+      resetTime: number;
+    } | null;
     if (cached && cached.resetTime > now) {
       count = cached.count + 1;
-      memoryCache.set(key, { count, resetTime: cached.resetTime }, config.windowMs);
+      memoryCache.set(
+        key,
+        { count, resetTime: cached.resetTime },
+        config.windowMs
+      );
     } else {
       count = 1;
       memoryCache.set(key, { count, resetTime: resetAt }, config.windowMs);
@@ -227,21 +284,21 @@ export function addRateLimitHeaders(
 /**
  * Generic rate limiting middleware
  * Can be used with a preset name or custom configuration
- * 
+ *
  * Usage with just handler (uses 'general' preset):
  * ```ts
  * return withRateLimit(request, async (req) => {
  *   // handler code
  * });
  * ```
- * 
+ *
  * Usage with preset:
  * ```ts
  * return withRateLimit(request, 'general', async (req) => {
  *   // handler code
  * });
  * ```
- * 
+ *
  * Usage with custom config:
  * ```ts
  * return withRateLimit(request, {
@@ -255,13 +312,18 @@ export function addRateLimitHeaders(
  */
 export async function withRateLimit(
   request: NextRequest,
-  configOrPresetOrHandler: RateLimitConfig | string | ((req: NextRequest) => Promise<NextResponse>),
-  handlerOrOptions?: ((req: NextRequest) => Promise<NextResponse>) | {
-    /** Optional userId if already authenticated */
-    userId?: string;
-    /** Whether to skip rate limiting if no identifier is found */
-    skipIfNoIdentifier?: boolean;
-  },
+  configOrPresetOrHandler:
+    | RateLimitConfig
+    | string
+    | ((req: NextRequest) => Promise<NextResponse>),
+  handlerOrOptions?:
+    | ((req: NextRequest) => Promise<NextResponse>)
+    | {
+        /** Optional userId if already authenticated */
+        userId?: string;
+        /** Whether to skip rate limiting if no identifier is found */
+        skipIfNoIdentifier?: boolean;
+      },
   options?: {
     /** Optional userId if already authenticated */
     userId?: string;
@@ -276,23 +338,29 @@ export async function withRateLimit(
 
   try {
     // Case 1: withRateLimit(request, handler) - use 'general' preset
-    if (typeof configOrPresetOrHandler === 'function') {
+    if (typeof configOrPresetOrHandler === "function") {
       config = RATE_LIMIT_PRESETS.general;
       handler = configOrPresetOrHandler;
-      opts = handlerOrOptions as { userId?: string; skipIfNoIdentifier?: boolean } | undefined;
+      opts = handlerOrOptions as
+        | { userId?: string; skipIfNoIdentifier?: boolean }
+        | undefined;
     }
     // Case 2: withRateLimit(request, config/preset, handler, options?)
     else {
-      config = typeof configOrPresetOrHandler === "string"
-        ? RATE_LIMIT_PRESETS[configOrPresetOrHandler] || RATE_LIMIT_PRESETS.general
-        : configOrPresetOrHandler;
-      
-      if (typeof handlerOrOptions === 'function') {
+      config =
+        typeof configOrPresetOrHandler === "string"
+          ? RATE_LIMIT_PRESETS[configOrPresetOrHandler] ||
+            RATE_LIMIT_PRESETS.general
+          : configOrPresetOrHandler;
+
+      if (typeof handlerOrOptions === "function") {
         handler = handlerOrOptions;
         opts = options;
       } else {
         // Invalid signature - handler must be a function
-        throw new Error('Invalid withRateLimit signature: handler must be a function');
+        throw new Error(
+          "Invalid withRateLimit signature: handler must be a function"
+        );
       }
     }
 
@@ -300,8 +368,8 @@ export async function withRateLimit(
     if (!config || !config.windowMs || !config.maxRequests) {
       throw new Error(`Invalid rate limit config: ${JSON.stringify(config)}`);
     }
-    if (typeof handler !== 'function') {
-      throw new Error('Handler must be a function');
+    if (typeof handler !== "function") {
+      throw new Error("Handler must be a function");
     }
     const identifier = getRequestIdentifier(request, opts?.userId);
 
@@ -349,7 +417,7 @@ export async function withRateLimit(
     // If rate limiting fails, allow the request but log the error
     console.error("[RateLimit] Error in rate limiting:", error);
     // Only call handler if it's actually a function (safety check)
-    if (typeof handler === 'function') {
+    if (typeof handler === "function") {
       return handler(request);
     }
     // If handler is not set, return a 500 error
@@ -366,7 +434,7 @@ export async function withRateLimit(
 /**
  * Engagement-specific rate limiting middleware
  * Convenience wrapper for engagement actions (likes, comments, shares)
- * 
+ *
  * Usage:
  * ```ts
  * return withEngagementRateLimit(req, async (rateLimitedReq) => {
@@ -395,4 +463,3 @@ export async function withEngagementRateLimit(
 
   return withRateLimit(request, actionType, handler, { userId });
 }
-
