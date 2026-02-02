@@ -42,7 +42,7 @@ function assertTestDatabase() {
   if (!looksTesty) {
     throw new Error(
       `Refusing to clean DB: DATABASE_URL (${url}) does not look like a test database. ` +
-      `Test database URLs should contain 'test', 'localhost', or '127.0.0.1'.`
+        `Test database URLs should contain 'test', 'localhost', or '127.0.0.1'.`
     );
   }
 
@@ -50,7 +50,7 @@ function assertTestDatabase() {
   if (url !== process.env.TEST_DATABASE_URL) {
     throw new Error(
       `Refusing to clean DB: DATABASE_URL (${url}) does not match TEST_DATABASE_URL (${process.env.TEST_DATABASE_URL}). ` +
-      `This indicates a configuration error in setupTests.ts.`
+        `This indicates a configuration error in setupTests.ts.`
     );
   }
 }
@@ -109,27 +109,29 @@ export async function createUser(
   let verified = false;
   const maxVerificationAttempts = 5;
   const verificationDelays = [5, 10, 20, 40, 80]; // ms
-  
+
   for (let attempt = 0; attempt < maxVerificationAttempts; attempt++) {
     const result = await prisma.$queryRaw<Array<{ id: string }>>`
       SELECT id FROM users WHERE id = ${user.id} LIMIT 1
     `;
-    
+
     if (result.length > 0) {
       verified = true;
       break;
     }
-    
+
     // Wait before next attempt (except on last attempt)
     if (attempt < maxVerificationAttempts - 1) {
-      await new Promise((resolve) => setTimeout(resolve, verificationDelays[attempt]));
+      await new Promise((resolve) =>
+        setTimeout(resolve, verificationDelays[attempt])
+      );
     }
   }
 
   if (!verified) {
     throw new Error(
       `User ${user.id} was created but is not visible after commit. ` +
-      `This indicates a serious database transaction isolation issue.`
+        `This indicates a serious database transaction isolation issue.`
     );
   }
 
@@ -144,19 +146,19 @@ export async function createTrip(
   }> = {}
 ) {
   let ownerId: string;
-  
+
   if (overrides.userId) {
     // Verify user exists using raw SQL
     // This ensures we're querying committed data, not cached data
     const ownerResult = await prisma.$queryRaw<Array<{ id: string }>>`
       SELECT id FROM users WHERE id = ${overrides.userId} LIMIT 1
     `;
-    
+
     if (ownerResult.length === 0) {
       throw new Error(
         `User with id ${overrides.userId} does not exist. ` +
-        `Create the user first using createUser() before creating a trip. ` +
-        `Note: createUser() now verifies user visibility before returning, so this should be rare.`
+          `Create the user first using createUser() before creating a trip. ` +
+          `Note: createUser() now verifies user visibility before returning, so this should be rare.`
       );
     }
     ownerId = overrides.userId;
@@ -189,7 +191,125 @@ export async function getAuthToken(user: { id: string; email?: string }) {
   if (!fullUser) {
     throw new Error(`User ${user.id} not found`);
   }
-  
+
   // Generate token - the middleware has a 1-second buffer to handle timing differences
   return AuthService.generateAccessToken(fullUser as any);
+}
+
+/**
+ * Create a final post for testing engagement features
+ */
+export async function createFinalPost(
+  overrides: Partial<{
+    tripId: string;
+    userId: string;
+    isPublished: boolean;
+  }> = {}
+) {
+  let trip;
+
+  if (overrides.tripId) {
+    trip = await prisma.trip.findUnique({ where: { id: overrides.tripId } });
+    if (!trip) {
+      throw new Error(`Trip ${overrides.tripId} not found`);
+    }
+  } else if (overrides.userId) {
+    trip = await createTrip({
+      userId: overrides.userId,
+      status: TripStatus.ENDED,
+    });
+  } else {
+    const user = await createUser();
+    trip = await createTrip({ userId: user.id, status: TripStatus.ENDED });
+  }
+
+  return prisma.tripFinalPost.create({
+    data: {
+      tripId: trip.id,
+      summaryText: `Final post summary for testing engagement features. This is a longer summary to meet any validation requirements. ${randomUUID().slice(
+        0,
+        6
+      )}`,
+      curatedMedia: [],
+      isPublished: overrides.isPublished ?? true,
+      generationStatus: overrides.isPublished === false ? "DRAFT" : "PUBLISHED",
+    },
+  });
+}
+
+/**
+ * Create a thread entry for testing engagement features
+ */
+export async function createThreadEntry(
+  overrides: Partial<{
+    tripId: string;
+    userId: string;
+  }> = {}
+) {
+  let trip;
+
+  if (overrides.tripId) {
+    trip = await prisma.trip.findUnique({ where: { id: overrides.tripId } });
+    if (!trip) {
+      throw new Error(`Trip ${overrides.tripId} not found`);
+    }
+  } else if (overrides.userId) {
+    trip = await createTrip({
+      userId: overrides.userId,
+      status: TripStatus.ONGOING,
+    });
+  } else {
+    const user = await createUser();
+    trip = await createTrip({ userId: user.id, status: TripStatus.ONGOING });
+  }
+
+  return prisma.tripThreadEntry.create({
+    data: {
+      tripId: trip.id,
+      authorId: trip.userId,
+      type: "TEXT",
+      contentText: `Thread entry for testing ${randomUUID().slice(0, 6)}`,
+    },
+  });
+}
+
+/**
+ * Create a comment for testing
+ */
+export async function createComment(
+  overrides: Partial<{
+    userId: string;
+    entityType: "TRIP_FINAL_POST" | "TRIP_THREAD_ENTRY" | "COMMENT";
+    entityId: string;
+    contentText: string;
+    parentCommentId?: string;
+  }> = {}
+) {
+  let userId = overrides.userId;
+
+  if (!userId) {
+    const user = await createUser();
+    userId = user.id;
+  }
+
+  // If no entityId provided, create a final post
+  let entityId = overrides.entityId;
+  let entityType = overrides.entityType || "TRIP_FINAL_POST";
+
+  if (!entityId) {
+    const post = await createFinalPost({ userId });
+    entityId = post.id;
+    entityType = "TRIP_FINAL_POST";
+  }
+
+  return prisma.comment.create({
+    data: {
+      userId,
+      entityType,
+      entityId,
+      contentText:
+        overrides.contentText ?? `Test comment ${randomUUID().slice(0, 6)}`,
+      parentCommentId: overrides.parentCommentId,
+    },
+  });
 }
