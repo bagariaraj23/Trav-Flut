@@ -13,6 +13,7 @@ Comment _$CommentFromJson(Map<String, dynamic> json) => Comment(
   entityId: json['entityId'] as String,
   contentText: json['contentText'] as String,
   parentCommentId: json['parentCommentId'] as String?,
+  likeCount: (json['likeCount'] as num?)?.toInt() ?? 0,
   createdAt: DateTime.parse(json['createdAt'] as String),
   updatedAt: DateTime.parse(json['updatedAt'] as String),
   user: json['user'] == null
@@ -28,6 +29,7 @@ Map<String, dynamic> _$CommentToJson(Comment instance) => <String, dynamic>{
   'entityId': instance.entityId,
   'contentText': instance.contentText,
   'parentCommentId': instance.parentCommentId,
+  'likeCount': instance.likeCount,
   'createdAt': instance.createdAt.toIso8601String(),
   'updatedAt': instance.updatedAt.toIso8601String(),
   'user': instance.user,

@@ -9,7 +9,7 @@ import { logSecurityEvent } from "@/lib/security/events";
 import { ApiResponse } from "@/types/api";
 
 export async function POST(request: NextRequest) {
-  return withLogging(async (req) => {
+  const loggedHandler = withLogging(async (req) => {
     return withEngagementRateLimit(req, async (rateLimitedReq) => {
       return withAuth(rateLimitedReq, async (authenticatedReq) => {
         try {
@@ -96,6 +96,8 @@ export async function POST(request: NextRequest) {
         }
       });
     }, 'comment');
-  })(request);
+  });
+  
+  return await loggedHandler(request);
 }
 

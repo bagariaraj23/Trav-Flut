@@ -7,7 +7,7 @@ export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ commentId: string }> }
 ) {
-  return withLogging(async (req) => {
+  const loggedHandler = withLogging(async (req) => {
     return withRateLimit(req, async (rateLimitedReq) => {
       try {
         const { commentId } = await params;
@@ -36,6 +36,6 @@ export async function GET(
         return handleApiError(error);
       }
     });
-  })(request);
+  });
 }
 

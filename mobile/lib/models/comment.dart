@@ -11,6 +11,7 @@ class Comment {
   final String entityId;
   final String contentText;
   final String? parentCommentId;
+  final int likeCount;
   final DateTime createdAt;
   final DateTime updatedAt;
   final User? user;
@@ -23,6 +24,7 @@ class Comment {
     required this.entityId,
     required this.contentText,
     this.parentCommentId,
+    this.likeCount = 0,
     required this.createdAt,
     required this.updatedAt,
     this.user,
@@ -41,6 +43,7 @@ class Comment {
     String? entityId,
     String? contentText,
     String? parentCommentId,
+    int? likeCount,
     DateTime? createdAt,
     DateTime? updatedAt,
     User? user,
@@ -53,6 +56,7 @@ class Comment {
       entityId: entityId ?? this.entityId,
       contentText: contentText ?? this.contentText,
       parentCommentId: parentCommentId ?? this.parentCommentId,
+      likeCount: likeCount ?? this.likeCount,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       user: user ?? this.user,
@@ -60,4 +64,3 @@ class Comment {
     );
   }
 }
-

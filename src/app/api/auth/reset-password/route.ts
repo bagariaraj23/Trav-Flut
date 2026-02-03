@@ -3,9 +3,9 @@ import { resetWithToken } from "@/lib/services/passwordReset";
 import { ZodError } from "zod";
 import { withRateLimit, withLogging } from "@/lib/middleware";
 
-export async function POST(req: NextRequest) {
-  return withLogging(async (request) => {
-    return withRateLimit(request, "auth_reset", async (rateLimitedReq) => {
+export async function POST(request: NextRequest) {
+  const loggedHandler = withLogging(async (req) => {
+    return withRateLimit(req, "auth_reset", async (rateLimitedReq) => {
       try {
         const body = await rateLimitedReq.json().catch(() => ({}));
         await resetWithToken(body);
@@ -130,4 +130,6 @@ export async function POST(req: NextRequest) {
       }
     });
   });
+
+  return await loggedHandler(request);
 }

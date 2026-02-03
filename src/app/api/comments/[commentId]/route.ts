@@ -22,7 +22,7 @@ export async function PUT(
   request: NextRequest,
   { params }: { params: Promise<{ commentId: string }> }
 ) {
-  return withLogging(async (req) => {
+  const loggedHandler = withLogging(async (req) => {
     return withAuth(req, async (authenticatedReq) => {
       try {
         const { commentId } = await params;
@@ -95,7 +95,7 @@ export async function PUT(
         return handleApiError(error);
       }
     });
-  })(request);
+  });
 }
 
 export async function DELETE(
@@ -148,6 +148,6 @@ export async function DELETE(
         return handleApiError(error);
       }
     });
-  })(request);
+  });
 }
 

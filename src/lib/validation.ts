@@ -414,27 +414,39 @@ export const rateLimitSchema = z.object({
 
 // Engagement validation schemas
 export const createLikeSchema = z.object({
-  entityType: z.enum(['TRIP_FINAL_POST', 'TRIP_THREAD_ENTRY', 'COMMENT']),
-  entityId: z.string().uuid('Invalid entity ID format'),
+  entityType: z.enum(["TRIP_FINAL_POST", "TRIP_THREAD_ENTRY", "COMMENT"]),
+  entityId: z.string().uuid("Invalid entity ID format"),
+});
+
+export const deleteLikeSchema = z.object({
+  entityType: z.enum(["TRIP_FINAL_POST", "TRIP_THREAD_ENTRY", "COMMENT"]),
+  entityId: z.string().uuid("Invalid entity ID format"),
 });
 
 export const createCommentSchema = z.object({
-  entityType: z.enum(['TRIP_FINAL_POST', 'TRIP_THREAD_ENTRY']),
-  entityId: z.string().uuid('Invalid entity ID format'),
+  entityType: z.enum(["TRIP_FINAL_POST", "TRIP_THREAD_ENTRY"]),
+  entityId: z.string().uuid("Invalid entity ID format"),
   contentText: z
     .string()
-    .min(1, 'Comment cannot be empty')
-    .max(500, 'Comment must be less than 500 characters')
+    .min(1, "Comment cannot be empty")
+    .max(250, "Comment must be less than 250 characters")
     .transform((text) => text.trim())
     .refine((text) => text.length > 0, {
-      message: 'Comment cannot be empty or only whitespace',
+      message: "Comment cannot be empty or only whitespace",
     }),
-  parentCommentId: z.string().uuid('Invalid parent comment ID format').optional(),
+  parentCommentId: z
+    .string()
+    .uuid("Invalid parent comment ID format")
+    .optional(),
 });
 
 export const createShareSchema = z.object({
-  entityType: z.enum(['TRIP_FINAL_POST', 'TRIP_THREAD_ENTRY', 'COMMENT']),
-  entityId: z.string().uuid('Invalid entity ID format'),
-  shareType: z.enum(['DEEP_LINK', 'WEB_LINK', 'EXTERNAL']),
-  expiresAt: z.string().datetime().optional().transform((val) => val ? new Date(val) : undefined),
+  entityType: z.enum(["TRIP_FINAL_POST"]),
+  entityId: z.string().uuid("Invalid entity ID format"),
+  shareType: z.enum(["DEEP_LINK", "WEB_LINK", "EXTERNAL"]),
+  expiresAt: z
+    .string()
+    .datetime()
+    .optional()
+    .transform((val) => (val ? new Date(val) : undefined)),
 });

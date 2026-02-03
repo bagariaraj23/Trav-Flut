@@ -6,8 +6,8 @@ import { ApiResponse, AuthResponse } from "@/types/api";
 import { withRateLimit, withLogging, handleApiError } from "@/lib/middleware";
 
 export async function POST(request: NextRequest) {
-  return withLogging(async (req) => {
-    return withRateLimit(req, "auth_login", async (rateLimitedReq) => {
+  const loggedHandler = withLogging(async (req) => {
+    return await withRateLimit(req, "auth_login", async (rateLimitedReq) => {
       try {
         const body = await rateLimitedReq.json();
 
@@ -106,4 +106,6 @@ export async function POST(request: NextRequest) {
       }
     });
   });
+
+  return await loggedHandler(request);
 }

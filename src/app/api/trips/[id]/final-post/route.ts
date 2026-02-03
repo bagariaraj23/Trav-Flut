@@ -56,7 +56,7 @@ export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  return withLogging(async (req) => {
+  const loggedHandler = withLogging(async (req) => {
     return withRateLimit(req, async (rateLimitedReq) => {
       return withAuth(rateLimitedReq, async (authenticatedReq) => {
         try {
@@ -80,7 +80,7 @@ export async function GET(
         }
       });
     });
-  })(request);
+  });
 }
 
 export async function PUT(
@@ -116,5 +116,5 @@ export async function PUT(
         }
       });
     });
-  })(request);
+  });
 }

@@ -6,7 +6,7 @@ import { sanitizeInput } from "@/lib/security";
 import { withAuth, withRateLimit, withLogging, handleApiError } from "@/lib/middleware";
 
 export async function POST(request: NextRequest) {
-  return withLogging(async (req) => {
+  const loggedHandler = withLogging(async (req) => {
     // Extract userId for rate limiting before auth
     let userId: string | undefined;
     const authHeader = req.headers.get("authorization");
@@ -66,5 +66,7 @@ export async function POST(request: NextRequest) {
         }
       });
     }, { userId });
-  })(request);
+  });
+  
+  return await loggedHandler(request);
 }

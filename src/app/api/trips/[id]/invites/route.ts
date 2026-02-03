@@ -10,7 +10,7 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  return withLogging(async (req) => {
+  const loggedHandler = withLogging(async (req) => {
     return withRateLimit(req, async (rateLimitedReq) => {
       return withAuth(rateLimitedReq, async (authenticatedReq) => {
         try {
@@ -69,7 +69,9 @@ export async function POST(
         }
       });
     });
-  })(request);
+  });
+  
+  return await loggedHandler(request);
 }
 
 // Get sent invitations for a trip (for trip owner)
@@ -78,7 +80,7 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  return withLogging(async (req) => {
+  const loggedHandler = withLogging(async (req) => {
     return withRateLimit(req, async (rateLimitedReq) => {
       return withAuth(rateLimitedReq, async (authenticatedReq) => {
         try {
@@ -160,7 +162,9 @@ export async function GET(
         }
       });
     });
-  })(request);
+  });
+  
+  return await loggedHandler(request);
 }
 
 // Cancel a sent invitation
@@ -169,7 +173,7 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  return withLogging(async (req) => {
+  const loggedHandler = withLogging(async (req) => {
     return withRateLimit(req, async (rateLimitedReq) => {
       return withAuth(rateLimitedReq, async (authenticatedReq) => {
         try {
@@ -227,5 +231,7 @@ export async function DELETE(
         }
       });
     });
-  })(request);
+  });
+  
+  return await loggedHandler(request);
 }

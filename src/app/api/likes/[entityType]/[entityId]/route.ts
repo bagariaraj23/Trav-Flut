@@ -10,7 +10,7 @@ export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ entityType: string; entityId: string }> }
 ) {
-  return withLogging(async (req) => {
+  const loggedHandler = withLogging(async (req) => {
     return withAuth(req, async (authenticatedReq) => {
       try {
         const { entityType, entityId } = await params;
@@ -46,12 +46,15 @@ export async function DELETE(
 
         if (like.userId !== userId) {
           await logSecurityEvent({
-            eventType: 'UNAUTHORIZED_ACCESS',
+            eventType: "UNAUTHORIZED_ACCESS",
             userId,
             entityType: entityType as EntityType,
             entityId,
-            ipAddress: request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || null,
-            metadata: { action: 'delete_like', likeId: like.id },
+            ipAddress:
+              request.headers.get("x-forwarded-for") ||
+              request.headers.get("x-real-ip") ||
+              null,
+            metadata: { action: "delete_like", likeId: like.id },
           });
 
           return NextResponse.json<ApiResponse>(
@@ -63,7 +66,11 @@ export async function DELETE(
           );
         }
 
-        const result = await deleteLike(userId, entityType as EntityType, entityId);
+        const result = await deleteLike(
+          userId,
+          entityType as EntityType,
+          entityId
+        );
 
         if (!result) {
           return NextResponse.json<ApiResponse>(
@@ -83,6 +90,7 @@ export async function DELETE(
         return handleApiError(error);
       }
     });
-  })(request);
-}
+  });
 
+  return await loggedHandler(request);
+}

@@ -13,7 +13,7 @@ import { PerformanceMonitor, ErrorTracker } from "@/lib/monitoring";
 
 // Get discoverable trips (ongoing and completed trips from followed users and public profiles)
 export async function GET(request: NextRequest) {
-  return withLogging(async (req) => {
+  const loggedHandler = withLogging(async (req) => {
     return withRateLimit(req, async (rateLimitedReq) => {
       return withAuth(rateLimitedReq, async (authenticatedReq) => {
         const endTimer =
@@ -252,5 +252,7 @@ export async function GET(request: NextRequest) {
         }
       });
     });
-  })(request);
+  });
+  
+  return await loggedHandler(request);
 }

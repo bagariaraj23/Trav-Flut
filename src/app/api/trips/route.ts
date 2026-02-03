@@ -15,7 +15,7 @@ import { TripStatus } from "@prisma/client";
 
 // Create a new trip
 export async function POST(request: NextRequest) {
-  return withLogging(async (req) => {
+  const loggedHandler = withLogging(async (req) => {
     return withRateLimit(
       req,
       async (rateLimitedReq) => {
@@ -382,7 +382,9 @@ export async function POST(request: NextRequest) {
         });
       }
     );
-  })(request);
+  });
+  
+  return await loggedHandler(request);
 }
 
 // Get user's trips
@@ -494,5 +496,5 @@ export async function GET(request: NextRequest) {
         }
       });
     });
-  })(request);
+  });
 }

@@ -9,7 +9,7 @@ import { getAuthSession } from "@/lib/auth";
 import { withRateLimit, withLogging, handleApiError } from "@/lib/middleware";
 
 export async function GET(request: NextRequest) {
-  return withLogging(async (req) => {
+  const loggedHandler = withLogging(async (req) => {
     // Get authenticated user if available for rate limiting
     const session = await getAuthSession();
     const userId = session?.user?.id;
@@ -73,5 +73,7 @@ export async function GET(request: NextRequest) {
         return handleApiError(error);
       }
     }, { userId });
-  })(request);
+  });
+  
+  return await loggedHandler(request);
 }

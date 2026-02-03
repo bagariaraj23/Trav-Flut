@@ -6,7 +6,7 @@ import { CloudinaryService } from "@/lib/cloudinary";
 
 // Get current user profile
 export async function GET(request: NextRequest) {
-  return withLogging(async (req) => {
+  const loggedHandler = withLogging(async (req) => {
     return withRateLimit(req, async (rateLimitedReq) => {
       return withAuth(rateLimitedReq, async (authenticatedReq) => {
         try {
@@ -72,7 +72,9 @@ export async function GET(request: NextRequest) {
         }
       });
     });
-  })(request);
+  });
+  
+  return await loggedHandler(request);
 }
 
 // Update current user profile
@@ -175,7 +177,7 @@ export async function PUT(request: NextRequest) {
         }
       });
     });
-  })(request);
+  });
 }
 
 // Delete current user account (soft delete)
@@ -317,5 +319,5 @@ export async function DELETE(request: NextRequest) {
         }
       });
     });
-  })(request);
+  });
 }

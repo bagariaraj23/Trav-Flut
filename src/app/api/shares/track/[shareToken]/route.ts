@@ -14,7 +14,7 @@ export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ shareToken: string }> }
 ) {
-  return withLogging(async (req) => {
+  const loggedHandler = withLogging(async (req) => {
     return withRateLimit(req, async (rateLimitedReq) => {
       try {
         const { shareToken } = await params;
@@ -56,6 +56,6 @@ export async function POST(
         return handleApiError(error);
       }
     });
-  })(request);
+  });
 }
 

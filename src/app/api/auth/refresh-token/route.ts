@@ -4,7 +4,7 @@ import { ApiResponse } from "@/types/api";
 import { withRateLimit, withLogging } from "@/lib/middleware";
 
 export async function POST(request: NextRequest) {
-  return withLogging(async (req) => {
+  const loggedHandler = withLogging(async (req) => {
     return withRateLimit(req, "auth_refresh", async (rateLimitedReq) => {
       try {
         const body = await rateLimitedReq.json();
@@ -69,4 +69,6 @@ export async function POST(request: NextRequest) {
       }
     });
   });
+  
+  return await loggedHandler(request);
 }

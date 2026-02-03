@@ -9,7 +9,7 @@ export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ shareToken: string }> }
 ) {
-  return withLogging(async (req) => {
+  const loggedHandler = withLogging(async (req) => {
     return withRateLimit(req, async (rateLimitedReq) => {
       try {
         const { shareToken } = await params;
@@ -73,6 +73,6 @@ export async function GET(
         return handleApiError(error);
       }
     });
-  })(request);
+  });
 }
 

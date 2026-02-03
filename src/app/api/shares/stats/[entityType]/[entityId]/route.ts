@@ -8,7 +8,7 @@ export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ entityType: string; entityId: string }> }
 ) {
-  return withLogging(async (req) => {
+  const loggedHandler = withLogging(async (req) => {
     return withRateLimit(req, async (rateLimitedReq) => {
       try {
         const { entityType, entityId } = await params;
@@ -79,6 +79,6 @@ export async function GET(
         return handleApiError(error);
       }
     });
-  })(request);
+  });
 }
 

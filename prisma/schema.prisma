@@ -462,6 +462,7 @@ model Comment {
   entityId        String
   contentText     String     @db.VarChar(250)
   parentCommentId String?
+  likeCount       Int        @default(0)
   createdAt       DateTime   @default(now())
   updatedAt       DateTime   @updatedAt
   user            User       @relation("UserComments", fields: [userId], references: [id])

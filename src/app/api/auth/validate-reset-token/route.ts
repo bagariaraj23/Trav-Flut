@@ -10,7 +10,7 @@ const validateSchema = z.object({
 });
 
 export async function POST(request: NextRequest) {
-  return withLogging(async (req) => {
+  const loggedHandler = withLogging(async (req) => {
     return withRateLimit(req, "auth_validate", async (rateLimitedReq) => {
       try {
         const body = await rateLimitedReq.json();
@@ -47,6 +47,8 @@ export async function POST(request: NextRequest) {
       }
     });
   });
+  
+  return await loggedHandler(request);
 }
 
 function getErrorMessage(error: string): string {
