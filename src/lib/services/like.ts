@@ -1,112 +1,14 @@
-import { EntityType, Prisma } from "@prisma/client";
+import { EntityType } from "@prisma/client";
 import { prisma } from "../prisma";
-import { redis, memoryCache } from "../redis";
-
-const COUNT_CACHE_TTL = 5 * 60 * 1000;
-
-function getCountCacheKey(entityType: EntityType, entityId: string): string {
-  return `likeCount:${entityType}:${entityId}`;
-}
-
-async function invalidateCountCache(
-  entityType: EntityType,
-  entityId: string
-): Promise<void> {
-  const key = getCountCacheKey(entityType, entityId);
-  memoryCache.delete(key);
-  if (redis) {
-    await redis.del(key);
-  }
-}
-
-async function validateEntityExists(
-  entityType: EntityType,
-  entityId: string
-): Promise<boolean> {
-  if (entityType === "TRIP_FINAL_POST") {
-    const post = await prisma.tripFinalPost.findUnique({
-      where: { id: entityId },
-    });
-    return post !== null;
-  }
-  if (entityType === "TRIP_THREAD_ENTRY") {
-    const entry = await prisma.tripThreadEntry.findUnique({
-      where: { id: entityId },
-    });
-    return entry !== null;
-  }
-  if (entityType === "COMMENT") {
-    const comment = await prisma.comment.findUnique({
-      where: { id: entityId },
-    });
-    return comment !== null;
-  }
-  return false;
-}
-
-async function incrementLikeCount(
-  entityType: EntityType,
-  entityId: string,
-  tx: Prisma.TransactionClient
-): Promise<void> {
-  if (entityType === "TRIP_FINAL_POST") {
-    await tx.tripFinalPost.update({
-      where: { id: entityId },
-      data: { likeCount: { increment: 1 } },
-    });
-  } else if (entityType === "TRIP_THREAD_ENTRY") {
-    await tx.tripThreadEntry.update({
-      where: { id: entityId },
-      data: { likeCount: { increment: 1 } },
-    });
-  } else if (entityType === "COMMENT") {
-    await tx.comment.update({
-      where: { id: entityId },
-      data: { likeCount: { increment: 1 } },
-    });
-  }
-}
-
-async function decrementLikeCount(
-  entityType: EntityType,
-  entityId: string,
-  tx: Prisma.TransactionClient
-): Promise<void> {
-  if (entityType === "TRIP_FINAL_POST") {
-    const post = await tx.tripFinalPost.findUnique({
-      where: { id: entityId },
-      select: { likeCount: true },
-    });
-    if (post && post.likeCount > 0) {
-      await tx.tripFinalPost.update({
-        where: { id: entityId },
-        data: { likeCount: { decrement: 1 } },
-      });
-    }
-  } else if (entityType === "TRIP_THREAD_ENTRY") {
-    const entry = await tx.tripThreadEntry.findUnique({
-      where: { id: entityId },
-      select: { likeCount: true },
-    });
-    if (entry && entry.likeCount > 0) {
-      await tx.tripThreadEntry.update({
-        where: { id: entityId },
-        data: { likeCount: { decrement: 1 } },
-      });
-    }
-  } else if (entityType === "COMMENT") {
-    const comment = await tx.comment.findUnique({
-      where: { id: entityId },
-      select: { likeCount: true },
-    });
-    if (comment && comment.likeCount > 0) {
-      await tx.comment.update({
-        where: { id: entityId },
-        data: { likeCount: { decrement: 1 } },
-      });
-    }
-  }
-}
+import {
+  validateEntityExists,
+  invalidateEngagementCache,
+  incrementEntityCount,
+  decrementEntityCount,
+  paginateResults,
+  USER_FULL_SELECT,
+  ENGAGEMENT_CONSTANTS,
+} from "./engagement-utils";
 
 export async function createLike(
   userId: string,
@@ -130,9 +32,9 @@ export async function createLike(
       data: { userId, entityType, entityId },
     });
 
-    await incrementLikeCount(entityType, entityId, tx);
+    await incrementEntityCount(entityType, entityId, "likeCount", tx);
 
-    await invalidateCountCache(entityType, entityId);
+    await invalidateEngagementCache("like", entityType, entityId);
 
     return like;
   });
@@ -155,9 +57,9 @@ export async function deleteLike(
       where: { id: like.id },
     });
 
-    await decrementLikeCount(entityType, entityId, tx);
+    await decrementEntityCount(entityType, entityId, "likeCount", tx);
 
-    await invalidateCountCache(entityType, entityId);
+    await invalidateEngagementCache("like", entityType, entityId);
 
     return like;
   });
@@ -167,11 +69,14 @@ export async function getLikesByEntity(
   entityType: EntityType,
   entityId: string,
   cursor?: string,
-  limit: number = 20
+  limit: number = ENGAGEMENT_CONSTANTS.PAGINATION.DEFAULT_LIMIT
 ) {
-  const where: Prisma.LikeWhereInput = {
+  const where: any = {
     entityType,
     entityId,
+    user: {
+      deletedAt: null,
+    },
   };
 
   if (cursor) {
@@ -179,46 +84,21 @@ export async function getLikesByEntity(
   }
 
   const likes = await prisma.like.findMany({
-    where: {
-      ...where,
-      user: {
-        deletedAt: null,
-      },
-    },
+    where,
     take: limit + 1,
     orderBy: { createdAt: "desc" },
     select: {
       id: true,
       createdAt: true,
       user: {
-        select: {
-          id: true,
-          email: true,
-          username: true,
-          name: true,
-          avatarUrl: true,
-          bio: true,
-          isPrivate: true,
-          createdAt: true,
-          updatedAt: true,
-          deletedAt: true,
-          deleteMeta: true,
-        },
+        select: USER_FULL_SELECT,
       },
     },
   });
 
   // Filter out any likes with null users (safety check)
   const validLikes = likes.filter((like) => like.user !== null);
-  const hasMore = validLikes.length > limit;
-  const items = hasMore ? validLikes.slice(0, limit) : validLikes;
-  const nextCursor = hasMore ? items[items.length - 1].id : null;
-
-  return {
-    items,
-    nextCursor,
-    hasMore,
-  };
+  return paginateResults(validLikes, limit);
 }
 
 export async function checkLikeStatus(
@@ -252,10 +132,13 @@ export async function checkLikeStatus(
 export async function getUserLikes(
   userId: string,
   cursor?: string,
-  limit: number = 20
+  limit: number = ENGAGEMENT_CONSTANTS.PAGINATION.DEFAULT_LIMIT
 ) {
-  const where: Prisma.LikeWhereInput = {
+  const where: any = {
     userId,
+    user: {
+      deletedAt: null,
+    },
   };
 
   if (cursor) {
@@ -263,42 +146,17 @@ export async function getUserLikes(
   }
 
   const likes = await prisma.like.findMany({
-    where: {
-      ...where,
-      user: {
-        deletedAt: null,
-      },
-    },
+    where,
     take: limit + 1,
     orderBy: { createdAt: "desc" },
     include: {
       user: {
-        select: {
-          id: true,
-          email: true,
-          username: true,
-          name: true,
-          avatarUrl: true,
-          bio: true,
-          isPrivate: true,
-          createdAt: true,
-          updatedAt: true,
-          deletedAt: true,
-          deleteMeta: true,
-        },
+        select: USER_FULL_SELECT,
       },
     },
   });
 
   // Filter out any likes with null users (safety check)
   const validLikes = likes.filter((like) => like.user !== null);
-  const hasMore = validLikes.length > limit;
-  const items = hasMore ? validLikes.slice(0, limit) : validLikes;
-  const nextCursor = hasMore ? items[items.length - 1].id : null;
-
-  return {
-    items,
-    nextCursor,
-    hasMore,
-  };
+  return paginateResults(validLikes, limit);
 }

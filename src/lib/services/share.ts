@@ -1,9 +1,14 @@
-import { EntityType, ShareType, Prisma } from "@prisma/client";
+import { EntityType, ShareType } from "@prisma/client";
 import { prisma } from "../prisma";
 import { redis, memoryCache } from "../redis";
 import { nanoid } from "nanoid";
-
-const SHARE_TOKEN_CACHE_TTL = 60 * 60 * 1000;
+import {
+  validateEntityExists,
+  incrementEntityCount,
+  paginateResults,
+  USER_MINIMAL_SELECT,
+  ENGAGEMENT_CONSTANTS,
+} from "./engagement-utils";
 
 function getShareTokenCacheKey(shareToken: string): string {
   return `shareToken:${shareToken}`;
@@ -14,32 +19,6 @@ async function invalidateShareTokenCache(shareToken: string): Promise<void> {
   memoryCache.delete(key);
   if (redis) {
     await redis.del(key);
-  }
-}
-
-async function validateEntityExists(
-  entityType: EntityType,
-  entityId: string
-): Promise<boolean> {
-  if (entityType === "TRIP_FINAL_POST") {
-    const post = await prisma.tripFinalPost.findUnique({
-      where: { id: entityId },
-    });
-    return post !== null;
-  }
-  return false;
-}
-
-async function incrementShareCount(
-  entityType: EntityType,
-  entityId: string,
-  tx: Prisma.TransactionClient
-): Promise<void> {
-  if (entityType === "TRIP_FINAL_POST") {
-    await tx.tripFinalPost.update({
-      where: { id: entityId },
-      data: { shareCount: { increment: 1 } },
-    });
   }
 }
 
@@ -55,16 +34,25 @@ export async function createShare(
     throw new Error("Entity not found");
   }
 
+  // Generate unique share token with retry limit
   let shareToken: string;
-  let isUnique = false;
-  while (!isUnique) {
-    shareToken = nanoid(16);
+  let attempts = 0;
+
+  while (attempts < ENGAGEMENT_CONSTANTS.SHARE.MAX_RETRY_ATTEMPTS) {
+    shareToken = nanoid(ENGAGEMENT_CONSTANTS.SHARE.TOKEN_LENGTH);
     const existing = await prisma.share.findUnique({
       where: { shareToken },
     });
     if (!existing) {
-      isUnique = true;
+      break;
     }
+    attempts++;
+  }
+
+  if (attempts >= ENGAGEMENT_CONSTANTS.SHARE.MAX_RETRY_ATTEMPTS) {
+    throw new Error(
+      "Failed to generate unique share token after maximum attempts"
+    );
   }
 
   const metadata: Record<string, any> = {
@@ -84,17 +72,17 @@ export async function createShare(
       },
     });
 
-    await incrementShareCount(entityType, entityId, tx);
+    await incrementEntityCount(entityType, entityId, "shareCount", tx);
 
     if (redis) {
+      const ttl = expiresAt
+        ? Math.floor((expiresAt.getTime() - Date.now()) / 1000)
+        : Math.floor(ENGAGEMENT_CONSTANTS.CACHE_TTL.SHARE_TOKEN / 1000);
+
       await redis.set(
         getShareTokenCacheKey(shareToken!),
         JSON.stringify(share),
-        {
-          ex: expiresAt
-            ? Math.floor((expiresAt.getTime() - Date.now()) / 1000)
-            : 3600,
-        }
+        { ex: ttl }
       );
     }
 
@@ -122,11 +110,7 @@ export async function resolveShareToken(shareToken: string) {
       where: { shareToken },
       include: {
         user: {
-          select: {
-            id: true,
-            username: true,
-            avatarUrl: true,
-          },
+          select: USER_MINIMAL_SELECT,
         },
       },
     });
@@ -134,7 +118,7 @@ export async function resolveShareToken(shareToken: string) {
     if (share && redis) {
       const ttl = share.expiresAt
         ? Math.floor((share.expiresAt.getTime() - Date.now()) / 1000)
-        : 3600;
+        : Math.floor(ENGAGEMENT_CONSTANTS.CACHE_TTL.SHARE_TOKEN / 1000);
       if (ttl > 0) {
         await redis.set(cacheKey, JSON.stringify(share), { ex: ttl });
       }
@@ -176,11 +160,7 @@ export async function resolveShareToken(shareToken: string) {
           },
         },
         author: {
-          select: {
-            id: true,
-            username: true,
-            avatarUrl: true,
-          },
+          select: USER_MINIMAL_SELECT,
         },
       },
     });
@@ -189,11 +169,7 @@ export async function resolveShareToken(shareToken: string) {
       where: { id: share.entityId },
       include: {
         user: {
-          select: {
-            id: true,
-            username: true,
-            avatarUrl: true,
-          },
+          select: USER_MINIMAL_SELECT,
         },
       },
     });
@@ -240,9 +216,9 @@ export async function trackShareOpen(
 export async function getSharesByUser(
   userId: string,
   cursor?: string,
-  limit: number = 20
+  limit: number = ENGAGEMENT_CONSTANTS.PAGINATION.DEFAULT_LIMIT
 ) {
-  const where: Prisma.ShareWhereInput = {
+  const where: any = {
     userId,
   };
 
@@ -256,21 +232,15 @@ export async function getSharesByUser(
     orderBy: { createdAt: "desc" },
     include: {
       user: {
-        select: {
-          id: true,
-          username: true,
-          avatarUrl: true,
-        },
+        select: USER_MINIMAL_SELECT,
       },
     },
   });
 
-  const hasMore = shares.length > limit;
-  const items = hasMore ? shares.slice(0, limit) : shares;
-  const nextCursor = hasMore ? items[items.length - 1].id : null;
+  const result = paginateResults(shares, limit);
 
   const itemsWithEntity = await Promise.all(
-    items.map(async (share) => {
+    result.items.map(async (share) => {
       let entityPreview: any = null;
       if (share.entityType === "TRIP_FINAL_POST") {
         const post = await prisma.tripFinalPost.findUnique({
@@ -309,10 +279,7 @@ export async function getSharesByUser(
             id: true,
             contentText: true,
             user: {
-              select: {
-                id: true,
-                username: true,
-              },
+              select: USER_MINIMAL_SELECT,
             },
           },
         });
@@ -327,9 +294,8 @@ export async function getSharesByUser(
   );
 
   return {
+    ...result,
     items: itemsWithEntity,
-    nextCursor,
-    hasMore,
   };
 }
 

@@ -1,43 +1,16 @@
 import { EntityType, Prisma } from "@prisma/client";
 import { prisma } from "../prisma";
-import { redis, memoryCache } from "../redis";
 import { sanitizeInput } from "../security";
-
-const COUNT_CACHE_TTL = 5 * 60 * 1000;
-
-function getCountCacheKey(entityType: EntityType, entityId: string): string {
-  return `commentCount:${entityType}:${entityId}`;
-}
-
-async function invalidateCountCache(
-  entityType: EntityType,
-  entityId: string
-): Promise<void> {
-  const key = getCountCacheKey(entityType, entityId);
-  memoryCache.delete(key);
-  if (redis) {
-    await redis.del(key);
-  }
-}
-
-async function validateEntityExists(
-  entityType: EntityType,
-  entityId: string
-): Promise<boolean> {
-  if (entityType === "TRIP_FINAL_POST") {
-    const post = await prisma.tripFinalPost.findUnique({
-      where: { id: entityId },
-    });
-    return post !== null;
-  }
-  if (entityType === "TRIP_THREAD_ENTRY") {
-    const entry = await prisma.tripThreadEntry.findUnique({
-      where: { id: entityId },
-    });
-    return entry !== null;
-  }
-  return false;
-}
+import {
+  validateEntityExists,
+  invalidateEngagementCache,
+  incrementEntityCount,
+  decrementEntityCount,
+  paginateResults,
+  USER_PUBLIC_SELECT,
+  USER_MINIMAL_SELECT,
+  ENGAGEMENT_CONSTANTS,
+} from "./engagement-utils";
 
 async function validateParentComment(
   commentId: string
@@ -58,54 +31,6 @@ async function validateParentComment(
     throw new Error("Nesting limited to one level only");
   }
   return { entityType: parent.entityType, entityId: parent.entityId };
-}
-
-async function incrementCommentCount(
-  entityType: EntityType,
-  entityId: string,
-  tx: Prisma.TransactionClient
-): Promise<void> {
-  if (entityType === "TRIP_FINAL_POST") {
-    await tx.tripFinalPost.update({
-      where: { id: entityId },
-      data: { commentCount: { increment: 1 } },
-    });
-  } else if (entityType === "TRIP_THREAD_ENTRY") {
-    await tx.tripThreadEntry.update({
-      where: { id: entityId },
-      data: { commentCount: { increment: 1 } },
-    });
-  }
-}
-
-async function decrementCommentCount(
-  entityType: EntityType,
-  entityId: string,
-  tx: Prisma.TransactionClient
-): Promise<void> {
-  if (entityType === "TRIP_FINAL_POST") {
-    const post = await tx.tripFinalPost.findUnique({
-      where: { id: entityId },
-      select: { commentCount: true },
-    });
-    if (post && post.commentCount > 0) {
-      await tx.tripFinalPost.update({
-        where: { id: entityId },
-        data: { commentCount: { decrement: 1 } },
-      });
-    }
-  } else if (entityType === "TRIP_THREAD_ENTRY") {
-    const entry = await tx.tripThreadEntry.findUnique({
-      where: { id: entityId },
-      select: { commentCount: true },
-    });
-    if (entry && entry.commentCount > 0) {
-      await tx.tripThreadEntry.update({
-        where: { id: entityId },
-        data: { commentCount: { decrement: 1 } },
-      });
-    }
-  }
 }
 
 async function getEntityOwner(
@@ -136,8 +61,13 @@ export async function createComment(
   contentText: string,
   parentCommentId?: string
 ) {
-  if (contentText.length < 1 || contentText.length > 250) {
-    throw new Error("Comment must be between 1 and 250 characters");
+  if (
+    contentText.length < ENGAGEMENT_CONSTANTS.COMMENT.MIN_LENGTH ||
+    contentText.length > ENGAGEMENT_CONSTANTS.COMMENT.MAX_LENGTH
+  ) {
+    throw new Error(
+      `Comment must be between ${ENGAGEMENT_CONSTANTS.COMMENT.MIN_LENGTH} and ${ENGAGEMENT_CONSTANTS.COMMENT.MAX_LENGTH} characters`
+    );
   }
 
   const sanitizedText = sanitizeInput(contentText);
@@ -173,19 +103,23 @@ export async function createComment(
       },
       include: {
         user: {
-          select: {
-            id: true,
-            username: true,
-            name: true,
-            avatarUrl: true,
-          },
+          select: USER_PUBLIC_SELECT,
         },
       },
     });
 
     if (!parentCommentId) {
-      await incrementCommentCount(finalEntityType, finalEntityId, tx);
-      await invalidateCountCache(finalEntityType, finalEntityId);
+      await incrementEntityCount(
+        finalEntityType,
+        finalEntityId,
+        "commentCount",
+        tx
+      );
+      await invalidateEngagementCache(
+        "comment",
+        finalEntityType,
+        finalEntityId
+      );
     }
 
     return comment;
@@ -197,8 +131,13 @@ export async function updateComment(
   commentId: string,
   newText: string
 ) {
-  if (newText.length < 1 || newText.length > 250) {
-    throw new Error("Comment must be between 1 and 250 characters");
+  if (
+    newText.length < ENGAGEMENT_CONSTANTS.COMMENT.MIN_LENGTH ||
+    newText.length > ENGAGEMENT_CONSTANTS.COMMENT.MAX_LENGTH
+  ) {
+    throw new Error(
+      `Comment must be between ${ENGAGEMENT_CONSTANTS.COMMENT.MIN_LENGTH} and ${ENGAGEMENT_CONSTANTS.COMMENT.MAX_LENGTH} characters`
+    );
   }
 
   const sanitizedText = sanitizeInput(newText);
@@ -227,12 +166,7 @@ export async function updateComment(
     },
     include: {
       user: {
-        select: {
-          id: true,
-          username: true,
-          name: true,
-          avatarUrl: true,
-        },
+        select: USER_PUBLIC_SELECT,
       },
     },
   });
@@ -276,8 +210,17 @@ export async function deleteComment(userId: string, commentId: string) {
     });
 
     if (!comment.parentCommentId) {
-      await decrementCommentCount(comment.entityType, comment.entityId, tx);
-      await invalidateCountCache(comment.entityType, comment.entityId);
+      await decrementEntityCount(
+        comment.entityType,
+        comment.entityId,
+        "commentCount",
+        tx
+      );
+      await invalidateEngagementCache(
+        "comment",
+        comment.entityType,
+        comment.entityId
+      );
     }
 
     return { deleted: true, replyCount: replyIds.length };
@@ -288,9 +231,9 @@ export async function getCommentsByEntity(
   entityType: EntityType,
   entityId: string,
   cursor?: string,
-  limit: number = 20
+  limit: number = ENGAGEMENT_CONSTANTS.PAGINATION.DEFAULT_LIMIT
 ) {
-  const where: Prisma.CommentWhereInput = {
+  const where: any = {
     entityType,
     entityId,
     parentCommentId: null,
@@ -314,12 +257,7 @@ export async function getCommentsByEntity(
       createdAt: true,
       updatedAt: true,
       user: {
-        select: {
-          id: true,
-          username: true,
-          name: true,
-          avatarUrl: true,
-        },
+        select: USER_PUBLIC_SELECT,
       },
       _count: {
         select: {
@@ -329,26 +267,23 @@ export async function getCommentsByEntity(
     },
   });
 
-  const hasMore = comments.length > limit;
-  const items = hasMore ? comments.slice(0, limit) : comments;
-  const nextCursor = hasMore ? items[items.length - 1].id : null;
+  const result = paginateResults(comments, limit);
 
   return {
-    items: items.map((item) => ({
+    ...result,
+    items: result.items.map((item) => ({
       ...item,
       replyCount: item._count.replies,
     })),
-    nextCursor,
-    hasMore,
   };
 }
 
 export async function getCommentReplies(
   commentId: string,
   cursor?: string,
-  limit: number = 20
+  limit: number = ENGAGEMENT_CONSTANTS.PAGINATION.DEFAULT_LIMIT
 ) {
-  const where: Prisma.CommentWhereInput = {
+  const where: any = {
     parentCommentId: commentId,
   };
 
@@ -370,22 +305,10 @@ export async function getCommentReplies(
       createdAt: true,
       updatedAt: true,
       user: {
-        select: {
-          id: true,
-          username: true,
-          avatarUrl: true,
-        },
+        select: USER_MINIMAL_SELECT,
       },
     },
   });
 
-  const hasMore = replies.length > limit;
-  const items = hasMore ? replies.slice(0, limit) : replies;
-  const nextCursor = hasMore ? items[items.length - 1].id : null;
-
-  return {
-    items,
-    nextCursor,
-    hasMore,
-  };
+  return paginateResults(replies, limit);
 }
