@@ -448,5 +448,8 @@ export const createShareSchema = z.object({
     .string()
     .datetime()
     .optional()
-    .transform((val) => (val ? new Date(val) : undefined)),
+    .transform((val) => (val ? new Date(val) : undefined))
+    .refine((date) => !date || date > new Date(), {
+      message: "Expiration date must be in the future",
+    }),
 });

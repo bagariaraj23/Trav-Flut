@@ -130,6 +130,8 @@ export async function resolveShareToken(shareToken: string) {
   }
 
   if (share.expiresAt && new Date(share.expiresAt) < new Date()) {
+    // Lazy deletion: Delete expired share from database
+    await prisma.share.delete({ where: { id: share.id } });
     await invalidateShareTokenCache(shareToken);
     throw new Error("Share token expired");
   }

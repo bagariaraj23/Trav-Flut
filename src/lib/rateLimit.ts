@@ -138,7 +138,132 @@ export function getRateLimitKey(
 }
 
 /**
+ * Check rate limit using sliding window algorithm
+ * This prevents burst behavior by tracking individual request timestamps
+ *
+ * @param config - Rate limit configuration
+ * @param identifier - User identifier (userId or IP)
+ * @returns Rate limit result with allowed status
+ */
+export async function checkSlidingWindowRateLimit(
+  config: RateLimitConfig,
+  identifier: string
+): Promise<RateLimitResult> {
+  // Validate config
+  if (!config || !config.windowMs || config.windowMs <= 0) {
+    throw new Error(
+      `Invalid rate limit config: windowMs must be > 0, got ${config?.windowMs}`
+    );
+  }
+  if (!config.maxRequests || config.maxRequests <= 0) {
+    throw new Error(
+      `Invalid rate limit config: maxRequests must be > 0, got ${config?.maxRequests}`
+    );
+  }
+
+  const now = Date.now();
+  const windowStart = now - config.windowMs;
+  const key = `${config.keyPrefix || "rl:sw"}:${identifier}`;
+
+  let timestamps: number[] = [];
+  let count: number;
+
+  if (redis) {
+    // Use Redis Sorted Set for distributed sliding window
+    try {
+      // Remove old timestamps outside the window
+      await redis.zremrangebyscore(key, 0, windowStart);
+
+      // Get count of requests in current window
+      count = await redis.zcard(key);
+
+      // Get all timestamps for calculating reset time
+      const members = await redis.zrange<string[]>(key, 0, -1);
+      timestamps = members.map((m: string) => parseFloat(m));
+
+      // If allowed, add current timestamp
+      if (count < config.maxRequests) {
+        // Upstash Redis zadd signature: zadd(key, { score: number, member: string })
+        await redis.zadd(key, { score: now, member: now.toString() });
+        // Set expiration on the key (cleanup old keys)
+        await redis.pexpire(key, config.windowMs + 60000); // Extra minute for safety
+        count++;
+        timestamps.push(now);
+      }
+    } catch (error) {
+      // Fallback to memory cache if Redis fails
+      console.warn(
+        "[RateLimit] Redis error, falling back to memory cache:",
+        error
+      );
+      timestamps = await getSlidingWindowFromMemory(
+        key,
+        windowStart,
+        config.windowMs,
+        now,
+        config.maxRequests
+      );
+      count = timestamps.length;
+    }
+  } else {
+    // Use memory cache for sliding window
+    timestamps = await getSlidingWindowFromMemory(
+      key,
+      windowStart,
+      config.windowMs,
+      now,
+      config.maxRequests
+    );
+    count = timestamps.length;
+  }
+
+  // Calculate reset time (when oldest request will expire)
+  let resetAt: number;
+  if (count >= config.maxRequests && timestamps.length > 0) {
+    // Reset when the oldest request expires from the window
+    const oldestTimestamp = Math.min(...timestamps);
+    resetAt = oldestTimestamp + config.windowMs;
+  } else {
+    // If under limit, window resets at now + windowMs
+    resetAt = now + config.windowMs;
+  }
+
+  const remaining = Math.max(0, config.maxRequests - count);
+  const allowed = count <= config.maxRequests;
+
+  return { allowed, remaining, resetAt, count };
+}
+
+/**
+ * Helper function to manage sliding window in memory cache
+ */
+async function getSlidingWindowFromMemory(
+  key: string,
+  windowStart: number,
+  windowMs: number,
+  now: number,
+  maxRequests: number
+): Promise<number[]> {
+  const cached = memoryCache.get(key) as { timestamps: number[] } | null;
+
+  // Filter timestamps within the current window
+  let timestamps =
+    cached?.timestamps?.filter((ts: number) => ts > windowStart) || [];
+
+  // If allowed, add current timestamp
+  if (timestamps.length < maxRequests) {
+    timestamps.push(now);
+  }
+
+  // Update cache
+  memoryCache.set(key, { timestamps }, windowMs + 60000); // Extra minute for safety
+
+  return timestamps;
+}
+
+/**
  * Check rate limit for a given identifier (userId or IP)
+ * Uses fixed window approach (legacy, but still used for non-comment endpoints)
  * Uses Redis if available, falls back to memory cache
  */
 export async function checkRateLimit(
@@ -378,6 +503,14 @@ export async function withRateLimit(
       return handler(request);
     }
 
+    // Sliding window rate limiting available but disabled for now
+    // TODO: Enable for critical endpoints when needed
+    // const isCommentEndpoint = config.keyPrefix === "rl:comment";
+    // const result = isCommentEndpoint
+    //   ? await checkSlidingWindowRateLimit(config, identifier)
+    //   : await checkRateLimit(config, identifier);
+
+    // Using fixed window for all endpoints
     const result = await checkRateLimit(config, identifier);
 
     if (!result.allowed) {
