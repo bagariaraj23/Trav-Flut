@@ -53,5 +53,7 @@ export async function GET(
       }
     });
   });
+
+  return loggedHandler(request);
 }
 

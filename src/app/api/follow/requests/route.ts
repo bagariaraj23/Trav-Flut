@@ -170,7 +170,7 @@ export async function POST(request: NextRequest) {
 
 // Get all pending follow requests for current user
 export async function GET(request: NextRequest) {
-  return withLogging(async (req) => {
+  const handler = withLogging(async (req) => {
     return withRateLimit(req, async (rateLimitedReq) => {
       return withAuth(rateLimitedReq, async (authenticatedReq) => {
         try {
@@ -240,6 +240,7 @@ export async function GET(request: NextRequest) {
       });
     });
   });
+  return handler(request);
 }
 
 // Delete/cancel a follow request
