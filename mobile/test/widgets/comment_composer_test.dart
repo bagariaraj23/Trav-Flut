@@ -5,7 +5,7 @@ import 'package:tripthread/widgets/engagement/comment_composer.dart';
 import 'package:tripthread/providers/comment_provider.dart';
 import 'package:tripthread/services/comment_service.dart';
 import 'package:tripthread/models/comment.dart';
-import 'package:tripthread/models/user.dart';
+import 'package:tripthread/models/comment_user.dart';
 
 class MockCommentService extends CommentService {
   bool shouldFail = false;
@@ -30,13 +30,10 @@ class MockCommentService extends CommentService {
       parentCommentId: parentId,
       createdAt: DateTime.now(),
       updatedAt: DateTime.now(),
-      user: User(
+      user: const CommentUser(
         id: 'user1',
-        email: 'user1@test.com',
+        username: 'userone',
         name: 'User One',
-        isPrivate: false,
-        createdAt: DateTime.now(),
-        updatedAt: DateTime.now(),
       ),
       replyCount: 0,
     );
@@ -88,14 +85,7 @@ void main() {
         parentCommentId: null,
         createdAt: DateTime.now(),
         updatedAt: DateTime.now(),
-        user: User(
-          id: 'user2',
-          email: 'user2@test.com',
-          name: 'User Two',
-          isPrivate: false,
-          createdAt: DateTime.now(),
-          updatedAt: DateTime.now(),
-        ),
+        user: CommentUser(id: 'user2', username: 'user2', name: 'User Two'),
         replyCount: 0,
       );
 
@@ -114,7 +104,9 @@ void main() {
       expect(find.text('Write a reply...'), findsOneWidget);
     });
 
-    testWidgets('should enable send button when text is entered', (tester) async {
+    testWidgets('should enable send button when text is entered', (
+      tester,
+    ) async {
       await tester.pumpWidget(
         createTestWidget(
           const CommentComposer(
@@ -132,7 +124,9 @@ void main() {
       expect(find.byIcon(Icons.send), findsOneWidget);
     });
 
-    testWidgets('should show character counter when approaching limit', (tester) async {
+    testWidgets('should show character counter when approaching limit', (
+      tester,
+    ) async {
       await tester.pumpWidget(
         createTestWidget(
           const CommentComposer(
@@ -186,14 +180,7 @@ void main() {
         parentCommentId: null,
         createdAt: DateTime.now(),
         updatedAt: DateTime.now(),
-        user: User(
-          id: 'user2',
-          email: 'user2@test.com',
-          name: 'User Two',
-          isPrivate: false,
-          createdAt: DateTime.now(),
-          updatedAt: DateTime.now(),
-        ),
+        user: CommentUser(id: 'user2', username: 'user2', name: 'User Two'),
         replyCount: 0,
       );
 
@@ -237,4 +224,3 @@ void main() {
     });
   });
 }
-

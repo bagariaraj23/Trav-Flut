@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 import 'package:tripthread/widgets/engagement/comment_list_item.dart';
 import 'package:tripthread/models/comment.dart';
+import 'package:tripthread/models/comment_user.dart';
 import 'package:tripthread/models/user.dart';
 import 'package:tripthread/providers/comment_provider.dart';
 import 'package:tripthread/providers/auth_provider.dart';
@@ -28,13 +29,10 @@ class MockCommentService extends CommentService {
       parentCommentId: null,
       createdAt: DateTime.now(),
       updatedAt: DateTime.now(),
-      user: User(
+      user: const CommentUser(
         id: 'user1',
-        email: 'user1@test.com',
+        username: 'userone',
         name: 'User One',
-        isPrivate: false,
-        createdAt: DateTime.now(),
-        updatedAt: DateTime.now(),
       ),
       replyCount: 0,
     );
@@ -42,10 +40,8 @@ class MockCommentService extends CommentService {
 }
 
 class MockAuthProvider extends AuthProvider {
-  MockAuthProvider() : super(
-    apiService: ApiService(),
-    storageService: StorageService(),
-  );
+  MockAuthProvider()
+    : super(apiService: ApiService(), storageService: StorageService());
 
   User? _currentUser;
 
@@ -87,9 +83,7 @@ void main() {
             ChangeNotifierProvider<CommentProvider>.value(
               value: commentProvider,
             ),
-            ChangeNotifierProvider<AuthProvider>.value(
-              value: mockAuthProvider,
-            ),
+            ChangeNotifierProvider<AuthProvider>.value(value: mockAuthProvider),
           ],
           child: child,
         ),
@@ -113,13 +107,10 @@ void main() {
       parentCommentId: parentCommentId,
       createdAt: DateTime.now(),
       updatedAt: DateTime.now(),
-      user: User(
+      user: CommentUser(
         id: userId ?? 'user1',
-        email: '${userId ?? 'user1'}@test.com',
+        username: userId ?? 'userone',
         name: 'User ${userId ?? 'One'}',
-        isPrivate: false,
-        createdAt: DateTime.now(),
-        updatedAt: DateTime.now(),
       ),
       replyCount: replyCount ?? 0,
     );
@@ -130,9 +121,7 @@ void main() {
       final comment = createTestComment();
 
       await tester.pumpWidget(
-        createTestWidget(
-          CommentListItem(comment: comment),
-        ),
+        createTestWidget(CommentListItem(comment: comment)),
       );
 
       expect(find.text('User One'), findsOneWidget);
@@ -140,37 +129,37 @@ void main() {
       expect(find.byType(CircleAvatar), findsOneWidget);
     });
 
-    testWidgets('should show reply button for top-level comments', (tester) async {
+    testWidgets('should show reply button for top-level comments', (
+      tester,
+    ) async {
       final comment = createTestComment(parentCommentId: null);
 
       await tester.pumpWidget(
-        createTestWidget(
-          CommentListItem(comment: comment),
-        ),
+        createTestWidget(CommentListItem(comment: comment)),
       );
 
       expect(find.text('Reply'), findsOneWidget);
     });
 
-    testWidgets('should show view replies button when replies exist', (tester) async {
+    testWidgets('should show view replies button when replies exist', (
+      tester,
+    ) async {
       final comment = createTestComment(replyCount: 5);
 
       await tester.pumpWidget(
-        createTestWidget(
-          CommentListItem(comment: comment),
-        ),
+        createTestWidget(CommentListItem(comment: comment)),
       );
 
       expect(find.text('5 replies'), findsOneWidget);
     });
 
-    testWidgets('should show edit/delete menu for own comments', (tester) async {
+    testWidgets('should show edit/delete menu for own comments', (
+      tester,
+    ) async {
       final comment = createTestComment(userId: 'user1');
 
       await tester.pumpWidget(
-        createTestWidget(
-          CommentListItem(comment: comment),
-        ),
+        createTestWidget(CommentListItem(comment: comment)),
       );
 
       await tester.tap(find.byIcon(Icons.more_vert));
@@ -180,27 +169,23 @@ void main() {
       expect(find.text('Delete'), findsOneWidget);
     });
 
-    testWidgets('should not show menu for other users comments', (tester) async {
+    testWidgets('should not show menu for other users comments', (
+      tester,
+    ) async {
       final comment = createTestComment(userId: 'user2');
 
       await tester.pumpWidget(
-        createTestWidget(
-          CommentListItem(comment: comment),
-        ),
+        createTestWidget(CommentListItem(comment: comment)),
       );
 
       expect(find.byIcon(Icons.more_vert), findsNothing);
     });
 
     testWidgets('should expand long comments on tap', (tester) async {
-      final longComment = createTestComment(
-        contentText: 'a' * 200,
-      );
+      final longComment = createTestComment(contentText: 'a' * 200);
 
       await tester.pumpWidget(
-        createTestWidget(
-          CommentListItem(comment: longComment),
-        ),
+        createTestWidget(CommentListItem(comment: longComment)),
       );
 
       expect(find.textContaining('...'), findsOneWidget);
@@ -212,25 +197,20 @@ void main() {
     });
 
     testWidgets('should indent reply comments', (tester) async {
-      final reply = createTestComment(
-        parentCommentId: 'parent1',
-      );
+      final reply = createTestComment(parentCommentId: 'parent1');
 
       await tester.pumpWidget(
-        createTestWidget(
-          CommentListItem(
-            comment: reply,
-            isReply: true,
-          ),
-        ),
+        createTestWidget(CommentListItem(comment: reply, isReply: true)),
       );
 
       // Reply should have left margin
       final container = tester.widget<Container>(
-        find.ancestor(
-          of: find.text('Test comment'),
-          matching: find.byType(Container),
-        ).first,
+        find
+            .ancestor(
+              of: find.text('Test comment'),
+              matching: find.byType(Container),
+            )
+            .first,
       );
 
       expect(container.margin, isA<EdgeInsets>());
@@ -240,9 +220,7 @@ void main() {
       final comment = createTestComment(userId: 'user1');
 
       await tester.pumpWidget(
-        createTestWidget(
-          CommentListItem(comment: comment),
-        ),
+        createTestWidget(CommentListItem(comment: comment)),
       );
 
       await tester.tap(find.byIcon(Icons.more_vert));
@@ -256,4 +234,3 @@ void main() {
     });
   });
 }
-

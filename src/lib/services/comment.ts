@@ -302,10 +302,11 @@ export async function getCommentReplies(
       entityId: true,
       contentText: true,
       parentCommentId: true,
+      likeCount: true,
       createdAt: true,
       updatedAt: true,
       user: {
-        select: USER_MINIMAL_SELECT,
+        select: USER_PUBLIC_SELECT,
       },
     },
   });

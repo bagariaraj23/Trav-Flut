@@ -18,7 +18,7 @@ Comment _$CommentFromJson(Map<String, dynamic> json) => Comment(
   updatedAt: DateTime.parse(json['updatedAt'] as String),
   user: json['user'] == null
       ? null
-      : User.fromJson(json['user'] as Map<String, dynamic>),
+      : CommentUser.fromJson(json['user'] as Map<String, dynamic>),
   replyCount: (json['replyCount'] as num?)?.toInt(),
 );
 

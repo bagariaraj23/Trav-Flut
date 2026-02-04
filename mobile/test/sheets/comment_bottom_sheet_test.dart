@@ -5,7 +5,7 @@ import 'package:tripthread/widgets/sheets/comment_bottom_sheet.dart';
 import 'package:tripthread/providers/comment_provider.dart';
 import 'package:tripthread/services/comment_service.dart';
 import 'package:tripthread/models/comment.dart';
-import 'package:tripthread/models/user.dart';
+import 'package:tripthread/models/comment_user.dart';
 import 'package:tripthread/models/api_response.dart';
 
 class MockCommentService extends CommentService {
@@ -27,14 +27,7 @@ class MockCommentService extends CommentService {
           parentCommentId: null,
           createdAt: DateTime.now(),
           updatedAt: DateTime.now(),
-          user: User(
-            id: 'user1',
-            email: 'user1@test.com',
-            name: 'User One',
-            isPrivate: false,
-            createdAt: DateTime.now(),
-            updatedAt: DateTime.now(),
-          ),
+          user: CommentUser(id: 'user1', username: 'user1', name: 'User One'),
           replyCount: 0,
         ),
         Comment(
@@ -46,14 +39,7 @@ class MockCommentService extends CommentService {
           parentCommentId: null,
           createdAt: DateTime.now(),
           updatedAt: DateTime.now(),
-          user: User(
-            id: 'user2',
-            email: 'user2@test.com',
-            name: 'User Two',
-            isPrivate: false,
-            createdAt: DateTime.now(),
-            updatedAt: DateTime.now(),
-          ),
+          user: CommentUser(id: 'user2', username: 'user2', name: 'User Two'),
           replyCount: 2,
         ),
       ],
@@ -83,14 +69,7 @@ class MockCommentService extends CommentService {
       parentCommentId: parentId,
       createdAt: DateTime.now(),
       updatedAt: DateTime.now(),
-      user: User(
-        id: 'user1',
-        email: 'user1@test.com',
-        name: 'User One',
-        isPrivate: false,
-        createdAt: DateTime.now(),
-        updatedAt: DateTime.now(),
-      ),
+      user: CommentUser(id: 'user1', username: 'user1', name: 'User One'),
       replyCount: 0,
     );
   }
@@ -112,14 +91,7 @@ class MockCommentService extends CommentService {
           parentCommentId: commentId,
           createdAt: DateTime.now(),
           updatedAt: DateTime.now(),
-          user: User(
-            id: 'user3',
-            email: 'user3@test.com',
-            name: 'User Three',
-            isPrivate: false,
-            createdAt: DateTime.now(),
-            updatedAt: DateTime.now(),
-          ),
+          user: CommentUser(id: 'user3', username: 'user3', name: 'User Three'),
           replyCount: 0,
         ),
       ],
@@ -173,7 +145,9 @@ void main() {
 
     testWidgets('should show empty state when no comments', (tester) async {
       // Override to return empty list
-      final emptyProvider = CommentProvider(commentService: MockCommentService());
+      final emptyProvider = CommentProvider(
+        commentService: MockCommentService(),
+      );
 
       await tester.pumpWidget(
         MaterialApp(
@@ -224,7 +198,9 @@ void main() {
       expect(find.byType(TextField), findsOneWidget);
     });
 
-    testWidgets('should expand replies when view replies is tapped', (tester) async {
+    testWidgets('should expand replies when view replies is tapped', (
+      tester,
+    ) async {
       await tester.pumpWidget(
         createTestWidget(
           const CommentBottomSheet(
@@ -275,4 +251,3 @@ void main() {
     });
   });
 }
-

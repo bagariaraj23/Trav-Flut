@@ -1,5 +1,5 @@
 import 'package:json_annotation/json_annotation.dart';
-import 'package:tripthread/models/user.dart';
+import 'package:tripthread/models/comment_user.dart';
 
 part 'comment.g.dart';
 
@@ -14,7 +14,7 @@ class Comment {
   final int likeCount;
   final DateTime createdAt;
   final DateTime updatedAt;
-  final User? user;
+  final CommentUser? user;
   final int? replyCount;
 
   const Comment({
@@ -46,7 +46,7 @@ class Comment {
     int? likeCount,
     DateTime? createdAt,
     DateTime? updatedAt,
-    User? user,
+    CommentUser? user,
     int? replyCount,
   }) {
     return Comment(
