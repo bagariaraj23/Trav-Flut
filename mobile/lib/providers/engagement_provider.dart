@@ -7,7 +7,7 @@ class EngagementProvider extends ChangeNotifier {
   final LikeService _likeService;
 
   EngagementProvider({required LikeService likeService})
-      : _likeService = likeService;
+    : _likeService = likeService;
 
   final Map<String, bool> _likeStatus = {};
   final Map<String, int> _likeCounts = {};
@@ -110,7 +110,10 @@ class EngagementProvider extends ChangeNotifier {
     String entityType,
   ) async {
     try {
-      final statusMap = await _likeService.checkLikeStatus(entityIds, entityType);
+      final statusMap = await _likeService.checkLikeStatus(
+        entityIds,
+        entityType,
+      );
       for (final entry in statusMap.entries) {
         _likeStatus[entry.key] = entry.value;
       }
@@ -137,4 +140,3 @@ class EngagementProvider extends ChangeNotifier {
     notifyListeners();
   }
 }
-

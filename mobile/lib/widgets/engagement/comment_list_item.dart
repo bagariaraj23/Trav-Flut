@@ -427,37 +427,44 @@ class _CommentLikeButtonState extends State<_CommentLikeButton>
             : widget.comment.likeCount;
         final isToggling = provider.isToggling(widget.comment.id);
 
-        return GestureDetector(
+        return InkWell(
           onTap: isToggling ? null : _handleLike,
-          child: AnimatedBuilder(
-            animation: _controller,
-            builder: (context, child) {
-              return Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Transform.scale(
-                    scale: _scaleAnimation.value,
-                    child: Icon(
-                      isLiked ? Icons.favorite : Icons.favorite_border,
-                      size: 16,
-                      color: isLiked ? Colors.red : Colors.grey,
-                    ),
-                  ),
-                  if (likeCount > 0) ...[
-                    const SizedBox(width: 4),
-                    Text(
-                      likeCount.toString(),
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+          borderRadius: BorderRadius.circular(20),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(
+              horizontal: 12.0,
+              vertical: 8.0,
+            ), // Creates adequate touch target
+            child: AnimatedBuilder(
+              animation: _controller,
+              builder: (context, child) {
+                return Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Transform.scale(
+                      scale: _scaleAnimation.value,
+                      child: Icon(
+                        isLiked ? Icons.favorite : Icons.favorite_border,
+                        size: 16,
                         color: isLiked ? Colors.red : Colors.grey,
-                        fontWeight: isLiked
-                            ? FontWeight.w600
-                            : FontWeight.normal,
                       ),
                     ),
+                    if (likeCount > 0) ...[
+                      const SizedBox(width: 4),
+                      Text(
+                        likeCount.toString(),
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: isLiked ? Colors.red : Colors.grey,
+                          fontWeight: isLiked
+                              ? FontWeight.w600
+                              : FontWeight.normal,
+                        ),
+                      ),
+                    ],
                   ],
-                ],
-              );
-            },
+                );
+              },
+            ),
           ),
         );
       },

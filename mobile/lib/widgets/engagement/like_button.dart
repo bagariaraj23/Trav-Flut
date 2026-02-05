@@ -124,65 +124,70 @@ class _LikeButtonState extends State<LikeButton>
             : (widget.initialLikeCount ?? 0);
         final isToggling = provider.isToggling(widget.entityId);
 
-        return GestureDetector(
-          onTap: isToggling ? null : _handleTap,
-          child: AnimatedBuilder(
-            animation: _controller,
-            builder: (context, child) {
-              // Clamp animation value to prevent errors
-              final animationValue = _controller.value.clamp(0.0, 1.0);
-              final scale = isLiked ? 1.0 + (animationValue * 0.2) : 1.0;
+        return Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            InkWell(
+              onTap: isToggling ? null : _handleTap,
+              borderRadius: BorderRadius.circular(24),
+              child: Padding(
+                padding: const EdgeInsets.all(
+                  12.0,
+                ), // Creates 48x48 touch target
+                child: AnimatedBuilder(
+                  animation: _controller,
+                  builder: (context, child) {
+                    // Clamp animation value to prevent errors
+                    final animationValue = _controller.value.clamp(0.0, 1.0);
+                    final scale = isLiked ? 1.0 + (animationValue * 0.2) : 1.0;
 
-              return Transform.scale(
-                scale: scale,
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      isLiked ? Icons.favorite : Icons.favorite_border,
-                      color: isLiked
-                          ? (_colorAnimation.value ?? Colors.red)
-                          : Colors.grey,
-                      size: 24,
-                    ),
-                    const SizedBox(width: 4),
-                    if (likeCount > 0)
-                      GestureDetector(
-                        onTap: () {
-                          context.push(
-                            '/likes/${widget.entityType}/${widget.entityId}',
-                          );
-                        },
-                        behavior: HitTestBehavior.opaque,
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 8,
-                          ),
-                          child: Text(
-                            _formatCount(likeCount),
-                            style: Theme.of(context).textTheme.bodyMedium
-                                ?.copyWith(
-                                  color: isLiked ? Colors.red : Colors.grey,
-                                  fontWeight: FontWeight.w500,
-                                ),
-                          ),
-                        ),
+                    return Transform.scale(
+                      scale: scale,
+                      child: Icon(
+                        isLiked ? Icons.favorite : Icons.favorite_border,
+                        color: isLiked
+                            ? (_colorAnimation.value ?? Colors.red)
+                            : Colors.grey,
+                        size: 24,
                       ),
-                    if (isToggling)
-                      const Padding(
-                        padding: EdgeInsets.only(left: 8),
-                        child: SizedBox(
-                          width: 12,
-                          height: 12,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        ),
-                      ),
-                  ],
+                    );
+                  },
                 ),
-              );
-            },
-          ),
+              ),
+            ),
+            if (likeCount > 0)
+              InkWell(
+                onTap: () {
+                  context.push(
+                    '/likes/${widget.entityType}/${widget.entityId}',
+                  );
+                },
+                borderRadius: BorderRadius.circular(12),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical:
+                        12, // Increased vertical padding for better touch target
+                  ),
+                  child: Text(
+                    _formatCount(likeCount),
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: isLiked ? Colors.red : Colors.grey,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ),
+              ),
+            if (isToggling)
+              const Padding(
+                padding: EdgeInsets.only(left: 8),
+                child: SizedBox(
+                  width: 12,
+                  height: 12,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+              ),
+          ],
         );
       },
     );
