@@ -1,5 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import { withAuth, withRateLimit, withLogging, handleApiError } from "@/lib/middleware";
+import {
+  withAuth,
+  withRateLimit,
+  withLogging,
+  handleApiError,
+} from "@/lib/middleware";
 import { createLike } from "@/lib/services/like";
 import { ApiResponse } from "@/types/api";
 import { EntityType } from "@prisma/client";
@@ -36,5 +41,6 @@ export async function POST(
       });
     });
   });
-}
 
+  return await loggedHandler(request);
+}

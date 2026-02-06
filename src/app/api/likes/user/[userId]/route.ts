@@ -1,5 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import { withAuth, withRateLimit, withLogging, handleApiError } from "@/lib/middleware";
+import {
+  withAuth,
+  withRateLimit,
+  withLogging,
+  handleApiError,
+} from "@/lib/middleware";
 import { getUserLikes } from "@/lib/services/like";
 import { ApiResponse } from "@/types/api";
 
@@ -50,5 +55,6 @@ export async function GET(
       });
     });
   });
-}
 
+  return await loggedHandler(request);
+}

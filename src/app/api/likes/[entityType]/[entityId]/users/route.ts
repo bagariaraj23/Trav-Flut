@@ -81,5 +81,6 @@ export async function GET(
       }
     });
   });
-}
 
+  return await loggedHandler(request);
+}

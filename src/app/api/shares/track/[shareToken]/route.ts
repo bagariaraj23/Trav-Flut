@@ -20,7 +20,10 @@ export async function POST(
         const { shareToken } = await params;
         const body = await rateLimitedReq.json().catch(() => ({}));
         const validatedData = trackShareSchema.parse(body);
-        const ipAddress = request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || null;
+        const ipAddress =
+          request.headers.get("x-forwarded-for") ||
+          request.headers.get("x-real-ip") ||
+          null;
 
         const metadata = {
           ...validatedData,
@@ -57,5 +60,6 @@ export async function POST(
       }
     });
   });
-}
 
+  return await loggedHandler(request);
+}

@@ -34,18 +34,22 @@ export async function PUT(
 
         if (!canEdit) {
           await logSecurityEvent({
-            eventType: 'UNAUTHORIZED_ACCESS',
+            eventType: "UNAUTHORIZED_ACCESS",
             userId,
-            entityType: 'COMMENT',
+            entityType: "COMMENT",
             entityId: commentId,
-            ipAddress: request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || null,
-            metadata: { action: 'edit_comment' },
+            ipAddress:
+              request.headers.get("x-forwarded-for") ||
+              request.headers.get("x-real-ip") ||
+              null,
+            metadata: { action: "edit_comment" },
           });
 
           return NextResponse.json<ApiResponse>(
             {
               success: false,
-              error: "Forbidden: You can only edit your own comments within 15 minutes of creation",
+              error:
+                "Forbidden: You can only edit your own comments within 15 minutes of creation",
             },
             { status: 403 }
           );
@@ -55,11 +59,14 @@ export async function PUT(
 
         if (moderation.hasProfanity) {
           await logSecurityEvent({
-            eventType: 'PROFANITY_DETECTED',
+            eventType: "PROFANITY_DETECTED",
             userId,
-            entityType: 'COMMENT',
+            entityType: "COMMENT",
             entityId: commentId,
-            ipAddress: request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || null,
+            ipAddress:
+              request.headers.get("x-forwarded-for") ||
+              request.headers.get("x-real-ip") ||
+              null,
             metadata: {
               originalLength: moderation.originalLength,
               sanitizedLength: moderation.sanitizedLength,
@@ -67,7 +74,11 @@ export async function PUT(
           });
         }
 
-        const comment = await updateComment(userId, commentId, moderation.sanitized);
+        const comment = await updateComment(
+          userId,
+          commentId,
+          moderation.sanitized
+        );
 
         return NextResponse.json<ApiResponse>({
           success: true,
@@ -96,6 +107,8 @@ export async function PUT(
       }
     });
   });
+
+  return await loggedHandler(request);
 }
 
 export async function DELETE(
@@ -112,12 +125,15 @@ export async function DELETE(
 
         if (!canDelete) {
           await logSecurityEvent({
-            eventType: 'UNAUTHORIZED_ACCESS',
+            eventType: "UNAUTHORIZED_ACCESS",
             userId,
-            entityType: 'COMMENT',
+            entityType: "COMMENT",
             entityId: commentId,
-            ipAddress: request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || null,
-            metadata: { action: 'delete_comment' },
+            ipAddress:
+              request.headers.get("x-forwarded-for") ||
+              request.headers.get("x-real-ip") ||
+              null,
+            metadata: { action: "delete_comment" },
           });
 
           return NextResponse.json<ApiResponse>(
@@ -150,4 +166,3 @@ export async function DELETE(
     });
   });
 }
-

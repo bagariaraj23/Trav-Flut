@@ -13,29 +13,36 @@ export async function GET(
     return withRateLimit(req, async (rateLimitedReq) => {
       try {
         const { shareToken } = await params;
-        const ipAddress = request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || null;
+        const ipAddress =
+          request.headers.get("x-forwarded-for") ||
+          request.headers.get("x-real-ip") ||
+          null;
 
         const result = await resolveShareToken(shareToken);
 
-        const authHeader = request.headers.get('authorization');
+        const authHeader = request.headers.get("authorization");
         let userId: string | null = null;
-        if (authHeader?.startsWith('Bearer ')) {
+        if (authHeader?.startsWith("Bearer ")) {
           const token = authHeader.substring(7);
-          const { AuthService } = await import('@/lib/auth');
+          const { AuthService } = await import("@/lib/auth");
           const payload = AuthService.verifyAccessToken(token);
           userId = payload?.userId || null;
         }
 
-        const canView = await canViewEntity(userId, result.share.entityType, result.share.entityId);
+        const canView = await canViewEntity(
+          userId,
+          result.share.entityType,
+          result.share.entityId
+        );
 
         if (!canView) {
           await logSecurityEvent({
-            eventType: 'UNAUTHORIZED_ACCESS',
+            eventType: "UNAUTHORIZED_ACCESS",
             userId,
             entityType: result.share.entityType,
             entityId: result.share.entityId,
             ipAddress,
-            metadata: { action: 'resolve_share', shareToken },
+            metadata: { action: "resolve_share", shareToken },
           });
 
           return NextResponse.json<ApiResponse>(
@@ -74,5 +81,6 @@ export async function GET(
       }
     });
   });
-}
 
+  return await loggedHandler(request);
+}

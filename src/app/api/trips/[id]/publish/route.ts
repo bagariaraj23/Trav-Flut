@@ -10,9 +10,9 @@ import {
 } from "@/lib/middleware";
 import { NotFoundError, ConflictError } from "@/lib/errors";
 
-function toResponse(finalPost: Awaited<
-  ReturnType<typeof TripFinalizerService.publishFinalPost>
->): TripFinalPostResponse {
+function toResponse(
+  finalPost: Awaited<ReturnType<typeof TripFinalizerService.publishFinalPost>>
+): TripFinalPostResponse {
   return {
     ...finalPost,
     caption: finalPost.caption ?? undefined,
@@ -79,4 +79,6 @@ export async function POST(
       });
     });
   });
+
+  return await loggedHandler(request);
 }
