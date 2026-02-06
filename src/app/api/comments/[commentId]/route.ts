@@ -11,7 +11,7 @@ const updateCommentSchema = z.object({
   contentText: z
     .string()
     .min(1, "Comment must be at least 1 character")
-    .max(500, "Comment must be less than 500 characters")
+    .max(250, "Comment must be less than 250 characters")
     .transform((text) => text.trim())
     .refine((text) => text.length > 0, {
       message: "Comment cannot be empty or only whitespace",

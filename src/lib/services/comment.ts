@@ -254,6 +254,7 @@ export async function getCommentsByEntity(
       entityId: true,
       contentText: true,
       parentCommentId: true,
+      likeCount: true,
       createdAt: true,
       updatedAt: true,
       user: {

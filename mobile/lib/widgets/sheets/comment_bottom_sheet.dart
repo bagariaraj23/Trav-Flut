@@ -290,13 +290,19 @@ class _CommentBottomSheetState extends State<CommentBottomSheet> {
     final provider = context.read<CommentProvider>();
     final entityKey = '${widget.entityType}:${widget.entityId}';
     final comments = provider.getCommentsList(entityKey);
-    return comments.firstWhere(
-      (c) => c.id == commentId,
-      orElse: () => comments.firstWhere(
-        (c) => provider.getRepliesList(c.id).any((r) => r.id == commentId),
-        orElse: () => throw StateError('Comment not found'),
-      ),
-    );
+    try {
+      return comments.firstWhere((c) => c.id == commentId);
+    } catch (e) {
+      for (final comment in comments) {
+        final replies = provider.getRepliesList(comment.id);
+        try {
+          return replies.firstWhere((r) => r.id == commentId);
+        } catch (_) {
+          continue;
+        }
+      }
+      return null;
+    }
   }
 }
 

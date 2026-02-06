@@ -8,21 +8,24 @@ class CommentProvider extends ChangeNotifier {
   final CommentService _commentService;
 
   CommentProvider({required CommentService commentService})
-      : _commentService = commentService;
+    : _commentService = commentService;
 
   final Map<String, List<Comment>> _entityComments = {};
   final Map<String, List<Comment>> _commentReplies = {};
   final Map<String, int> _currentPage = {};
   final Map<String, bool> _hasMore = {};
   final Map<String, bool> _isLoading = {};
-  final Map<String, bool> _isLoadingReplies = {}; // Separate loading state for replies
+  final Map<String, bool> _isLoadingReplies =
+      {}; // Separate loading state for replies
   final Map<String, bool> _isCreating = {};
   final Map<String, bool> _isUpdating = {};
   final Map<String, bool> _isDeleting = {};
   String? _error;
 
-  List<Comment> getCommentsList(String entityKey) => _entityComments[entityKey] ?? [];
-  List<Comment> getRepliesList(String commentId) => _commentReplies[commentId] ?? [];
+  List<Comment> getCommentsList(String entityKey) =>
+      _entityComments[entityKey] ?? [];
+  List<Comment> getRepliesList(String commentId) =>
+      _commentReplies[commentId] ?? [];
   int getCurrentPage(String entityKey) => _currentPage[entityKey] ?? 1;
   bool hasMore(String entityKey) => _hasMore[entityKey] ?? false;
   bool isLoading(String entityKey) => _isLoading[entityKey] ?? false;
@@ -35,10 +38,7 @@ class CommentProvider extends ChangeNotifier {
     return '$entityType:$entityId';
   }
 
-  Future<void> getComments(
-    String entityType,
-    String entityId,
-  ) async {
+  Future<void> getComments(String entityType, String entityId) async {
     final entityKey = _getEntityKey(entityType, entityId);
     final page = _currentPage[entityKey] ?? 1;
 
@@ -55,8 +55,12 @@ class CommentProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final response = await _commentService.getComments(entityType, entityId, page);
-      
+      final response = await _commentService.getComments(
+        entityType,
+        entityId,
+        page,
+      );
+
       if (page == 1) {
         _entityComments[entityKey] = response.data;
       } else {
@@ -67,7 +71,7 @@ class CommentProvider extends ChangeNotifier {
       }
 
       _hasMore[entityKey] = response.pagination.totalPages > page;
-      _currentPage[entityKey] = page;
+      _currentPage[entityKey] = page + 1;
       _isLoading[entityKey] = false;
       notifyListeners();
     } catch (e) {
@@ -106,9 +110,15 @@ class CommentProvider extends ChangeNotifier {
     );
 
     if (parentId == null) {
-      _entityComments[entityKey] = [tempComment, ...(_entityComments[entityKey] ?? [])];
+      _entityComments[entityKey] = [
+        tempComment,
+        ...(_entityComments[entityKey] ?? []),
+      ];
     } else {
-      _commentReplies[parentId] = [tempComment, ...(_commentReplies[parentId] ?? [])];
+      _commentReplies[parentId] = [
+        tempComment,
+        ...(_commentReplies[parentId] ?? []),
+      ];
     }
     notifyListeners();
 
@@ -121,18 +131,32 @@ class CommentProvider extends ChangeNotifier {
       );
 
       if (parentId == null) {
-        final index = _entityComments[entityKey]?.indexWhere((c) => c.id == tempComment.id) ?? -1;
+        final index =
+            _entityComments[entityKey]?.indexWhere(
+              (c) => c.id == tempComment.id,
+            ) ??
+            -1;
         if (index >= 0) {
           _entityComments[entityKey]![index] = comment;
         } else {
-          _entityComments[entityKey] = [comment, ...(_entityComments[entityKey] ?? [])];
+          _entityComments[entityKey] = [
+            comment,
+            ...(_entityComments[entityKey] ?? []),
+          ];
         }
       } else {
-        final index = _commentReplies[parentId]?.indexWhere((c) => c.id == tempComment.id) ?? -1;
+        final index =
+            _commentReplies[parentId]?.indexWhere(
+              (c) => c.id == tempComment.id,
+            ) ??
+            -1;
         if (index >= 0) {
           _commentReplies[parentId]![index] = comment;
         } else {
-          _commentReplies[parentId] = [comment, ...(_commentReplies[parentId] ?? [])];
+          _commentReplies[parentId] = [
+            comment,
+            ...(_commentReplies[parentId] ?? []),
+          ];
         }
       }
 
@@ -151,10 +175,7 @@ class CommentProvider extends ChangeNotifier {
     }
   }
 
-  Future<void> updateComment(
-    String commentId,
-    String newText,
-  ) async {
+  Future<void> updateComment(String commentId, String newText) async {
     if (_isUpdating[commentId] == true) {
       return;
     }
@@ -168,7 +189,9 @@ class CommentProvider extends ChangeNotifier {
       if (index >= 0) {
         originalComment = entry.value[index];
         entityKey = entry.key;
-        _entityComments[entityKey]![index] = originalComment.copyWith(contentText: newText);
+        _entityComments[entityKey]![index] = originalComment.copyWith(
+          contentText: newText,
+        );
         break;
       }
     }
@@ -179,7 +202,9 @@ class CommentProvider extends ChangeNotifier {
         if (index >= 0) {
           originalComment = entry.value[index];
           replyKey = entry.key;
-          _commentReplies[replyKey]![index] = originalComment.copyWith(contentText: newText);
+          _commentReplies[replyKey]![index] = originalComment.copyWith(
+            contentText: newText,
+          );
           break;
         }
       }
@@ -194,15 +219,22 @@ class CommentProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final updatedComment = await _commentService.updateComment(commentId, newText);
+      final updatedComment = await _commentService.updateComment(
+        commentId,
+        newText,
+      );
 
       if (entityKey != null) {
-        final index = _entityComments[entityKey]?.indexWhere((c) => c.id == commentId) ?? -1;
+        final index =
+            _entityComments[entityKey]?.indexWhere((c) => c.id == commentId) ??
+            -1;
         if (index >= 0) {
           _entityComments[entityKey]![index] = updatedComment;
         }
       } else if (replyKey != null) {
-        final index = _commentReplies[replyKey]?.indexWhere((c) => c.id == commentId) ?? -1;
+        final index =
+            _commentReplies[replyKey]?.indexWhere((c) => c.id == commentId) ??
+            -1;
         if (index >= 0) {
           _commentReplies[replyKey]![index] = updatedComment;
         }
@@ -212,12 +244,16 @@ class CommentProvider extends ChangeNotifier {
       notifyListeners();
     } catch (e) {
       if (entityKey != null) {
-        final index = _entityComments[entityKey]?.indexWhere((c) => c.id == commentId) ?? -1;
+        final index =
+            _entityComments[entityKey]?.indexWhere((c) => c.id == commentId) ??
+            -1;
         if (index >= 0) {
           _entityComments[entityKey]![index] = originalComment;
         }
       } else if (replyKey != null) {
-        final index = _commentReplies[replyKey]?.indexWhere((c) => c.id == commentId) ?? -1;
+        final index =
+            _commentReplies[replyKey]?.indexWhere((c) => c.id == commentId) ??
+            -1;
         if (index >= 0) {
           _commentReplies[replyKey]![index] = originalComment;
         }
@@ -315,11 +351,11 @@ class CommentProvider extends ChangeNotifier {
     }
   }
 
-  bool isLoadingReplies(String commentId) => _isLoadingReplies[commentId] ?? false;
+  bool isLoadingReplies(String commentId) =>
+      _isLoadingReplies[commentId] ?? false;
 
   void clearError() {
     _error = null;
     notifyListeners();
   }
 }
-

@@ -68,6 +68,20 @@ class DeepLinkService {
         return;
       }
 
+      // Handle share links
+      if (uri.path.startsWith('/share/')) {
+        if (uri.pathSegments.isNotEmpty) {
+          final shareToken = uri.pathSegments.last;
+          if (shareToken.isNotEmpty) {
+            debugPrint(
+              '[DeepLinkService] Navigating to shared content: $shareToken',
+            );
+            _router!.go('/share/$shareToken');
+            return;
+          }
+        }
+      }
+
       // Handle other deep links here
       debugPrint('[DeepLinkService] Unhandled deep link: $link');
     } catch (e) {
