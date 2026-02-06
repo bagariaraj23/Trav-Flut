@@ -3,19 +3,42 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 import 'package:tripthread/screens/engagement/comments_screen.dart';
 import 'package:tripthread/providers/comment_provider.dart';
+import 'package:tripthread/providers/auth_provider.dart';
+import 'package:tripthread/providers/engagement_provider.dart';
 import 'package:tripthread/services/comment_service.dart';
+import 'package:tripthread/services/like_service.dart';
+import 'package:tripthread/services/api_service.dart';
 import 'package:tripthread/models/comment.dart';
 import 'package:tripthread/models/comment_user.dart';
+import 'package:tripthread/models/user.dart';
 import 'package:tripthread/models/api_response.dart';
 
 class MockCommentService extends CommentService {
+  final bool returnEmpty;
+  final bool slow;
+
+  MockCommentService({this.returnEmpty = false, this.slow = false});
+
   @override
   Future<PaginatedResponse<Comment>> getComments(
     String entityType,
     String entityId,
     int page,
   ) async {
-    await Future.delayed(const Duration(milliseconds: 100));
+    if (slow) {
+      await Future.delayed(const Duration(seconds: 2));
+    }
+    if (returnEmpty) {
+      return PaginatedResponse(
+        data: [],
+        pagination: PaginationInfo(
+          page: page,
+          limit: 20,
+          total: 0,
+          totalPages: 0,
+        ),
+      );
+    }
     return PaginatedResponse(
       data: [
         Comment(
@@ -27,7 +50,11 @@ class MockCommentService extends CommentService {
           parentCommentId: null,
           createdAt: DateTime.now(),
           updatedAt: DateTime.now(),
-          user: CommentUser(id: 'user1', username: 'user1', name: 'User One'),
+          user: const CommentUser(
+            id: 'user1',
+            username: 'user1',
+            name: 'User One',
+          ),
           replyCount: 0,
         ),
       ],
@@ -47,7 +74,6 @@ class MockCommentService extends CommentService {
     String text,
     String? parentId,
   ) async {
-    await Future.delayed(const Duration(milliseconds: 100));
     return Comment(
       id: 'new-comment',
       userId: 'user1',
@@ -57,7 +83,7 @@ class MockCommentService extends CommentService {
       parentCommentId: parentId,
       createdAt: DateTime.now(),
       updatedAt: DateTime.now(),
-      user: CommentUser(id: 'user1', username: 'user1', name: 'User One'),
+      user: const CommentUser(id: 'user1', username: 'user1', name: 'User One'),
       replyCount: 0,
     );
   }
@@ -67,7 +93,6 @@ class MockCommentService extends CommentService {
     String commentId,
     int page,
   ) async {
-    await Future.delayed(const Duration(milliseconds: 100));
     return PaginatedResponse(
       data: [
         Comment(
@@ -79,7 +104,11 @@ class MockCommentService extends CommentService {
           parentCommentId: commentId,
           createdAt: DateTime.now(),
           updatedAt: DateTime.now(),
-          user: CommentUser(id: 'user2', username: 'user2', name: 'User Two'),
+          user: const CommentUser(
+            id: 'user2',
+            username: 'user2',
+            name: 'User Two',
+          ),
           replyCount: 0,
         ),
       ],
@@ -93,20 +122,136 @@ class MockCommentService extends CommentService {
   }
 }
 
+/// A minimal mock that implements AuthProvider's interface without calling
+/// the real constructor (which requires ApiService/StorageService and triggers
+/// network initialization).
+class MockAuthProvider extends ChangeNotifier implements AuthProvider {
+  User? _mockUser;
+
+  @override
+  User? get currentUser => _mockUser;
+
+  void setUser(User user) {
+    _mockUser = user;
+    notifyListeners();
+  }
+
+  @override
+  bool get isAuthenticated => _mockUser != null;
+
+  @override
+  bool get isLoading => false;
+
+  @override
+  String? get error => null;
+
+  @override
+  bool get shouldShowError => false;
+
+  @override
+  ChangeNotifier get uiNotifier => ChangeNotifier();
+
+  @override
+  ChangeNotifier get routingNotifier => ChangeNotifier();
+
+  @override
+  Future<bool> signup({
+    required String email,
+    required String password,
+    required String name,
+    String? username,
+  }) async => false;
+
+  @override
+  Future<bool> login({required String email, required String password}) async =>
+      false;
+
+  @override
+  Future<void> logout() async {}
+
+  @override
+  Future<bool> deleteAccount() async => false;
+
+  @override
+  Future<bool> forgotPassword({required String email}) async => false;
+
+  @override
+  Future<bool> resetPassword({
+    required String token,
+    required String newPassword,
+  }) async => false;
+
+  @override
+  void clearError() {}
+
+  @override
+  void markErrorAsShown() {}
+
+  @override
+  void updateUser(User user) {
+    _mockUser = user;
+    notifyListeners();
+  }
+
+  @override
+  Future<void> forceLogout({String? message}) async {}
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => null;
+}
+
+class MockLikeService extends LikeService {
+  @override
+  Future<void> toggleLike(String entityType, String entityId) async {}
+
+  @override
+  Future<Map<String, bool>> checkLikeStatus(
+    List<String> entityIds,
+    String entityType,
+  ) async {
+    return {};
+  }
+}
+
 void main() {
   late CommentProvider commentProvider;
   late MockCommentService mockCommentService;
+  late MockAuthProvider mockAuthProvider;
+  late EngagementProvider engagementProvider;
+  late MockLikeService mockLikeService;
 
   setUp(() {
     mockCommentService = MockCommentService();
     commentProvider = CommentProvider(commentService: mockCommentService);
+    mockLikeService = MockLikeService();
+    engagementProvider = EngagementProvider(likeService: mockLikeService);
+    mockAuthProvider = MockAuthProvider();
+    mockAuthProvider.setUser(
+      User(
+        id: 'user1',
+        email: 'user1@test.com',
+        name: 'User One',
+        isPrivate: false,
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
+      ),
+    );
   });
 
-  Widget createTestWidget(Widget child) {
+  Widget createTestWidget(Widget child, {CommentProvider? overrideProvider}) {
     return MaterialApp(
       home: Scaffold(
-        body: ChangeNotifierProvider<CommentProvider>.value(
-          value: commentProvider,
+        body: MultiProvider(
+          providers: [
+            ChangeNotifierProvider<CommentProvider>.value(
+              value: overrideProvider ?? commentProvider,
+            ),
+            ChangeNotifierProvider<AuthProvider>.value(value: mockAuthProvider),
+            ChangeNotifierProvider<EngagementProvider>.value(
+              value: engagementProvider,
+            ),
+            Provider<ApiService>.value(value: ApiService()),
+          ],
           child: child,
         ),
       ),
@@ -125,20 +270,35 @@ void main() {
       );
 
       expect(find.text('Comments'), findsOneWidget);
+
+      // Settle the async loading triggered by initState
+      await tester.pumpAndSettle();
     });
 
     testWidgets('should show loading indicator initially', (tester) async {
+      // Use a slow mock so loading state is visible
+      final slowService = MockCommentService(slow: true);
+      final slowProvider = CommentProvider(commentService: slowService);
+
       await tester.pumpWidget(
         createTestWidget(
           const CommentsScreen(
             entityType: 'TRIP_FINAL_POST',
             entityId: 'entity1',
           ),
+          overrideProvider: slowProvider,
         ),
       );
 
+      // After first pump, the postFrameCallback fires and getComments starts
+      // which sets isLoading=true. Pump once more to see the loading state.
+      await tester.pump();
+      await tester.pump();
+
       expect(find.byType(CircularProgressIndicator), findsOneWidget);
 
+      // Clean up: advance past the Future.delayed so no pending timers remain
+      await tester.pump(const Duration(seconds: 3));
       await tester.pumpAndSettle();
     });
 
@@ -159,21 +319,16 @@ void main() {
     });
 
     testWidgets('should show empty state when no comments', (tester) async {
-      final emptyProvider = CommentProvider(
-        commentService: MockCommentService(),
-      );
+      final emptyService = MockCommentService(returnEmpty: true);
+      final emptyProvider = CommentProvider(commentService: emptyService);
 
       await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: ChangeNotifierProvider<CommentProvider>.value(
-              value: emptyProvider,
-              child: const CommentsScreen(
-                entityType: 'TRIP_FINAL_POST',
-                entityId: 'entity1',
-              ),
-            ),
+        createTestWidget(
+          const CommentsScreen(
+            entityType: 'TRIP_FINAL_POST',
+            entityId: 'entity1',
           ),
+          overrideProvider: emptyProvider,
         ),
       );
 

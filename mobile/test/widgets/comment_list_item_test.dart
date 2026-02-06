@@ -7,9 +7,9 @@ import 'package:tripthread/models/comment_user.dart';
 import 'package:tripthread/models/user.dart';
 import 'package:tripthread/providers/comment_provider.dart';
 import 'package:tripthread/providers/auth_provider.dart';
+import 'package:tripthread/providers/engagement_provider.dart';
 import 'package:tripthread/services/comment_service.dart';
-import 'package:tripthread/services/api_service.dart';
-import 'package:tripthread/services/storage_service.dart';
+import 'package:tripthread/services/like_service.dart';
 
 class MockCommentService extends CommentService {
   @override
@@ -39,18 +39,97 @@ class MockCommentService extends CommentService {
   }
 }
 
-class MockAuthProvider extends AuthProvider {
-  MockAuthProvider()
-    : super(apiService: ApiService(), storageService: StorageService());
-
-  User? _currentUser;
+/// A minimal mock that implements AuthProvider's interface without calling
+/// the real constructor (which requires ApiService/StorageService and triggers
+/// network initialization).
+class MockAuthProvider extends ChangeNotifier implements AuthProvider {
+  User? _mockUser;
 
   @override
-  User? get currentUser => _currentUser;
+  User? get currentUser => _mockUser;
 
   void setUser(User user) {
-    _currentUser = user;
+    _mockUser = user;
     notifyListeners();
+  }
+
+  @override
+  bool get isAuthenticated => _mockUser != null;
+
+  @override
+  bool get isLoading => false;
+
+  @override
+  String? get error => null;
+
+  @override
+  bool get shouldShowError => false;
+
+  @override
+  ChangeNotifier get uiNotifier => ChangeNotifier();
+
+  @override
+  ChangeNotifier get routingNotifier => ChangeNotifier();
+
+  @override
+  Future<bool> signup({
+    required String email,
+    required String password,
+    required String name,
+    String? username,
+  }) async => false;
+
+  @override
+  Future<bool> login({required String email, required String password}) async =>
+      false;
+
+  @override
+  Future<void> logout() async {}
+
+  @override
+  Future<bool> deleteAccount() async => false;
+
+  @override
+  Future<bool> forgotPassword({required String email}) async => false;
+
+  @override
+  Future<bool> resetPassword({
+    required String token,
+    required String newPassword,
+  }) async => false;
+
+  @override
+  void clearError() {}
+
+  @override
+  void markErrorAsShown() {}
+
+  @override
+  void updateUser(User user) {
+    _mockUser = user;
+    notifyListeners();
+  }
+
+  @override
+  Future<void> forceLogout({String? message}) async {}
+
+  // Catch-all for any dynamic calls
+  @override
+  dynamic noSuchMethod(Invocation invocation) => null;
+}
+
+class MockLikeService extends LikeService {
+  @override
+  Future<void> toggleLike(String entityType, String entityId) async {
+    await Future.delayed(const Duration(milliseconds: 50));
+  }
+
+  @override
+  Future<Map<String, bool>> checkLikeStatus(
+    List<String> entityIds,
+    String entityType,
+  ) async {
+    return {};
   }
 }
 
@@ -58,10 +137,14 @@ void main() {
   late CommentProvider commentProvider;
   late MockCommentService mockCommentService;
   late MockAuthProvider mockAuthProvider;
+  late EngagementProvider engagementProvider;
+  late MockLikeService mockLikeService;
 
   setUp(() {
     mockCommentService = MockCommentService();
     commentProvider = CommentProvider(commentService: mockCommentService);
+    mockLikeService = MockLikeService();
+    engagementProvider = EngagementProvider(likeService: mockLikeService);
     mockAuthProvider = MockAuthProvider();
     mockAuthProvider.setUser(
       User(
@@ -84,6 +167,9 @@ void main() {
               value: commentProvider,
             ),
             ChangeNotifierProvider<AuthProvider>.value(value: mockAuthProvider),
+            ChangeNotifierProvider<EngagementProvider>.value(
+              value: engagementProvider,
+            ),
           ],
           child: child,
         ),
@@ -97,6 +183,7 @@ void main() {
     String? contentText,
     String? parentCommentId,
     int? replyCount,
+    DateTime? createdAt,
   }) {
     return Comment(
       id: id ?? 'comment1',
@@ -105,7 +192,7 @@ void main() {
       entityId: 'entity1',
       contentText: contentText ?? 'Test comment',
       parentCommentId: parentCommentId,
-      createdAt: DateTime.now(),
+      createdAt: createdAt ?? DateTime.now(),
       updatedAt: DateTime.now(),
       user: CommentUser(
         id: userId ?? 'user1',
@@ -124,6 +211,8 @@ void main() {
         createTestWidget(CommentListItem(comment: comment)),
       );
 
+      await tester.pumpAndSettle();
+
       expect(find.text('User One'), findsOneWidget);
       expect(find.text('Test comment'), findsOneWidget);
       expect(find.byType(CircleAvatar), findsOneWidget);
@@ -138,6 +227,7 @@ void main() {
         createTestWidget(CommentListItem(comment: comment)),
       );
 
+      await tester.pumpAndSettle();
       expect(find.text('Reply'), findsOneWidget);
     });
 
@@ -147,29 +237,58 @@ void main() {
       final comment = createTestComment(replyCount: 5);
 
       await tester.pumpWidget(
-        createTestWidget(CommentListItem(comment: comment)),
+        createTestWidget(
+          CommentListItem(comment: comment, onViewReplies: () {}),
+        ),
       );
 
-      expect(find.text('5 replies'), findsOneWidget);
+      await tester.pumpAndSettle();
+      expect(find.text('View 5 replies'), findsOneWidget);
     });
 
-    testWidgets('should show edit/delete menu for own comments', (
+    testWidgets(
+      'should show edit and delete buttons for own comments within 15 minutes',
+      (tester) async {
+        // Create a recent comment (within 15 minutes)
+        final comment = createTestComment(
+          userId: 'user1',
+          createdAt: DateTime.now().subtract(const Duration(minutes: 5)),
+        );
+
+        await tester.pumpWidget(
+          createTestWidget(CommentListItem(comment: comment)),
+        );
+
+        await tester.pumpAndSettle();
+
+        // Should show both Edit and Delete buttons
+        expect(find.text('Edit'), findsOneWidget);
+        expect(find.text('Delete'), findsOneWidget);
+      },
+    );
+
+    testWidgets('should hide edit button after 15 minutes but keep delete', (
       tester,
     ) async {
-      final comment = createTestComment(userId: 'user1');
+      // Create an old comment (older than 15 minutes)
+      final comment = createTestComment(
+        userId: 'user1',
+        createdAt: DateTime.now().subtract(const Duration(minutes: 20)),
+      );
 
       await tester.pumpWidget(
         createTestWidget(CommentListItem(comment: comment)),
       );
 
-      await tester.tap(find.byIcon(Icons.more_vert));
       await tester.pumpAndSettle();
 
-      expect(find.text('Edit'), findsOneWidget);
+      // Should NOT show Edit button (past 15-minute window)
+      expect(find.text('Edit'), findsNothing);
+      // Should still show Delete button
       expect(find.text('Delete'), findsOneWidget);
     });
 
-    testWidgets('should not show menu for other users comments', (
+    testWidgets('should not show edit/delete for other users comments', (
       tester,
     ) async {
       final comment = createTestComment(userId: 'user2');
@@ -178,7 +297,10 @@ void main() {
         createTestWidget(CommentListItem(comment: comment)),
       );
 
-      expect(find.byIcon(Icons.more_vert), findsNothing);
+      await tester.pumpAndSettle();
+
+      expect(find.text('Edit'), findsNothing);
+      expect(find.text('Delete'), findsNothing);
     });
 
     testWidgets('should expand long comments on tap', (tester) async {
@@ -188,10 +310,12 @@ void main() {
         createTestWidget(CommentListItem(comment: longComment)),
       );
 
+      await tester.pumpAndSettle();
+
       expect(find.textContaining('...'), findsOneWidget);
 
       await tester.tap(find.textContaining('...'));
-      await tester.pump();
+      await tester.pumpAndSettle();
 
       expect(find.textContaining('...'), findsNothing);
     });
@@ -203,34 +327,61 @@ void main() {
         createTestWidget(CommentListItem(comment: reply, isReply: true)),
       );
 
-      // Reply should have left margin
-      final container = tester.widget<Container>(
-        find
-            .ancestor(
-              of: find.text('Test comment'),
-              matching: find.byType(Container),
-            )
-            .first,
+      await tester.pumpAndSettle();
+
+      // Reply should have left margin - check for Dismissible wrapping Container
+      final containers = tester.widgetList<Container>(
+        find.descendant(
+          of: find.byType(Dismissible),
+          matching: find.byType(Container),
+        ),
       );
 
-      expect(container.margin, isA<EdgeInsets>());
+      // The inner container should have left margin for replies
+      expect(containers.any((c) => c.margin is EdgeInsets), isTrue);
     });
 
-    testWidgets('should handle delete confirmation', (tester) async {
+    testWidgets('should handle delete confirmation via button', (tester) async {
       final comment = createTestComment(userId: 'user1');
 
       await tester.pumpWidget(
         createTestWidget(CommentListItem(comment: comment)),
       );
 
-      await tester.tap(find.byIcon(Icons.more_vert));
       await tester.pumpAndSettle();
 
+      // Tap the Delete button directly
       await tester.tap(find.text('Delete'));
       await tester.pumpAndSettle();
 
+      // Should show confirmation dialog
       expect(find.text('Delete Comment'), findsOneWidget);
-      expect(find.text('Are you sure'), findsOneWidget);
+      expect(
+        find.text('Are you sure you want to delete this comment?'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('should support swipe-to-delete for own comments', (
+      tester,
+    ) async {
+      final comment = createTestComment(userId: 'user1');
+
+      await tester.pumpWidget(
+        createTestWidget(CommentListItem(comment: comment)),
+      );
+
+      await tester.pumpAndSettle();
+
+      // Verify Dismissible widget exists
+      expect(find.byType(Dismissible), findsOneWidget);
+
+      // Swipe to delete
+      await tester.drag(find.byType(Dismissible), const Offset(-500, 0));
+      await tester.pumpAndSettle();
+
+      // Should show confirmation dialog
+      expect(find.text('Delete Comment'), findsOneWidget);
     });
   });
 }

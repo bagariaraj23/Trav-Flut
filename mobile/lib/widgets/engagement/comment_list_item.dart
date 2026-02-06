@@ -30,12 +30,19 @@ class CommentListItem extends StatefulWidget {
 class _CommentListItemState extends State<CommentListItem> {
   bool _showFullText = false;
 
+  bool _canEditComment() {
+    final now = DateTime.now();
+    final commentAge = now.difference(widget.comment.createdAt);
+    return commentAge.inMinutes < 15;
+  }
+
   @override
   Widget build(BuildContext context) {
     final authProvider = context.watch<AuthProvider>();
     final isOwnComment = authProvider.currentUser?.id == widget.comment.userId;
     final text = widget.comment.contentText;
     final shouldTruncate = text.length > 150;
+    final canEdit = isOwnComment && _canEditComment();
 
     return Dismissible(
       key: Key(widget.comment.id),
@@ -104,52 +111,10 @@ class _CommentListItemState extends State<CommentListItem> {
                       const SizedBox(width: 8),
                       Text(
                         _formatRelativeTime(widget.comment.createdAt),
-                        style: Theme.of(context).textTheme.bodySmall,
+                        style: Theme.of(
+                          context,
+                        ).textTheme.bodySmall?.copyWith(color: Colors.grey),
                       ),
-                      if (isOwnComment) ...[
-                        const SizedBox(width: 8),
-                        PopupMenuButton<String>(
-                          icon: const Icon(Icons.more_vert, size: 16),
-                          padding: EdgeInsets.zero,
-                          constraints: const BoxConstraints(),
-                          onSelected: (value) {
-                            if (value == 'edit') {
-                              _editComment();
-                            } else if (value == 'delete') {
-                              _deleteComment();
-                            }
-                          },
-                          itemBuilder: (context) => [
-                            const PopupMenuItem(
-                              value: 'edit',
-                              child: Row(
-                                children: [
-                                  Icon(Icons.edit, size: 18),
-                                  SizedBox(width: 8),
-                                  Text('Edit'),
-                                ],
-                              ),
-                            ),
-                            const PopupMenuItem(
-                              value: 'delete',
-                              child: Row(
-                                children: [
-                                  Icon(
-                                    Icons.delete,
-                                    size: 18,
-                                    color: Colors.red,
-                                  ),
-                                  SizedBox(width: 8),
-                                  Text(
-                                    'Delete',
-                                    style: TextStyle(color: Colors.red),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
                     ],
                   ),
                   const SizedBox(height: 4),
@@ -203,6 +168,46 @@ class _CommentListItemState extends State<CommentListItem> {
                             tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                           ),
                         ),
+                      if (isOwnComment) ...[
+                        if (canEdit)
+                          TextButton(
+                            onPressed: () {
+                              HapticFeedback.lightImpact();
+                              _editComment();
+                            },
+                            style: TextButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                              ),
+                              minimumSize: Size.zero,
+                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                              foregroundColor: Colors.grey[600],
+                            ),
+                            child: const Text(
+                              'Edit',
+                              style: TextStyle(fontSize: 13),
+                            ),
+                          ),
+                        TextButton(
+                          onPressed: () async {
+                            HapticFeedback.lightImpact();
+                            final confirmed = await _showDeleteConfirmation();
+                            if (confirmed) {
+                              _deleteComment();
+                            }
+                          },
+                          style: TextButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(horizontal: 8),
+                            minimumSize: Size.zero,
+                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                            foregroundColor: Colors.grey[600],
+                          ),
+                          child: const Text(
+                            'Delete',
+                            style: TextStyle(fontSize: 13),
+                          ),
+                        ),
+                      ],
                       const Spacer(),
                       _CommentLikeButton(comment: widget.comment),
                     ],
