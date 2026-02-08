@@ -39,9 +39,7 @@ class _SignupScreenState extends State<SignupScreen> {
       email: _emailController.text.trim(),
       password: _passwordController.text,
       name: _nameController.text.trim(),
-      username: _usernameController.text.trim().isEmpty
-          ? null
-          : _usernameController.text.trim(),
+      username: _usernameController.text.trim(),
     );
 
     if (success && mounted) {
@@ -129,22 +127,27 @@ class _SignupScreenState extends State<SignupScreen> {
                   // Username Field
                   CustomTextField(
                     controller: _usernameController,
-                    label: 'Username (optional)',
+                    label: 'Username',
                     prefixIcon: Icons.alternate_email,
-                    validator: (value) {
-                      if (value != null &&
-                          value.isNotEmpty &&
-                          value.length < 3) {
-                        return 'Username must be at least 3 characters';
-                      }
-                      return null;
-                    },
+                    validator: MultiValidator([
+                      RequiredValidator(errorText: 'Username is required'),
+                      MinLengthValidator(
+                        3,
+                        errorText: 'Username must be at least 3 characters',
+                      ),
+                      PatternValidator(
+                        RegExp(r'^[a-zA-Z0-9_]+$'),
+                        errorText:
+                            'Username can only contain letters, numbers, and underscores',
+                      ),
+                    ]).call,
                     onChanged: (_) {
                       final authProvider = context.read<AuthProvider>();
                       if (authProvider.error != null) {
                         authProvider.clearError();
                       }
                     },
+                    maxLength: 30,
                   ),
 
                   const SizedBox(height: 16),

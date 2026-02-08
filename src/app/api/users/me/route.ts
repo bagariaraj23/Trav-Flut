@@ -79,15 +79,67 @@ export async function GET(request: NextRequest) {
 
 // Update current user profile
 export async function PUT(request: NextRequest) {
-  return withLogging(async (req) => {
+  const loggedHandler = withLogging(async (req) => {
     return withRateLimit(req, async (rateLimitedReq) => {
       return withAuth(rateLimitedReq, async (authenticatedReq) => {
         try {
           const currentUserId = authenticatedReq.user!.userId;
-          const body = await request.json();
-          const { name, username, bio, avatarUrl, isPrivate } = body;
-          // Validate input
-          if (username && (username.length < 3 || username.length > 30)) {
+          let body: Record<string, unknown>;
+          try {
+            body = (await request.json()) as Record<string, unknown>;
+          } catch {
+            return NextResponse.json<ApiResponse>(
+              { success: false, error: "Invalid request body" },
+              { status: 400 }
+            );
+          }
+          if (body == null || typeof body !== "object" || Array.isArray(body)) {
+            return NextResponse.json<ApiResponse>(
+              { success: false, error: "Invalid request body" },
+              { status: 400 }
+            );
+          }
+          let { name, username, bio, avatarUrl, isPrivate } = body as {
+            name?: string | null;
+            username?: string | null;
+            bio?: string | null;
+            avatarUrl?: string | null;
+            isPrivate?: boolean | string | null;
+          };
+          // Normalize name: trim; treat empty/whitespace as null
+          if (typeof name === "string") {
+            const n = name.trim();
+            name = n.length > 0 ? n : null;
+          }
+          // Normalize username: trim and treat empty/whitespace as null (clear)
+          if (typeof username === "string") {
+            const u = username.trim();
+            username = u.length > 0 ? u : null;
+          }
+          // Normalize bio: trim and treat empty/whitespace as null (clear)
+          if (typeof bio === "string") {
+            const trimmed = bio.trim();
+            bio = trimmed.length > 0 ? trimmed : null;
+          }
+          // Normalize avatarUrl: treat empty/whitespace as null
+          if (typeof avatarUrl === "string") {
+            const a = avatarUrl.trim();
+            avatarUrl = a.length > 0 ? a : null;
+          }
+          // Normalize isPrivate: coerce string "true"/"false" to boolean; leave undefined if not a boolean
+          if (typeof isPrivate === "string") {
+            isPrivate = isPrivate === "true";
+          }
+          const isPrivateBool =
+            typeof isPrivate === "boolean" ? isPrivate : undefined;
+          // Validate input (name is mandatory when provided in body)
+          if ("name" in body && (name == null || name.length < 1)) {
+            return NextResponse.json<ApiResponse>(
+              { success: false, error: "Name is required" },
+              { status: 400 }
+            );
+          }
+          if (username != null && (username.length < 3 || username.length > 30)) {
             return NextResponse.json<ApiResponse>(
               {
                 success: false,
@@ -96,7 +148,7 @@ export async function PUT(request: NextRequest) {
               { status: 400 }
             );
           }
-          if (name && (name.length < 1 || name.length > 100)) {
+          if (name != null && (name.length < 1 || name.length > 100)) {
             return NextResponse.json<ApiResponse>(
               {
                 success: false,
@@ -105,14 +157,35 @@ export async function PUT(request: NextRequest) {
               { status: 400 }
             );
           }
-          if (bio && bio.length > 500) {
+          if (bio != null && bio.length > 200) {
             return NextResponse.json<ApiResponse>(
               {
                 success: false,
-                error: "Bio must be less than 500 characters",
+                error: "Bio must be 200 characters or less",
               },
               { status: 400 }
             );
+          }
+          // When updating profile details (name, username, or bio), username is required
+          const hasProfileDetailUpdate =
+            "name" in body || "username" in body || "bio" in body;
+          if (hasProfileDetailUpdate) {
+            const currentUser = await prisma.user.findUnique({
+              where: { id: currentUserId },
+              select: { username: true },
+            });
+            const effectiveUsername =
+              username !== undefined ? username : currentUser?.username ?? null;
+            if (!effectiveUsername?.trim()) {
+              return NextResponse.json<ApiResponse>(
+                {
+                  success: false,
+                  error:
+                    "Username is required to update profile details.",
+                },
+                { status: 400 }
+              );
+            }
           }
           // Remove manual username uniqueness check; just try update
           let updatedUser;
@@ -122,9 +195,10 @@ export async function PUT(request: NextRequest) {
               data: {
                 ...(name !== undefined && { name }),
                 ...(username !== undefined && { username }),
+                // bio is normalized above (empty string => null) so we can clear it
                 ...(bio !== undefined && { bio }),
                 ...(avatarUrl !== undefined && { avatarUrl }),
-                ...(isPrivate !== undefined && { isPrivate }),
+                ...(isPrivateBool !== undefined && { isPrivate: isPrivateBool }),
               },
               select: {
                 id: true,
@@ -178,11 +252,12 @@ export async function PUT(request: NextRequest) {
       });
     });
   });
+  return await loggedHandler(request);
 }
 
 // Delete current user account (soft delete)
 export async function DELETE(request: NextRequest) {
-  return withLogging(async (req) => {
+  const loggedHandler = withLogging(async (req) => {
     return withRateLimit(req, async (rateLimitedReq) => {
       return withAuth(rateLimitedReq, async (authenticatedReq) => {
         try {
@@ -320,4 +395,5 @@ export async function DELETE(request: NextRequest) {
       });
     });
   });
+  return await loggedHandler(request);
 }

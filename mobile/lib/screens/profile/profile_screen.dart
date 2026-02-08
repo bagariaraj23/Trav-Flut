@@ -320,6 +320,25 @@ class _ProfileScreenState extends State<ProfileScreen> {
     ];
   }
 
+  /// Single character for avatar fallback (name > username > 'U').
+  String _avatarInitial(User user) {
+    final name = user.name?.trim();
+    if (name != null && name.isNotEmpty) return name.substring(0, 1).toUpperCase();
+    final username = user.username?.trim();
+    if (username != null && username.isNotEmpty) {
+      return username.substring(0, 1).toUpperCase();
+    }
+    return 'U';
+  }
+
+  /// Subtitle style for username and bio (smaller, muted; works in light and dark).
+  TextStyle _profileSubtitleStyle(BuildContext context) {
+    return Theme.of(context).textTheme.bodySmall!.copyWith(
+          color: Theme.of(context).colorScheme.onSurfaceVariant,
+          fontSize: 14,
+        );
+  }
+
   Widget _buildProfileHeader(
     BuildContext context,
     User user,
@@ -329,6 +348,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
     bool isRequestPending,
     bool isLoading,
   ) {
+    final hasUsername =
+        user.username != null && user.username!.trim().isNotEmpty;
+    final hasBio = user.bio != null && user.bio!.trim().isNotEmpty;
+    final bioText = hasBio ? user.bio!.trim() : '';
+    // ~40 chars per line at bodySmall; clamp so short bios stay compact, long ones get space
+    const int maxBioLinesCap = 20;
+    const int charsPerLine = 40;
+    final int bioMaxLines = hasBio
+        ? (bioText.length / charsPerLine).ceil().clamp(1, maxBioLinesCap)
+        : 0;
+    final subtitleStyle = _profileSubtitleStyle(context);
+
     return Container(
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
@@ -343,39 +374,49 @@ class _ProfileScreenState extends State<ProfileScreen> {
         ],
       ),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // Avatar
-          CircleAvatar(
-            radius: 40,
+          // Profile photo (WhatsApp-style: photo first)
+          Center(
+            child: CircleAvatar(
+            radius: 48,
             backgroundColor: Theme.of(context).colorScheme.primary,
             backgroundImage: user.avatarUrl != null
                 ? NetworkImage(user.avatarUrl!)
                 : null,
             child: user.avatarUrl == null
                 ? Text(
-                    user.name?.substring(0, 1).toUpperCase() ?? 'U',
-                    style: const TextStyle(
-                      fontSize: 24,
+                    _avatarInitial(user),
+                    style: TextStyle(
+                      fontSize: 28,
                       fontWeight: FontWeight.bold,
-                      color: Colors.white,
+                      color: Theme.of(context).colorScheme.onPrimary,
                     ),
                   )
                 : null,
+            ),
           ),
 
-          const SizedBox(height: 16),
+          const SizedBox(height: 20),
 
-          // Name and Privacy Indicator
-          Row(
+          // Name and privacy indicator (prominent)
+          Center(
+            child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             mainAxisSize: MainAxisSize.min,
             children: [
               Flexible(
                 child: Text(
-                  user.name ?? 'User',
-                  style: Theme.of(context).textTheme.headlineMedium,
+                  (user.name?.trim().isNotEmpty == true
+                      ? user.name!.trim()
+                      : (hasUsername ? '@${user.username!.trim()}' : 'User')),
+                  style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                        fontWeight: FontWeight.w600,
+                        color: Theme.of(context).colorScheme.onSurface,
+                      ),
                   overflow: TextOverflow.ellipsis,
                   maxLines: 1,
+                  textAlign: TextAlign.center,
                 ),
               ),
               if (user.isPrivate) ...[
@@ -388,25 +429,36 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ],
             ],
           ),
+          ),
 
-          // Username
-          if (user.username != null) ...[
-            const SizedBox(height: 4),
+          // Username (like phone number in WhatsApp: smaller, muted)
+          if (hasUsername) ...[
+            const SizedBox(height: 6),
             Text(
-              '@${user.username}',
-              style: Theme.of(context).textTheme.bodyMedium,
+              '@${user.username!.trim()}',
+              style: subtitleStyle,
               overflow: TextOverflow.ellipsis,
               maxLines: 1,
+              textAlign: TextAlign.center,
             ),
           ],
 
-          // Bio
-          if (user.bio != null) ...[
-            const SizedBox(height: 12),
-            Text(
-              user.bio!,
-              style: Theme.of(context).textTheme.bodyMedium,
-              textAlign: TextAlign.center,
+          // Bio (full-width, justified; height adapts to length)
+          if (hasBio) ...[
+            SizedBox(height: hasUsername ? 8 : 6),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: Text(
+                    bioText,
+                    style: subtitleStyle.copyWith(height: 1.4),
+                    textAlign: TextAlign.justify,
+                    maxLines: bioMaxLines,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
             ),
           ],
 

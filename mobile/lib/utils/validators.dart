@@ -101,8 +101,8 @@ class Validators {
       return null; // Bio is optional
     }
     
-    if (value.length > 500) {
-      return 'Bio must be less than 500 characters';
+    if (value.length > 200) {
+      return 'Bio must be 200 characters or less';
     }
     
     return null;

@@ -188,7 +188,7 @@ class ApiService {
     required String email,
     required String password,
     required String name,
-    String? username,
+    required String username,
   }) async {
     try {
       debugPrint(
@@ -197,7 +197,7 @@ class ApiService {
         'email': email,
         'password': password,
         'name': name,
-        if (username != null) 'username': username,
+        'username': username,
       });
 
       debugPrint('[ApiService] Signup response: ${response.statusCode}');
@@ -420,10 +420,11 @@ class ApiService {
   }) async {
     try {
       debugPrint(
-          '[ApiService] Updating profile: name=$name, username=$username, bio=$bio, avatarUrl=$avatarUrl');
+          '[ApiService] Updating profile: name=$name, username=$username, bio=${bio == null ? "null" : (bio.isEmpty ? "(empty)" : bio)}, avatarUrl=$avatarUrl');
       final response = await _dio.put('/users/me', data: {
         if (name != null) 'name': name,
         if (username != null) 'username': username,
+        // Include bio when not null so backend can clear it (empty string => null)
         if (bio != null) 'bio': bio,
         if (avatarUrl != null) 'avatarUrl': avatarUrl,
         if (isPrivate != null) 'isPrivate': isPrivate,

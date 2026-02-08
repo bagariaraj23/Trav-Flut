@@ -32,8 +32,7 @@ export const signupSchema = z.object({
       /^[a-zA-Z0-9_]+$/,
       "Username can only contain letters, numbers, and underscores"
     )
-    .transform((username) => username.toLowerCase().trim())
-    .optional(),
+    .transform((username) => username.toLowerCase().trim()),
 });
 
 export const loginSchema = z.object({
@@ -70,7 +69,7 @@ export const updateProfileSchema = z.object({
     .optional(),
   bio: z
     .string()
-    .max(500, "Bio must be less than 500 characters")
+    .max(200, "Bio must be 200 characters or less")
     .transform((bio) => bio.trim())
     .optional(),
   avatarUrl: z

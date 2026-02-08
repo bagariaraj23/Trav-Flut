@@ -130,7 +130,7 @@ class AuthProvider extends ChangeNotifier {
     required String email,
     required String password,
     required String name,
-    String? username,
+    required String username,
   }) async {
     try {
       _setLoadingState(true);
