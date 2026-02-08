@@ -115,7 +115,7 @@ export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ commentId: string }> }
 ) {
-  return withLogging(async (req) => {
+  const handler = withLogging(async (req) => {
     return withAuth(req, async (authenticatedReq) => {
       try {
         const { commentId } = await params;
@@ -165,4 +165,5 @@ export async function DELETE(
       }
     });
   });
+  return handler(request);
 }

@@ -58,7 +58,7 @@ export const RATE_LIMIT_PRESETS: Record<string, RateLimitConfig> = {
 
   // Authentication endpoints - Strict limits to prevent brute force
   auth_login: {
-    maxRequests: 3,
+    maxRequests: 100,
     windowMs: 15 * 60 * 1000, // 15 minutes (3 attempts, then 15min cool-down)
     keyPrefix: "rl:auth:login",
     logEvent: true,

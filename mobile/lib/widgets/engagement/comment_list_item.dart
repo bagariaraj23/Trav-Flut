@@ -132,83 +132,91 @@ class _CommentListItemState extends State<CommentListItem> {
                   const SizedBox(height: 8),
                   Row(
                     children: [
-                      if (widget.comment.replyCount != null &&
-                          widget.comment.replyCount! > 0 &&
-                          widget.onViewReplies != null)
-                        TextButton.icon(
-                          onPressed: widget.onViewReplies,
-                          icon: Icon(
-                            widget.isExpanded
-                                ? Icons.expand_less
-                                : Icons.expand_more,
-                            size: 16,
-                          ),
-                          label: Text(
-                            widget.isExpanded
-                                ? 'Hide replies'
-                                : 'View ${widget.comment.replyCount} ${widget.comment.replyCount == 1 ? 'reply' : 'replies'}',
-                          ),
-                          style: TextButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(horizontal: 8),
-                            minimumSize: Size.zero,
-                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                          ),
-                        ),
-                      if (widget.comment.parentCommentId == null)
-                        TextButton.icon(
-                          onPressed: () {
-                            HapticFeedback.lightImpact();
-                            widget.onReplyTap?.call();
-                          },
-                          icon: const Icon(Icons.reply, size: 16),
-                          label: const Text('Reply'),
-                          style: TextButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(horizontal: 8),
-                            minimumSize: Size.zero,
-                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                          ),
-                        ),
-                      if (isOwnComment) ...[
-                        if (canEdit)
-                          TextButton(
-                            onPressed: () {
-                              HapticFeedback.lightImpact();
-                              _editComment();
-                            },
-                            style: TextButton.styleFrom(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 8,
+                      Expanded(
+                        child: Wrap(
+                          crossAxisAlignment: WrapCrossAlignment.center,
+                          spacing: 0,
+                          runSpacing: 4,
+                          children: [
+                            if (widget.comment.replyCount != null &&
+                                widget.comment.replyCount! > 0 &&
+                                widget.onViewReplies != null)
+                              TextButton.icon(
+                                onPressed: widget.onViewReplies,
+                                icon: Icon(
+                                  widget.isExpanded
+                                      ? Icons.expand_less
+                                      : Icons.expand_more,
+                                  size: 16,
+                                ),
+                                label: Text(
+                                  widget.isExpanded
+                                      ? 'Hide replies'
+                                      : 'View ${widget.comment.replyCount} ${widget.comment.replyCount == 1 ? 'reply' : 'replies'}',
+                                ),
+                                style: TextButton.styleFrom(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                                  minimumSize: Size.zero,
+                                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                ),
                               ),
-                              minimumSize: Size.zero,
-                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                              foregroundColor: Colors.grey[600],
-                            ),
-                            child: const Text(
-                              'Edit',
-                              style: TextStyle(fontSize: 13),
-                            ),
-                          ),
-                        TextButton(
-                          onPressed: () async {
-                            HapticFeedback.lightImpact();
-                            final confirmed = await _showDeleteConfirmation();
-                            if (confirmed) {
-                              _deleteComment();
-                            }
-                          },
-                          style: TextButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(horizontal: 8),
-                            minimumSize: Size.zero,
-                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                            foregroundColor: Colors.grey[600],
-                          ),
-                          child: const Text(
-                            'Delete',
-                            style: TextStyle(fontSize: 13),
-                          ),
+                            if (widget.comment.parentCommentId == null)
+                              TextButton.icon(
+                                onPressed: () {
+                                  HapticFeedback.lightImpact();
+                                  widget.onReplyTap?.call();
+                                },
+                                icon: const Icon(Icons.reply, size: 16),
+                                label: const Text('Reply'),
+                                style: TextButton.styleFrom(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                                  minimumSize: Size.zero,
+                                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                ),
+                              ),
+                            if (isOwnComment) ...[
+                              if (canEdit)
+                                TextButton(
+                                  onPressed: () {
+                                    HapticFeedback.lightImpact();
+                                    _editComment();
+                                  },
+                                  style: TextButton.styleFrom(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 8,
+                                    ),
+                                    minimumSize: Size.zero,
+                                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                    foregroundColor: Colors.grey[600],
+                                  ),
+                                  child: const Text(
+                                    'Edit',
+                                    style: TextStyle(fontSize: 13),
+                                  ),
+                                ),
+                              TextButton(
+                                onPressed: () async {
+                                  HapticFeedback.lightImpact();
+                                  final confirmed = await _showDeleteConfirmation();
+                                  if (confirmed) {
+                                    _deleteComment();
+                                  }
+                                },
+                                style: TextButton.styleFrom(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                                  minimumSize: Size.zero,
+                                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                  foregroundColor: Colors.grey[600],
+                                ),
+                                child: const Text(
+                                  'Delete',
+                                  style: TextStyle(fontSize: 13),
+                                ),
+                              ),
+                            ],
+                          ],
                         ),
-                      ],
-                      const Spacer(),
+                      ),
                       _CommentLikeButton(comment: widget.comment),
                     ],
                   ),
@@ -248,13 +256,30 @@ class _CommentListItemState extends State<CommentListItem> {
   }
 
   Future<void> _deleteComment() async {
+    final commentId = widget.comment.id;
+    final commentProvider = context.read<CommentProvider>();
+    final engagementProvider = context.read<EngagementProvider>();
+    // Capture reply IDs before delete (deleteComment removes them from provider).
+    final replyIds = widget.isReply
+        ? <String>[]
+        : commentProvider
+            .getRepliesList(commentId)
+            .map((r) => r.id)
+            .toList();
+
     try {
-      final provider = context.read<CommentProvider>();
-      await provider.deleteComment(widget.comment.id);
+      await commentProvider.deleteComment(commentId);
+      // Always clear engagement for the deleted comment (and its replies) so
+      // sync and counts stay correct. Do this even if this widget is disposed,
+      // so we don't leave stale state or affect the "below" comment's display.
+      engagementProvider.clearEntity(commentId);
+      for (final id in replyIds) {
+        engagementProvider.clearEntity(id);
+      }
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('Comment deleted')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Comment deleted')),
+        );
       }
     } catch (e) {
       if (mounted) {

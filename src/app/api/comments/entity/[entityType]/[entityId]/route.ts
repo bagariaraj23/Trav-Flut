@@ -1,6 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
-import { withRateLimit, withLogging, handleApiError } from "@/lib/middleware";
+import {
+  withRateLimit,
+  withLogging,
+  handleApiError,
+  getOptionalUser,
+} from "@/lib/middleware";
 import { getCommentsByEntity } from "@/lib/services/comment";
+import { checkLikeStatus } from "@/lib/services/like";
 import { ApiResponse } from "@/types/api";
 import { EntityType } from "@prisma/client";
 
@@ -43,6 +49,20 @@ export async function GET(
           cursor,
           limit
         );
+
+        const user = await getOptionalUser(rateLimitedReq);
+        if (user && result.items.length > 0) {
+          const commentIds = result.items.map((c: { id: string }) => c.id);
+          const likedMap = await checkLikeStatus(
+            user.userId,
+            "COMMENT" as EntityType,
+            commentIds
+          );
+          result.items = result.items.map((item: { id: string }) => ({
+            ...item,
+            liked: likedMap[item.id] ?? false,
+          }));
+        }
 
         return NextResponse.json<ApiResponse>({
           success: true,

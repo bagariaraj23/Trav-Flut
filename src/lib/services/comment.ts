@@ -272,10 +272,14 @@ export async function getCommentsByEntity(
 
   return {
     ...result,
-    items: result.items.map((item) => ({
-      ...item,
-      replyCount: item._count.replies,
-    })),
+    items: result.items.map((item: any) => {
+      const { _count: c, ...comment } = item;
+      return {
+        ...comment,
+        replyCount: c.replies,
+        likeCount: comment.likeCount ?? 0,
+      };
+    }),
   };
 }
 
@@ -312,5 +316,12 @@ export async function getCommentReplies(
     },
   });
 
-  return paginateResults(replies, limit);
+  const result = paginateResults(replies, limit);
+  return {
+    ...result,
+    items: result.items.map((item: any) => ({
+      ...item,
+      likeCount: item.likeCount ?? 0,
+    })),
+  };
 }

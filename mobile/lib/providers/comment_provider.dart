@@ -38,8 +38,17 @@ class CommentProvider extends ChangeNotifier {
     return '$entityType:$entityId';
   }
 
-  Future<void> getComments(String entityType, String entityId) async {
+  /// [refresh] when true, refetches from page 1 so like counts and list are
+  /// up to date for other users' likes/unlikes (e.g. when opening the sheet).
+  Future<void> getComments(
+    String entityType,
+    String entityId, {
+    bool refresh = false,
+  }) async {
     final entityKey = _getEntityKey(entityType, entityId);
+    if (refresh) {
+      _currentPage[entityKey] = 1;
+    }
     final page = _currentPage[entityKey] ?? 1;
 
     if (_isLoading[entityKey] == true) {
@@ -280,6 +289,7 @@ class CommentProvider extends ChangeNotifier {
         deletedComment = entry.value[index];
         entityKey = entry.key;
         _entityComments[entityKey]!.removeAt(index);
+        _commentReplies.remove(commentId);
         break;
       }
     }
@@ -291,6 +301,7 @@ class CommentProvider extends ChangeNotifier {
           deletedComment = entry.value[index];
           replyKey = entry.key;
           _commentReplies[replyKey]!.removeAt(index);
+          _decrementParentReplyCount(replyKey);
           break;
         }
       }
@@ -319,11 +330,39 @@ class CommentProvider extends ChangeNotifier {
           deletedComment,
           ...(_commentReplies[replyKey] ?? []),
         ];
+        _incrementParentReplyCount(replyKey);
       }
       _isDeleting[commentId] = false;
       _error = ErrorHandler.handleError(e).message;
       notifyListeners();
       rethrow;
+    }
+  }
+
+  void _decrementParentReplyCount(String parentCommentId) {
+    for (final entry in _entityComments.entries) {
+      final index = entry.value.indexWhere((c) => c.id == parentCommentId);
+      if (index >= 0) {
+        final parent = entry.value[index];
+        final newCount = (parent.replyCount ?? 1) - 1;
+        _entityComments[entry.key]![index] = parent.copyWith(
+          replyCount: newCount >= 0 ? newCount : 0,
+        );
+        break;
+      }
+    }
+  }
+
+  void _incrementParentReplyCount(String parentCommentId) {
+    for (final entry in _entityComments.entries) {
+      final index = entry.value.indexWhere((c) => c.id == parentCommentId);
+      if (index >= 0) {
+        final parent = entry.value[index];
+        _entityComments[entry.key]![index] = parent.copyWith(
+          replyCount: (parent.replyCount ?? 0) + 1,
+        );
+        break;
+      }
     }
   }
 

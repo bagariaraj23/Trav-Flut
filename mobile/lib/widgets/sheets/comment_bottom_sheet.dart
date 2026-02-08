@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:tripthread/models/comment.dart';
 import 'package:tripthread/providers/comment_provider.dart';
+import 'package:tripthread/providers/engagement_provider.dart';
 import 'package:tripthread/widgets/engagement/centered_scrollable.dart';
 import 'package:tripthread/widgets/engagement/comment_composer.dart';
 import 'package:tripthread/widgets/engagement/comment_list_item.dart';
@@ -54,15 +55,54 @@ class _CommentBottomSheetState extends State<CommentBottomSheet> {
 
   Future<void> _loadComments() async {
     final provider = context.read<CommentProvider>();
-    await provider.getComments(widget.entityType, widget.entityId);
+    await provider.getComments(
+      widget.entityType,
+      widget.entityId,
+      refresh: true,
+    );
+    if (!mounted) return;
+    await _syncCommentLikeCounts(
+      provider,
+      '${widget.entityType}:${widget.entityId}',
+    );
   }
 
   Future<void> _loadMoreComments() async {
     final provider = context.read<CommentProvider>();
     final entityKey = '${widget.entityType}:${widget.entityId}';
     if (provider.hasMore(entityKey) && !provider.isLoading(entityKey)) {
-      await provider.getComments(widget.entityType, widget.entityId);
+      await provider.getComments(
+        widget.entityType,
+        widget.entityId,
+        refresh: false,
+      );
+      if (!mounted) return;
+      await _syncCommentLikeCounts(provider, entityKey);
     }
+  }
+
+  Future<void> _syncCommentLikeCounts(
+    CommentProvider provider,
+    String entityKey,
+  ) async {
+    final comments = provider.getCommentsList(entityKey);
+    if (comments.isEmpty) return;
+    final engagementProvider = context.read<EngagementProvider>();
+    engagementProvider.syncLikeCounts({
+      for (final c in comments) c.id: c.likeCount,
+    });
+    final hasLikedFromApi =
+        comments.every((c) => c.liked != null);
+    if (hasLikedFromApi) {
+      engagementProvider.setLikeStatusBatch({
+        for (final c in comments) c.id: c.liked!,
+      });
+      return;
+    }
+    await engagementProvider.checkLikeStatus(
+      comments.map((c) => c.id).toList(),
+      'COMMENT',
+    );
   }
 
   void _scrollToComment(String commentId) {
@@ -82,14 +122,39 @@ class _CommentBottomSheetState extends State<CommentBottomSheet> {
     });
   }
 
-  void _toggleReplies(String commentId) {
+  Future<void> _toggleReplies(String commentId) async {
     setState(() {
       _expandedReplies[commentId] = !(_expandedReplies[commentId] ?? false);
-      if (_expandedReplies[commentId] == true) {
-        final provider = context.read<CommentProvider>();
-        provider.getReplies(commentId);
-      }
     });
+    if (_expandedReplies[commentId] == true) {
+      final provider = context.read<CommentProvider>();
+      await provider.getReplies(commentId);
+      if (!mounted) return;
+      await _syncReplyLikeCounts(provider, commentId);
+    }
+  }
+
+  Future<void> _syncReplyLikeCounts(
+    CommentProvider provider,
+    String parentCommentId,
+  ) async {
+    final replies = provider.getRepliesList(parentCommentId);
+    if (replies.isEmpty) return;
+    final engagementProvider = context.read<EngagementProvider>();
+    engagementProvider.syncLikeCounts({
+      for (final r in replies) r.id: r.likeCount,
+    });
+    final hasLikedFromApi = replies.every((r) => r.liked != null);
+    if (hasLikedFromApi) {
+      engagementProvider.setLikeStatusBatch({
+        for (final r in replies) r.id: r.liked!,
+      });
+      return;
+    }
+    await engagementProvider.checkLikeStatus(
+      replies.map((r) => r.id).toList(),
+      'COMMENT',
+    );
   }
 
   void _startReply(String commentId) {
@@ -158,7 +223,7 @@ class _CommentBottomSheetState extends State<CommentBottomSheet> {
                         ],
                       ),
                     ),
-                    Flexible(
+                    Expanded(
                       child: Consumer<CommentProvider>(
                         builder: (context, provider, child) {
                           final entityKey =
@@ -234,6 +299,7 @@ class _CommentBottomSheetState extends State<CommentBottomSheet> {
                                 final hasReplies = comment.replyCount != null && comment.replyCount! > 0;
 
                                 return Column(
+                                  key: ValueKey(comment.id),
                                   children: [
                                     CommentListItem(
                                       comment: comment,

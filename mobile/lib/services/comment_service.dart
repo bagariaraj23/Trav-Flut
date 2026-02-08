@@ -12,6 +12,14 @@ class CommentService {
   late final Dio _refreshDio;
   StorageService? _storageService;
 
+  static int _parseLikeCount(dynamic v) {
+    if (v == null) return 0;
+    if (v is int) return v;
+    if (v is num) return v.toInt();
+    if (v is String) return int.tryParse(v) ?? 0;
+    return 0;
+  }
+
   CommentService() {
     _dio = Dio(
       BaseOptions(
@@ -137,13 +145,13 @@ class CommentService {
               items?.map((item) {
                 final commentData = item as Map<String, dynamic>;
 
-                // Ensure required Comment fields are present (backend might not return all)
                 if (commentData['entityType'] == null) {
                   commentData['entityType'] = entityType;
                 }
                 if (commentData['entityId'] == null) {
                   commentData['entityId'] = entityId;
                 }
+                commentData['likeCount'] = _parseLikeCount(commentData['likeCount']);
 
                 return Comment.fromJson(commentData);
               }).toList() ??
@@ -236,14 +244,13 @@ class CommentService {
               items?.map((item) {
                 final commentData = item as Map<String, dynamic>;
 
-                // Ensure required Comment fields are present (backend should return these now)
-                // Backend now includes entityType and entityId in replies
                 if (commentData['entityType'] == null ||
                     commentData['entityId'] == null) {
                   debugPrint(
                     '[CommentService] Warning: Reply missing entityType or entityId',
                   );
                 }
+                commentData['likeCount'] = _parseLikeCount(commentData['likeCount']);
 
                 return Comment.fromJson(commentData);
               }).toList() ??

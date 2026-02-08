@@ -105,19 +105,50 @@ class EngagementProvider extends ChangeNotifier {
     }
   }
 
+  /// Set current user's like status for multiple entities (e.g. from API
+  /// response that included `liked`). Does not change counts. Single notify.
+  void setLikeStatusBatch(Map<String, bool> entityIdToLiked) {
+    bool changed = false;
+    for (final entry in entityIdToLiked.entries) {
+      if (_isToggling[entry.key] == true) continue;
+      _likeStatus[entry.key] = entry.value;
+      changed = true;
+    }
+    if (changed) notifyListeners();
+  }
+
+  /// Seed like counts for entities (e.g. comments) from server data so toggle
+  /// increments/decrements from the correct base. Skips entities currently
+  /// being toggled to avoid overwriting optimistic updates.
+  void syncLikeCounts(Map<String, int> entityIdToCount) {
+    bool changed = false;
+    for (final entry in entityIdToCount.entries) {
+      if (_isToggling[entry.key] == true) continue;
+      _likeCounts[entry.key] = entry.value;
+      changed = true;
+    }
+    if (changed) notifyListeners();
+  }
+
+  /// Fetches current user's like status for entities. Skips entities currently
+  /// being toggled so late-arriving responses don't overwrite optimistic state.
   Future<void> checkLikeStatus(
     List<String> entityIds,
     String entityType,
   ) async {
+    if (entityIds.isEmpty) return;
     try {
       final statusMap = await _likeService.checkLikeStatus(
         entityIds,
         entityType,
       );
-      for (final entry in statusMap.entries) {
-        _likeStatus[entry.key] = entry.value;
+      bool changed = false;
+      for (final id in entityIds) {
+        if (_isToggling[id] == true) continue;
+        _likeStatus[id] = statusMap[id] ?? false;
+        changed = true;
       }
-      notifyListeners();
+      if (changed) notifyListeners();
     } catch (e) {
       debugPrint('[EngagementProvider] checkLikeStatus error: $e');
     }
@@ -125,6 +156,14 @@ class EngagementProvider extends ChangeNotifier {
 
   void clearError() {
     _error = null;
+    notifyListeners();
+  }
+
+  /// Remove engagement state for one entity (e.g. after comment delete).
+  void clearEntity(String entityId) {
+    _likeStatus.remove(entityId);
+    _likeCounts.remove(entityId);
+    _isToggling.remove(entityId);
     notifyListeners();
   }
 

@@ -389,7 +389,7 @@ export async function POST(request: NextRequest) {
 
 // Get user's trips
 export async function GET(request: NextRequest) {
-  return withLogging(async (req) => {
+  const loggedHandler = withLogging(async (req) => {
     return withRateLimit(req, async (rateLimitedReq) => {
       return withAuth(rateLimitedReq, async (authenticatedReq) => {
         const endTimer =
@@ -490,11 +490,12 @@ export async function GET(request: NextRequest) {
             { operation: "get_trips" },
             authenticatedReq.user?.userId
           );
-          throw error;
+          return handleApiError(error);
         } finally {
           endTimer();
         }
       });
     });
   });
+  return await loggedHandler(request);
 }

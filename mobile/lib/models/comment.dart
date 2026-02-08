@@ -16,6 +16,8 @@ class Comment {
   final DateTime updatedAt;
   final CommentUser? user;
   final int? replyCount;
+  /// When the API includes current user's like state (authenticated), avoids an extra round trip.
+  final bool? liked;
 
   const Comment({
     required this.id,
@@ -29,6 +31,7 @@ class Comment {
     required this.updatedAt,
     this.user,
     this.replyCount,
+    this.liked,
   });
 
   factory Comment.fromJson(Map<String, dynamic> json) =>
@@ -48,6 +51,7 @@ class Comment {
     DateTime? updatedAt,
     CommentUser? user,
     int? replyCount,
+    bool? liked,
   }) {
     return Comment(
       id: id ?? this.id,
@@ -61,6 +65,7 @@ class Comment {
       updatedAt: updatedAt ?? this.updatedAt,
       user: user ?? this.user,
       replyCount: replyCount ?? this.replyCount,
+      liked: liked ?? this.liked,
     );
   }
 }

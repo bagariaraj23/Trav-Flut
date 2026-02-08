@@ -65,6 +65,34 @@ export async function withAuth(
   }
 }
 
+/** Returns the authenticated user from the request or null if not authenticated. */
+export async function getOptionalUser(
+  request: NextRequest
+): Promise<{ userId: string; email: string } | null> {
+  try {
+    const authHeader = request.headers.get("authorization");
+    if (!authHeader?.startsWith("Bearer ")) return null;
+    const token = authHeader.substring(7);
+    const payload = AuthService.verifyAccessToken(token);
+    if (!payload) return null;
+    const user = await prisma.user.findUnique({
+      where: { id: payload.userId },
+      select: { id: true, email: true, updatedAt: true },
+    });
+    if (!user) return null;
+    if (
+      payload.iat &&
+      user.updatedAt &&
+      payload.iat * 1000 < user.updatedAt.getTime() - 1000
+    ) {
+      return null;
+    }
+    return { userId: user.id, email: user.email };
+  } catch {
+    return null;
+  }
+}
+
 // Rate limiting middleware
 // Re-export from centralized rate limit module
 export { withRateLimit, withEngagementRateLimit } from "./rateLimit";

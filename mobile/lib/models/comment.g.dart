@@ -20,6 +20,7 @@ Comment _$CommentFromJson(Map<String, dynamic> json) => Comment(
       ? null
       : CommentUser.fromJson(json['user'] as Map<String, dynamic>),
   replyCount: (json['replyCount'] as num?)?.toInt(),
+  liked: json['liked'] as bool?,
 );
 
 Map<String, dynamic> _$CommentToJson(Comment instance) => <String, dynamic>{
@@ -34,4 +35,5 @@ Map<String, dynamic> _$CommentToJson(Comment instance) => <String, dynamic>{
   'updatedAt': instance.updatedAt.toIso8601String(),
   'user': instance.user,
   'replyCount': instance.replyCount,
+  'liked': instance.liked,
 };
