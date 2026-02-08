@@ -176,13 +176,13 @@ class _FollowRequestsScreenState extends State<FollowRequestsScreen> {
                   Icon(
                     Icons.person_add_outlined,
                     size: 64,
-                    color: Colors.grey[400],
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
                   ),
                   const SizedBox(height: 16),
                   Text(
                     'No Follow Requests',
                     style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                          color: Colors.grey[600],
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
                         ),
                   ),
                   const SizedBox(height: 8),
@@ -190,7 +190,7 @@ class _FollowRequestsScreenState extends State<FollowRequestsScreen> {
                     'When someone requests to follow you,\ntheir requests will appear here',
                     textAlign: TextAlign.center,
                     style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          color: Colors.grey[500],
+                          color: Theme.of(context).colorScheme.onSurfaceVariant.withValues(alpha: 0.6),
                         ),
                   ),
                 ],
@@ -279,7 +279,7 @@ class _FollowRequestsScreenState extends State<FollowRequestsScreen> {
                                 .textTheme
                                 .bodyMedium
                                 ?.copyWith(
-                                  color: Colors.grey[600],
+                                  color: Theme.of(context).colorScheme.onSurfaceVariant,
                                 ),
                           ),
                         const SizedBox(height: 4),
@@ -287,7 +287,7 @@ class _FollowRequestsScreenState extends State<FollowRequestsScreen> {
                           _formatDateTime(request.createdAt),
                           style:
                               Theme.of(context).textTheme.bodySmall?.copyWith(
-                                    color: Colors.grey[500],
+                                    color: Theme.of(context).colorScheme.onSurfaceVariant.withValues(alpha: 0.6),
                                   ),
                         ),
                       ],

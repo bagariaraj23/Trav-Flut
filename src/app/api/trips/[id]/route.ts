@@ -238,6 +238,9 @@ export async function GET(
         ? {
             ...trip.finalPost,
             createdAt: trip.finalPost.createdAt.toISOString(),
+            updatedAt: trip.finalPost.updatedAt.toISOString(),
+            publishedAt: trip.finalPost.publishedAt?.toISOString() ?? undefined,
+            coverMediaUrl: trip.finalPost.coverMediaUrl ?? undefined,
           }
         : undefined,
     };

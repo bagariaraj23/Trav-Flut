@@ -173,6 +173,12 @@ class TripThreadEntry {
   final User author;
   final List<User>? taggedUsers;
   final Media? media;
+  @JsonKey(defaultValue: 0)
+  final int likeCount;
+  @JsonKey(defaultValue: 0)
+  final int commentCount;
+  @JsonKey(defaultValue: false)
+  final bool hasLiked;
 
   const TripThreadEntry({
     required this.id,
@@ -189,6 +195,9 @@ class TripThreadEntry {
     required this.author,
     this.taggedUsers,
     this.media,
+    this.likeCount = 0,
+    this.commentCount = 0,
+    this.hasLiked = false,
   });
 
   factory TripThreadEntry.fromJson(Map<String, dynamic> json) =>
@@ -210,6 +219,14 @@ class TripFinalPost {
   final DateTime createdAt;
   final DateTime updatedAt;
   final Trip? trip;
+  @JsonKey(defaultValue: 0)
+  final int likeCount;
+  @JsonKey(defaultValue: 0)
+  final int commentCount;
+  @JsonKey(defaultValue: 0)
+  final int shareCount;
+  @JsonKey(defaultValue: false)
+  final bool hasLiked;
 
   const TripFinalPost({
     required this.id,
@@ -224,6 +241,10 @@ class TripFinalPost {
     required this.createdAt,
     required this.updatedAt,
     this.trip,
+    this.likeCount = 0,
+    this.commentCount = 0,
+    this.shareCount = 0,
+    this.hasLiked = false,
   });
 
   factory TripFinalPost.fromJson(Map<String, dynamic> json) =>
@@ -231,6 +252,8 @@ class TripFinalPost {
   Map<String, dynamic> toJson() => _$TripFinalPostToJson(this);
 
   TripFinalPost copyWith({
+    String? id,
+    String? tripId,
     String? summaryText,
     List<String>? curatedMedia,
     String? caption,
@@ -241,10 +264,14 @@ class TripFinalPost {
     DateTime? createdAt,
     DateTime? updatedAt,
     Trip? trip,
+    int? likeCount,
+    int? commentCount,
+    int? shareCount,
+    bool? hasLiked,
   }) {
     return TripFinalPost(
-      id: id,
-      tripId: tripId,
+      id: id ?? this.id,
+      tripId: tripId ?? this.tripId,
       summaryText: summaryText ?? this.summaryText,
       curatedMedia: curatedMedia ?? this.curatedMedia,
       caption: caption ?? this.caption,
@@ -255,6 +282,10 @@ class TripFinalPost {
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       trip: trip ?? this.trip,
+      likeCount: likeCount ?? this.likeCount,
+      commentCount: commentCount ?? this.commentCount,
+      shareCount: shareCount ?? this.shareCount,
+      hasLiked: hasLiked ?? this.hasLiked,
     );
   }
 }

@@ -128,13 +128,13 @@ class _TripInvitationsScreenState extends State<TripInvitationsScreen> {
                   Icon(
                     Icons.mail_outline,
                     size: 64,
-                    color: Colors.grey[400],
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
                   ),
                   const SizedBox(height: 16),
                   Text(
                     'No Trip Invitations',
                     style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                          color: Colors.grey[600],
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
                         ),
                   ),
                   const SizedBox(height: 8),
@@ -142,7 +142,7 @@ class _TripInvitationsScreenState extends State<TripInvitationsScreen> {
                     'When someone invites you to a trip,\nthey will appear here',
                     textAlign: TextAlign.center,
                     style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          color: Colors.grey[500],
+                          color: Theme.of(context).colorScheme.onSurfaceVariant.withValues(alpha: 0.6),
                         ),
                   ),
                 ],
@@ -235,7 +235,7 @@ class _TripInvitationsScreenState extends State<TripInvitationsScreen> {
                                 .textTheme
                                 .bodyMedium
                                 ?.copyWith(
-                                  color: Colors.grey[600],
+                                  color: Theme.of(context).colorScheme.onSurfaceVariant,
                                 ),
                           ),
                         const SizedBox(height: 4),
@@ -243,7 +243,7 @@ class _TripInvitationsScreenState extends State<TripInvitationsScreen> {
                           'Invited you to: "${trip.title}"',
                           style:
                               Theme.of(context).textTheme.bodySmall?.copyWith(
-                                    color: Colors.grey[500],
+                                    color: Theme.of(context).colorScheme.onSurfaceVariant.withValues(alpha: 0.6),
                                   ),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
@@ -260,9 +260,25 @@ class _TripInvitationsScreenState extends State<TripInvitationsScreen> {
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: Colors.grey[100],
+                  color: Theme.of(context)
+                      .colorScheme
+                      .onSurface
+                      .withValues(
+                        alpha: Theme.of(context).brightness == Brightness.dark
+                            ? 0.08
+                            : 0.04,
+                      ),
                   borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.grey[300]!),
+                  border: Border.all(
+                    color: Theme.of(context)
+                        .colorScheme
+                        .onSurface
+                        .withValues(
+                          alpha: Theme.of(context).brightness == Brightness.dark
+                              ? 0.18
+                              : 0.10,
+                        ),
+                  ),
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -270,14 +286,18 @@ class _TripInvitationsScreenState extends State<TripInvitationsScreen> {
                     Row(
                       children: [
                         Icon(Icons.location_on,
-                            size: 16, color: Colors.grey[600]),
+                            size: 16,
+                            color:
+                                Theme.of(context).colorScheme.onSurfaceVariant),
                         const SizedBox(width: 4),
                         Expanded(
                           child: Text(
                             trip.destinations.join(', '),
                             style:
                                 Theme.of(context).textTheme.bodySmall?.copyWith(
-                                      color: Colors.grey[700],
+                                      color: Theme.of(context)
+                                          .colorScheme
+                                          .onSurfaceVariant,
                                       fontWeight: FontWeight.w500,
                                     ),
                             maxLines: 1,
@@ -291,13 +311,18 @@ class _TripInvitationsScreenState extends State<TripInvitationsScreen> {
                       Row(
                         children: [
                           Icon(Icons.calendar_today,
-                              size: 16, color: Colors.grey[600]),
+                              size: 16,
+                              color: Theme.of(context)
+                                  .colorScheme
+                                  .onSurfaceVariant),
                           const SizedBox(width: 4),
                           Text(
                             _formatDateRange(trip.startDate, trip.endDate),
                             style:
                                 Theme.of(context).textTheme.bodySmall?.copyWith(
-                                      color: Colors.grey[700],
+                                      color: Theme.of(context)
+                                          .colorScheme
+                                          .onSurfaceVariant,
                                       fontWeight: FontWeight.w500,
                                     ),
                           ),

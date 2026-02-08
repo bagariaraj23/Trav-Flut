@@ -4,8 +4,8 @@ import 'package:tripthread/providers/trip_provider.dart';
 import 'package:tripthread/providers/auth_provider.dart';
 import 'package:tripthread/models/trip.dart';
 import 'package:tripthread/models/place.dart';
-import 'package:tripthread/widgets/map_picker_sheet.dart';
-import 'package:tripthread/widgets/place_search_sheet.dart';
+import 'package:tripthread/widgets/sheets/map_picker_sheet.dart';
+import 'package:tripthread/widgets/sheets/place_search_sheet.dart';
 import 'package:tripthread/services/media_service.dart';
 import 'package:tripthread/services/api_service.dart';
 import 'package:tripthread/utils/cloudinary_utils.dart';
@@ -1158,14 +1158,26 @@ class _TripThreadScreenState extends State<TripThreadScreen> {
                     ? Theme.of(
                         context,
                       ).colorScheme.primary.withValues(alpha: 0.12)
-                    : const Color(0xFFFAF9F6),
+                    : (Theme.of(context).brightness == Brightness.dark
+                        ? Theme.of(context)
+                            .colorScheme
+                            .onSurface
+                            .withValues(alpha: 0.06)
+                        : const Color(0xFFFAF9F6)),
                 borderRadius: BorderRadius.circular(16),
                 border: Border.all(
                   color: isCurrentUser
                       ? Theme.of(
                           context,
                         ).colorScheme.primary.withValues(alpha: 0.3)
-                      : Colors.grey[300]!,
+                      : (Theme.of(context).brightness == Brightness.dark
+                          ? Theme.of(context)
+                              .colorScheme
+                              .onSurface
+                              .withValues(alpha: 0.18)
+                          : Theme.of(context).colorScheme.onSurface.withValues(
+                            alpha: Theme.of(context).brightness == Brightness.dark ? 0.18 : 0.10,
+                          )),
                   width: 1.5,
                 ),
                 boxShadow: [
@@ -1194,7 +1206,7 @@ class _TripThreadScreenState extends State<TripThreadScreen> {
                                 fontWeight: FontWeight.w600,
                                 color: isCurrentUser
                                     ? Theme.of(context).colorScheme.primary
-                                    : Colors.black87,
+                                    : Theme.of(context).colorScheme.onSurface,
                               ),
                           overflow: TextOverflow.ellipsis,
                           maxLines: 1,
@@ -1211,7 +1223,9 @@ class _TripThreadScreenState extends State<TripThreadScreen> {
                                 color: isCurrentUser
                                     ? Theme.of(context).colorScheme.primary
                                           .withValues(alpha: 0.8)
-                                    : Colors.grey[700],
+                                    : Theme.of(context)
+                                        .colorScheme
+                                        .onSurfaceVariant,
                                 fontWeight: FontWeight.w500,
                               ),
                           overflow: TextOverflow.ellipsis,
@@ -1228,7 +1242,7 @@ class _TripThreadScreenState extends State<TripThreadScreen> {
                     Text(
                       entry.contentText!,
                       style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: Colors.black87,
+                        color: Theme.of(context).colorScheme.onSurface,
                         height: 1.5,
                       ),
                       overflow: TextOverflow.visible,
@@ -1424,7 +1438,9 @@ class _TripThreadScreenState extends State<TripThreadScreen> {
         margin: const EdgeInsets.only(top: 8),
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: Colors.grey[200],
+          color: Theme.of(context).colorScheme.onSurface.withValues(
+            alpha: Theme.of(context).brightness == Brightness.dark ? 0.06 : 0.03,
+          ),
           borderRadius: BorderRadius.circular(8),
         ),
         child: Row(
@@ -1436,7 +1452,9 @@ class _TripThreadScreenState extends State<TripThreadScreen> {
                 'Media not available',
                 style: Theme.of(
                   context,
-                ).textTheme.bodyMedium?.copyWith(color: Colors.grey[600]),
+                ).textTheme.bodyMedium?.copyWith(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
               ),
             ),
           ],
@@ -1478,20 +1496,24 @@ class _TripThreadScreenState extends State<TripThreadScreen> {
                 },
                 errorBuilder: (context, error, stackTrace) {
                   return Container(
-                    color: Colors.grey[200],
+                    color: Theme.of(context).colorScheme.onSurface.withValues(
+            alpha: Theme.of(context).brightness == Brightness.dark ? 0.06 : 0.03,
+          ),
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        const Icon(
+                        Icon(
                           Icons.broken_image,
                           size: 48,
-                          color: Colors.grey,
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
                         ),
                         const SizedBox(height: 8),
                         Text(
                           'Failed to load media',
                           style: Theme.of(context).textTheme.bodyMedium
-                              ?.copyWith(color: Colors.grey[600]),
+                              ?.copyWith(
+                                color: Theme.of(context).colorScheme.onSurfaceVariant,
+                              ),
                         ),
                       ],
                     ),
@@ -1737,12 +1759,19 @@ class _TripThreadScreenState extends State<TripThreadScreen> {
                               vertical: 14,
                             ),
                             decoration: BoxDecoration(
-                              border: Border.all(color: Colors.grey[300]!),
+                              border: Border.all(
+                                color: Theme.of(context).colorScheme.onSurface.withValues(
+                                  alpha: Theme.of(context).brightness == Brightness.dark ? 0.18 : 0.10,
+                                ),
+                              ),
                               borderRadius: BorderRadius.circular(8),
                             ),
                             child: Row(
                               children: [
-                                Icon(Icons.search, color: Colors.grey[600]),
+                                Icon(
+                                  Icons.search,
+                                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                                ),
                                 const SizedBox(width: 12),
                                 Expanded(
                                   child: _selectedPlace != null
@@ -1763,7 +1792,7 @@ class _TripThreadScreenState extends State<TripThreadScreen> {
                                               Text(
                                                 _selectedPlace!.address!,
                                                 style: TextStyle(
-                                                  color: Colors.grey[600],
+                                                  color: Theme.of(context).colorScheme.onSurfaceVariant,
                                                   fontSize: 12,
                                                 ),
                                                 maxLines: 1,
@@ -1774,7 +1803,7 @@ class _TripThreadScreenState extends State<TripThreadScreen> {
                                       : Text(
                                           'Search for a location',
                                           style: TextStyle(
-                                            color: Colors.grey[600],
+                                            color: Theme.of(context).colorScheme.onSurfaceVariant,
                                           ),
                                         ),
                                 ),
@@ -1801,7 +1830,13 @@ class _TripThreadScreenState extends State<TripThreadScreen> {
                         // "OR" divider
                         Row(
                           children: [
-                            Expanded(child: Divider(color: Colors.grey[300])),
+                            Expanded(
+                              child: Divider(
+                                color: Theme.of(context).colorScheme.onSurface.withValues(
+                                  alpha: Theme.of(context).brightness == Brightness.dark ? 0.18 : 0.10,
+                                ),
+                              ),
+                            ),
                             Padding(
                               padding: const EdgeInsets.symmetric(
                                 horizontal: 16,
@@ -1809,12 +1844,18 @@ class _TripThreadScreenState extends State<TripThreadScreen> {
                               child: Text(
                                 'OR',
                                 style: TextStyle(
-                                  color: Colors.grey[600],
+                                  color: Theme.of(context).colorScheme.onSurfaceVariant,
                                   fontWeight: FontWeight.w500,
                                 ),
                               ),
                             ),
-                            Expanded(child: Divider(color: Colors.grey[300])),
+                            Expanded(
+                              child: Divider(
+                                color: Theme.of(context).colorScheme.onSurface.withValues(
+                                  alpha: Theme.of(context).brightness == Brightness.dark ? 0.18 : 0.10,
+                                ),
+                              ),
+                            ),
                           ],
                         ),
 
@@ -1864,10 +1905,13 @@ class _TripThreadScreenState extends State<TripThreadScreen> {
                             padding: const EdgeInsets.all(12),
                             margin: const EdgeInsets.only(bottom: 12),
                             decoration: BoxDecoration(
-                              color: Colors.grey[900],
+                              color: Theme.of(context).colorScheme.surface,
                               borderRadius: BorderRadius.circular(12),
                               border: Border.all(
-                                color: Colors.white.withValues(alpha: 0.15),
+                                color: Theme.of(context)
+                                    .colorScheme
+                                    .onSurface
+                                    .withValues(alpha: 0.15),
                               ),
                               boxShadow: [
                                 BoxShadow(
@@ -1943,8 +1987,13 @@ class _TripThreadScreenState extends State<TripThreadScreen> {
                                           : _clearSelectedMedia,
                                       icon: const Icon(Icons.close, size: 20),
                                       style: IconButton.styleFrom(
-                                        backgroundColor: Colors.white12,
-                                        foregroundColor: Colors.white,
+                                        backgroundColor: Theme.of(context)
+                                            .colorScheme
+                                            .onSurface
+                                            .withValues(alpha: 0.12),
+                                        foregroundColor: Theme.of(context)
+                                            .colorScheme
+                                            .onSurface,
                                         visualDensity: VisualDensity.compact,
                                         padding: const EdgeInsets.all(8),
                                       ),
@@ -1995,7 +2044,11 @@ class _TripThreadScreenState extends State<TripThreadScreen> {
                             padding: const EdgeInsets.all(8),
                             margin: const EdgeInsets.only(bottom: 12),
                             decoration: BoxDecoration(
-                              border: Border.all(color: Colors.grey[300]!),
+                              border: Border.all(
+                                color: Theme.of(context).colorScheme.onSurface.withValues(
+                                  alpha: Theme.of(context).brightness == Brightness.dark ? 0.18 : 0.10,
+                                ),
+                              ),
                               borderRadius: BorderRadius.circular(8),
                             ),
                             child: LayoutBuilder(
@@ -2316,7 +2369,9 @@ class _TripThreadScreenState extends State<TripThreadScreen> {
               buildOptimizedImageUrl(media.url, width: 360, height: 360),
               fit: BoxFit.cover,
               errorBuilder: (context, error, stackTrace) => Container(
-                color: Colors.grey[300],
+                color: Theme.of(context).colorScheme.onSurface.withValues(
+                  alpha: Theme.of(context).brightness == Brightness.dark ? 0.18 : 0.10,
+                ),
                 child: const Icon(Icons.broken_image, color: Colors.grey),
               ),
             )
@@ -2324,7 +2379,9 @@ class _TripThreadScreenState extends State<TripThreadScreen> {
               File(media.url),
               fit: BoxFit.cover,
               errorBuilder: (context, error, stackTrace) => Container(
-                color: Colors.grey[300],
+                color: Theme.of(context).colorScheme.onSurface.withValues(
+                  alpha: Theme.of(context).brightness == Brightness.dark ? 0.18 : 0.10,
+                ),
                 child: const Icon(Icons.broken_image, color: Colors.grey),
               ),
             );

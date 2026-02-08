@@ -5,7 +5,7 @@ import { withAuth, withRateLimit, withLogging } from "@/lib/middleware";
 
 // Get pending trip invitations for current user
 export async function GET(request: NextRequest) {
-  return withLogging(async (req) => {
+  const loggedHandler = withLogging(async (req) => {
     return withRateLimit(req, async (rateLimitedReq) => {
       return withAuth(rateLimitedReq, async (authenticatedReq) => {
         try {
@@ -81,5 +81,7 @@ export async function GET(request: NextRequest) {
         }
       });
     });
-  })(request);
+  });
+  
+  return await loggedHandler(request);
 }

@@ -9,7 +9,7 @@ import {
   cacheDelete,
   upstashFetch,
 } from "@/lib/cache";
-import { rlKeyFromUserOrIp, rateLimit } from "@/lib/rateLimit";
+import { checkRateLimit, getRequestIdentifier, RATE_LIMIT_PRESETS } from "@/lib/rateLimit";
 import { withLock } from "@/lib/mutex";
 
 const placesProvider = new MapboxPlacesAdapter();
@@ -201,11 +201,9 @@ export async function searchPlaces(params: {
   const { q, lat, lng, limit = 10, userId, ip } = params;
 
   // 1. Rate limiting check
-  const rl = await rateLimit(
-    rlKeyFromUserOrIp(userId, ip, "places:search"),
-    20,
-    60
-  );
+  // Use userId or IP as identifier 
+  const identifier = userId || ip || "unknown";
+  const rl = await checkRateLimit(RATE_LIMIT_PRESETS.places, identifier);
   if (!rl.allowed) {
     throw new Error("Rate limit exceeded");
   }

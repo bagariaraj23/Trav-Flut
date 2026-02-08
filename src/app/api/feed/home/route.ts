@@ -14,10 +14,12 @@ import {
   handleApiError,
 } from "@/lib/middleware";
 import { PerformanceMonitor, ErrorTracker } from "@/lib/monitoring";
+import { checkLikeStatus } from "@/lib/services/like";
+import { EntityType } from "@prisma/client";
 
 // Get home feed (final posts from followed users and public profiles)
 export async function GET(request: NextRequest) {
-  return withLogging(async (req) => {
+  const loggedHandler = withLogging(async (req) => {
     return withRateLimit(req, async (rateLimitedReq) => {
       return withAuth(rateLimitedReq, async (authenticatedReq) => {
         const endTimer =
@@ -140,46 +142,61 @@ export async function GET(request: NextRequest) {
             `[API] GET /feed/home - Found ${finalPosts.length} final posts`
           );
 
-          // Transform to response format
-          const finalPostsResponse: TripFinalPostResponse[] = finalPosts.map(
-            (post) => ({
-              id: post.id,
-              tripId: post.tripId,
-              summaryText: post.summaryText,
-              curatedMedia: post.curatedMedia,
-              caption: post.caption ?? undefined,
-              coverMediaUrl: post.coverMediaUrl ?? undefined,
-              generationStatus: post.generationStatus,
-              isPublished: post.isPublished,
-              publishedAt: post.publishedAt
-                ? post.publishedAt.toISOString()
-                : undefined,
-              createdAt: post.createdAt.toISOString(),
-              updatedAt: post.updatedAt.toISOString(),
-              trip: {
-                ...post.trip,
-                startDate: post.trip.startDate?.toISOString() || undefined,
-                endDate: post.trip.endDate?.toISOString() || undefined,
-                description: post.trip.description ?? undefined,
-                mood: post.trip.mood ?? undefined,
-                type: post.trip.type ?? undefined,
-                coverMediaId: post.trip.coverMediaId ?? undefined,
-                createdAt: post.trip.createdAt.toISOString(),
-                updatedAt: post.trip.updatedAt.toISOString(),
-                user: post.trip.user
-                  ? {
-                      ...post.trip.user,
-                      username: post.trip.user.username ?? undefined,
-                      name: post.trip.user.name ?? undefined,
-                      avatarUrl: post.trip.user.avatarUrl ?? undefined,
-                      bio: post.trip.user.bio ?? undefined,
-                      createdAt: post.trip.user.createdAt.toISOString(),
-                      updatedAt: post.trip.user.updatedAt.toISOString(),
-                    }
-                  : undefined,
-              },
-            })
+          // Get like status for all posts
+          const postIds = finalPosts.map((p) => p.id);
+          const likeStatusMap = await checkLikeStatus(
+            currentUserId,
+            EntityType.TRIP_FINAL_POST,
+            postIds
           );
+
+          // Transform to response format with engagement data
+          const finalPostsResponse: (TripFinalPostResponse & {
+            likeCount: number;
+            commentCount: number;
+            shareCount: number;
+            hasLiked: boolean;
+          })[] = finalPosts.map((post) => ({
+            id: post.id,
+            tripId: post.tripId,
+            summaryText: post.summaryText,
+            curatedMedia: post.curatedMedia,
+            caption: post.caption ?? undefined,
+            coverMediaUrl: post.coverMediaUrl ?? undefined,
+            generationStatus: post.generationStatus,
+            isPublished: post.isPublished,
+            publishedAt: post.publishedAt
+              ? post.publishedAt.toISOString()
+              : undefined,
+            createdAt: post.createdAt.toISOString(),
+            updatedAt: post.updatedAt.toISOString(),
+            likeCount: post.likeCount,
+            commentCount: post.commentCount,
+            shareCount: post.shareCount,
+            hasLiked: likeStatusMap[post.id] || false,
+            trip: {
+              ...post.trip,
+              startDate: post.trip.startDate?.toISOString() || undefined,
+              endDate: post.trip.endDate?.toISOString() || undefined,
+              description: post.trip.description ?? undefined,
+              mood: post.trip.mood ?? undefined,
+              type: post.trip.type ?? undefined,
+              coverMediaId: post.trip.coverMediaId ?? undefined,
+              createdAt: post.trip.createdAt.toISOString(),
+              updatedAt: post.trip.updatedAt.toISOString(),
+              user: post.trip.user
+                ? {
+                    ...post.trip.user,
+                    username: post.trip.user.username ?? undefined,
+                    name: post.trip.user.name ?? undefined,
+                    avatarUrl: post.trip.user.avatarUrl ?? undefined,
+                    bio: post.trip.user.bio ?? undefined,
+                    createdAt: post.trip.user.createdAt.toISOString(),
+                    updatedAt: post.trip.user.updatedAt.toISOString(),
+                  }
+                : undefined,
+            },
+          }));
 
           const hasNext = offset + limitNum < totalCount;
           console.log(`[API] GET /feed/home - Has next: ${hasNext}`);
@@ -215,5 +232,7 @@ export async function GET(request: NextRequest) {
         }
       });
     });
-  })(request);
+  });
+  
+  return await loggedHandler(request);
 }

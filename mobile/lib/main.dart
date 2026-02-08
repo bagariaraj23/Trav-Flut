@@ -10,6 +10,12 @@ import 'package:tripthread/providers/final_post_provider.dart';
 import 'package:tripthread/providers/user_provider.dart';
 import 'package:tripthread/providers/trip_provider.dart';
 import 'package:tripthread/providers/feed_provider.dart';
+import 'package:tripthread/providers/engagement_provider.dart';
+import 'package:tripthread/providers/comment_provider.dart';
+import 'package:tripthread/providers/share_provider.dart';
+import 'package:tripthread/services/like_service.dart';
+import 'package:tripthread/services/comment_service.dart';
+import 'package:tripthread/services/share_service.dart';
 import 'package:tripthread/screens/trip/trip_map_screen.dart';
 import 'package:tripthread/services/api_service.dart';
 import 'package:tripthread/services/storage_service.dart';
@@ -35,6 +41,7 @@ import 'package:tripthread/screens/trip/final_post_edit_screen.dart';
 import 'package:tripthread/screens/profile/follow_requests_screen.dart';
 import 'package:tripthread/screens/profile/trip_invitations_screen.dart';
 import 'package:tripthread/screens/settings/settings_screen.dart';
+import 'package:tripthread/screens/engagement/liked_by_screen.dart';
 import 'package:tripthread/utils/app_theme.dart';
 import 'package:tripthread/utils/error_handler.dart';
 import 'package:tripthread/widgets/auth_gate.dart';
@@ -78,6 +85,9 @@ void main() async {
     final tripService = TripService();
     final mediaService = MediaService(apiService);
     final deepLinkService = DeepLinkService();
+    final likeService = LikeService();
+    final commentService = CommentService();
+    final shareService = ShareService();
     debugPrint('[main] Core services created');
 
     debugPrint('[main] Setting up providers');
@@ -89,8 +99,12 @@ void main() async {
           Provider<TripService>.value(value: tripService),
           Provider<MediaService>.value(value: mediaService),
           Provider<DeepLinkService>.value(value: deepLinkService),
+          Provider<LikeService>.value(value: likeService),
+          Provider<CommentService>.value(value: commentService),
+          Provider<ShareService>.value(value: shareService),
           ChangeNotifierProvider<ConnectivityService>.value(
-              value: connectivityService),
+            value: connectivityService,
+          ),
           ChangeNotifierProvider<AuthProvider>(
             create: (context) {
               debugPrint('[main] Creating AuthProvider');
@@ -101,9 +115,11 @@ void main() async {
               // Set up the unauthorized callback to trigger logout
               apiService.setUnauthorizedCallback(() {
                 debugPrint(
-                    '[main] Unauthorized callback triggered - forcing logout');
+                  '[main] Unauthorized callback triggered - forcing logout',
+                );
                 authProvider.forceLogout(
-                    message: 'Session expired. Please log in again.');
+                  message: 'Session expired. Please log in again.',
+                );
               });
               return authProvider;
             },
@@ -130,16 +146,66 @@ void main() async {
               return provider;
             },
           ),
-          ChangeNotifierProvider<FeedProvider>(
+          ChangeNotifierProvider<PlaceProvider>(
             create: (context) {
-              debugPrint('[main] Creating FeedProvider');
-              return FeedProvider(apiService: apiService);
+              debugPrint('[main] Creating PlaceProvider');
+              return PlaceProvider(apiService: apiService);
             },
           ),
-          ChangeNotifierProvider<PlaceProvider>(create: (context) {
-            debugPrint('[main] Creating PlaceProvider');
-            return PlaceProvider(apiService: apiService);
-          })
+          ChangeNotifierProvider<EngagementProvider>(
+            create: (context) {
+              debugPrint('[main] Creating EngagementProvider');
+              final authProvider = context.read<AuthProvider>();
+              final provider = EngagementProvider(likeService: likeService);
+              likeService.setStorageService(storageService);
+              authProvider.addListener(() {
+                if (!authProvider.isAuthenticated) {
+                  provider.clear();
+                }
+              });
+              return provider;
+            },
+          ),
+          ChangeNotifierProxyProvider<EngagementProvider, FeedProvider>(
+            create: (context) {
+              debugPrint('[main] Creating FeedProvider');
+              return FeedProvider(
+                apiService: apiService,
+                engagementProvider: context.read<EngagementProvider>(),
+              );
+            },
+            update: (context, engagementProvider, feedProvider) {
+              debugPrint(
+                '[main] Updating FeedProvider with EngagementProvider',
+              );
+              // If feedProvider exists, return it (we don't need to recreate)
+              // The provider already has the engagementProvider reference
+              return feedProvider ??
+                  FeedProvider(
+                    apiService: apiService,
+                    engagementProvider: engagementProvider,
+                  );
+            },
+          ),
+          ChangeNotifierProvider<CommentProvider>(
+            create: (context) {
+              debugPrint('[main] Creating CommentProvider');
+              final provider = CommentProvider(commentService: commentService);
+              commentService.setStorageService(storageService);
+              return provider;
+            },
+          ),
+          ChangeNotifierProvider<ShareProvider>(
+            create: (context) {
+              debugPrint('[main] Creating ShareProvider');
+              final provider = ShareProvider(
+                shareService: shareService,
+                deepLinkService: deepLinkService,
+              );
+              shareService.setStorageService(storageService);
+              return provider;
+            },
+          ),
         ],
         child: TripThreadAppRouter(),
       ),
@@ -150,22 +216,24 @@ void main() async {
     ErrorHandler.logError(error, context: 'App initialization');
 
     // Show error screen or fallback
-    runApp(MaterialApp(
-      home: Scaffold(
-        body: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Icon(Icons.error, size: 64, color: Colors.red),
-              const SizedBox(height: 16),
-              const Text('Failed to initialize app'),
-              const SizedBox(height: 8),
-              Text(error.toString()),
-            ],
+    runApp(
+      MaterialApp(
+        home: Scaffold(
+          body: Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(Icons.error, size: 64, color: Colors.red),
+                const SizedBox(height: 16),
+                const Text('Failed to initialize app'),
+                const SizedBox(height: 8),
+                Text(error.toString()),
+              ],
+            ),
           ),
         ),
       ),
-    ));
+    );
   }
 }
 
@@ -223,11 +291,7 @@ class _ConnectivityToastHandlerState extends State<ConnectivityToastHandler> {
     return Flushbar(
       title: 'No Internet Connection',
       message: 'You are offline. Some features may not be available.',
-      icon: const Icon(
-        Icons.wifi_off_rounded,
-        size: 28.0,
-        color: Colors.white,
-      ),
+      icon: const Icon(Icons.wifi_off_rounded, size: 28.0, color: Colors.white),
       backgroundColor: Colors.red.shade700,
       // The toast will disappear after 8 seconds.
       // For a persistent toast that only disappears when connection is back
@@ -263,8 +327,10 @@ class _TripThreadAppRouterState extends State<TripThreadAppRouter> {
     super.didChangeDependencies();
 
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
-    final deepLinkService =
-        Provider.of<DeepLinkService>(context, listen: false);
+    final deepLinkService = Provider.of<DeepLinkService>(
+      context,
+      listen: false,
+    );
 
     // Create or recreate router only when the AuthProvider instance changes
     if (_router == null || authProvider != _lastAuthProvider) {
@@ -293,18 +359,22 @@ class _TripThreadAppRouterState extends State<TripThreadAppRouter> {
         refreshListenable: Listenable.merge([
           authProvider,
           authProvider.routingNotifier,
-          authProvider.uiNotifier
+          authProvider.uiNotifier,
         ]),
         redirect: (context, state) {
-          final authProvider =
-              Provider.of<AuthProvider>(context, listen: false);
+          final authProvider = Provider.of<AuthProvider>(
+            context,
+            listen: false,
+          );
           final isLoading = authProvider.isLoading;
           final isLoggedIn = authProvider.isAuthenticated;
           final location = state.uri.toString();
 
           if (location != TripThreadAppRouter._lastLocation) {
             debugPrint('[GoRouter] location changed to: $location');
-            debugPrint('[GoRouter] isLoading: $isLoading, isLoggedIn: $isLoggedIn');
+            debugPrint(
+              '[GoRouter] isLoading: $isLoading, isLoggedIn: $isLoggedIn',
+            );
             TripThreadAppRouter._lastLocation = location;
           }
 
@@ -366,8 +436,9 @@ class _TripThreadAppRouterState extends State<TripThreadAppRouter> {
             builder: (context, state) => const HomeScreen(),
           ),
           GoRoute(
-              path: '/trips',
-              builder: (context, state) => const HomeScreen(initialTab: 1)),
+            path: '/trips',
+            builder: (context, state) => const HomeScreen(initialTab: 1),
+          ),
           GoRoute(
             path: '/profile/:userId',
             builder: (context, state) {
@@ -379,7 +450,9 @@ class _TripThreadAppRouterState extends State<TripThreadAppRouter> {
             path: '/profile/:userId/followers',
             builder: (context, state) {
               final userId = state.pathParameters['userId']!;
-              debugPrint('[GoRouter] Building FollowersFollowingScreen - followers for user: $userId');
+              debugPrint(
+                '[GoRouter] Building FollowersFollowingScreen - followers for user: $userId',
+              );
               return FollowersFollowingScreen(
                 userId: userId,
                 showFollowers: true,
@@ -390,7 +463,9 @@ class _TripThreadAppRouterState extends State<TripThreadAppRouter> {
             path: '/profile/:userId/following',
             builder: (context, state) {
               final userId = state.pathParameters['userId']!;
-              debugPrint('[GoRouter] Building FollowersFollowingScreen - following for user: $userId');
+              debugPrint(
+                '[GoRouter] Building FollowersFollowingScreen - following for user: $userId',
+              );
               return FollowersFollowingScreen(
                 userId: userId,
                 showFollowers: false,
@@ -398,11 +473,13 @@ class _TripThreadAppRouterState extends State<TripThreadAppRouter> {
             },
           ),
           GoRoute(
-              path: '/edit-profile',
-              builder: (context, state) => const EditProfileScreen()),
+            path: '/edit-profile',
+            builder: (context, state) => const EditProfileScreen(),
+          ),
           GoRoute(
-              path: '/create-trip',
-              builder: (context, state) => const CreateTripScreen()),
+            path: '/create-trip',
+            builder: (context, state) => const CreateTripScreen(),
+          ),
           GoRoute(
             path: '/trip/:tripId',
             builder: (context, state) {
@@ -472,6 +549,14 @@ class _TripThreadAppRouterState extends State<TripThreadAppRouter> {
           GoRoute(
             path: '/settings',
             builder: (context, state) => const SettingsScreen(),
+          ),
+          GoRoute(
+            path: '/likes/:entityType/:entityId',
+            builder: (context, state) {
+              final entityType = state.pathParameters['entityType']!;
+              final entityId = state.pathParameters['entityId']!;
+              return LikedByScreen(entityType: entityType, entityId: entityId);
+            },
           ),
         ],
       );

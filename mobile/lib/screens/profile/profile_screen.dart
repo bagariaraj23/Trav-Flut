@@ -529,16 +529,32 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 Container(
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
-                    color: Colors.grey[100],
+                    color: Theme.of(context)
+                        .colorScheme
+                        .onSurface
+                        .withValues(
+                          alpha: Theme.of(context).brightness == Brightness.dark
+                              ? 0.08
+                              : 0.04,
+                        ),
                     borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: Colors.grey[300]!),
+                    border: Border.all(
+                      color: Theme.of(context)
+                          .colorScheme
+                          .onSurface
+                          .withValues(
+                            alpha: Theme.of(context).brightness == Brightness.dark
+                                ? 0.18
+                                : 0.10,
+                          ),
+                    ),
                   ),
                   child: Column(
                     children: [
                       Icon(
                         Icons.lock_outlined,
                         size: 32,
-                        color: Colors.black87,
+                        color: Theme.of(context).colorScheme.onSurface,
                       ),
                       const SizedBox(height: 8),
                       Text(
@@ -546,14 +562,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         style: Theme.of(context).textTheme.titleMedium
                             ?.copyWith(
                               fontWeight: FontWeight.w600,
-                              color: Colors.black87,
+                              color: Theme.of(context).colorScheme.onSurface,
                             ),
                       ),
                       const SizedBox(height: 4),
                       Text(
                         'Follow to see their trips and posts',
                         style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          color: Colors.grey[800],
+                          color:
+                              Theme.of(context).colorScheme.onSurfaceVariant,
                         ),
                         textAlign: TextAlign.center,
                       ),
@@ -594,9 +611,28 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     return OutlinedButton(
                       onPressed: isProcessing ? null : _handleFollowToggle,
                       style: OutlinedButton.styleFrom(
-                        foregroundColor: Colors.grey[900],
-                        backgroundColor: Colors.grey[100],
-                        side: BorderSide(color: Colors.grey[400]!),
+                        foregroundColor:
+                            Theme.of(context).colorScheme.onSurface,
+                        backgroundColor: Theme.of(context)
+                            .colorScheme
+                            .onSurface
+                            .withValues(
+                              alpha:
+                                  Theme.of(context).brightness == Brightness.dark
+                                      ? 0.08
+                                      : 0.04,
+                            ),
+                        side: BorderSide(
+                          color: Theme.of(context)
+                              .colorScheme
+                              .onSurface
+                              .withValues(
+                                alpha: Theme.of(context).brightness ==
+                                        Brightness.dark
+                                    ? 0.18
+                                    : 0.10,
+                              ),
+                        ),
                         padding: const EdgeInsets.symmetric(vertical: 12),
                       ),
                       child: isProcessing
@@ -715,7 +751,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ),
           ),
           const SizedBox(height: 4),
-          Text(label, style: TextStyle(fontSize: 14, color: Colors.grey[600])),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 14,
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
+          ),
         ],
       ),
     );

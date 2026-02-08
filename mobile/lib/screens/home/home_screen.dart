@@ -5,9 +5,13 @@ import 'package:tripthread/providers/auth_provider.dart';
 import 'package:tripthread/providers/trip_provider.dart';
 import 'package:tripthread/providers/feed_provider.dart';
 import 'package:tripthread/providers/user_provider.dart';
+import 'package:tripthread/providers/engagement_provider.dart';
 import 'package:tripthread/models/trip.dart';
 import 'package:tripthread/screens/discover/discover_tab.dart';
 import 'package:tripthread/utils/cloudinary_utils.dart';
+import 'package:tripthread/widgets/engagement/engagement_action_bar.dart';
+import 'package:tripthread/widgets/sheets/comment_bottom_sheet.dart';
+import 'package:tripthread/widgets/sheets/share_bottom_sheet.dart';
 
 class HomeScreen extends StatefulWidget {
   final int initialTab;
@@ -350,7 +354,7 @@ class _HomeFeedScreenState extends State<HomeFeedScreen> {
                       Text(
                         _formatDateTime(post.createdAt),
                         style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: Colors.grey[600],
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
                         ),
                       ),
                     ],
@@ -376,7 +380,9 @@ class _HomeFeedScreenState extends State<HomeFeedScreen> {
                   return Container(
                     margin: const EdgeInsets.symmetric(horizontal: 4),
                     decoration: BoxDecoration(
-                      color: Colors.grey[200],
+                      color: Theme.of(context).colorScheme.onSurface.withValues(
+                        alpha: Theme.of(context).brightness == Brightness.dark ? 0.06 : 0.03,
+                      ),
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: ClipRRect(
@@ -389,7 +395,9 @@ class _HomeFeedScreenState extends State<HomeFeedScreen> {
                         fit: BoxFit.cover,
                         errorBuilder: (context, error, stackTrace) {
                           return Container(
-                            color: Colors.grey[200],
+                            color: Theme.of(context).colorScheme.onSurface.withValues(
+                        alpha: Theme.of(context).brightness == Brightness.dark ? 0.06 : 0.03,
+                      ),
                             child: const Center(
                               child: Icon(
                                 Icons.image_not_supported,
@@ -425,34 +433,72 @@ class _HomeFeedScreenState extends State<HomeFeedScreen> {
                     post.caption!,
                     style: Theme.of(
                       context,
-                    ).textTheme.bodyMedium?.copyWith(color: Colors.grey[700]),
+                    ).textTheme.bodyMedium?.copyWith(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant.withValues(alpha: 0.9),
+                    ),
                   ),
                 ],
 
                 const SizedBox(height: 12),
 
-                // Action buttons
+                // Engagement action bar
                 Row(
                   children: [
-                    IconButton(
-                      icon: const Icon(Icons.favorite_border),
-                      onPressed: () {
-                        // TODO: Implement like functionality
-                      },
+                    Expanded(
+                      child: Align(
+                        alignment: Alignment.centerLeft,
+                        child: EngagementActionBar(
+                          entityType: 'TRIP_FINAL_POST',
+                          entityId: post.id,
+                          likeCount: post.likeCount,
+                          commentCount: post.commentCount,
+                          shareCount: post.shareCount,
+                          hasLiked: post.hasLiked,
+                          onCommentTap: () {
+                            showModalBottomSheet(
+                              context: context,
+                              isScrollControlled: true,
+                              backgroundColor: Colors.transparent,
+                              builder: (context) => CommentBottomSheet(
+                                entityType: 'TRIP_FINAL_POST',
+                                entityId: post.id,
+                              ),
+                            );
+                          },
+                          onShareTap: () {
+                            showModalBottomSheet(
+                              context: context,
+                              backgroundColor: Colors.transparent,
+                              builder: (context) => ShareBottomSheet(
+                                entityType: 'TRIP_FINAL_POST',
+                                entityId: post.id,
+                              ),
+                            );
+                          },
+                          onLikeChanged: () {
+                            // Update the post in FeedProvider with new like count
+                            final engagementProvider =
+                                context.read<EngagementProvider>();
+                            final newLikeCount =
+                                engagementProvider.getLikeCount(post.id);
+                            final newHasLiked =
+                                engagementProvider.isLiked(post.id);
+
+                            // Update the post in the feed
+                            final feedProvider = context.read<FeedProvider>();
+                            final updatedPost = post.copyWith(
+                              likeCount: newLikeCount,
+                              hasLiked: newHasLiked,
+                            );
+                            final index = feedProvider.homeFeedPosts
+                                .indexWhere((p) => p.id == post.id);
+                            if (index >= 0) {
+                              feedProvider.updatePost(index, updatedPost);
+                            }
+                          },
+                        ),
+                      ),
                     ),
-                    IconButton(
-                      icon: const Icon(Icons.comment_outlined),
-                      onPressed: () {
-                        // TODO: Implement comment functionality
-                      },
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.share_outlined),
-                      onPressed: () {
-                        // TODO: Implement share functionality
-                      },
-                    ),
-                    const Spacer(),
                     TextButton(
                       onPressed: () {
                         context.push(
@@ -828,13 +874,19 @@ class _TripsTabState extends State<TripsTab> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(Icons.map_outlined, size: 64, color: Colors.grey[400]),
+              Icon(
+                Icons.map_outlined,
+                size: 64,
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
               const SizedBox(height: 16),
               Text(
                 'No Trips Yet',
                 style: Theme.of(
                   context,
-                ).textTheme.headlineSmall?.copyWith(color: Colors.grey[600]),
+                ).textTheme.headlineSmall?.copyWith(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
               ),
               const SizedBox(height: 8),
               Text(
@@ -842,7 +894,9 @@ class _TripsTabState extends State<TripsTab> {
                 textAlign: TextAlign.center,
                 style: Theme.of(
                   context,
-                ).textTheme.bodyMedium?.copyWith(color: Colors.grey[500]),
+                ).textTheme.bodyMedium?.copyWith(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant.withValues(alpha: 0.6),
+                ),
               ),
               const SizedBox(height: 24),
               ElevatedButton.icon(
@@ -1011,7 +1065,9 @@ class _TripsTabState extends State<TripsTab> {
                 borderRadius: const BorderRadius.vertical(
                   top: Radius.circular(12),
                 ),
-                color: Colors.grey[200],
+                color: Theme.of(context).colorScheme.onSurface.withValues(
+                  alpha: Theme.of(context).brightness == Brightness.dark ? 0.06 : 0.03,
+                ),
               ),
               child: () {
                 final coverUrl = trip.coverMedia?.url;
@@ -1060,14 +1116,16 @@ class _TripsTabState extends State<TripsTab> {
                       Icon(
                         Icons.location_on,
                         size: 16,
-                        color: Colors.grey[600],
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
                       ),
                       const SizedBox(width: 4),
                       Expanded(
                         child: Text(
                           trip.destinations.join(', '),
                           style: Theme.of(context).textTheme.bodyMedium
-                              ?.copyWith(color: Colors.grey[600]),
+                              ?.copyWith(
+                                color: Theme.of(context).colorScheme.onSurfaceVariant,
+                              ),
                           overflow: TextOverflow.ellipsis,
                           maxLines: 1,
                         ),
@@ -1188,18 +1246,28 @@ class _TripsTabState extends State<TripsTab> {
   }
 
   Widget _buildStatChip(BuildContext context, IconData icon, String text) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
-        color: Colors.grey[100],
+        color: colorScheme.onSurface.withValues(alpha: isDark ? 0.08 : 0.04),
         borderRadius: BorderRadius.circular(12),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 14, color: Colors.grey[600]),
+          Icon(icon, size: 14, color: colorScheme.onSurfaceVariant),
           const SizedBox(width: 4),
-          Text(text, style: TextStyle(color: Colors.grey[600], fontSize: 12)),
+          Text(
+            text,
+            style: TextStyle(
+              color: colorScheme.onSurfaceVariant,
+              fontSize: 12,
+            ),
+          ),
         ],
       ),
     );
@@ -1499,15 +1567,16 @@ class ProfileTab extends StatelessWidget {
                           ),
                           const SizedBox(height: 16),
                           if (recentTrips.isEmpty)
-                            const Center(
+                            Center(
                               child: Column(
+                                mainAxisSize: MainAxisSize.min,
                                 children: [
                                   Icon(
                                     Icons.map_outlined,
                                     size: 48,
                                     color: Colors.grey,
                                   ),
-                                  SizedBox(height: 12),
+                                  const SizedBox(height: 12),
                                   Text(
                                     'No trips yet',
                                     style: TextStyle(
@@ -1515,10 +1584,14 @@ class ProfileTab extends StatelessWidget {
                                       color: Colors.grey,
                                     ),
                                   ),
-                                  SizedBox(height: 4),
-                                  Text(
-                                    'Start documenting your adventures!',
-                                    style: TextStyle(color: Colors.grey),
+                                  const SizedBox(height: 4),
+                                  Builder(
+                                    builder: (context) => Text(
+                                      'Start documenting your adventures!',
+                                      style: TextStyle(
+                                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                                      ),
+                                    ),
                                   ),
                                 ],
                               ),

@@ -2,92 +2,71 @@ import { NextRequest, NextResponse } from "next/server";
 import { resolvePlace } from "@/lib/place";
 import { ApiResponse } from "@/types/api";
 import { AuthService } from "@/lib/auth";
-import { enforceRateLimit, sanitizeInput } from "@/lib/security";
+import { sanitizeInput } from "@/lib/security";
+import { withAuth, withRateLimit, withLogging, handleApiError } from "@/lib/middleware";
 
 export async function POST(request: NextRequest) {
-  try {
-    // 1. Require authentication - check Bearer token first (for mobile apps)
+  const loggedHandler = withLogging(async (req) => {
+    // Extract userId for rate limiting before auth
     let userId: string | undefined;
-    const authHeader = request.headers.get("authorization");
-
+    const authHeader = req.headers.get("authorization");
     if (authHeader?.startsWith("Bearer ")) {
-      const token = authHeader.substring(7);
-      const payload = AuthService.verifyAccessToken(token);
-      if (payload) {
-        userId = payload.userId;
+      try {
+        const token = authHeader.substring(7);
+        const payload = AuthService.verifyAccessToken(token);
+        userId = payload?.userId;
+      } catch {
+        // Token invalid, will be caught by withAuth
       }
     }
 
-    // Fallback to cookie-based auth (for web)
-    if (!userId) {
-      const { getAuthSession } = await import("@/lib/auth");
-      const session = await getAuthSession();
-      userId = session?.user?.id;
-    }
+    return withRateLimit(req, 'places', async (rateLimitedReq) => {
+      return withAuth(rateLimitedReq, async (authenticatedReq) => {
+        try {
+          // Validate and sanitize input
+          const body = await rateLimitedReq.json();
+          const { name, address, lat, lng, externalId, placeType, source } =
+            body ?? {};
 
-    if (!userId) {
-      return NextResponse.json<ApiResponse>(
-        { success: false, error: "Authentication required" },
-        { status: 401 }
-      );
-    }
+          if (!name || typeof lat !== "number" || typeof lng !== "number") {
+            return NextResponse.json<ApiResponse>(
+              { success: false, error: "Invalid input" },
+              { status: 400 }
+            );
+          }
 
-    // 2. Rate limiting
-    const rateLimitResult = await enforceRateLimit(
-      request,
-      userId,
-      "places:resolve"
-    );
-    if (!rateLimitResult.allowed) {
-      return NextResponse.json<ApiResponse>(
-        { success: false, error: "Rate limit exceeded" },
-        { status: 429 }
-      );
-    }
+          // Sanitize text inputs
+          const sanitizedName = sanitizeInput(name);
+          const sanitizedAddress = address ? sanitizeInput(address) : undefined;
 
-    // 3. Validate and sanitize input
-    const body = await request.json();
-    const { name, address, lat, lng, externalId, placeType, source } =
-      body ?? {};
+          // Validate coordinate bounds
+          if (lat < -90 || lat > 90 || lng < -180 || lng > 180) {
+            return NextResponse.json<ApiResponse>(
+              { success: false, error: "Invalid coordinates" },
+              { status: 400 }
+            );
+          }
 
-    if (!name || typeof lat !== "number" || typeof lng !== "number") {
-      return NextResponse.json<ApiResponse>(
-        { success: false, error: "Invalid input" },
-        { status: 400 }
-      );
-    }
+          const out = await resolvePlace({
+            name: sanitizedName,
+            address: sanitizedAddress,
+            lat,
+            lng,
+            externalId,
+            placeType,
+            source,
+          });
 
-    // 4. Sanitize text inputs
-    const sanitizedName = sanitizeInput(name);
-    const sanitizedAddress = address ? sanitizeInput(address) : undefined;
-
-    // 5. Validate coordinate bounds
-    if (lat < -90 || lat > 90 || lng < -180 || lng > 180) {
-      return NextResponse.json<ApiResponse>(
-        { success: false, error: "Invalid coordinates" },
-        { status: 400 }
-      );
-    }
-
-    const out = await resolvePlace({
-      name: sanitizedName,
-      address: sanitizedAddress,
-      lat,
-      lng,
-      externalId,
-      placeType,
-      source,
-    });
-
-    return NextResponse.json<ApiResponse>(
-      { success: true, data: out },
-      { status: 201 }
-    );
-  } catch (error) {
-    console.error("[Resolve] Error:", error);
-    return NextResponse.json<ApiResponse>(
-      { success: false, error: "Internal server error" },
-      { status: 500 }
-    );
-  }
+          return NextResponse.json<ApiResponse>(
+            { success: true, data: out },
+            { status: 201 }
+          );
+        } catch (error) {
+          return handleApiError(error);
+        }
+      });
+    }, { userId });
+  });
+  
+  return await loggedHandler(request);
 }

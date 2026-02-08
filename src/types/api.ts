@@ -85,13 +85,13 @@ export interface TripResponse {
   endDate?: string | null;
   destinations: string[];
   mood?:
-  | "RELAXED"
-  | "ADVENTURE"
-  | "SPIRITUAL"
-  | "CULTURAL"
-  | "PARTY"
-  | "MIXED"
-  | null;
+    | "RELAXED"
+    | "ADVENTURE"
+    | "SPIRITUAL"
+    | "CULTURAL"
+    | "PARTY"
+    | "MIXED"
+    | null;
   type?: "SOLO" | "GROUP" | "COUPLE" | "FAMILY" | null;
   coverMediaId?: string | null;
   status: "UPCOMING" | "ONGOING" | "ENDED";
@@ -162,6 +162,10 @@ export interface TripFinalPostResponse {
   createdAt: string;
   updatedAt: string;
   trip?: TripResponse | null;
+  likeCount?: number;
+  commentCount?: number;
+  shareCount?: number;
+  hasLiked?: boolean;
 }
 
 export interface MediaResponse {

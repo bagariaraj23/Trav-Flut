@@ -214,7 +214,9 @@ class _TripMapScreenState extends State<TripMapScreen> {
                     const SizedBox(height: 8),
                     Text(
                       'Share locations in the trip thread to see them here',
-                      style: TextStyle(color: Colors.grey[600]),
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
                       textAlign: TextAlign.center,
                     ),
                   ],
@@ -335,7 +337,7 @@ class _TripMapScreenState extends State<TripMapScreen> {
                       place.address!,
                       style: TextStyle(
                         fontSize: 11,
-                        color: Colors.grey[600],
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
                         height: 1.3,
                       ),
                       maxLines: 2,
@@ -355,7 +357,7 @@ class _TripMapScreenState extends State<TripMapScreen> {
                       mapPlace.notes!,
                       style: TextStyle(
                         fontSize: 10,
-                        color: Colors.grey[600],
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
                         fontStyle: FontStyle.italic,
                         height: 1.3,
                       ),

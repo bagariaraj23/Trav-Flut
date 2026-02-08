@@ -1,11 +1,8 @@
 import { NextRequest } from "next/server";
 import { z } from "zod";
 import { ok, badRequest, serverError } from "@/lib/response-helpers";
-import {
-  AuthenticatedRequest,
-  withAuth,
-} from "@/lib/middleware";
-import { prisma } from "@/lib/db";
+import { AuthenticatedRequest, withAuth } from "@/lib/middleware";
+import { prisma } from "@/lib/prisma";
 import { CloudinaryService } from "@/lib/cloudinary";
 
 const mediaUsageEnum = z.enum(["trip_cover", "thread_entry", "general"]);
@@ -63,8 +60,7 @@ async function handler(request: AuthenticatedRequest) {
       }
     }
 
-    const dailyLimit =
-      Number(process.env.MEDIA_DAILY_UPLOAD_LIMIT ?? 200) || 0;
+    const dailyLimit = Number(process.env.MEDIA_DAILY_UPLOAD_LIMIT ?? 200) || 0;
 
     if (dailyLimit > 0) {
       const startOfDay = new Date();
@@ -92,10 +88,7 @@ async function handler(request: AuthenticatedRequest) {
       usage,
     });
 
-    return ok(
-      uploadParams,
-      "Signed upload parameters generated successfully"
-    );
+    return ok(uploadParams, "Signed upload parameters generated successfully");
   } catch (error: any) {
     console.error("[MEDIA] Signature generation failed:", error);
     console.error(error.stack);

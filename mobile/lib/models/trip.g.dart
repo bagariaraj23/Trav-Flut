@@ -169,6 +169,9 @@ TripThreadEntry _$TripThreadEntryFromJson(Map<String, dynamic> json) =>
       media: json['media'] == null
           ? null
           : Media.fromJson(json['media'] as Map<String, dynamic>),
+      likeCount: (json['likeCount'] as num?)?.toInt() ?? 0,
+      commentCount: (json['commentCount'] as num?)?.toInt() ?? 0,
+      hasLiked: json['hasLiked'] as bool? ?? false,
     );
 
 Map<String, dynamic> _$TripThreadEntryToJson(TripThreadEntry instance) =>
@@ -187,6 +190,9 @@ Map<String, dynamic> _$TripThreadEntryToJson(TripThreadEntry instance) =>
       'author': instance.author,
       'taggedUsers': instance.taggedUsers,
       'media': instance.media,
+      'likeCount': instance.likeCount,
+      'commentCount': instance.commentCount,
+      'hasLiked': instance.hasLiked,
     };
 
 const _$ThreadEntryTypeEnumMap = {
@@ -206,8 +212,11 @@ TripFinalPost _$TripFinalPostFromJson(Map<String, dynamic> json) =>
           .toList(),
       caption: json['caption'] as String?,
       coverMediaUrl: json['coverMediaUrl'] as String?,
-      generationStatus: $enumDecodeNullable(
-              _$GenerationStatusEnumMap, json['generationStatus']) ??
+      generationStatus:
+          $enumDecodeNullable(
+            _$GenerationStatusEnumMap,
+            json['generationStatus'],
+          ) ??
           GenerationStatus.draft,
       isPublished: json['isPublished'] as bool,
       publishedAt: json['publishedAt'] == null
@@ -218,6 +227,10 @@ TripFinalPost _$TripFinalPostFromJson(Map<String, dynamic> json) =>
       trip: json['trip'] == null
           ? null
           : Trip.fromJson(json['trip'] as Map<String, dynamic>),
+      likeCount: (json['likeCount'] as num?)?.toInt() ?? 0,
+      commentCount: (json['commentCount'] as num?)?.toInt() ?? 0,
+      shareCount: (json['shareCount'] as num?)?.toInt() ?? 0,
+      hasLiked: json['hasLiked'] as bool? ?? false,
     );
 
 Map<String, dynamic> _$TripFinalPostToJson(TripFinalPost instance) =>
@@ -234,6 +247,10 @@ Map<String, dynamic> _$TripFinalPostToJson(TripFinalPost instance) =>
       'createdAt': instance.createdAt.toIso8601String(),
       'updatedAt': instance.updatedAt.toIso8601String(),
       'trip': instance.trip,
+      'likeCount': instance.likeCount,
+      'commentCount': instance.commentCount,
+      'shareCount': instance.shareCount,
+      'hasLiked': instance.hasLiked,
     };
 
 const _$GenerationStatusEnumMap = {

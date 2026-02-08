@@ -9,7 +9,7 @@ export async function PUT(
   { params }: { params: Promise<{ inviteId: string }> }
 ) {
   const { inviteId } = await params;
-  return withLogging(async (req) => {
+  const loggedHandler = withLogging(async (req) => {
     return withRateLimit(req, async (rateLimitedReq) => {
       return withAuth(rateLimitedReq, async (authenticatedReq) => {
         try {
@@ -48,5 +48,7 @@ export async function PUT(
         }
       });
     });
-  })(request);
+  });
+  
+  return await loggedHandler(request);
 }

@@ -1,10 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { AuthService } from "./auth";
-import { AppError, AuthenticationError, RateLimitError } from "./errors";
+import { AppError, AuthenticationError } from "./errors";
 import { prisma } from "./prisma";
 
-// Rate limiting store (in production, use Redis)
-const rateLimitStore = new Map<string, { count: number; resetTime: number }>();
+// Rate limiting is now handled by src/lib/rateLimit.ts
 
 export interface AuthenticatedRequest extends NextRequest {
   user?: {
@@ -44,10 +43,11 @@ export async function withAuth(
 
     // Invalidate tokens issued before the user's last password change/update
     // If token iat is older than user's updatedAt, force re-auth
+    // Add 1 second buffer to account for timing precision differences
     if (
       payload.iat &&
       user.updatedAt &&
-      payload.iat * 1000 < user.updatedAt.getTime()
+      payload.iat * 1000 < user.updatedAt.getTime() - 1000
     ) {
       throw new AuthenticationError("Invalid or expired token");
     }
@@ -65,49 +65,37 @@ export async function withAuth(
   }
 }
 
-// Rate limiting middleware
-export async function withRateLimit(
-  request: NextRequest,
-  handler: (req: NextRequest) => Promise<NextResponse>,
-  options: { maxRequests: number; windowMs: number } = {
-    maxRequests: 100,
-    windowMs: 60000,
-  }
-): Promise<NextResponse> {
+/** Returns the authenticated user from the request or null if not authenticated. */
+export async function getOptionalUser(
+  request: NextRequest
+): Promise<{ userId: string; email: string } | null> {
   try {
-    const clientIp =
-      request.headers.get("x-forwarded-for") || request.headers.get("x-real-ip") || "unknown";
-    const key = `rate_limit:${clientIp}`;
-    const now = Date.now();
-
-    const record = rateLimitStore.get(key);
-
-    if (record) {
-      if (now < record.resetTime) {
-        // Still within the window
-        if (record.count >= options.maxRequests) {
-          throw new RateLimitError("Rate limit exceeded");
-        }
-        // Increment and save the count
-        record.count++;
-        rateLimitStore.set(key, record);
-      } else {
-        // Window expired, reset
-        rateLimitStore.set(key, {
-          count: 1,
-          resetTime: now + options.windowMs,
-        });
-      }
-    } else {
-      // First request, initialize
-      rateLimitStore.set(key, { count: 1, resetTime: now + options.windowMs });
+    const authHeader = request.headers.get("authorization");
+    if (!authHeader?.startsWith("Bearer ")) return null;
+    const token = authHeader.substring(7);
+    const payload = AuthService.verifyAccessToken(token);
+    if (!payload) return null;
+    const user = await prisma.user.findUnique({
+      where: { id: payload.userId },
+      select: { id: true, email: true, updatedAt: true },
+    });
+    if (!user) return null;
+    if (
+      payload.iat &&
+      user.updatedAt &&
+      payload.iat * 1000 < user.updatedAt.getTime() - 1000
+    ) {
+      return null;
     }
-
-    return await handler(request);
-  } catch (error) {
-    return handleApiError(error);
+    return { userId: user.id, email: user.email };
+  } catch {
+    return null;
   }
 }
+
+// Rate limiting middleware
+// Re-export from centralized rate limit module
+export { withRateLimit, withEngagementRateLimit } from "./rateLimit";
 
 // Input validation middleware
 export function withValidation<T>(

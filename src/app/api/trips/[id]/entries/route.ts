@@ -9,6 +9,8 @@ import {
   PlaceResponse,
 } from "@/types/api";
 import { serializePlace } from "@/lib/place";
+import { checkLikeStatus } from "@/lib/services/like";
+import { EntityType } from "@prisma/client";
 
 // Create a new thread entry
 export async function POST(
@@ -500,7 +502,18 @@ export async function GET(
       orderBy: { createdAt: "asc" },
     });
 
-    const entriesResponse: TripThreadEntryResponse[] = entries.map((entry) => ({
+    const entryIds = entries.map((e) => e.id);
+    const likeStatusMap = await checkLikeStatus(
+      userId,
+      EntityType.TRIP_THREAD_ENTRY,
+      entryIds
+    );
+
+    const entriesResponse: (TripThreadEntryResponse & {
+      likeCount: number;
+      commentCount: number;
+      hasLiked: boolean;
+    })[] = entries.map((entry) => ({
       ...entry,
       gpsCoordinates: entry.gpsCoordinates
         ? ((typeof entry.gpsCoordinates === "string"
@@ -511,6 +524,9 @@ export async function GET(
           })
         : null,
       createdAt: entry.createdAt.toISOString(),
+      likeCount: entry.likeCount,
+      commentCount: entry.commentCount,
+      hasLiked: likeStatusMap[entry.id] || false,
       author: {
         ...entry.author,
         createdAt: entry.author.createdAt.toISOString(),

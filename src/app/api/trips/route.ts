@@ -15,7 +15,7 @@ import { TripStatus } from "@prisma/client";
 
 // Create a new trip
 export async function POST(request: NextRequest) {
-  return withLogging(async (req) => {
+  const loggedHandler = withLogging(async (req) => {
     return withRateLimit(
       req,
       async (rateLimitedReq) => {
@@ -380,15 +380,16 @@ export async function POST(request: NextRequest) {
             endTimer();
           }
         });
-      },
-      { maxRequests: 5, windowMs: 60000 }
+      }
     );
-  })(request);
+  });
+  
+  return await loggedHandler(request);
 }
 
 // Get user's trips
 export async function GET(request: NextRequest) {
-  return withLogging(async (req) => {
+  const loggedHandler = withLogging(async (req) => {
     return withRateLimit(req, async (rateLimitedReq) => {
       return withAuth(rateLimitedReq, async (authenticatedReq) => {
         const endTimer =
@@ -489,11 +490,12 @@ export async function GET(request: NextRequest) {
             { operation: "get_trips" },
             authenticatedReq.user?.userId
           );
-          throw error;
+          return handleApiError(error);
         } finally {
           endTimer();
         }
       });
     });
-  })(request);
+  });
+  return await loggedHandler(request);
 }
