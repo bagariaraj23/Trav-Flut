@@ -3,6 +3,21 @@ import 'package:tripthread/models/user.dart';
 import 'package:tripthread/services/api_service.dart';
 import 'package:tripthread/services/storage_service.dart';
 
+/// Result of Google sign-in: success (logged in), email not found (go to signup), or failure.
+sealed class GoogleSignInResult {}
+
+class GoogleSignInSuccess extends GoogleSignInResult {}
+
+class GoogleSignInEmailNotFound extends GoogleSignInResult {
+  final String? email;
+  GoogleSignInEmailNotFound([this.email]);
+}
+
+class GoogleSignInFailure extends GoogleSignInResult {
+  final String message;
+  GoogleSignInFailure(this.message);
+}
+
 class AuthProvider extends ChangeNotifier {
   final ApiService _apiService;
   final StorageService _storageService;
@@ -32,6 +47,9 @@ class AuthProvider extends ChangeNotifier {
   bool get isLoading => _isLoading;
   bool get isAuthenticated => _currentUser != null;
   String? get error => _error;
+  /// True when user is authenticated but must complete profile (username + password) before full access.
+  bool get requiresProfileCompletion =>
+      _currentUser != null && (_currentUser!.profileComplete == false);
 
   Future<void> _initializeAuth() async {
     // Skip initialization if already in progress or user is already authenticated
@@ -229,6 +247,53 @@ class AuthProvider extends ChangeNotifier {
     }
   }
 
+  Future<bool> completeProfile({
+    required String username,
+    required String password,
+    String? name,
+  }) async {
+    try {
+      _setLoadingState(true);
+      _clearError();
+      final response = await _apiService.completeProfile(
+        username: username,
+        password: password,
+        name: name,
+      );
+      if (response.success && response.data != null) {
+        final authData = response.data!;
+        await _storageService.saveTokens(
+          accessToken: authData.accessToken,
+          refreshToken: authData.refreshToken,
+          userId: authData.user.id,
+        );
+        _currentUser = authData.user;
+        routingNotifier.notifyListeners();
+        notifyListeners();
+        _setLoadingState(false);
+        return true;
+      } else if (response.error == 'Profile already complete') {
+        // Backend says profile is complete; refresh user and redirect
+        final userResponse = await _apiService.getCurrentUser();
+        if (userResponse.success && userResponse.data != null) {
+          _currentUser = userResponse.data!.copyWith(profileComplete: true);
+          routingNotifier.notifyListeners();
+          notifyListeners();
+          _setLoadingState(false);
+          return true;
+        }
+      }
+      _setError(response.error ?? 'Failed to complete profile.');
+      _setLoadingState(false);
+      return false;
+    } catch (e) {
+      debugPrint('[AuthProvider] completeProfile catch error: $e');
+      _setError('Network error. Please try again.');
+      _setLoadingState(false);
+      return false;
+    }
+  }
+
   Future<bool> deleteAccount() async {
     try {
       debugPrint('[AuthProvider] Delete account called');
@@ -341,6 +406,67 @@ class AuthProvider extends ChangeNotifier {
       _setError('Network error. Please check your connection and try again.');
       _setLoadingState(false);
       debugPrint('Reset password error: $e');
+      return false;
+    }
+  }
+
+  /// Sign in with Google idToken. Returns [GoogleSignInSuccess], [GoogleSignInEmailNotFound] (navigate to signup), or [GoogleSignInFailure].
+  Future<GoogleSignInResult> signInWithGoogle(String idToken) async {
+    try {
+      _setLoadingState(true);
+      _clearError();
+      final result = await _apiService.signInWithGoogle(idToken);
+      final response = result.response;
+      final emailFromError = result.emailFromError;
+
+      if (response.success && response.data != null) {
+        final authData = response.data!;
+        await _storageService.saveTokens(
+          accessToken: authData.accessToken,
+          refreshToken: authData.refreshToken,
+          userId: authData.user.id,
+        );
+        _currentUser = authData.user;
+        routingNotifier.notifyListeners();
+        notifyListeners();
+        _setLoadingState(false);
+        return GoogleSignInSuccess();
+      }
+
+      if (response.error == 'EMAIL_NOT_FOUND') {
+        _setLoadingState(false);
+        return GoogleSignInEmailNotFound(emailFromError);
+      }
+
+      _setError(response.error ?? 'Sign-in failed. Try again.');
+      _setLoadingState(false);
+      return GoogleSignInFailure(response.error ?? 'Sign-in failed. Try again.');
+    } catch (e) {
+      debugPrint('[AuthProvider] signInWithGoogle catch error: $e');
+      _setError('Network error. Please check your connection and try again.');
+      _setLoadingState(false);
+      return GoogleSignInFailure('Network error. Please check your connection and try again.');
+    }
+  }
+
+  Future<bool> linkGoogle(String idToken) async {
+    try {
+      _clearError();
+      final response = await _apiService.linkGoogle(idToken);
+      if (response.success) {
+        final userResponse = await _apiService.getCurrentUser();
+        if (userResponse.success && userResponse.data != null && _currentUser != null) {
+          _currentUser = userResponse.data;
+          notifyListeners();
+        }
+        return true;
+      } else {
+        _setError(response.error ?? 'Failed to link Google account.');
+        return false;
+      }
+    } catch (e) {
+      debugPrint('[AuthProvider] linkGoogle catch error: $e');
+      _setError('Network error. Please try again.');
       return false;
     }
   }

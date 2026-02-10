@@ -251,6 +251,105 @@ class ApiService {
     }
   }
 
+  /// Returns [AuthResponse] on success; on EMAIL_NOT_FOUND, [error] is set and [emailFromError] is the Google email.
+  Future<({ApiResponse<AuthResponse> response, String? emailFromError})> signInWithGoogle(String idToken) async {
+    try {
+      debugPrint('[ApiService] Sign in with Google');
+      final response = await _dio.post('/auth/google', data: {'idToken': idToken});
+      debugPrint('[ApiService] Sign in with Google response: ${response.statusCode}');
+      final data = response.data as Map<String, dynamic>?;
+      if (data == null) {
+        return (
+          response: const ApiResponse<AuthResponse>(success: false, error: 'Invalid response'),
+          emailFromError: null,
+        );
+      }
+      final authData = data['data'];
+      final apiResponse = ApiResponse<AuthResponse>(
+        success: data['success'] == true,
+        data: authData != null ? AuthResponse.fromJson(authData as Map<String, dynamic>) : null,
+        error: data['error']?.toString(),
+      );
+      final emailFromError = data['email']?.toString();
+      return (response: apiResponse, emailFromError: emailFromError);
+    } on DioException catch (e) {
+      debugPrint('[ApiService] Sign in with Google DioException: ${e.message}');
+      final body = e.response?.data;
+      final error = body is Map ? body['error']?.toString() : null;
+      final email = body is Map ? body['email']?.toString() : null;
+      return (
+        response: ApiResponse<AuthResponse>(success: false, error: error ?? 'Network error occurred'),
+        emailFromError: email,
+      );
+    } catch (e) {
+      debugPrint('[ApiService] Sign in with Google unexpected error: $e');
+      return (
+        response: const ApiResponse<AuthResponse>(success: false, error: 'An unexpected error occurred'),
+        emailFromError: null,
+      );
+    }
+  }
+
+  Future<ApiResponse<AuthResponse>> completeProfile({
+    required String username,
+    required String password,
+    String? name,
+  }) async {
+    try {
+      debugPrint('[ApiService] Complete profile');
+      final response = await _dio.post('/auth/complete-profile', data: {
+        'username': username,
+        'password': password,
+        if (name != null && name.isNotEmpty) 'name': name,
+      });
+      debugPrint('[ApiService] Complete profile response: ${response.statusCode}');
+      final data = response.data;
+      return ApiResponse<AuthResponse>(
+        success: data['success'] == true,
+        data: data['data'] != null ? AuthResponse.fromJson(data['data']) : null,
+        error: data['error'],
+      );
+    } on DioException catch (e) {
+      debugPrint('[ApiService] Complete profile DioException: ${e.message}');
+      return ApiResponse<AuthResponse>(
+        success: false,
+        error: e.response?.data['error'] ?? 'Network error occurred',
+      );
+    } catch (e) {
+      debugPrint('[ApiService] Complete profile unexpected error: $e');
+      return ApiResponse<AuthResponse>(
+        success: false,
+        error: 'An unexpected error occurred',
+      );
+    }
+  }
+
+  Future<ApiResponse<void>> linkGoogle(String idToken) async {
+    try {
+      debugPrint('[ApiService] Link Google');
+      final response = await _dio.post('/auth/link-google', data: {'idToken': idToken});
+      debugPrint('[ApiService] Link Google response: ${response.statusCode}');
+      final data = response.data;
+      return ApiResponse<void>(
+        success: data['success'] == true,
+        error: data['error'],
+        message: data['message'],
+      );
+    } on DioException catch (e) {
+      debugPrint('[ApiService] Link Google DioException: ${e.message}');
+      return ApiResponse<void>(
+        success: false,
+        error: e.response?.data['error'] ?? 'Network error occurred',
+      );
+    } catch (e) {
+      debugPrint('[ApiService] Link Google unexpected error: $e');
+      return ApiResponse<void>(
+        success: false,
+        error: 'An unexpected error occurred',
+      );
+    }
+  }
+
   Future<ApiResponse<void>> logout() async {
     try {
       debugPrint('[ApiService] Logout called');

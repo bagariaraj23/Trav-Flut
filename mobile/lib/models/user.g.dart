@@ -20,6 +20,7 @@ User _$UserFromJson(Map<String, dynamic> json) => User(
       ? null
       : DateTime.parse(json['deletedAt'] as String),
   deleteMeta: json['deleteMeta'] as Map<String, dynamic>?,
+  profileComplete: json['profileComplete'] as bool?,
 );
 
 Map<String, dynamic> _$UserToJson(User instance) => <String, dynamic>{
@@ -34,6 +35,7 @@ Map<String, dynamic> _$UserToJson(User instance) => <String, dynamic>{
   'updatedAt': instance.updatedAt.toIso8601String(),
   'deletedAt': instance.deletedAt?.toIso8601String(),
   'deleteMeta': instance.deleteMeta,
+  'profileComplete': instance.profileComplete,
 };
 
 UserStats _$UserStatsFromJson(Map<String, dynamic> json) => UserStats(
