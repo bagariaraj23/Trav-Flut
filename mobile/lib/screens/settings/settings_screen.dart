@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
 import 'package:tripthread/providers/auth_provider.dart';
+import 'package:tripthread/services/google_sign_in_service.dart';
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
@@ -104,6 +105,75 @@ class SettingsScreen extends StatelessWidget {
             body: ListView(
               children: [
                 const SizedBox(height: 16),
+                const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 16),
+                  child: Text(
+                    'Linked accounts',
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                      color: Colors.grey,
+                    ),
+                  ),
+                ),
+                _buildSettingsTile(
+                  context: context,
+                  icon: Icons.link,
+                  title: 'Link Google account',
+                  onTap: () async {
+                    final googleSignIn = context.read<GoogleSignInService>();
+                    final result = await googleSignIn.signIn();
+                    if (!context.mounted) return;
+                    final idToken = result is GoogleSignInNativeSuccess
+                        ? result.idToken
+                        : null;
+                    if (idToken == null) {
+                      if (result is GoogleSignInNativeCancelled) return;
+                      if (result is GoogleSignInNativeDeveloperError) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text(
+                              'Google Sign-In not configured. Check SHA-1 and OAuth client.',
+                            ),
+                            backgroundColor: Colors.red,
+                          ),
+                        );
+                        return;
+                      }
+                      if (result is GoogleSignInNativeFailure) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(result.message),
+                            backgroundColor: Colors.red,
+                          ),
+                        );
+                        return;
+                      }
+                      return;
+                    }
+                    final authProvider = context.read<AuthProvider>();
+                    final success = await authProvider.linkGoogle(idToken);
+                    if (!context.mounted) return;
+                    if (success) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Google account linked successfully.'),
+                          backgroundColor: Colors.green,
+                        ),
+                      );
+                    } else {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(
+                            authProvider.error ?? 'Failed to link Google account.',
+                          ),
+                          backgroundColor: Colors.red,
+                        ),
+                      );
+                    }
+                  },
+                ),
+                const Divider(),
                 const Padding(
                   padding: EdgeInsets.symmetric(horizontal: 16),
                   child: Text(

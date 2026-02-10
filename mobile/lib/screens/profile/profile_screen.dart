@@ -376,7 +376,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // Profile photo (WhatsApp-style: photo first)
+          // Profile photo
           Center(
             child: CircleAvatar(
             radius: 48,
@@ -431,7 +431,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           ),
           ),
 
-          // Username (like phone number in WhatsApp: smaller, muted)
+          // Username
           if (hasUsername) ...[
             const SizedBox(height: 6),
             Text(

@@ -3,12 +3,20 @@ import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
 import 'package:form_field_validator/form_field_validator.dart';
 import 'package:tripthread/providers/auth_provider.dart';
+import 'package:tripthread/services/google_sign_in_service.dart';
 import 'package:tripthread/widgets/custom_text_field.dart';
 import 'package:tripthread/widgets/loading_button.dart';
 import 'package:flutter/services.dart';
 
 class SignupScreen extends StatefulWidget {
-  const SignupScreen({super.key});
+  const SignupScreen({
+    super.key,
+    this.googleEmailNotFound = false,
+    this.prefilledEmail,
+  });
+
+  final bool googleEmailNotFound;
+  final String? prefilledEmail;
 
   @override
   State<SignupScreen> createState() => _SignupScreenState();
@@ -21,6 +29,16 @@ class _SignupScreenState extends State<SignupScreen> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   bool _obscurePassword = true;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.prefilledEmail != null && widget.prefilledEmail!.isNotEmpty) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _emailController.text = widget.prefilledEmail!;
+      });
+    }
+  }
 
   @override
   void dispose() {
@@ -98,6 +116,31 @@ class _SignupScreenState extends State<SignupScreen> {
                       ),
                     ],
                   ),
+
+                  if (widget.googleEmailNotFound) ...[
+                    const SizedBox(height: 24),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                      decoration: BoxDecoration(
+                        color: Theme.of(context).colorScheme.errorContainer,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(Icons.info_outline, color: Theme.of(context).colorScheme.onErrorContainer, size: 20),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Text(
+                              'Email not found. Please sign up with the form below.',
+                              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                color: Theme.of(context).colorScheme.onErrorContainer,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
 
                   const SizedBox(height: 48),
 
@@ -281,6 +324,94 @@ class _SignupScreenState extends State<SignupScreen> {
                         onPressed: _handleSignup,
                         isLoading: authProvider.isLoading,
                         child: const Text('Create Account'),
+                      );
+                    },
+                  ),
+
+                  const SizedBox(height: 24),
+
+                  Row(
+                    children: [
+                      Expanded(child: Divider(color: Theme.of(context).colorScheme.outline)),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        child: Text(
+                          'Or continue with',
+                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color: Theme.of(context).colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                      ),
+                      Expanded(child: Divider(color: Theme.of(context).colorScheme.outline)),
+                    ],
+                  ),
+                  const SizedBox(height: 24),
+
+                  Consumer<AuthProvider>(
+                    builder: (context, authProvider, _) {
+                      return OutlinedButton.icon(
+                        onPressed: authProvider.isLoading
+                            ? null
+                            : () async {
+                                final googleSignIn = context.read<GoogleSignInService>();
+                                final nativeResult = await googleSignIn.signIn();
+                                if (!mounted) return;
+                                String? idTokenToUse;
+                                switch (nativeResult) {
+                                  case GoogleSignInNativeSuccess(:final idToken):
+                                    idTokenToUse = idToken;
+                                    break;
+                                  case GoogleSignInNativeCancelled():
+                                    return;
+                                  case GoogleSignInNativeDeveloperError():
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(
+                                        content: Text(
+                                          'Google Sign-In is not configured. Add your app SHA-1 in Firebase (Project settings → Android app → Add fingerprint) or Google Cloud (Credentials → Android OAuth client). Then download google-services.json and rebuild.',
+                                        ),
+                                        duration: Duration(seconds: 8),
+                                      ),
+                                    );
+                                    return;
+                                  case GoogleSignInNativeFailure(:final message):
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(content: Text('Google sign-in failed: $message')),
+                                    );
+                                    return;
+                                }
+                                final result = await authProvider.signInWithGoogle(idTokenToUse);
+                                if (!mounted) return;
+                                switch (result) {
+                                  case GoogleSignInSuccess():
+                                    if (authProvider.requiresProfileCompletion) {
+                                      context.go('/complete-profile');
+                                    } else {
+                                      context.go('/home');
+                                    }
+                                    break;
+                                  case GoogleSignInEmailNotFound():
+                                    // Already on signup; show message (banner is shown via route extra)
+                                    authProvider.markErrorAsShown();
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(
+                                        content: Text('Email not found. Please sign up with the form below.'),
+                                      ),
+                                    );
+                                    break;
+                                  case GoogleSignInFailure():
+                                    authProvider.markErrorAsShown();
+                                }
+                              },
+                        icon: Image.asset(
+                          'assets/images/google_logo.png',
+                          width: 20,
+                          height: 20,
+                        ),
+                        label: const Text('Continue with Google'),
+                        style: OutlinedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          minimumSize: const Size.fromHeight(48),
+                        ),
                       );
                     },
                   ),

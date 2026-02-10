@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
 import 'package:form_field_validator/form_field_validator.dart';
 import 'package:tripthread/providers/auth_provider.dart';
+import 'package:tripthread/services/google_sign_in_service.dart';
 import 'package:tripthread/widgets/custom_text_field.dart';
 import 'package:tripthread/widgets/loading_button.dart';
 
@@ -209,6 +210,96 @@ class _LoginScreenState extends State<LoginScreen> {
                       onPressed: _handleLogin,
                       isLoading: authProvider.isLoading,
                       child: const Text('Sign In'),
+                    );
+                  },
+                ),
+
+                const SizedBox(height: 24),
+
+                // Or continue with
+                Row(
+                  children: [
+                    Expanded(child: Divider(color: Theme.of(context).colorScheme.outline)),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: Text(
+                        'Or continue with',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ),
+                    Expanded(child: Divider(color: Theme.of(context).colorScheme.outline)),
+                  ],
+                ),
+                const SizedBox(height: 24),
+
+                // Google Sign In
+                Consumer<AuthProvider>(
+                  builder: (context, authProvider, _) {
+                    return OutlinedButton.icon(
+                      onPressed: authProvider.isLoading
+                          ? null
+                          : () async {
+                              final googleSignIn = context.read<GoogleSignInService>();
+                              final nativeResult = await googleSignIn.signIn();
+                              if (!mounted) return;
+                              String? idTokenToUse;
+                              switch (nativeResult) {
+                                case GoogleSignInNativeSuccess(:final idToken):
+                                  idTokenToUse = idToken;
+                                  break;
+                                case GoogleSignInNativeCancelled():
+                                  return;
+                                case GoogleSignInNativeDeveloperError():
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: const Text(
+                                        'Google Sign-In is not configured for this app. '
+                                        'Add your app SHA-1 in Firebase Console (Project settings → Your Android app → Add fingerprint) '
+                                        'or in Google Cloud Console (Credentials → Android OAuth client for com.example.tripthread). '
+                                        'Then download the new google-services.json and rebuild.',
+                                      ),
+                                      duration: const Duration(seconds: 8),
+                                    ),
+                                  );
+                                  return;
+                                case GoogleSignInNativeFailure(:final message):
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(content: Text('Google sign-in failed: $message')),
+                                  );
+                                  return;
+                              }
+                              final result = await authProvider.signInWithGoogle(idTokenToUse);
+                              if (!mounted) return;
+                              switch (result) {
+                                case GoogleSignInSuccess():
+                                  if (authProvider.requiresProfileCompletion) {
+                                    context.go('/complete-profile');
+                                  } else {
+                                    context.go('/home');
+                                  }
+                                  break;
+                                case GoogleSignInEmailNotFound(:final email):
+                                  context.go('/signup', extra: {
+                                    'googleEmailNotFound': true,
+                                    if (email != null) 'email': email,
+                                  });
+                                  break;
+                                case GoogleSignInFailure():
+                                  authProvider.markErrorAsShown();
+                              }
+                            },
+                      icon: Image.asset(
+                        'assets/images/google_logo.png',
+                        width: 20,
+                        height: 20,
+                      ),
+                      label: const Text('Continue with Google'),
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        minimumSize: const Size.fromHeight(48),
+                      ),
                     );
                   },
                 ),
