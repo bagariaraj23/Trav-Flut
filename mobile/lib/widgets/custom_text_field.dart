@@ -11,6 +11,7 @@ class CustomTextField extends StatelessWidget {
   final String? Function(String?)? validator;
   final int maxLines;
   final int? maxLength;
+  final int errorMaxLines;
   final bool enabled;
   final ValueChanged<String>? onChanged;
   final TextCapitalization textCapitalization;
@@ -27,6 +28,7 @@ class CustomTextField extends StatelessWidget {
     this.validator,
     this.maxLines = 1,
     this.maxLength,
+    this.errorMaxLines = 2,
     this.enabled = true,
     this.onChanged,
     this.textCapitalization = TextCapitalization.none,
@@ -76,6 +78,7 @@ class CustomTextField extends StatelessWidget {
           style: inputStyle,
           decoration: InputDecoration(
             hintText: hintText ?? label,
+            errorMaxLines: errorMaxLines,
             prefixIcon: prefixIcon != null ? Icon(prefixIcon) : null,
             suffixIcon: suffixIcon,
             hintStyle: TextStyle(
