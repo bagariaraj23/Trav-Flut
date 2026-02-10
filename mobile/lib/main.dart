@@ -439,15 +439,7 @@ class _TripThreadAppRouterState extends State<TripThreadAppRouter> {
           ),
           GoRoute(
             path: '/signup',
-            builder: (context, state) {
-              final extra = state.extra as Map<String, dynamic>?;
-              final googleEmailNotFound = extra?['googleEmailNotFound'] == true;
-              final email = extra?['email'] as String?;
-              return SignupScreen(
-                googleEmailNotFound: googleEmailNotFound,
-                prefilledEmail: email,
-              );
-            },
+            builder: (context, state) => const SignupScreen(),
           ),
           GoRoute(
             path: '/forgot-password',

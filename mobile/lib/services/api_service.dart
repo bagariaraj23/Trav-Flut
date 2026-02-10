@@ -251,41 +251,35 @@ class ApiService {
     }
   }
 
-  /// Returns [AuthResponse] on success; on EMAIL_NOT_FOUND, [error] is set and [emailFromError] is the Google email.
-  Future<({ApiResponse<AuthResponse> response, String? emailFromError})> signInWithGoogle(String idToken) async {
+  /// Returns [AuthResponse] on success.
+  Future<ApiResponse<AuthResponse>> signInWithGoogle(String idToken) async {
     try {
       debugPrint('[ApiService] Sign in with Google');
       final response = await _dio.post('/auth/google', data: {'idToken': idToken});
       debugPrint('[ApiService] Sign in with Google response: ${response.statusCode}');
       final data = response.data as Map<String, dynamic>?;
       if (data == null) {
-        return (
-          response: const ApiResponse<AuthResponse>(success: false, error: 'Invalid response'),
-          emailFromError: null,
-        );
+        return const ApiResponse<AuthResponse>(success: false, error: 'Invalid response');
       }
       final authData = data['data'];
-      final apiResponse = ApiResponse<AuthResponse>(
+      return ApiResponse<AuthResponse>(
         success: data['success'] == true,
         data: authData != null ? AuthResponse.fromJson(authData as Map<String, dynamic>) : null,
         error: data['error']?.toString(),
       );
-      final emailFromError = data['email']?.toString();
-      return (response: apiResponse, emailFromError: emailFromError);
     } on DioException catch (e) {
       debugPrint('[ApiService] Sign in with Google DioException: ${e.message}');
       final body = e.response?.data;
       final error = body is Map ? body['error']?.toString() : null;
-      final email = body is Map ? body['email']?.toString() : null;
-      return (
-        response: ApiResponse<AuthResponse>(success: false, error: error ?? 'Network error occurred'),
-        emailFromError: email,
+      return ApiResponse<AuthResponse>(
+        success: false,
+        error: error ?? 'Network error occurred',
       );
     } catch (e) {
       debugPrint('[ApiService] Sign in with Google unexpected error: $e');
-      return (
-        response: const ApiResponse<AuthResponse>(success: false, error: 'An unexpected error occurred'),
-        emailFromError: null,
+      return const ApiResponse<AuthResponse>(
+        success: false,
+        error: 'An unexpected error occurred',
       );
     }
   }

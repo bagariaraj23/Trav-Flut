@@ -3,15 +3,10 @@ import 'package:tripthread/models/user.dart';
 import 'package:tripthread/services/api_service.dart';
 import 'package:tripthread/services/storage_service.dart';
 
-/// Result of Google sign-in: success (logged in), email not found (go to signup), or failure.
+/// Result of Google sign-in: success (logged in) or failure.
 sealed class GoogleSignInResult {}
 
 class GoogleSignInSuccess extends GoogleSignInResult {}
-
-class GoogleSignInEmailNotFound extends GoogleSignInResult {
-  final String? email;
-  GoogleSignInEmailNotFound([this.email]);
-}
 
 class GoogleSignInFailure extends GoogleSignInResult {
   final String message;
@@ -410,14 +405,12 @@ class AuthProvider extends ChangeNotifier {
     }
   }
 
-  /// Sign in with Google idToken. Returns [GoogleSignInSuccess], [GoogleSignInEmailNotFound] (navigate to signup), or [GoogleSignInFailure].
+  /// Sign in with Google idToken. Returns [GoogleSignInSuccess] or [GoogleSignInFailure].
   Future<GoogleSignInResult> signInWithGoogle(String idToken) async {
     try {
       _setLoadingState(true);
       _clearError();
-      final result = await _apiService.signInWithGoogle(idToken);
-      final response = result.response;
-      final emailFromError = result.emailFromError;
+      final response = await _apiService.signInWithGoogle(idToken);
 
       if (response.success && response.data != null) {
         final authData = response.data!;
@@ -431,11 +424,6 @@ class AuthProvider extends ChangeNotifier {
         notifyListeners();
         _setLoadingState(false);
         return GoogleSignInSuccess();
-      }
-
-      if (response.error == 'EMAIL_NOT_FOUND') {
-        _setLoadingState(false);
-        return GoogleSignInEmailNotFound(emailFromError);
       }
 
       _setError(response.error ?? 'Sign-in failed. Try again.');

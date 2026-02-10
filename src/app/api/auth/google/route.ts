@@ -137,12 +137,42 @@ export async function POST(request: NextRequest) {
           });
         }
 
-        // 3. Email not found – do not auto-create; client should send user to signup
-        return NextResponse.json<ApiResponse>({
-          success: false,
-          error: "EMAIL_NOT_FOUND",
-          email,
-        }, { status: 200 });
+        // 3. New user: create account with Google email and send to complete-profile
+        const newUser = await prisma.user.create({
+          data: {
+            email,
+            name,
+            avatarUrl: picture,
+            username: null,
+            password: null,
+            oauthAccounts: {
+              create: {
+                provider: OAuthProvider.GOOGLE,
+                providerUserId: sub,
+              },
+            },
+          },
+          include: { oauthAccounts: true },
+        });
+        const accessToken = AuthService.generateAccessToken(newUser);
+        const refreshToken = AuthService.generateRefreshToken(newUser);
+        await AuthService.storeRefreshToken(newUser.id, refreshToken);
+        const { password: __, ...userWithoutPassword } = newUser;
+        const response: ApiResponse<AuthResponse> = {
+          success: true,
+          data: {
+            user: {
+              ...toUserProfile(userWithoutPassword),
+              profileComplete: false,
+            },
+            accessToken,
+            refreshToken,
+          },
+        };
+        return NextResponse.json({
+          ...response,
+          requiresProfileCompletion: true,
+        });
       } catch (error: unknown) {
         if (error && typeof error === "object" && "name" in error && (error as { name: string }).name === "ZodError") {
           return NextResponse.json<ApiResponse>(

@@ -4,8 +4,6 @@ export interface ApiResponse<T = any> {
   error?: string | null;
   message?: string | null;
   meta?: Record<string, any>;
-  /** Set when error is EMAIL_NOT_FOUND (e.g. Google sign-in with unknown email). */
-  email?: string;
 }
 
 export interface AuthResponse {
@@ -24,7 +22,6 @@ export interface UserProfile {
   isPrivate: boolean;
   createdAt: string;
   updatedAt: string;
-  /** Present when returned from GET /users/me; true when user has completed profile (username and, for OAuth users, password). */
   profileComplete?: boolean;
 }
 

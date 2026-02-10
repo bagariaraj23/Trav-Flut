@@ -9,14 +9,7 @@ import 'package:tripthread/widgets/loading_button.dart';
 import 'package:flutter/services.dart';
 
 class SignupScreen extends StatefulWidget {
-  const SignupScreen({
-    super.key,
-    this.googleEmailNotFound = false,
-    this.prefilledEmail,
-  });
-
-  final bool googleEmailNotFound;
-  final String? prefilledEmail;
+  const SignupScreen({super.key});
 
   @override
   State<SignupScreen> createState() => _SignupScreenState();
@@ -29,16 +22,6 @@ class _SignupScreenState extends State<SignupScreen> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   bool _obscurePassword = true;
-
-  @override
-  void initState() {
-    super.initState();
-    if (widget.prefilledEmail != null && widget.prefilledEmail!.isNotEmpty) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) _emailController.text = widget.prefilledEmail!;
-      });
-    }
-  }
 
   @override
   void dispose() {
@@ -116,31 +99,6 @@ class _SignupScreenState extends State<SignupScreen> {
                       ),
                     ],
                   ),
-
-                  if (widget.googleEmailNotFound) ...[
-                    const SizedBox(height: 24),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                      decoration: BoxDecoration(
-                        color: Theme.of(context).colorScheme.errorContainer,
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Row(
-                        children: [
-                          Icon(Icons.info_outline, color: Theme.of(context).colorScheme.onErrorContainer, size: 20),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Text(
-                              'Email not found. Please sign up with the form below.',
-                              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                color: Theme.of(context).colorScheme.onErrorContainer,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
 
                   const SizedBox(height: 48),
 
@@ -388,15 +346,6 @@ class _SignupScreenState extends State<SignupScreen> {
                                     } else {
                                       context.go('/home');
                                     }
-                                    break;
-                                  case GoogleSignInEmailNotFound():
-                                    // Already on signup; show message (banner is shown via route extra)
-                                    authProvider.markErrorAsShown();
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      const SnackBar(
-                                        content: Text('Email not found. Please sign up with the form below.'),
-                                      ),
-                                    );
                                     break;
                                   case GoogleSignInFailure():
                                     authProvider.markErrorAsShown();

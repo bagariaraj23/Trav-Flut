@@ -280,12 +280,6 @@ class _LoginScreenState extends State<LoginScreen> {
                                     context.go('/home');
                                   }
                                   break;
-                                case GoogleSignInEmailNotFound(:final email):
-                                  context.go('/signup', extra: {
-                                    'googleEmailNotFound': true,
-                                    if (email != null) 'email': email,
-                                  });
-                                  break;
                                 case GoogleSignInFailure():
                                   authProvider.markErrorAsShown();
                               }
