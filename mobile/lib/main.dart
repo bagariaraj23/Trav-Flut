@@ -394,12 +394,35 @@ class _TripThreadAppRouterState extends State<TripThreadAppRouter> {
             return '/login';
           }
 
-          // Redirect to home if authenticated and on auth pages
+          // Redirect if authenticated and on auth pages
           if (isLoggedIn &&
               (location == '/login' ||
                   location == '/signup' ||
                   location == '/forgot-password' ||
                   location.startsWith('/reset-password'))) {
+            // Check for ongoing trip to determine redirect destination
+            try {
+              final tripProvider = Provider.of<TripProvider>(
+                context,
+                listen: false,
+              );
+
+              // If trip provider has an ongoing trip, redirect to thread screen
+              if (tripProvider.hasOngoingTrip &&
+                  tripProvider.currentTrip != null) {
+                final tripId = tripProvider.currentTrip!.id;
+                debugPrint(
+                  '[GoRouter] Already logged in with ongoing trip, redirecting to /trip/$tripId/thread',
+                );
+                return '/trip/$tripId/thread';
+              }
+            } catch (e) {
+              // TripProvider might not be available yet, default to home
+              debugPrint(
+                '[GoRouter] TripProvider not available yet, defaulting to /home: $e',
+              );
+            }
+
             debugPrint('[GoRouter] Already logged in, redirecting to /home');
             return '/home';
           }

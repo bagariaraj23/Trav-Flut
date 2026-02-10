@@ -12,6 +12,7 @@ import 'package:tripthread/utils/cloudinary_utils.dart';
 import 'package:tripthread/widgets/engagement/engagement_action_bar.dart';
 import 'package:tripthread/widgets/sheets/comment_bottom_sheet.dart';
 import 'package:tripthread/widgets/sheets/share_bottom_sheet.dart';
+import 'package:tripthread/widgets/floating_trip_nav_button.dart';
 
 class HomeScreen extends StatefulWidget {
   final int initialTab;
@@ -33,10 +34,30 @@ class _HomeScreenState extends State<HomeScreen> {
     );
     _currentIndex = widget.initialTab;
     // Initialize trip provider and load pending follow requests for notifications
-    WidgetsBinding.instance.addPostFrameCallback((_) {
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
       debugPrint('[HomeScreen] Initializing providers');
-      context.read<TripProvider>().initialize();
+      final tripProvider = context.read<TripProvider>();
+      await tripProvider.initialize();
       debugPrint('[HomeScreen] TripProvider initialized');
+      
+      // Check if there's an ongoing trip and redirect to thread screen
+      // Only redirect if we're on the home route (not a deep link or intentional navigation)
+      if (mounted && tripProvider.hasOngoingTrip && tripProvider.currentTrip != null) {
+        final router = GoRouter.of(context);
+        final currentLocation = router.routerDelegate.currentConfiguration.uri.toString();
+        
+        // Only redirect if we're on /home (not /trips or other tabs)
+        // This ensures we don't interrupt user navigation
+        if (currentLocation == '/home' || currentLocation == '/') {
+          final tripId = tripProvider.currentTrip!.id;
+          debugPrint(
+            '[HomeScreen] Ongoing trip detected, redirecting to /trip/$tripId/thread',
+          );
+          router.go('/trip/$tripId/thread');
+          return;
+        }
+      }
+      
       // Load pending follow requests to update notification badge
       context.read<UserProvider>().loadPendingFollowRequests();
       debugPrint('[HomeScreen] Loading pending follow requests for notifications');
@@ -53,7 +74,13 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: _screens[_currentIndex],
+      body: Stack(
+        children: [
+          _screens[_currentIndex],
+          // Floating navigation button for ongoing trips
+          const FloatingTripNavButton(),
+        ],
+      ),
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _currentIndex,
         onTap: (index) {
