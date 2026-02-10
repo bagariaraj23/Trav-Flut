@@ -13,7 +13,7 @@ export async function GET(request: NextRequest) {
           const currentUserId = authenticatedReq.user!.userId;
           console.log(`[API] GET /users/me - User: ${currentUserId}`);
 
-          // Get current user with profile details
+          // Get current user with profile details and oauthAccounts for profileComplete
           const user = await prisma.user.findUnique({
             where: { id: currentUserId },
             select: {
@@ -26,6 +26,8 @@ export async function GET(request: NextRequest) {
               isPrivate: true,
               createdAt: true,
               updatedAt: true,
+              password: true,
+              oauthAccounts: { select: { id: true } },
             },
           });
 
@@ -46,14 +48,20 @@ export async function GET(request: NextRequest) {
             `[API] GET /users/me - Found user: ${user.username || user.name}`
           );
 
+          const profileComplete =
+            user.username != null &&
+            (user.password != null || user.oauthAccounts.length === 0);
+
+          const { password: _p, oauthAccounts: _oa, ...userFields } = user;
           const userResponse: UserProfile = {
-            ...user,
+            ...userFields,
             username: user.username ?? undefined,
             name: user.name ?? undefined,
             avatarUrl: user.avatarUrl ?? undefined,
             bio: user.bio ?? undefined,
             createdAt: user.createdAt.toISOString(),
             updatedAt: user.updatedAt.toISOString(),
+            profileComplete,
           };
 
           return NextResponse.json<ApiResponse<UserProfile>>({

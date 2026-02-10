@@ -40,6 +40,9 @@ export const config = {
   appResetWebUrl: process.env.APP_RESET_WEB_URL || "https://app.tripthread.com/reset",
   appScheme: process.env.APP_SCHEME || "travello",
 
+  // Google OAuth
+  googleOAuthClientId: process.env.GOOGLE_CLIENT_ID || "",
+
   // Security Configuration
   bcryptRounds: 12,
 

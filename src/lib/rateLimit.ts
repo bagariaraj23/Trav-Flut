@@ -93,6 +93,24 @@ export const RATE_LIMIT_PRESETS: Record<string, RateLimitConfig> = {
     keyPrefix: "rl:auth:validate",
     logEvent: false, // Less critical, no need to log
   },
+  auth_google: {
+    maxRequests: 30,
+    windowMs: 15 * 60 * 1000,
+    keyPrefix: "rl:auth:google",
+    logEvent: true,
+  },
+  auth_complete_profile: {
+    maxRequests: 20,
+    windowMs: 15 * 60 * 1000,
+    keyPrefix: "rl:auth:complete_profile",
+    logEvent: true,
+  },
+  auth_link_google: {
+    maxRequests: 10,
+    windowMs: 15 * 60 * 1000,
+    keyPrefix: "rl:auth:link_google",
+    logEvent: true,
+  },
 
   // General API endpoints
   general: {

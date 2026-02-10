@@ -46,6 +46,44 @@ export const loginSchema = z.object({
     .max(128, "Password is too long"),
 });
 
+export const authGoogleSchema = z.object({
+  idToken: z.string().min(1, "idToken is required"),
+});
+
+const usernameSchema = z
+  .string()
+  .min(3, "Username must be at least 3 characters")
+  .max(30, "Username must be less than 30 characters")
+  .regex(
+    /^[a-zA-Z0-9_]+$/,
+    "Username can only contain letters, numbers, and underscores"
+  )
+  .transform((username) => username.toLowerCase().trim());
+
+const passwordSchema = z
+  .string()
+  .min(8, "Password must be at least 8 characters")
+  .max(128, "Password must be less than 128 characters")
+  .regex(
+    /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/,
+    "Password must contain at least one lowercase letter, one uppercase letter, and one number"
+  );
+
+export const completeProfileSchema = z.object({
+  username: usernameSchema,
+  password: passwordSchema,
+  name: z
+    .string()
+    .min(2, "Name must be at least 2 characters")
+    .max(100, "Name must be less than 100 characters")
+    .regex(
+      /^[a-zA-Z\s'-]+$/,
+      "Name can only contain letters, spaces, hyphens, and apostrophes"
+    )
+    .transform((name) => name.trim())
+    .optional(),
+});
+
 export const updateProfileSchema = z.object({
   name: z
     .string()
