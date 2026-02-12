@@ -25,11 +25,14 @@ class GoogleSignInService {
   GoogleSignIn? _googleSignIn;
 
   GoogleSignIn? get _client {
-    _googleSignIn ??= GoogleSignIn(
+    if (_googleSignIn != null) return _googleSignIn;
+    final clientId = AppConfig.googleClientId;
+    if (kDebugMode && clientId.isNotEmpty) {
+      debugPrint('[GoogleSignInService] using clientId: ${clientId.substring(0, clientId.length > 20 ? 20 : clientId.length)}...');
+    }
+    _googleSignIn = GoogleSignIn(
       scopes: ['email', 'profile'],
-      serverClientId: AppConfig.googleClientId.isNotEmpty
-          ? AppConfig.googleClientId
-          : null,
+      serverClientId: clientId.isNotEmpty ? clientId : null,
     );
     return _googleSignIn;
   }
@@ -62,11 +65,17 @@ class GoogleSignInService {
     }
   }
 
+  /// Signs out and revokes OAuth consent so the next sign-in shows the account picker.
   Future<void> signOut() async {
     try {
       await _client?.signOut();
     } catch (e) {
       debugPrint('[GoogleSignInService] signOut error: $e');
+    }
+    try {
+      await _client?.disconnect();
+    } catch (e) {
+      debugPrint('[GoogleSignInService] disconnect error: $e');
     }
   }
 }

@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:tripthread/models/user.dart';
 import 'package:tripthread/services/api_service.dart';
+import 'package:tripthread/services/google_sign_in_service.dart';
 import 'package:tripthread/services/storage_service.dart';
 
 /// Result of Google sign-in: success (logged in) or failure.
@@ -16,6 +17,7 @@ class GoogleSignInFailure extends GoogleSignInResult {
 class AuthProvider extends ChangeNotifier {
   final ApiService _apiService;
   final StorageService _storageService;
+  final GoogleSignInService? _googleSignInService;
 
   User? _currentUser;
   bool _isLoading = true;
@@ -31,8 +33,10 @@ class AuthProvider extends ChangeNotifier {
   AuthProvider({
     required ApiService apiService,
     required StorageService storageService,
+    GoogleSignInService? googleSignInService,
   })  : _apiService = apiService,
-        _storageService = storageService {
+        _storageService = storageService,
+        _googleSignInService = googleSignInService {
     _apiService.setStorageService(_storageService);
     _initializeAuth();
   }
@@ -331,6 +335,7 @@ class AuthProvider extends ChangeNotifier {
       routingNotifier.notifyListeners();
       notifyListeners();
       await _storageService.clearTokens();
+      await _googleSignInService?.signOut();
     }
   }
 
@@ -505,6 +510,7 @@ class AuthProvider extends ChangeNotifier {
     _isLoading = false;
     _currentUser = null;
     await _storageService.clearTokens();
+    await _googleSignInService?.signOut();
 
     // Set error message if provided
     if (message != null) {

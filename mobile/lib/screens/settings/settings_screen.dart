@@ -133,8 +133,9 @@ class SettingsScreen extends StatelessWidget {
                         ScaffoldMessenger.of(context).showSnackBar(
                           const SnackBar(
                             content: Text(
-                              'Google Sign-In not configured. Check SHA-1 and OAuth client.',
+                              'ApiException 10: Add SHA-1 to Android OAuth client.',
                             ),
+                            duration: Duration(seconds: 10),
                             backgroundColor: Colors.red,
                           ),
                         );
