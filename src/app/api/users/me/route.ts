@@ -3,6 +3,8 @@ import { prisma } from "@/lib/prisma";
 import { withAuth, withRateLimit, withLogging } from "@/lib/middleware";
 import { ApiResponse, UserProfile } from "@/types/api";
 import { CloudinaryService } from "@/lib/cloudinary";
+import { updateProfileSchema } from "@/lib/validation";
+import { handlePrismaUniqueError } from "@/lib/prismaErrors";
 
 // Get current user profile
 export async function GET(request: NextRequest) {
@@ -107,121 +109,91 @@ export async function PUT(request: NextRequest) {
               { status: 400 }
             );
           }
-          let { name, username, bio, avatarUrl, isPrivate } = body as {
-            name?: string | null;
-            username?: string | null;
-            bio?: string | null;
-            avatarUrl?: string | null;
-            isPrivate?: boolean | string | null;
-          };
-          // Normalize name: trim; treat empty/whitespace as null
-          if (typeof name === "string") {
-            const n = name.trim();
-            name = n.length > 0 ? n : null;
+          
+          // Validate all profile data using schema (handles name, username, bio, avatarUrl, isPrivate)
+          let validatedData;
+          try {
+            validatedData = updateProfileSchema.parse(body);
+          } catch (error: any) {
+            if (error.name === "ZodError") {
+              return NextResponse.json<ApiResponse>(
+                {
+                  success: false,
+                  error: error.errors[0]?.message || "Validation error",
+                },
+                { status: 400 }
+              );
+            }
+            throw error;
           }
-          // Normalize username: trim and treat empty/whitespace as null (clear)
-          if (typeof username === "string") {
-            const u = username.trim();
-            username = u.length > 0 ? u : null;
-          }
-          // Normalize bio: trim and treat empty/whitespace as null (clear)
-          if (typeof bio === "string") {
-            const trimmed = bio.trim();
-            bio = trimmed.length > 0 ? trimmed : null;
-          }
-          // Normalize avatarUrl: treat empty/whitespace as null
-          if (typeof avatarUrl === "string") {
-            const a = avatarUrl.trim();
-            avatarUrl = a.length > 0 ? a : null;
-          }
-          // Normalize isPrivate: coerce string "true"/"false" to boolean; leave undefined if not a boolean
-          if (typeof isPrivate === "string") {
-            isPrivate = isPrivate === "true";
-          }
-          const isPrivateBool =
-            typeof isPrivate === "boolean" ? isPrivate : undefined;
-          // Validate input (name is mandatory when provided in body)
-          if ("name" in body && (name == null || name.length < 1)) {
+          
+          // Additional validation: name is mandatory when provided in body
+          if ("name" in body && (!validatedData.name || validatedData.name.length < 1)) {
             return NextResponse.json<ApiResponse>(
               { success: false, error: "Name is required" },
               { status: 400 }
             );
           }
-          if (username != null && (username.length < 3 || username.length > 30)) {
-            return NextResponse.json<ApiResponse>(
-              {
-                success: false,
-                error: "Username must be between 3 and 30 characters",
-              },
-              { status: 400 }
-            );
-          }
-          if (name != null && (name.length < 1 || name.length > 100)) {
-            return NextResponse.json<ApiResponse>(
-              {
-                success: false,
-                error: "Name must be between 1 and 100 characters",
-              },
-              { status: 400 }
-            );
-          }
-          if (bio != null && bio.length > 200) {
-            return NextResponse.json<ApiResponse>(
-              {
-                success: false,
-                error: "Bio must be 200 characters or less",
-              },
-              { status: 400 }
-            );
-          }
+          
+          const { name, username, bio, avatarUrl, isPrivate } = validatedData;
           // When updating profile details (name, username, or bio), username is required
           const hasProfileDetailUpdate =
             "name" in body || "username" in body || "bio" in body;
-          if (hasProfileDetailUpdate) {
-            const currentUser = await prisma.user.findUnique({
-              where: { id: currentUserId },
-              select: { username: true },
+          
+          // Use transaction to prevent race condition and ensure username requirement check is atomic
+          let updatedUser;
+          try {
+            updatedUser = await prisma.$transaction(async (tx) => {
+              // Check username requirement inside transaction to prevent race condition
+              if (hasProfileDetailUpdate) {
+                const currentUser = await tx.user.findUnique({
+                  where: { id: currentUserId },
+                  select: { username: true },
+                });
+                const effectiveUsername =
+                  username !== undefined ? username : currentUser?.username ?? null;
+                if (!effectiveUsername?.trim()) {
+                  throw new Error("Username is required to update profile details.");
+                }
+              }
+              
+              // Perform update inside transaction
+              return await tx.user.update({
+                where: { id: currentUserId },
+                data: {
+                  ...(name !== undefined && { name }),
+                  ...(username !== undefined && { username }),
+                  // bio is normalized above (empty string => null) so we can clear it
+                  ...(bio !== undefined && { bio }),
+                  ...(avatarUrl !== undefined && { avatarUrl }),
+                  ...(isPrivate !== undefined && { isPrivate }),
+                },
+                select: {
+                  id: true,
+                  email: true,
+                  username: true,
+                  name: true,
+                  avatarUrl: true,
+                  bio: true,
+                  isPrivate: true,
+                  createdAt: true,
+                  updatedAt: true,
+                },
+              });
             });
-            const effectiveUsername =
-              username !== undefined ? username : currentUser?.username ?? null;
-            if (!effectiveUsername?.trim()) {
+          } catch (error: any) {
+            // Handle username requirement error
+            if (error.message === "Username is required to update profile details.") {
               return NextResponse.json<ApiResponse>(
                 {
                   success: false,
-                  error:
-                    "Username is required to update profile details.",
+                  error: error.message,
                 },
                 { status: 400 }
               );
             }
-          }
-          // Remove manual username uniqueness check; just try update
-          let updatedUser;
-          try {
-            updatedUser = await prisma.user.update({
-              where: { id: currentUserId },
-              data: {
-                ...(name !== undefined && { name }),
-                ...(username !== undefined && { username }),
-                // bio is normalized above (empty string => null) so we can clear it
-                ...(bio !== undefined && { bio }),
-                ...(avatarUrl !== undefined && { avatarUrl }),
-                ...(isPrivateBool !== undefined && { isPrivate: isPrivateBool }),
-              },
-              select: {
-                id: true,
-                email: true,
-                username: true,
-                name: true,
-                avatarUrl: true,
-                bio: true,
-                isPrivate: true,
-                createdAt: true,
-                updatedAt: true,
-              },
-            });
-          } catch (error: any) {
-            const { handlePrismaUniqueError } = await import("@/lib/prismaErrors");
+            
+            // Handle unique constraint violations
             const message = handlePrismaUniqueError(error, { username: "Username" });
             if (message) {
               return NextResponse.json<ApiResponse>(

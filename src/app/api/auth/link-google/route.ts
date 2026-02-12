@@ -5,6 +5,7 @@ import { authGoogleSchema } from "@/lib/validation";
 import { ApiResponse } from "@/types/api";
 import { withRateLimit, withAuth, withLogging } from "@/lib/middleware";
 import { OAuthProvider } from "@prisma/client";
+import { handlePrismaUniqueError } from "@/lib/prismaErrors";
 
 export async function POST(request: NextRequest) {
   const loggedHandler = withLogging(async (req) => {
@@ -77,13 +78,62 @@ export async function POST(request: NextRequest) {
             );
           }
 
-          await prisma.oAuthAccount.create({
-            data: {
-              userId: currentUserId,
-              provider: OAuthProvider.GOOGLE,
-              providerUserId: sub,
-            },
-          });
+          // Use transaction to prevent race condition when creating OAuth account
+          try {
+            await prisma.$transaction(async (tx) => {
+              // Double-check inside transaction to prevent race condition
+              const existingOAuthInTx = await tx.oAuthAccount.findUnique({
+                where: {
+                  provider_providerUserId: {
+                    provider: OAuthProvider.GOOGLE,
+                    providerUserId: sub,
+                  },
+                },
+              });
+
+              if (existingOAuthInTx) {
+                if (existingOAuthInTx.userId !== currentUserId) {
+                  throw new Error("This Google account is already linked to another account.");
+                }
+                // Already linked to this user, no-op
+                return;
+              }
+
+              await tx.oAuthAccount.create({
+                data: {
+                  userId: currentUserId,
+                  provider: OAuthProvider.GOOGLE,
+                  providerUserId: sub,
+                },
+              });
+            });
+          } catch (error: any) {
+            // Handle our custom error (thrown from transaction)
+            if (error.message?.includes("already linked")) {
+              return NextResponse.json<ApiResponse>(
+                {
+                  success: false,
+                  error: "This Google account is already linked to another account.",
+                },
+                { status: 400 }
+              );
+            }
+            
+            // Handle unique constraint violation (P2002) using centralized handler
+            const uniqueError = handlePrismaUniqueError(error, {
+              provider_providerUserId: "OAuth account",
+            });
+            if (uniqueError) {
+              return NextResponse.json<ApiResponse>(
+                {
+                  success: false,
+                  error: "This Google account is already linked to another account.",
+                },
+                { status: 400 }
+              );
+            }
+            throw error;
+          }
 
           return NextResponse.json<ApiResponse>({
             success: true,

@@ -6,6 +6,7 @@ import { authGoogleSchema } from "@/lib/validation";
 import { ApiResponse, AuthResponse, UserProfile } from "@/types/api";
 import { withRateLimit, withLogging } from "@/lib/middleware";
 import { OAuthProvider } from "@prisma/client";
+import { handlePrismaUniqueError } from "@/lib/prismaErrors";
 
 function toUserProfile(user: {
   id: string;
@@ -57,21 +58,40 @@ export async function POST(request: NextRequest) {
         });
 
         if (existingByEmail) {
-          const hasGoogle = existingByEmail.oauthAccounts.some(
-            (a) => a.provider === OAuthProvider.GOOGLE && a.providerUserId === sub
-          );
-          if (!hasGoogle) {
-            await prisma.oAuthAccount.create({
-              data: {
-                userId: existingByEmail.id,
-                provider: OAuthProvider.GOOGLE,
-                providerUserId: sub,
-              },
+          // Use transaction to prevent race condition when linking OAuth account
+          const user = await prisma.$transaction(async (tx) => {
+            // Check again inside transaction to prevent race condition
+            const hasGoogle = existingByEmail.oauthAccounts.some(
+              (a) => a.provider === OAuthProvider.GOOGLE && a.providerUserId === sub
+            );
+            
+            if (!hasGoogle) {
+              try {
+                await tx.oAuthAccount.create({
+                  data: {
+                    userId: existingByEmail.id,
+                    provider: OAuthProvider.GOOGLE,
+                    providerUserId: sub,
+                  },
+                });
+              } catch (error: any) {
+                // Handle unique constraint violation (P2002) - another request may have created it
+                const uniqueError = handlePrismaUniqueError(error, {
+                  provider_providerUserId: "OAuth account",
+                });
+                if (!uniqueError) {
+                  // Not a unique constraint error, rethrow
+                  throw error;
+                }
+                // OAuth account already exists (created by another concurrent request), continue
+              }
+            }
+            
+            // Fetch user with updated OAuth accounts
+            return await tx.user.findUnique({
+              where: { id: existingByEmail.id },
+              include: { oauthAccounts: true },
             });
-          }
-          const user = await prisma.user.findUnique({
-            where: { id: existingByEmail.id },
-            include: { oauthAccounts: true },
           });
           if (!user) {
             return NextResponse.json<ApiResponse>(

@@ -106,14 +106,29 @@ export const updateProfileSchema = z.object({
     .transform((username) => username.toLowerCase().trim())
     .optional(),
   bio: z
-    .string()
-    .max(200, "Bio must be 200 characters or less")
-    .transform((bio) => bio.trim())
+    .union([
+      z.string().max(200, "Bio must be 200 characters or less").transform((bio) => {
+        const trimmed = bio.trim();
+        return trimmed.length > 0 ? trimmed : null;
+      }),
+      z.null(),
+    ])
     .optional(),
   avatarUrl: z
     .string()
     .url("Please enter a valid URL")
     .max(2048, "URL is too long")
+    .optional(),
+  isPrivate: z
+    .union([
+      z.boolean(),
+      z.string().transform((val) => {
+        // Handle string "true"/"false" from form data or query params
+        if (val === "true" || val === "1") return true;
+        if (val === "false" || val === "0") return false;
+        throw new Error("isPrivate must be a boolean or 'true'/'false' string");
+      }),
+    ])
     .optional(),
 });
 
