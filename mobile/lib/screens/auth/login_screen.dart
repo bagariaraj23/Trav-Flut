@@ -253,14 +253,13 @@ class _LoginScreenState extends State<LoginScreen> {
                                   return;
                                 case GoogleSignInNativeDeveloperError():
                                   ScaffoldMessenger.of(context).showSnackBar(
-                                    SnackBar(
-                                      content: const Text(
-                                        'Google Sign-In is not configured for this app. '
-                                        'Add your app SHA-1 in Firebase Console (Project settings → Your Android app → Add fingerprint) '
-                                        'or in Google Cloud Console (Credentials → Android OAuth client for com.example.tripthread). '
-                                        'Then download the new google-services.json and rebuild.',
+                                    const SnackBar(
+                                      content: Text(
+                                        'ApiException 10: Add your app\'s SHA-1 to the Android OAuth client. '
+                                        'In Android Studio: Gradle → app → signingReport. Copy SHA1. '
+                                        'Google Cloud Console → Credentials → Android client (com.example.tripthread) → Add fingerprint → paste SHA-1, Save. Rebuild app.',
                                       ),
-                                      duration: const Duration(seconds: 8),
+                                      duration: Duration(seconds: 10),
                                     ),
                                   );
                                   return;

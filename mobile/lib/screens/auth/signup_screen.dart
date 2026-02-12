@@ -325,9 +325,11 @@ class _SignupScreenState extends State<SignupScreen> {
                                     ScaffoldMessenger.of(context).showSnackBar(
                                       const SnackBar(
                                         content: Text(
-                                          'Google Sign-In is not configured. Add your app SHA-1 in Firebase (Project settings → Android app → Add fingerprint) or Google Cloud (Credentials → Android OAuth client). Then download google-services.json and rebuild.',
+                                          'ApiException 10: Add your app\'s SHA-1 to the Android OAuth client. '
+                                          'In Android Studio: Gradle → app → signingReport. Copy SHA1. '
+                                          'Google Cloud Console → Credentials → Android client (com.example.tripthread) → Add fingerprint → paste SHA-1, Save. Rebuild app.',
                                         ),
-                                        duration: Duration(seconds: 8),
+                                        duration: Duration(seconds: 10),
                                       ),
                                     );
                                     return;

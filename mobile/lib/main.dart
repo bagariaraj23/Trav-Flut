@@ -114,6 +114,7 @@ void main() async {
               final authProvider = AuthProvider(
                 apiService: apiService,
                 storageService: storageService,
+                googleSignInService: context.read<GoogleSignInService>(),
               );
               // Set up the unauthorized callback to trigger logout
               apiService.setUnauthorizedCallback(() {
