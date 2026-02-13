@@ -17,17 +17,14 @@ class SettingsScreen extends StatelessWidget {
   }) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
-    
+
     return InkWell(
       onTap: onTap,
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
         child: Row(
           children: [
-            Icon(
-              icon,
-              color: iconColor ?? colorScheme.onSurface,
-            ),
+            Icon(icon, color: iconColor ?? colorScheme.onSurface),
             const SizedBox(width: 16),
             Expanded(
               child: Text(
@@ -51,13 +48,11 @@ class SettingsScreen extends StatelessWidget {
       builder: (context, authProvider, child) {
         final theme = Theme.of(context);
         final colorScheme = theme.colorScheme;
-        
+
         if (authProvider.isLoading) {
           return Scaffold(
             body: Center(
-              child: CircularProgressIndicator(
-                color: colorScheme.primary,
-              ),
+              child: CircularProgressIndicator(color: colorScheme.primary),
             ),
           );
         }
@@ -70,9 +65,7 @@ class SettingsScreen extends StatelessWidget {
           });
           return Scaffold(
             body: Center(
-              child: CircularProgressIndicator(
-                color: colorScheme.primary,
-              ),
+              child: CircularProgressIndicator(color: colorScheme.primary),
             ),
           );
         }
@@ -130,12 +123,16 @@ class SettingsScreen extends StatelessWidget {
                     if (idToken == null) {
                       if (result is GoogleSignInNativeCancelled) return;
                       if (result is GoogleSignInNativeDeveloperError) {
+                        // Log technical details for developers, show user-friendly message
+                        debugPrint(
+                          '[SettingsScreen] Google Sign-In configuration error (SHA-1 not configured)',
+                        );
                         ScaffoldMessenger.of(context).showSnackBar(
                           const SnackBar(
                             content: Text(
-                              'ApiException 10: Add SHA-1 to Android OAuth client.',
+                              'Google Sign-In is not properly configured. Please contact support.',
                             ),
-                            duration: Duration(seconds: 10),
+                            duration: Duration(seconds: 5),
                             backgroundColor: Colors.red,
                           ),
                         );
@@ -166,7 +163,8 @@ class SettingsScreen extends StatelessWidget {
                       ScaffoldMessenger.of(context).showSnackBar(
                         SnackBar(
                           content: Text(
-                            authProvider.error ?? 'Failed to link Google account.',
+                            authProvider.error ??
+                                'Failed to link Google account.',
                           ),
                           backgroundColor: Colors.red,
                         ),
@@ -205,31 +203,37 @@ class SettingsScreen extends StatelessWidget {
                           ),
                           actions: [
                             TextButton(
-                              onPressed: () => Navigator.of(dialogContext).pop(),
+                              onPressed: () =>
+                                  Navigator.of(dialogContext).pop(),
                               child: const Text('Cancel'),
                             ),
                             TextButton(
                               onPressed: () async {
                                 Navigator.of(dialogContext).pop();
-                                final authProvider = context.read<AuthProvider>();
+                                final authProvider = context
+                                    .read<AuthProvider>();
                                 final user = authProvider.currentUser;
 
                                 if (user != null && user.email.isNotEmpty) {
-                                  final success = await authProvider.forgotPassword(
-                                    email: user.email,
-                                  );
+                                  final success = await authProvider
+                                      .forgotPassword(email: user.email);
 
                                   if (context.mounted) {
                                     if (success) {
-                                      ScaffoldMessenger.of(context).showSnackBar(
+                                      ScaffoldMessenger.of(
+                                        context,
+                                      ).showSnackBar(
                                         const SnackBar(
                                           content: Text(
-                                              'Password reset link has been sent to your email.'),
+                                            'Password reset link has been sent to your email.',
+                                          ),
                                           backgroundColor: Colors.green,
                                         ),
                                       );
                                     } else {
-                                      ScaffoldMessenger.of(context).showSnackBar(
+                                      ScaffoldMessenger.of(
+                                        context,
+                                      ).showSnackBar(
                                         SnackBar(
                                           content: Text(
                                             authProvider.error ??
@@ -245,7 +249,8 @@ class SettingsScreen extends StatelessWidget {
                                     ScaffoldMessenger.of(context).showSnackBar(
                                       const SnackBar(
                                         content: Text(
-                                            'Unable to retrieve user email. Please try again.'),
+                                          'Unable to retrieve user email. Please try again.',
+                                        ),
                                         backgroundColor: Colors.red,
                                       ),
                                     );
@@ -301,7 +306,8 @@ class SettingsScreen extends StatelessWidget {
                           ),
                           actions: [
                             TextButton(
-                              onPressed: () => Navigator.of(dialogContext).pop(),
+                              onPressed: () =>
+                                  Navigator.of(dialogContext).pop(),
                               child: const Text('Cancel'),
                             ),
                             TextButton(
@@ -318,8 +324,10 @@ class SettingsScreen extends StatelessWidget {
                                   },
                                 );
 
-                                final authProvider = context.read<AuthProvider>();
-                                final success = await authProvider.deleteAccount();
+                                final authProvider = context
+                                    .read<AuthProvider>();
+                                final success = await authProvider
+                                    .deleteAccount();
 
                                 if (context.mounted) {
                                   Navigator.of(context).pop();
@@ -327,10 +335,13 @@ class SettingsScreen extends StatelessWidget {
                                   if (success) {
                                     if (context.mounted) {
                                       context.go('/login');
-                                      ScaffoldMessenger.of(context).showSnackBar(
+                                      ScaffoldMessenger.of(
+                                        context,
+                                      ).showSnackBar(
                                         const SnackBar(
                                           content: Text(
-                                              'Your account has been deleted successfully.'),
+                                            'Your account has been deleted successfully.',
+                                          ),
                                           backgroundColor: Colors.green,
                                         ),
                                       );

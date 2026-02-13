@@ -4,6 +4,7 @@ import { AuthService } from "@/lib/auth";
 import { signupSchema } from "@/lib/validation";
 import { ApiResponse, AuthResponse } from "@/types/api";
 import { withRateLimit, withLogging, handleApiError } from "@/lib/middleware";
+import { sanitizeErrorForClient } from "@/lib/prismaErrors";
 
 export async function POST(request: NextRequest) {
   const loggedHandler = withLogging(async (req) => {
@@ -66,22 +67,28 @@ export async function POST(request: NextRequest) {
           },
         };
         return NextResponse.json(response, { status: 201 });
-      } catch (error: any) {
-        if (error.name === "ZodError") {
+      } catch (error: unknown) {
+        // Handle validation errors (safe to show to user)
+        if (error && typeof error === "object" && "name" in error && error.name === "ZodError") {
+          const zodError = error as { errors?: Array<{ message?: string }> };
           return NextResponse.json<ApiResponse>(
             {
               success: false,
-              error: error.errors[0]?.message || "Validation error",
+              error: zodError.errors?.[0]?.message || "Validation error",
             },
             { status: 400 }
           );
         }
+
+        // Sanitize error for client (logs technical details, returns user-friendly message)
+        const { message, statusCode } = sanitizeErrorForClient(error, "signup");
+
         return NextResponse.json<ApiResponse>(
           {
             success: false,
-            error: "Internal server error",
+            error: message,
           },
-          { status: 500 }
+          { status: statusCode }
         );
       }
     });

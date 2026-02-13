@@ -219,7 +219,11 @@ class _LoginScreenState extends State<LoginScreen> {
                 // Or continue with
                 Row(
                   children: [
-                    Expanded(child: Divider(color: Theme.of(context).colorScheme.outline)),
+                    Expanded(
+                      child: Divider(
+                        color: Theme.of(context).colorScheme.outline,
+                      ),
+                    ),
                     Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 16),
                       child: Text(
@@ -229,7 +233,11 @@ class _LoginScreenState extends State<LoginScreen> {
                         ),
                       ),
                     ),
-                    Expanded(child: Divider(color: Theme.of(context).colorScheme.outline)),
+                    Expanded(
+                      child: Divider(
+                        color: Theme.of(context).colorScheme.outline,
+                      ),
+                    ),
                   ],
                 ),
                 const SizedBox(height: 24),
@@ -241,7 +249,8 @@ class _LoginScreenState extends State<LoginScreen> {
                       onPressed: authProvider.isLoading
                           ? null
                           : () async {
-                              final googleSignIn = context.read<GoogleSignInService>();
+                              final googleSignIn = context
+                                  .read<GoogleSignInService>();
                               final nativeResult = await googleSignIn.signIn();
                               if (!mounted) return;
                               String? idTokenToUse;
@@ -252,24 +261,39 @@ class _LoginScreenState extends State<LoginScreen> {
                                 case GoogleSignInNativeCancelled():
                                   return;
                                 case GoogleSignInNativeDeveloperError():
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(
-                                      content: Text(
-                                        'ApiException 10: Add your app\'s SHA-1 to the Android OAuth client. '
-                                        'In Android Studio: Gradle → app → signingReport. Copy SHA1. '
-                                        'Google Cloud Console → Credentials → Android client (com.example.tripthread) → Add fingerprint → paste SHA-1, Save. Rebuild app.',
-                                      ),
-                                      duration: Duration(seconds: 10),
-                                    ),
+                                  // Log technical details for developers, show user-friendly message
+                                  debugPrint(
+                                    '[LoginScreen] Google Sign-In configuration error (SHA-1 not configured)',
                                   );
+                                  if (mounted) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(
+                                        content: Text(
+                                          'Google Sign-In is not properly configured. Please contact support or try again later.',
+                                        ),
+                                        duration: Duration(seconds: 5),
+                                      ),
+                                    );
+                                  }
                                   return;
                                 case GoogleSignInNativeFailure(:final message):
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    SnackBar(content: Text('Google sign-in failed: $message')),
+                                  // Log technical details, show generic message to user
+                                  debugPrint(
+                                    '[LoginScreen] Google Sign-In error: $message',
                                   );
+                                  if (mounted) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(
+                                        content: Text(
+                                          'Google sign-in is currently unavailable. Please try again later.',
+                                        ),
+                                      ),
+                                    );
+                                  }
                                   return;
                               }
-                              final result = await authProvider.signInWithGoogle(idTokenToUse);
+                              final result = await authProvider
+                                  .signInWithGoogle(idTokenToUse);
                               if (!mounted) return;
                               switch (result) {
                                 case GoogleSignInSuccess():

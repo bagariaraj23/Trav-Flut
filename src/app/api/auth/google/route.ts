@@ -6,7 +6,7 @@ import { authGoogleSchema } from "@/lib/validation";
 import { ApiResponse, AuthResponse, UserProfile } from "@/types/api";
 import { withRateLimit, withLogging } from "@/lib/middleware";
 import { OAuthProvider } from "@prisma/client";
-import { handlePrismaUniqueError } from "@/lib/prismaErrors";
+import { handlePrismaUniqueError, sanitizeErrorForClient } from "@/lib/prismaErrors";
 
 function toUserProfile(user: {
   id: string;
@@ -194,6 +194,7 @@ export async function POST(request: NextRequest) {
           requiresProfileCompletion: true,
         });
       } catch (error: unknown) {
+        // Handle validation errors 
         if (error && typeof error === "object" && "name" in error && (error as { name: string }).name === "ZodError") {
           return NextResponse.json<ApiResponse>(
             {
@@ -203,10 +204,13 @@ export async function POST(request: NextRequest) {
             { status: 400 }
           );
         }
-        console.error("[API] POST /auth/google error:", error);
+
+        // Sanitize error for client (logs technical details, returns user-friendly message)
+        const { message, statusCode } = sanitizeErrorForClient(error, "google_oauth");
+
         return NextResponse.json<ApiResponse>(
-          { success: false, error: "Internal server error" },
-          { status: 500 }
+          { success: false, error: message },
+          { status: statusCode }
         );
       }
     });

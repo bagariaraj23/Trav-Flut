@@ -75,7 +75,20 @@ class ErrorHandler {
     String message = 'An error occurred';
 
     if (data is Map<String, dynamic> && data['error'] != null) {
-      message = data['error'];
+      final errorMessage = data['error'] as String;
+
+      // Sanitize technical error messages from backend
+      // Log technical details for debugging
+      if (_isTechnicalError(errorMessage)) {
+        debugPrint(
+          '[ErrorHandler] Technical error received from backend: $errorMessage',
+        );
+        // Don't expose technical details to users
+        message = _getUserFriendlyMessage(statusCode ?? 500, errorMessage);
+      } else {
+        // Safe to show user-friendly messages
+        message = errorMessage;
+      }
     }
 
     switch (statusCode) {
@@ -106,6 +119,53 @@ class ErrorHandler {
       default:
         return ServerException(message, statusCode: statusCode);
     }
+  }
+
+  /// Checks if an error message contains technical details that shouldn't be shown to users
+  static bool _isTechnicalError(String message) {
+    final technicalIndicators = [
+      'Internal server error:',
+      'PrismaClient',
+      'P1001', 'P1008', 'P2025', // Prisma error codes
+      'ECONNREFUSED',
+      'ENOTFOUND',
+      'SHA-1',
+      'ApiException',
+      'signingReport',
+      'OAuth client',
+      'database',
+      'connection',
+      'timeout',
+      'stack',
+      'at ',
+    ];
+
+    final lowerMessage = message.toLowerCase();
+    return technicalIndicators.any(
+      (indicator) => lowerMessage.contains(indicator.toLowerCase()),
+    );
+  }
+
+  /// Returns user-friendly message based on status code and error type
+  static String _getUserFriendlyMessage(
+    int statusCode,
+    String technicalMessage,
+  ) {
+    if (statusCode >= 500) {
+      return 'Server error. Please try again later.';
+    }
+    if (statusCode == 503) {
+      return 'Service temporarily unavailable. Please try again later.';
+    }
+    if (technicalMessage.toLowerCase().contains('database') ||
+        technicalMessage.toLowerCase().contains('connection')) {
+      return 'Unable to connect to the server. Please check your internet connection.';
+    }
+    if (technicalMessage.toLowerCase().contains('oauth') ||
+        technicalMessage.toLowerCase().contains('google')) {
+      return 'Authentication service is currently unavailable. Please try again later.';
+    }
+    return 'An error occurred. Please try again.';
   }
 
   static void logError(
