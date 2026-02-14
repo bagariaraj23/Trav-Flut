@@ -245,77 +245,97 @@ class _LoginScreenState extends State<LoginScreen> {
                 // Google Sign In
                 Consumer<AuthProvider>(
                   builder: (context, authProvider, _) {
-                    return OutlinedButton.icon(
-                      onPressed: authProvider.isLoading
-                          ? null
-                          : () async {
-                              final googleSignIn = context
-                                  .read<GoogleSignInService>();
-                              final nativeResult = await googleSignIn.signIn();
-                              if (!mounted) return;
-                              String? idTokenToUse;
-                              switch (nativeResult) {
-                                case GoogleSignInNativeSuccess(:final idToken):
-                                  idTokenToUse = idToken;
-                                  break;
-                                case GoogleSignInNativeCancelled():
-                                  return;
-                                case GoogleSignInNativeDeveloperError():
-                                  // Log technical details for developers, show user-friendly message
-                                  debugPrint(
-                                    '[LoginScreen] Google Sign-In configuration error (SHA-1 not configured)',
-                                  );
-                                  if (mounted) {
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      const SnackBar(
-                                        content: Text(
-                                          'Google Sign-In is not properly configured. Please contact support or try again later.',
-                                        ),
-                                        duration: Duration(seconds: 5),
-                                      ),
+                    return SizedBox(
+                      width: double.infinity,
+                      child: OutlinedButton.icon(
+                        onPressed: authProvider.isLoading
+                            ? null
+                            : () async {
+                                final googleSignIn = context
+                                    .read<GoogleSignInService>();
+                                final nativeResult = await googleSignIn
+                                    .signIn();
+                                if (!mounted) return;
+                                String? idTokenToUse;
+                                switch (nativeResult) {
+                                  case GoogleSignInNativeSuccess(
+                                    :final idToken,
+                                  ):
+                                    idTokenToUse = idToken;
+                                    break;
+                                  case GoogleSignInNativeCancelled():
+                                    return;
+                                  case GoogleSignInNativeDeveloperError():
+                                    // Log technical details for developers, show user-friendly message
+                                    debugPrint(
+                                      '[LoginScreen] Google Sign-In configuration error (SHA-1 not configured)',
                                     );
-                                  }
-                                  return;
-                                case GoogleSignInNativeFailure(:final message):
-                                  // Log technical details, show generic message to user
-                                  debugPrint(
-                                    '[LoginScreen] Google Sign-In error: $message',
-                                  );
-                                  if (mounted) {
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      const SnackBar(
-                                        content: Text(
-                                          'Google sign-in is currently unavailable. Please try again later.',
+                                    if (mounted) {
+                                      ScaffoldMessenger.of(
+                                        context,
+                                      ).showSnackBar(
+                                        const SnackBar(
+                                          content: Text(
+                                            'Google Sign-In is not properly configured. Please contact support or try again later.',
+                                          ),
+                                          duration: Duration(seconds: 5),
                                         ),
-                                      ),
+                                      );
+                                    }
+                                    return;
+                                  case GoogleSignInNativeFailure(
+                                    :final message,
+                                  ):
+                                    // Log technical details, show generic message to user
+                                    debugPrint(
+                                      '[LoginScreen] Google Sign-In error: $message',
                                     );
-                                  }
-                                  return;
-                              }
-                              final result = await authProvider
-                                  .signInWithGoogle(idTokenToUse);
-                              if (!mounted) return;
-                              switch (result) {
-                                case GoogleSignInSuccess():
-                                  if (authProvider.requiresProfileCompletion) {
-                                    context.go('/complete-profile');
-                                  } else {
-                                    context.go('/home');
-                                  }
-                                  break;
-                                case GoogleSignInFailure():
-                                  authProvider.markErrorAsShown();
-                              }
-                            },
-                      icon: Image.asset(
-                        'assets/images/google_logo.png',
-                        width: 20,
-                        height: 20,
-                      ),
-                      label: const Text('Continue with Google'),
-                      style: OutlinedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                        minimumSize: const Size.fromHeight(48),
+                                    if (mounted) {
+                                      ScaffoldMessenger.of(
+                                        context,
+                                      ).showSnackBar(
+                                        const SnackBar(
+                                          content: Text(
+                                            'Google sign-in is currently unavailable. Please try again later.',
+                                          ),
+                                        ),
+                                      );
+                                    }
+                                    return;
+                                }
+                                final result = await authProvider
+                                    .signInWithGoogle(idTokenToUse);
+                                if (!mounted) return;
+                                switch (result) {
+                                  case GoogleSignInSuccess():
+                                    if (authProvider
+                                        .requiresProfileCompletion) {
+                                      context.go('/complete-profile');
+                                    } else {
+                                      context.go('/home');
+                                    }
+                                    break;
+                                  case GoogleSignInFailure():
+                                    authProvider.markErrorAsShown();
+                                }
+                              },
+                        icon: Image.asset(
+                          'assets/images/google_logo.png',
+                          width: 20,
+                          height: 20,
+                          errorBuilder: (context, error, stackTrace) {
+                            // Fallback to icon if image not found
+                            return const Icon(Icons.login, size: 20);
+                          },
+                        ),
+                        label: const Text('Continue with Google'),
+                        style: OutlinedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(
+                            vertical: 12,
+                            horizontal: 16,
+                          ),
+                          minimumSize: const Size.fromHeight(48),
+                        ),
                       ),
                     );
                   },

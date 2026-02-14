@@ -3,12 +3,13 @@ import { prisma } from "@/lib/prisma";
 import { AuthService } from "@/lib/auth";
 import { loginSchema } from "@/lib/validation";
 import { ApiResponse, AuthResponse } from "@/types/api";
-import { withRateLimit, withLogging, handleApiError } from "@/lib/middleware";
+import { withRateLimit, withLogging, withCors, handleApiError } from "@/lib/middleware";
 import { sanitizeErrorForClient } from "@/lib/prismaErrors";
 
 export async function POST(request: NextRequest) {
-  const loggedHandler = withLogging(async (req) => {
-    return await withRateLimit(req, "auth_login", async (rateLimitedReq) => {
+  return await withCors(async (req) => {
+    const loggedHandler = withLogging(async (loggedReq) => {
+      return await withRateLimit(loggedReq, "auth_login", async (rateLimitedReq) => {
       try {
         const body = await rateLimitedReq.json();
 
@@ -99,8 +100,8 @@ export async function POST(request: NextRequest) {
           { status: statusCode }
         );
       }
+      });
     });
-  });
-
-  return await loggedHandler(request);
+    return await loggedHandler(req);
+  })(request);
 }
