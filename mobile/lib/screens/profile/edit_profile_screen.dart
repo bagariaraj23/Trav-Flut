@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
-import 'package:form_field_validator/form_field_validator.dart';
 import 'package:tripthread/providers/auth_provider.dart';
 import 'package:tripthread/providers/user_provider.dart';
 import 'package:tripthread/services/media_service.dart';
+import 'package:tripthread/utils/validators.dart';
 import 'package:tripthread/widgets/custom_text_field.dart';
 import 'package:tripthread/widgets/loading_button.dart';
 
@@ -128,7 +128,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     if (currentUser == null) return;
 
     final nameTrimmed = _nameController.text.trim();
-    final usernameTrimmed = _usernameController.text.trim();
+    final usernameTrimmed = Validators.normalizeUsernameToAscii(_usernameController.text.trim());
     final bioTrimmed = _bioController.text.trim();
     // Name and username required by validators. Send username so backend can enforce when editing details. Bio: '' when empty so backend clears it.
     final success = await userProvider.updateProfile(
@@ -307,23 +307,26 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
 
                 const SizedBox(height: 16),
 
-                // Username Field (required when editing profile details)
+                // Username Field (required when editing profile details; validate after normalizing)
                 CustomTextField(
                   controller: _usernameController,
                   label: 'Username',
                   prefixIcon: Icons.alternate_email,
-                  validator: MultiValidator([
-                    RequiredValidator(errorText: 'Username is required'),
-                    MinLengthValidator(
-                      3,
-                      errorText: 'Username must be at least 3 characters',
-                    ),
-                    PatternValidator(
-                      RegExp(r'^[a-zA-Z0-9_]+$'),
-                      errorText:
-                          'Username can only contain letters, numbers, and underscores',
-                    ),
-                  ]).call,
+                  validator: (value) {
+                    final normalized =
+                        Validators.normalizeUsernameToAscii(value?.trim() ?? '');
+                    if (normalized.isEmpty) return 'Username is required';
+                    if (normalized.length < 3) {
+                      return 'Username must be at least 3 characters';
+                    }
+                    if (normalized.length > 30) {
+                      return 'Username must be less than 30 characters';
+                    }
+                    if (!RegExp(r'^[a-zA-Z0-9_]+$').hasMatch(normalized)) {
+                      return 'Username can only contain letters, numbers, and underscores';
+                    }
+                    return null;
+                  },
                   maxLength: 30,
                 ),
 

@@ -442,7 +442,8 @@ class AuthProvider extends ChangeNotifier {
     }
   }
 
-  Future<bool> linkGoogle(String idToken) async {
+  /// Links Google account to current user. Returns success message to show (e.g. "Google account linked successfully." or "Already linked."), or null on failure (use [error] for message).
+  Future<String?> linkGoogle(String idToken) async {
     try {
       _clearError();
       final response = await _apiService.linkGoogle(idToken);
@@ -452,15 +453,15 @@ class AuthProvider extends ChangeNotifier {
           _currentUser = userResponse.data;
           notifyListeners();
         }
-        return true;
+        return response.message ?? 'Google account linked successfully.';
       } else {
         _setError(response.error ?? 'Failed to link Google account.');
-        return false;
+        return null;
       }
     } catch (e) {
       debugPrint('[AuthProvider] linkGoogle catch error: $e');
       _setError('Network error. Please try again.');
-      return false;
+      return null;
     }
   }
 

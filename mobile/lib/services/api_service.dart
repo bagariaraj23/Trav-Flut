@@ -201,15 +201,28 @@ class ApiService {
       });
 
       debugPrint('[ApiService] Signup response: ${response.statusCode}');
+      final data = response.data;
+      final success = data['success'] == true;
+      final payload = data['data'];
+      if (success && payload != null) {
+        return ApiResponse<AuthResponse>(
+          success: true,
+          data: AuthResponse.fromJson(payload),
+        );
+      }
       return ApiResponse<AuthResponse>(
-        success: response.data['success'],
-        data: AuthResponse.fromJson(response.data['data']),
+        success: false,
+        error: data['error'] ?? data['message'] ?? 'Signup failed. Please try again.',
       );
     } on DioException catch (e) {
       debugPrint('[ApiService] Signup DioException: ${e.message}');
+      final body = e.response?.data;
+      final errorMsg = body is Map
+          ? (body['error'] ?? body['message'] ?? 'Network error occurred')
+          : 'Network error occurred';
       return ApiResponse<AuthResponse>(
         success: false,
-        error: e.response?.data['error'] ?? 'Network error occurred',
+        error: errorMsg is String ? errorMsg : 'Network error occurred',
       );
     } catch (e) {
       debugPrint('[ApiService] Signup unexpected error: $e');

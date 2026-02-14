@@ -14,6 +14,7 @@ class CustomTextField extends StatelessWidget {
   final int errorMaxLines;
   final bool enabled;
   final ValueChanged<String>? onChanged;
+  final VoidCallback? onTap;
   final TextCapitalization textCapitalization;
 
   const CustomTextField({
@@ -31,6 +32,7 @@ class CustomTextField extends StatelessWidget {
     this.errorMaxLines = 2,
     this.enabled = true,
     this.onChanged,
+    this.onTap,
     this.textCapitalization = TextCapitalization.none,
   });
 
@@ -74,6 +76,7 @@ class CustomTextField extends StatelessWidget {
           maxLength: maxLength,
           enabled: enabled,
           onChanged: onChanged,
+          onTap: onTap,
           textCapitalization: textCapitalization,
           style: inputStyle,
           decoration: InputDecoration(

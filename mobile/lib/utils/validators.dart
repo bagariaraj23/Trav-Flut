@@ -1,19 +1,28 @@
 class Validators {
+  /// Strip invisible/control chars from email (paste, keyboard suggestions).
+  /// Use before sending email to API so server sees the same canonical value.
+  static String normalizeEmail(String value) {
+    final trimmed = value.trim().toLowerCase();
+    // Remove zero-width space, zero-width non-joiner, zero-width joiner, BOM, soft hyphen
+    return trimmed.replaceAll(RegExp('[\u200B-\u200D\uFEFF\u00AD]'), '');
+  }
+
   // Email validation
   static String? validateEmail(String? value) {
     if (value == null || value.isEmpty) {
       return 'Email is required';
     }
-    
+
+    final normalized = normalizeEmail(value);
     final emailRegex = RegExp(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$');
-    if (!emailRegex.hasMatch(value)) {
+    if (!emailRegex.hasMatch(normalized)) {
       return 'Please enter a valid email address';
     }
-    
-    if (value.length > 255) {
+
+    if (normalized.length > 255) {
       return 'Email must be less than 255 characters';
     }
-    
+
     return null;
   }
 
@@ -72,23 +81,40 @@ class Validators {
     return null;
   }
 
-  // Username validation
+  /// Replaces Unicode lookalikes (e.g. Cyrillic) with ASCII so "kunal1234"
+  /// from any keyboard is accepted. Use when submitting username to API.
+  static String normalizeUsernameToAscii(String value) {
+    const replacements = {
+      'а': 'a', 'е': 'e', 'о': 'o', 'р': 'p', 'с': 'c', 'у': 'y', 'х': 'x',
+      'і': 'i', 'ј': 'j', 'ѕ': 's', 'А': 'A', 'Е': 'E', 'О': 'O', 'Р': 'P',
+      'С': 'C', 'У': 'Y', 'Х': 'X', 'І': 'I', 'Ј': 'J', 'Ѕ': 'S', 'α': 'a',
+      'в': 'v', 'н': 'h', 'т': 't',
+    };
+    String result = value;
+    for (final e in replacements.entries) {
+      result = result.replaceAll(e.key, e.value);
+    }
+    return result;
+  }
+
+  // Username validation (validates after normalizing so pasted/autocomplete text works)
   static String? validateUsername(String? value) {
     if (value == null || value.isEmpty) {
       return null; // Username is optional
     }
     
     final trimmed = value.trim();
-    if (trimmed.length < 3) {
+    final normalized = normalizeUsernameToAscii(trimmed);
+    if (normalized.length < 3) {
       return 'Username must be at least 3 characters';
     }
     
-    if (trimmed.length > 30) {
+    if (normalized.length > 30) {
       return 'Username must be less than 30 characters';
     }
     
     final usernameRegex = RegExp(r'^[a-zA-Z0-9_]+$');
-    if (!usernameRegex.hasMatch(trimmed)) {
+    if (!usernameRegex.hasMatch(normalized)) {
       return 'Username can only contain letters, numbers, and underscores';
     }
     

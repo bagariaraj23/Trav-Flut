@@ -46,20 +46,31 @@ export async function POST(request: NextRequest) {
                 providerUserId: sub,
               },
             },
-            include: { user: true },
+            include: { user: { select: { id: true, deletedAt: true } } },
           });
 
           if (existingOAuth && existingOAuth.userId !== currentUserId) {
-            return NextResponse.json<ApiResponse>(
-              {
-                success: false,
-                error: "This Google account is already linked to another account.",
-              },
-              { status: 400 }
-            );
-          }
-
-          if (existingOAuth && existingOAuth.userId === currentUserId) {
+            // If the other account is soft-deleted (e.g. reclaimed by signup), free the OAuth link so we can link to current user.
+            if (existingOAuth.user?.deletedAt != null) {
+              await prisma.oAuthAccount.delete({
+                where: {
+                  provider_providerUserId: {
+                    provider: OAuthProvider.GOOGLE,
+                    providerUserId: sub,
+                  },
+                },
+              });
+              // Fall through to create link for current user (after email check).
+            } else {
+              return NextResponse.json<ApiResponse>(
+                {
+                  success: false,
+                  error: "This Google account is already linked to another account.",
+                },
+                { status: 400 }
+              );
+            }
+          } else if (existingOAuth && existingOAuth.userId === currentUserId) {
             return NextResponse.json<ApiResponse>({
               success: true,
               data: null,
@@ -67,7 +78,11 @@ export async function POST(request: NextRequest) {
             });
           }
 
-          if (googleEmail !== currentUser.email.toLowerCase()) {
+          const accountEmailLower = currentUser.email.toLowerCase();
+          const isAccountGoogleEmail =
+            accountEmailLower.endsWith("@gmail.com") ||
+            accountEmailLower.endsWith("@googlemail.com");
+          if (isAccountGoogleEmail && googleEmail !== accountEmailLower) {
             return NextResponse.json<ApiResponse>(
               {
                 success: false,

@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:form_field_validator/form_field_validator.dart';
 import 'package:tripthread/providers/auth_provider.dart';
 import 'package:tripthread/services/google_sign_in_service.dart';
+import 'package:tripthread/utils/validators.dart';
 import 'package:tripthread/widgets/custom_text_field.dart';
 import 'package:tripthread/widgets/loading_button.dart';
 import 'package:flutter/services.dart';
@@ -36,11 +37,16 @@ class _SignupScreenState extends State<SignupScreen> {
     if (!_formKey.currentState!.validate()) return;
 
     final authProvider = context.read<AuthProvider>();
+    final rawUsername = _usernameController.text.trim();
+    final username = Validators.normalizeUsernameToAscii(rawUsername);
+    final rawEmail = _emailController.text;
+    final email = Validators.normalizeEmail(rawEmail);
+    debugPrint('[SignupScreen] Submitting email: "$email" (raw length=${rawEmail.length}, normalized length=${email.length})');
     final success = await authProvider.signup(
-      email: _emailController.text.trim(),
+      email: email,
       password: _passwordController.text,
       name: _nameController.text.trim(),
-      username: _usernameController.text.trim(),
+      username: username,
     );
 
     if (success && mounted) {
@@ -125,23 +131,26 @@ class _SignupScreenState extends State<SignupScreen> {
 
                   const SizedBox(height: 16),
 
-                  // Username Field
+                  // Username Field (validate after normalizing so Unicode lookalikes work)
                   CustomTextField(
                     controller: _usernameController,
                     label: 'Username',
                     prefixIcon: Icons.alternate_email,
-                    validator: MultiValidator([
-                      RequiredValidator(errorText: 'Username is required'),
-                      MinLengthValidator(
-                        3,
-                        errorText: 'Username must be at least 3 characters',
-                      ),
-                      PatternValidator(
-                        RegExp(r'^[a-zA-Z0-9_]+$'),
-                        errorText:
-                            'Username can only contain letters, numbers, and underscores',
-                      ),
-                    ]).call,
+                    validator: (value) {
+                      final normalized =
+                          Validators.normalizeUsernameToAscii(value?.trim() ?? '');
+                      if (normalized.isEmpty) return 'Username is required';
+                      if (normalized.length < 3) {
+                        return 'Username must be at least 3 characters';
+                      }
+                      if (normalized.length > 30) {
+                        return 'Username must be less than 30 characters';
+                      }
+                      if (!RegExp(r'^[a-zA-Z0-9_]+$').hasMatch(normalized)) {
+                        return 'Username can only contain letters, numbers, and underscores';
+                      }
+                      return null;
+                    },
                     onChanged: (_) {
                       final authProvider = context.read<AuthProvider>();
                       if (authProvider.error != null) {
@@ -153,7 +162,7 @@ class _SignupScreenState extends State<SignupScreen> {
 
                   const SizedBox(height: 16),
 
-                  // Email Field
+                  // Email Field (clear error on tap/focus so paste or new email doesn't show stale "email taken")
                   CustomTextField(
                     controller: _emailController,
                     label: 'Email',
@@ -163,6 +172,12 @@ class _SignupScreenState extends State<SignupScreen> {
                       RequiredValidator(errorText: 'Email is required'),
                       EmailValidator(errorText: 'Please enter a valid email'),
                     ]).call,
+                    onTap: () {
+                      final authProvider = context.read<AuthProvider>();
+                      if (authProvider.error != null) {
+                        authProvider.clearError();
+                      }
+                    },
                     onChanged: (_) {
                       final authProvider = context.read<AuthProvider>();
                       if (authProvider.error != null) {
@@ -327,7 +342,7 @@ class _SignupScreenState extends State<SignupScreen> {
                                   final googleSignIn = context
                                       .read<GoogleSignInService>();
                                   final nativeResult = await googleSignIn
-                                      .signIn();
+                                      .signInWithAccountPicker();
                                   if (!mounted) return;
                                   String? idTokenToUse;
                                   switch (nativeResult) {

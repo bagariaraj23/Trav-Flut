@@ -51,9 +51,9 @@ export async function POST(request: NextRequest) {
         const name = payload.name?.trim() || null;
         const picture = payload.picture?.trim() || null;
 
-        // 1. Lookup by email first (merge – one account per email)
-        const existingByEmail = await prisma.user.findUnique({
-          where: { email },
+        // 1. Lookup by email first (merge – one account per email). Exclude soft-deleted users.
+        const existingByEmail = await prisma.user.findFirst({
+          where: { email, deletedAt: null },
           include: { oauthAccounts: true },
         });
 
@@ -130,22 +130,104 @@ export async function POST(request: NextRequest) {
               providerUserId: sub,
             },
           },
-          include: { user: true },
+          include: { user: { select: { id: true, deletedAt: true } } },
         });
 
         if (oauthAccount) {
-          const user = oauthAccount.user;
-          const requiresProfileCompletion = !user.username;
-          const accessToken = AuthService.generateAccessToken(user);
-          const refreshToken = AuthService.generateRefreshToken(user);
-          await AuthService.storeRefreshToken(user.id, refreshToken);
-          const { password: _, ...userWithoutPassword } = user;
+          const linkedUser = oauthAccount.user;
+          // OAuth points to a deleted user → free the link and create a new account (start from zero)
+          if (linkedUser.deletedAt) {
+            await prisma.oAuthAccount.delete({
+              where: {
+                provider_providerUserId: {
+                  provider: OAuthProvider.GOOGLE,
+                  providerUserId: sub,
+                },
+              },
+            });
+            // Fall through to step 3 (create new user)
+          } else {
+            const user = await prisma.user.findUnique({
+              where: { id: linkedUser.id },
+              include: { oauthAccounts: true },
+            });
+            if (!user) {
+              return NextResponse.json<ApiResponse>(
+                { success: false, error: "User not found" },
+                { status: 500 }
+              );
+            }
+            const requiresProfileCompletion = !user.username;
+            const accessToken = AuthService.generateAccessToken(user);
+            const refreshToken = AuthService.generateRefreshToken(user);
+            await AuthService.storeRefreshToken(user.id, refreshToken);
+            const { password: _, ...userWithoutPassword } = user;
+            const response: ApiResponse<AuthResponse> = {
+              success: true,
+              data: {
+                user: {
+                  ...toUserProfile(userWithoutPassword),
+                  profileComplete: !requiresProfileCompletion,
+                },
+                accessToken,
+                refreshToken,
+              },
+            };
+            return NextResponse.json({
+              ...response,
+              requiresProfileCompletion: requiresProfileCompletion || undefined,
+            });
+          }
+        }
+
+        // 2b. Legacy: if a deleted user still has this email, free it and their OAuth so we can create a new account (start from zero)
+        const deletedByEmail = await prisma.user.findFirst({
+          where: { email, deletedAt: { not: null } },
+          select: { id: true },
+        });
+        if (deletedByEmail) {
+          await prisma.$transaction(async (tx) => {
+            await tx.user.update({
+              where: { id: deletedByEmail.id },
+              data: {
+                email: `deleted_${deletedByEmail.id}_${Date.now()}@deleted.local`,
+                username: null,
+              },
+            });
+            await tx.oAuthAccount.deleteMany({
+              where: { userId: deletedByEmail.id },
+            });
+          });
+        }
+
+        // 3. New user: create account with Google email and send to complete-profile
+        try {
+          const newUser = await prisma.user.create({
+            data: {
+              email,
+              name,
+              avatarUrl: picture,
+              username: null,
+              password: null,
+              oauthAccounts: {
+                create: {
+                  provider: OAuthProvider.GOOGLE,
+                  providerUserId: sub,
+                },
+              },
+            },
+            include: { oauthAccounts: true },
+          });
+          const accessToken = AuthService.generateAccessToken(newUser);
+          const refreshToken = AuthService.generateRefreshToken(newUser);
+          await AuthService.storeRefreshToken(newUser.id, refreshToken);
+          const { password: __, ...userWithoutPassword } = newUser;
           const response: ApiResponse<AuthResponse> = {
             success: true,
             data: {
               user: {
                 ...toUserProfile(userWithoutPassword),
-                profileComplete: !requiresProfileCompletion,
+                profileComplete: false,
               },
               accessToken,
               refreshToken,
@@ -153,46 +235,96 @@ export async function POST(request: NextRequest) {
           };
           return NextResponse.json({
             ...response,
-            requiresProfileCompletion: requiresProfileCompletion || undefined,
+            requiresProfileCompletion: true,
           });
-        }
-
-        // 3. New user: create account with Google email and send to complete-profile
-        const newUser = await prisma.user.create({
-          data: {
-            email,
-            name,
-            avatarUrl: picture,
-            username: null,
-            password: null,
-            oauthAccounts: {
-              create: {
-                provider: OAuthProvider.GOOGLE,
-                providerUserId: sub,
+        } catch (createError: unknown) {
+          // Concurrent sign-in: another request created this user; find and return them (no duplicate account)
+          const isP2002 =
+            createError &&
+            typeof createError === "object" &&
+            "code" in createError &&
+            (createError as { code: string }).code === "P2002";
+          if (isP2002) {
+            const existingByEmail = await prisma.user.findFirst({
+              where: { email, deletedAt: null },
+              include: { oauthAccounts: true },
+            });
+            if (existingByEmail) {
+              const hasGoogle = existingByEmail.oauthAccounts.some(
+                (a) => a.provider === OAuthProvider.GOOGLE && a.providerUserId === sub
+              );
+              if (!hasGoogle) {
+                try {
+                  await prisma.oAuthAccount.create({
+                    data: {
+                      userId: existingByEmail.id,
+                      provider: OAuthProvider.GOOGLE,
+                      providerUserId: sub,
+                    },
+                  });
+                } catch {
+                  // OAuth already created by concurrent request
+                }
+              }
+              const user = await prisma.user.findUnique({
+                where: { id: existingByEmail.id },
+                include: { oauthAccounts: true },
+              });
+              if (user) {
+                const accessToken = AuthService.generateAccessToken(user);
+                const refreshToken = AuthService.generateRefreshToken(user);
+                await AuthService.storeRefreshToken(user.id, refreshToken);
+                const { password: _p, ...userWithoutPassword } = user;
+                return NextResponse.json({
+                  success: true,
+                  data: {
+                    user: {
+                      ...toUserProfile(userWithoutPassword),
+                      profileComplete: !!user.username,
+                    },
+                    accessToken,
+                    refreshToken,
+                  },
+                  requiresProfileCompletion: !user.username || undefined,
+                });
+              }
+            }
+            const oauthAccount = await prisma.oAuthAccount.findUnique({
+              where: {
+                provider_providerUserId: {
+                  provider: OAuthProvider.GOOGLE,
+                  providerUserId: sub,
+                },
               },
-            },
-          },
-          include: { oauthAccounts: true },
-        });
-        const accessToken = AuthService.generateAccessToken(newUser);
-        const refreshToken = AuthService.generateRefreshToken(newUser);
-        await AuthService.storeRefreshToken(newUser.id, refreshToken);
-        const { password: __, ...userWithoutPassword } = newUser;
-        const response: ApiResponse<AuthResponse> = {
-          success: true,
-          data: {
-            user: {
-              ...toUserProfile(userWithoutPassword),
-              profileComplete: false,
-            },
-            accessToken,
-            refreshToken,
-          },
-        };
-        return NextResponse.json({
-          ...response,
-          requiresProfileCompletion: true,
-        });
+              include: { user: true },
+            });
+            if (oauthAccount && !oauthAccount.user.deletedAt) {
+              const user = await prisma.user.findUnique({
+                where: { id: oauthAccount.user.id },
+                include: { oauthAccounts: true },
+              });
+              if (user) {
+                const accessToken = AuthService.generateAccessToken(user);
+                const refreshToken = AuthService.generateRefreshToken(user);
+                await AuthService.storeRefreshToken(user.id, refreshToken);
+                const { password: _p, ...userWithoutPassword } = user;
+                return NextResponse.json({
+                  success: true,
+                  data: {
+                    user: {
+                      ...toUserProfile(userWithoutPassword),
+                      profileComplete: !!user.username,
+                    },
+                    accessToken,
+                    refreshToken,
+                  },
+                  requiresProfileCompletion: !user.username || undefined,
+                });
+              }
+            }
+          }
+          throw createError;
+        }
       } catch (error: unknown) {
         // Handle validation errors 
         if (error && typeof error === "object" && "name" in error && (error as { name: string }).name === "ZodError") {

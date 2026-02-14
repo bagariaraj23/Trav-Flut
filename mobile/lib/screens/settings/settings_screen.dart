@@ -111,11 +111,18 @@ class SettingsScreen extends StatelessWidget {
                 ),
                 _buildSettingsTile(
                   context: context,
-                  icon: Icons.link,
-                  title: 'Link Google account',
+                  icon: authProvider.currentUser?.hasGoogleLinked == true
+                      ? Icons.check_circle
+                      : Icons.link,
+                  title: authProvider.currentUser?.hasGoogleLinked == true
+                      ? 'Google account linked'
+                      : 'Link Google account',
+                  iconColor: authProvider.currentUser?.hasGoogleLinked == true
+                      ? Colors.green
+                      : null,
                   onTap: () async {
                     final googleSignIn = context.read<GoogleSignInService>();
-                    final result = await googleSignIn.signIn();
+                    final result = await googleSignIn.signInWithAccountPicker();
                     if (!context.mounted) return;
                     final idToken = result is GoogleSignInNativeSuccess
                         ? result.idToken
@@ -150,25 +157,28 @@ class SettingsScreen extends StatelessWidget {
                       return;
                     }
                     final authProvider = context.read<AuthProvider>();
-                    final success = await authProvider.linkGoogle(idToken);
+                    final message = await authProvider.linkGoogle(idToken);
                     if (!context.mounted) return;
-                    if (success) {
+                    if (message != null) {
                       ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text('Google account linked successfully.'),
+                        SnackBar(
+                          content: Text(message),
                           backgroundColor: Colors.green,
                         ),
                       );
                     } else {
+                      final errorText = authProvider.error ??
+                          'Failed to link Google account.';
                       ScaffoldMessenger.of(context).showSnackBar(
                         SnackBar(
-                          content: Text(
-                            authProvider.error ??
-                                'Failed to link Google account.',
-                          ),
+                          content: Text(errorText),
                           backgroundColor: Colors.red,
                         ),
                       );
+                      // So next tap shows account picker instead of reusing the same account
+                      if (errorText.toLowerCase().contains('already linked to another account')) {
+                        await googleSignIn.signOut();
+                      }
                     }
                   },
                 ),

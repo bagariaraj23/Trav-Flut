@@ -37,7 +37,16 @@ class GoogleSignInService {
     return _googleSignIn;
   }
 
-  /// Triggers Google Sign-In. Returns success with idToken, cancelled, developerError (code 10), or failure.
+  /// Signs out any cached Google account then triggers sign-in so the account picker
+  /// is always shown. Use this for login, signup, and "Link Google account" so the user
+  /// can choose which account to use every time.
+  Future<GoogleSignInNativeResult> signInWithAccountPicker() async {
+    await signOut();
+    return signIn();
+  }
+
+  /// Triggers Google Sign-In. May reuse the last account (no picker). Prefer
+  /// [signInWithAccountPicker] for login/signup/link so the picker is always shown.
   Future<GoogleSignInNativeResult> signIn() async {
     try {
       final account = await _client?.signIn();

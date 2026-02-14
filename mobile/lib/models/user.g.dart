@@ -21,6 +21,7 @@ User _$UserFromJson(Map<String, dynamic> json) => User(
       : DateTime.parse(json['deletedAt'] as String),
   deleteMeta: json['deleteMeta'] as Map<String, dynamic>?,
   profileComplete: json['profileComplete'] as bool?,
+  hasGoogleLinked: json['hasGoogleLinked'] as bool?,
 );
 
 Map<String, dynamic> _$UserToJson(User instance) => <String, dynamic>{
@@ -36,6 +37,7 @@ Map<String, dynamic> _$UserToJson(User instance) => <String, dynamic>{
   'deletedAt': instance.deletedAt?.toIso8601String(),
   'deleteMeta': instance.deleteMeta,
   'profileComplete': instance.profileComplete,
+  'hasGoogleLinked': instance.hasGoogleLinked,
 };
 
 UserStats _$UserStatsFromJson(Map<String, dynamic> json) => UserStats(

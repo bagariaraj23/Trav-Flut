@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
 import 'package:tripthread/providers/auth_provider.dart';
+import 'package:tripthread/utils/validators.dart';
 import 'package:tripthread/widgets/custom_text_field.dart';
 import 'package:tripthread/widgets/loading_button.dart';
 
@@ -43,8 +44,9 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
   Future<void> _handleSubmit() async {
     if (!_formKey.currentState!.validate()) return;
     final authProvider = context.read<AuthProvider>();
+    final username = Validators.normalizeUsernameToAscii(_usernameController.text.trim());
     final success = await authProvider.completeProfile(
-      username: _usernameController.text.trim(),
+      username: username,
       password: _passwordController.text,
       name: _nameController.text.trim().isEmpty
           ? null
@@ -111,12 +113,15 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
                     label: 'Username',
                     prefixIcon: Icons.alternate_email,
                     validator: (value) {
-                      final v = value?.trim() ?? '';
-                      if (v.isEmpty) return 'Username is required';
-                      if (v.length < 3) {
+                      final normalized = Validators.normalizeUsernameToAscii(value?.trim() ?? '');
+                      if (normalized.isEmpty) return 'Username is required';
+                      if (normalized.length < 3) {
                         return 'Username must be at least 3 characters';
                       }
-                      if (!RegExp(r'^[a-zA-Z0-9_]+$').hasMatch(v)) {
+                      if (normalized.length > 30) {
+                        return 'Username must be less than 30 characters';
+                      }
+                      if (!RegExp(r'^[a-zA-Z0-9_]+$').hasMatch(normalized)) {
                         return 'Username can only contain letters, numbers, and underscores';
                       }
                       return null;

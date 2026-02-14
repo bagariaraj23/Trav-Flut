@@ -23,6 +23,8 @@ export interface UserProfile {
   createdAt: string;
   updatedAt: string;
   profileComplete?: boolean;
+  /** True when the user has linked a Google account (for Settings UI). */
+  hasGoogleLinked?: boolean;
 }
 
 export interface UserStats {

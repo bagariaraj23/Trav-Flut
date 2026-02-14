@@ -254,7 +254,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                 final googleSignIn = context
                                     .read<GoogleSignInService>();
                                 final nativeResult = await googleSignIn
-                                    .signIn();
+                                    .signInWithAccountPicker();
                                 if (!mounted) return;
                                 String? idTokenToUse;
                                 switch (nativeResult) {

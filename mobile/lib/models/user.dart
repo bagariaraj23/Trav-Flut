@@ -16,6 +16,7 @@ class User {
   final DateTime? deletedAt;
   final Map<String, dynamic>? deleteMeta;
   final bool? profileComplete;
+  final bool? hasGoogleLinked;
 
   const User({
     required this.id,
@@ -30,6 +31,7 @@ class User {
     this.deletedAt,
     this.deleteMeta,
     this.profileComplete,
+    this.hasGoogleLinked,
   });
 
   factory User.fromJson(Map<String, dynamic> json) => _$UserFromJson(json);
@@ -48,6 +50,7 @@ class User {
     DateTime? deletedAt,
     Map<String, dynamic>? deleteMeta,
     bool? profileComplete,
+    bool? hasGoogleLinked,
   }) {
     return User(
       id: id ?? this.id,
@@ -62,6 +65,7 @@ class User {
       deletedAt: deletedAt ?? this.deletedAt,
       deleteMeta: deleteMeta ?? this.deleteMeta,
       profileComplete: profileComplete ?? this.profileComplete,
+      hasGoogleLinked: hasGoogleLinked ?? this.hasGoogleLinked,
     );
   }
 }

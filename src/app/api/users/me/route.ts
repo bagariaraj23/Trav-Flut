@@ -29,7 +29,7 @@ export async function GET(request: NextRequest) {
               createdAt: true,
               updatedAt: true,
               password: true,
-              oauthAccounts: { select: { id: true } },
+              oauthAccounts: { select: { id: true, provider: true } },
             },
           });
 
@@ -54,6 +54,10 @@ export async function GET(request: NextRequest) {
             user.username != null &&
             (user.password != null || user.oauthAccounts.length === 0);
 
+          const hasGoogleLinked = user.oauthAccounts.some(
+            (a) => a.provider === "GOOGLE"
+          );
+
           const { password: _p, oauthAccounts: _oa, ...userFields } = user;
           const userResponse: UserProfile = {
             ...userFields,
@@ -64,6 +68,7 @@ export async function GET(request: NextRequest) {
             createdAt: user.createdAt.toISOString(),
             updatedAt: user.updatedAt.toISOString(),
             profileComplete,
+            hasGoogleLinked,
           };
 
           return NextResponse.json<ApiResponse<UserProfile>>({
@@ -311,16 +316,17 @@ export async function DELETE(request: NextRequest) {
               where: { uploadedById: currentUserId },
             });
 
-            // Soft delete the user record itself
+            // Soft delete the user record; free email so same email can get a new account (start from zero)
+            const deletedEmail = `deleted_${currentUserId}_${Date.now()}@deleted.local`;
             await tx.user.update({
               where: { id: currentUserId },
               data: {
+                email: deletedEmail,
                 deletedAt: new Date(),
                 deleteMeta: {
                   deletedAt: new Date().toISOString(),
                   reason: "User initiated account deletion",
                 },
-                email: `deleted_${currentUserId}_${Date.now()}@deleted.local`,
                 username: null,
                 password: null,
                 avatarUrl: null,

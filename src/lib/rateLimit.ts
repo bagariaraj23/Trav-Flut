@@ -64,8 +64,8 @@ export const RATE_LIMIT_PRESETS: Record<string, RateLimitConfig> = {
     logEvent: true,
   },
   auth_signup: {
-    maxRequests: 2,
-    windowMs: 60 * 60 * 1000, // 1 hour (2 sign-ups per hour prevents spam)
+    maxRequests: 100,
+    windowMs: 60 * 60 * 1000, // 1 hour (50 sign-ups per hour per IP)
     keyPrefix: "rl:auth:signup",
     logEvent: true,
   },
