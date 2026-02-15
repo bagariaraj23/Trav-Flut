@@ -39,13 +39,17 @@ class _HomeScreenState extends State<HomeScreen> {
       final tripProvider = context.read<TripProvider>();
       await tripProvider.initialize();
       debugPrint('[HomeScreen] TripProvider initialized');
-      
+
+      // Check if widget is still mounted before using context
+      if (!mounted) return;
+
       // Check if there's an ongoing trip and redirect to thread screen
       // Only redirect if we're on the home route (not a deep link or intentional navigation)
-      if (mounted && tripProvider.hasOngoingTrip && tripProvider.currentTrip != null) {
+      if (tripProvider.hasOngoingTrip && tripProvider.currentTrip != null) {
         final router = GoRouter.of(context);
-        final currentLocation = router.routerDelegate.currentConfiguration.uri.toString();
-        
+        final currentLocation = router.routerDelegate.currentConfiguration.uri
+            .toString();
+
         // Only redirect if we're on /home (not /trips or other tabs)
         // This ensures we don't interrupt user navigation
         if (currentLocation == '/home' || currentLocation == '/') {
@@ -57,10 +61,13 @@ class _HomeScreenState extends State<HomeScreen> {
           return;
         }
       }
-      
+
       // Load pending follow requests to update notification badge
+      if (!mounted) return;
       context.read<UserProvider>().loadPendingFollowRequests();
-      debugPrint('[HomeScreen] Loading pending follow requests for notifications');
+      debugPrint(
+        '[HomeScreen] Loading pending follow requests for notifications',
+      );
     });
   }
 
@@ -408,7 +415,9 @@ class _HomeFeedScreenState extends State<HomeFeedScreen> {
                     margin: const EdgeInsets.symmetric(horizontal: 4),
                     decoration: BoxDecoration(
                       color: Theme.of(context).colorScheme.onSurface.withValues(
-                        alpha: Theme.of(context).brightness == Brightness.dark ? 0.06 : 0.03,
+                        alpha: Theme.of(context).brightness == Brightness.dark
+                            ? 0.06
+                            : 0.03,
                       ),
                       borderRadius: BorderRadius.circular(12),
                     ),
@@ -422,9 +431,14 @@ class _HomeFeedScreenState extends State<HomeFeedScreen> {
                         fit: BoxFit.cover,
                         errorBuilder: (context, error, stackTrace) {
                           return Container(
-                            color: Theme.of(context).colorScheme.onSurface.withValues(
-                        alpha: Theme.of(context).brightness == Brightness.dark ? 0.06 : 0.03,
-                      ),
+                            color: Theme.of(context).colorScheme.onSurface
+                                .withValues(
+                                  alpha:
+                                      Theme.of(context).brightness ==
+                                          Brightness.dark
+                                      ? 0.06
+                                      : 0.03,
+                                ),
                             child: const Center(
                               child: Icon(
                                 Icons.image_not_supported,
@@ -458,10 +472,10 @@ class _HomeFeedScreenState extends State<HomeFeedScreen> {
                   const SizedBox(height: 8),
                   Text(
                     post.caption!,
-                    style: Theme.of(
-                      context,
-                    ).textTheme.bodyMedium?.copyWith(
-                      color: Theme.of(context).colorScheme.onSurfaceVariant.withValues(alpha: 0.9),
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: Theme.of(
+                        context,
+                      ).colorScheme.onSurfaceVariant.withValues(alpha: 0.9),
                     ),
                   ),
                 ],
@@ -504,12 +518,13 @@ class _HomeFeedScreenState extends State<HomeFeedScreen> {
                           },
                           onLikeChanged: () {
                             // Update the post in FeedProvider with new like count
-                            final engagementProvider =
-                                context.read<EngagementProvider>();
-                            final newLikeCount =
-                                engagementProvider.getLikeCount(post.id);
-                            final newHasLiked =
-                                engagementProvider.isLiked(post.id);
+                            final engagementProvider = context
+                                .read<EngagementProvider>();
+                            final newLikeCount = engagementProvider
+                                .getLikeCount(post.id);
+                            final newHasLiked = engagementProvider.isLiked(
+                              post.id,
+                            );
 
                             // Update the post in the feed
                             final feedProvider = context.read<FeedProvider>();
@@ -517,8 +532,9 @@ class _HomeFeedScreenState extends State<HomeFeedScreen> {
                               likeCount: newLikeCount,
                               hasLiked: newHasLiked,
                             );
-                            final index = feedProvider.homeFeedPosts
-                                .indexWhere((p) => p.id == post.id);
+                            final index = feedProvider.homeFeedPosts.indexWhere(
+                              (p) => p.id == post.id,
+                            );
                             if (index >= 0) {
                               feedProvider.updatePost(index, updatedPost);
                             }
@@ -909,9 +925,7 @@ class _TripsTabState extends State<TripsTab> {
               const SizedBox(height: 16),
               Text(
                 'No Trips Yet',
-                style: Theme.of(
-                  context,
-                ).textTheme.headlineSmall?.copyWith(
+                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                   color: Theme.of(context).colorScheme.onSurfaceVariant,
                 ),
               ),
@@ -919,10 +933,10 @@ class _TripsTabState extends State<TripsTab> {
               Text(
                 'Start documenting your travel adventures',
                 textAlign: TextAlign.center,
-                style: Theme.of(
-                  context,
-                ).textTheme.bodyMedium?.copyWith(
-                  color: Theme.of(context).colorScheme.onSurfaceVariant.withValues(alpha: 0.6),
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  color: Theme.of(
+                    context,
+                  ).colorScheme.onSurfaceVariant.withValues(alpha: 0.6),
                 ),
               ),
               const SizedBox(height: 24),
@@ -1093,7 +1107,9 @@ class _TripsTabState extends State<TripsTab> {
                   top: Radius.circular(12),
                 ),
                 color: Theme.of(context).colorScheme.onSurface.withValues(
-                  alpha: Theme.of(context).brightness == Brightness.dark ? 0.06 : 0.03,
+                  alpha: Theme.of(context).brightness == Brightness.dark
+                      ? 0.06
+                      : 0.03,
                 ),
               ),
               child: () {
@@ -1151,7 +1167,9 @@ class _TripsTabState extends State<TripsTab> {
                           trip.destinations.join(', '),
                           style: Theme.of(context).textTheme.bodyMedium
                               ?.copyWith(
-                                color: Theme.of(context).colorScheme.onSurfaceVariant,
+                                color: Theme.of(
+                                  context,
+                                ).colorScheme.onSurfaceVariant,
                               ),
                           overflow: TextOverflow.ellipsis,
                           maxLines: 1,
@@ -1290,10 +1308,7 @@ class _TripsTabState extends State<TripsTab> {
           const SizedBox(width: 4),
           Text(
             text,
-            style: TextStyle(
-              color: colorScheme.onSurfaceVariant,
-              fontSize: 12,
-            ),
+            style: TextStyle(color: colorScheme.onSurfaceVariant, fontSize: 12),
           ),
         ],
       ),
@@ -1616,7 +1631,9 @@ class ProfileTab extends StatelessWidget {
                                     builder: (context) => Text(
                                       'Start documenting your adventures!',
                                       style: TextStyle(
-                                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                                        color: Theme.of(
+                                          context,
+                                        ).colorScheme.onSurfaceVariant,
                                       ),
                                     ),
                                   ),
