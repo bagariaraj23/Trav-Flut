@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:tripthread/providers/auth_provider.dart';
 import 'package:tripthread/providers/user_provider.dart';
 import 'package:tripthread/services/media_service.dart';
+import 'package:tripthread/utils/validators.dart';
 import 'package:tripthread/widgets/custom_text_field.dart';
 import 'package:tripthread/widgets/loading_button.dart';
 
@@ -15,12 +16,15 @@ class EditProfileScreen extends StatefulWidget {
 }
 
 class _EditProfileScreenState extends State<EditProfileScreen> {
+  static const int _bioMaxLength = 200;
+
   final _formKey = GlobalKey<FormState>();
   late final TextEditingController _nameController;
   late final TextEditingController _usernameController;
   late final TextEditingController _bioController;
   bool? _isPrivate;
   bool _isUploadingPhoto = false;
+  void _onBioChanged() => setState(() {});
 
   @override
   void initState() {
@@ -29,11 +33,13 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     _nameController = TextEditingController(text: user?.name ?? '');
     _usernameController = TextEditingController(text: user?.username ?? '');
     _bioController = TextEditingController(text: user?.bio ?? '');
+    _bioController.addListener(_onBioChanged);
     _isPrivate = user?.isPrivate ?? false;
   }
 
   @override
   void dispose() {
+    _bioController.removeListener(_onBioChanged);
     _nameController.dispose();
     _usernameController.dispose();
     _bioController.dispose();
@@ -113,7 +119,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   }
 
   Future<void> _handleSave() async {
-    if (!_formKey.currentState!.validate()) return;
+    if (_formKey.currentState?.validate() != true) return;
 
     final authProvider = context.read<AuthProvider>();
     final userProvider = context.read<UserProvider>();
@@ -121,15 +127,15 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
 
     if (currentUser == null) return;
 
+    final nameTrimmed = _nameController.text.trim();
+    final usernameTrimmed = Validators.normalizeUsernameToAscii(_usernameController.text.trim());
+    final bioTrimmed = _bioController.text.trim();
+    // Name and username required by validators. Send username so backend can enforce when editing details. Bio: '' when empty so backend clears it.
     final success = await userProvider.updateProfile(
       userId: currentUser.id,
-      name: _nameController.text.trim(),
-      username: _usernameController.text.trim().isEmpty
-          ? null
-          : _usernameController.text.trim(),
-      bio: _bioController.text.trim().isEmpty
-          ? null
-          : _bioController.text.trim(),
+      name: nameTrimmed,
+      username: usernameTrimmed,
+      bio: bioTrimmed.isEmpty ? '' : bioTrimmed,
       isPrivate: _isPrivate,
     );
 
@@ -182,15 +188,22 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
             },
           ),
           actions: [
-            Consumer<UserProvider>(
-              builder: (context, userProvider, child) {
-                return LoadingButton(
-                  onPressed: _handleSave,
-                  isLoading: userProvider.isLoading,
-                  style: TextButton.styleFrom(),
-                  child: const Text('Save'),
-                );
-              },
+            Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: Consumer<UserProvider>(
+                builder: (context, userProvider, child) {
+                  return LoadingButton(
+                    onPressed: _handleSave,
+                    isLoading: userProvider.isLoading,
+                    style: TextButton.styleFrom(
+                      minimumSize: Size.zero,
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                    child: const Text('Save'),
+                  );
+                },
+              ),
             ),
           ],
         ),
@@ -294,35 +307,56 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
 
                 const SizedBox(height: 16),
 
-                // Username Field
+                // Username Field (required when editing profile details; validate after normalizing)
                 CustomTextField(
                   controller: _usernameController,
                   label: 'Username',
                   prefixIcon: Icons.alternate_email,
                   validator: (value) {
-                    if (value != null && value.isNotEmpty && value.length < 3) {
+                    final normalized =
+                        Validators.normalizeUsernameToAscii(value?.trim() ?? '');
+                    if (normalized.isEmpty) return 'Username is required';
+                    if (normalized.length < 3) {
                       return 'Username must be at least 3 characters';
+                    }
+                    if (normalized.length > 30) {
+                      return 'Username must be less than 30 characters';
+                    }
+                    if (!RegExp(r'^[a-zA-Z0-9_]+$').hasMatch(normalized)) {
+                      return 'Username can only contain letters, numbers, and underscores';
                     }
                     return null;
                   },
+                  maxLength: 30,
                 ),
 
                 const SizedBox(height: 16),
 
-                // Bio Field
+                // Bio Field (200 char limit)
                 CustomTextField(
                   controller: _bioController,
                   label: 'Bio',
                   prefixIcon: Icons.info_outlined,
                   maxLines: 3,
-                  maxLength: 500,
+                  maxLength: _bioMaxLength,
                   validator: (value) {
-                    if (value != null && value.length > 500) {
-                      return 'Bio must be less than 500 characters';
+                    if (value != null && value.length > _bioMaxLength) {
+                      return 'Bio must be $_bioMaxLength characters or less';
                     }
                     return null;
                   },
                 ),
+                if (_bioController.text.length >= _bioMaxLength &&
+                    _bioController.text.isNotEmpty) ...[
+                  const SizedBox(height: 6),
+                  Text(
+                    'You have reached the maximum limit ($_bioMaxLength characters).',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Theme.of(context).colorScheme.error,
+                    ),
+                  ),
+                ],
 
                 const SizedBox(height: 24),
 

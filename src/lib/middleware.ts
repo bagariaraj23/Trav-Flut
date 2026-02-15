@@ -155,6 +155,65 @@ export function withSecurityHeaders(response: NextResponse): NextResponse {
   return response;
 }
 
+// CORS middleware - adds CORS headers to all API responses
+export function withCors(
+  handler: (req: NextRequest) => Promise<NextResponse>
+) {
+  return async (request: NextRequest): Promise<NextResponse> => {
+    const origin = request.headers.get("origin");
+    const { config } = await import("@/config/env");
+    
+    // Handle preflight OPTIONS request
+    if (request.method === "OPTIONS") {
+      const response = new NextResponse(null, { status: 204 });
+      if (origin && config.allowedOrigins.includes(origin)) {
+        response.headers.set("Access-Control-Allow-Origin", origin);
+      } else {
+        // For mobile apps or same-origin, allow all
+        response.headers.set("Access-Control-Allow-Origin", "*");
+      }
+      response.headers.set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, PATCH, OPTIONS");
+      response.headers.set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With");
+      response.headers.set("Access-Control-Allow-Credentials", "true");
+      response.headers.set("Access-Control-Max-Age", "86400");
+      return response;
+    }
+    
+    const response = await handler(request);
+    
+    // Add CORS headers to response
+    if (origin && config.allowedOrigins.includes(origin)) {
+      response.headers.set("Access-Control-Allow-Origin", origin);
+    } else if (!origin) {
+      // Mobile apps don't send origin header - allow all
+      response.headers.set("Access-Control-Allow-Origin", "*");
+    } else {
+      // Check if IP matches (for mobile apps using IP directly)
+      const requestUrl = new URL(request.url);
+      const requestHost = `${requestUrl.protocol}//${requestUrl.host}`;
+      const isAllowed = config.allowedOrigins.some(allowed => {
+        try {
+          const allowedUrl = new URL(allowed);
+          return allowedUrl.hostname === requestUrl.hostname || allowed === requestHost;
+        } catch {
+          return false;
+        }
+      });
+      if (isAllowed) {
+        response.headers.set("Access-Control-Allow-Origin", origin || "*");
+      } else {
+        response.headers.set("Access-Control-Allow-Origin", "*");
+      }
+    }
+    
+    response.headers.set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, PATCH, OPTIONS");
+    response.headers.set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With");
+    response.headers.set("Access-Control-Allow-Credentials", "true");
+    
+    return response;
+  };
+}
+
 // Request logging middleware
 export function withLogging(
   handler: (req: NextRequest) => Promise<NextResponse>

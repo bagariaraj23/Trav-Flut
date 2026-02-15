@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { AuthService } from "@/lib/auth";
 import { updateProfileSchema } from "@/lib/validation";
 import { ApiResponse, UserProfile, UserStats } from "@/types/api";
+import { handlePrismaUniqueError } from "@/lib/prismaErrors";
 
 // Get user profile
 export async function GET(
@@ -175,7 +176,6 @@ export async function PUT(
       });
     } catch (error: any) {
       // Use centralized error handler for unique constraint violations
-      const { handlePrismaUniqueError } = await import("@/lib/prismaErrors");
       const uniqueError = handlePrismaUniqueError(error, {
         username: "Username",
         email: "Email",

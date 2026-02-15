@@ -1,11 +1,23 @@
 import 'package:flutter/foundation.dart';
 import 'package:tripthread/models/user.dart';
 import 'package:tripthread/services/api_service.dart';
+import 'package:tripthread/services/google_sign_in_service.dart';
 import 'package:tripthread/services/storage_service.dart';
+
+/// Result of Google sign-in: success (logged in) or failure.
+sealed class GoogleSignInResult {}
+
+class GoogleSignInSuccess extends GoogleSignInResult {}
+
+class GoogleSignInFailure extends GoogleSignInResult {
+  final String message;
+  GoogleSignInFailure(this.message);
+}
 
 class AuthProvider extends ChangeNotifier {
   final ApiService _apiService;
   final StorageService _storageService;
+  final GoogleSignInService? _googleSignInService;
 
   User? _currentUser;
   bool _isLoading = true;
@@ -21,8 +33,10 @@ class AuthProvider extends ChangeNotifier {
   AuthProvider({
     required ApiService apiService,
     required StorageService storageService,
+    GoogleSignInService? googleSignInService,
   })  : _apiService = apiService,
-        _storageService = storageService {
+        _storageService = storageService,
+        _googleSignInService = googleSignInService {
     _apiService.setStorageService(_storageService);
     _initializeAuth();
   }
@@ -32,6 +46,9 @@ class AuthProvider extends ChangeNotifier {
   bool get isLoading => _isLoading;
   bool get isAuthenticated => _currentUser != null;
   String? get error => _error;
+  /// True when user is authenticated but must complete profile (username + password) before full access.
+  bool get requiresProfileCompletion =>
+      _currentUser != null && (_currentUser!.profileComplete == false);
 
   Future<void> _initializeAuth() async {
     // Skip initialization if already in progress or user is already authenticated
@@ -130,7 +147,7 @@ class AuthProvider extends ChangeNotifier {
     required String email,
     required String password,
     required String name,
-    String? username,
+    required String username,
   }) async {
     try {
       _setLoadingState(true);
@@ -229,6 +246,53 @@ class AuthProvider extends ChangeNotifier {
     }
   }
 
+  Future<bool> completeProfile({
+    required String username,
+    required String password,
+    String? name,
+  }) async {
+    try {
+      _setLoadingState(true);
+      _clearError();
+      final response = await _apiService.completeProfile(
+        username: username,
+        password: password,
+        name: name,
+      );
+      if (response.success && response.data != null) {
+        final authData = response.data!;
+        await _storageService.saveTokens(
+          accessToken: authData.accessToken,
+          refreshToken: authData.refreshToken,
+          userId: authData.user.id,
+        );
+        _currentUser = authData.user;
+        routingNotifier.notifyListeners();
+        notifyListeners();
+        _setLoadingState(false);
+        return true;
+      } else if (response.error == 'Profile already complete') {
+        // Backend says profile is complete; refresh user and redirect
+        final userResponse = await _apiService.getCurrentUser();
+        if (userResponse.success && userResponse.data != null) {
+          _currentUser = userResponse.data!.copyWith(profileComplete: true);
+          routingNotifier.notifyListeners();
+          notifyListeners();
+          _setLoadingState(false);
+          return true;
+        }
+      }
+      _setError(response.error ?? 'Failed to complete profile.');
+      _setLoadingState(false);
+      return false;
+    } catch (e) {
+      debugPrint('[AuthProvider] completeProfile catch error: $e');
+      _setError('Network error. Please try again.');
+      _setLoadingState(false);
+      return false;
+    }
+  }
+
   Future<bool> deleteAccount() async {
     try {
       debugPrint('[AuthProvider] Delete account called');
@@ -271,6 +335,7 @@ class AuthProvider extends ChangeNotifier {
       routingNotifier.notifyListeners();
       notifyListeners();
       await _storageService.clearTokens();
+      await _googleSignInService?.signOut();
     }
   }
 
@@ -345,6 +410,61 @@ class AuthProvider extends ChangeNotifier {
     }
   }
 
+  /// Sign in with Google idToken. Returns [GoogleSignInSuccess] or [GoogleSignInFailure].
+  Future<GoogleSignInResult> signInWithGoogle(String idToken) async {
+    try {
+      _setLoadingState(true);
+      _clearError();
+      final response = await _apiService.signInWithGoogle(idToken);
+
+      if (response.success && response.data != null) {
+        final authData = response.data!;
+        await _storageService.saveTokens(
+          accessToken: authData.accessToken,
+          refreshToken: authData.refreshToken,
+          userId: authData.user.id,
+        );
+        _currentUser = authData.user;
+        routingNotifier.notifyListeners();
+        notifyListeners();
+        _setLoadingState(false);
+        return GoogleSignInSuccess();
+      }
+
+      _setError(response.error ?? 'Sign-in failed. Try again.');
+      _setLoadingState(false);
+      return GoogleSignInFailure(response.error ?? 'Sign-in failed. Try again.');
+    } catch (e) {
+      debugPrint('[AuthProvider] signInWithGoogle catch error: $e');
+      _setError('Network error. Please check your connection and try again.');
+      _setLoadingState(false);
+      return GoogleSignInFailure('Network error. Please check your connection and try again.');
+    }
+  }
+
+  /// Links Google account to current user. Returns success message to show (e.g. "Google account linked successfully." or "Already linked."), or null on failure (use [error] for message).
+  Future<String?> linkGoogle(String idToken) async {
+    try {
+      _clearError();
+      final response = await _apiService.linkGoogle(idToken);
+      if (response.success) {
+        final userResponse = await _apiService.getCurrentUser();
+        if (userResponse.success && userResponse.data != null && _currentUser != null) {
+          _currentUser = userResponse.data;
+          notifyListeners();
+        }
+        return response.message ?? 'Google account linked successfully.';
+      } else {
+        _setError(response.error ?? 'Failed to link Google account.');
+        return null;
+      }
+    } catch (e) {
+      debugPrint('[AuthProvider] linkGoogle catch error: $e');
+      _setError('Network error. Please try again.');
+      return null;
+    }
+  }
+
   // Helper methods for cleaner state management
   void _setLoadingState(bool loading) {
     _isLoading = loading;
@@ -391,6 +511,7 @@ class AuthProvider extends ChangeNotifier {
     _isLoading = false;
     _currentUser = null;
     await _storageService.clearTokens();
+    await _googleSignInService?.signOut();
 
     // Set error message if provided
     if (message != null) {

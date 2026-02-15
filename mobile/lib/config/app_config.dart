@@ -46,6 +46,19 @@ class AppConfig {
     );
   }
 
+  static String get _googleClientId {
+    if (_isInitialized) {
+      final envValue = dotenv.env['GOOGLE_CLIENT_ID'];
+      if (envValue != null && envValue.isNotEmpty) {
+        return envValue;
+      }
+    }
+    return const String.fromEnvironment(
+      'GOOGLE_CLIENT_ID',
+      defaultValue: '',
+    );
+  }
+
   // API Configuration
   static String get apiBaseUrl {
     if (kDebugMode) {
@@ -65,6 +78,11 @@ class AppConfig {
   // Environment
   static String get environment {
     return _environment;
+  }
+
+  /// Web OAuth client ID (same as backend GOOGLE_CLIENT_ID). Used as serverClientId so id token can be verified by backend.
+  static String get googleClientId {
+    return _googleClientId;
   }
 
   // Timeouts
