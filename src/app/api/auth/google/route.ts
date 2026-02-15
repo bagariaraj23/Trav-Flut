@@ -245,50 +245,63 @@ export async function POST(request: NextRequest) {
             "code" in createError &&
             (createError as { code: string }).code === "P2002";
           if (isP2002) {
-            const existingByEmail = await prisma.user.findFirst({
-              where: { email, deletedAt: null },
-              include: { oauthAccounts: true },
-            });
-            if (existingByEmail) {
+            // Use transaction to atomically check and create OAuth account if needed
+            const result = await prisma.$transaction(async (tx) => {
+              const existingByEmail = await tx.user.findFirst({
+                where: { email, deletedAt: null },
+                include: { oauthAccounts: true },
+              });
+              
+              if (!existingByEmail) {
+                return null;
+              }
+              
               const hasGoogle = existingByEmail.oauthAccounts.some(
                 (a) => a.provider === OAuthProvider.GOOGLE && a.providerUserId === sub
               );
+              
               if (!hasGoogle) {
                 try {
-                  await prisma.oAuthAccount.create({
+                  await tx.oAuthAccount.create({
                     data: {
                       userId: existingByEmail.id,
                       provider: OAuthProvider.GOOGLE,
                       providerUserId: sub,
                     },
                   });
-                } catch {
-                  // OAuth already created by concurrent request
+                } catch (error: any) {
+                  // OAuth already created by concurrent request (unique constraint violation)
+                  // This is expected in race conditions, continue to fetch user
                 }
               }
-              const user = await prisma.user.findUnique({
+              
+              // Fetch user with updated OAuth accounts
+              return await tx.user.findUnique({
                 where: { id: existingByEmail.id },
                 include: { oauthAccounts: true },
               });
-              if (user) {
-                const accessToken = AuthService.generateAccessToken(user);
-                const refreshToken = AuthService.generateRefreshToken(user);
-                await AuthService.storeRefreshToken(user.id, refreshToken);
-                const { password: _p, ...userWithoutPassword } = user;
-                return NextResponse.json({
-                  success: true,
-                  data: {
-                    user: {
-                      ...toUserProfile(userWithoutPassword),
-                      profileComplete: !!user.username,
-                    },
-                    accessToken,
-                    refreshToken,
+            });
+            
+            if (result) {
+              const accessToken = AuthService.generateAccessToken(result);
+              const refreshToken = AuthService.generateRefreshToken(result);
+              await AuthService.storeRefreshToken(result.id, refreshToken);
+              const { password: _p, ...userWithoutPassword } = result;
+              return NextResponse.json({
+                success: true,
+                data: {
+                  user: {
+                    ...toUserProfile(userWithoutPassword),
+                    profileComplete: !!result.username,
                   },
-                  requiresProfileCompletion: !user.username || undefined,
-                });
-              }
+                  accessToken,
+                  refreshToken,
+                },
+                requiresProfileCompletion: !result.username || undefined,
+              });
             }
+            
+            // Fallback: check if OAuth account exists directly
             const oauthAccount = await prisma.oAuthAccount.findUnique({
               where: {
                 provider_providerUserId: {
@@ -296,7 +309,7 @@ export async function POST(request: NextRequest) {
                   providerUserId: sub,
                 },
               },
-              include: { user: true },
+              include: { user: { select: { id: true, deletedAt: true } } },
             });
             if (oauthAccount && !oauthAccount.user.deletedAt) {
               const user = await prisma.user.findUnique({
@@ -323,6 +336,7 @@ export async function POST(request: NextRequest) {
               }
             }
           }
+          // Re-throw original error if we couldn't handle it
           throw createError;
         }
       } catch (error: unknown) {

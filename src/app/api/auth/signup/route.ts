@@ -16,38 +16,35 @@ export async function POST(request: NextRequest) {
         const validatedData = signupSchema.parse(body);
         const { email, password, name, username } = validatedData;
         // email is already normalized (trim, lowercase, invisible chars stripped) by signupSchema
-        // Check for existing user by email (active or soft-deleted) so we don't hit unique constraint
-        // and so we can free the email if the only match is a deleted account or a Google-only "orphan".
-        const existingByEmail = await prisma.user.findUnique({
-          where: { email },
-          select: {
-            id: true,
-            deletedAt: true,
-            password: true,
-            oauthAccounts: { select: { id: true } },
-          },
-        });
-        const status = existingByEmail
-          ? existingByEmail.deletedAt == null
-            ? "active"
-            : "deleted"
-          : "none";
-        const isGoogleOnly =
-          existingByEmail &&
-          existingByEmail.deletedAt == null &&
-          existingByEmail.password == null &&
-          existingByEmail.oauthAccounts.length > 0;
-        console.log(
-          `[signup] email="${email}" (length=${email.length}) existing=${status} googleOnly=${!!isGoogleOnly}`
-        );
-        if (existingByEmail) {
-          if (existingByEmail.deletedAt == null) {
-            // Active user with this email. If it's a Google-only account (no password), it was likely
-            // re-created by "Sign in with Google" after the user had deleted; allow reclaim by soft-deleting it.
-            if (isGoogleOnly) {
-              await prisma.$transaction([
-                prisma.oAuthAccount.deleteMany({ where: { userId: existingByEmail.id } }),
-                prisma.user.update({
+        // Hash password before transaction (deterministic and fast operation)
+        const hashedPassword = await AuthService.hashPassword(password);
+        
+        // Wrap check-delete-create in a single transaction to prevent race conditions
+        // This ensures atomicity when handling Google-only account reclaim or deleted user email freeing
+        const user = await prisma.$transaction(async (tx) => {
+          // Check for existing user by email (active or soft-deleted) inside transaction
+          const existingByEmail = await tx.user.findUnique({
+            where: { email },
+            select: {
+              id: true,
+              deletedAt: true,
+              password: true,
+              oauthAccounts: { select: { id: true } },
+            },
+          });
+
+          if (existingByEmail) {
+            if (existingByEmail.deletedAt == null) {
+              // Active user with this email. If it's a Google-only account (no password), it was likely
+              // re-created by "Sign in with Google" after the user had deleted; allow reclaim by soft-deleting it.
+              const isGoogleOnly =
+                existingByEmail.password == null &&
+                existingByEmail.oauthAccounts.length > 0;
+              
+              if (isGoogleOnly) {
+                // Delete OAuth accounts and soft-delete user atomically
+                await tx.oAuthAccount.deleteMany({ where: { userId: existingByEmail.id } });
+                await tx.user.update({
                   where: { id: existingByEmail.id },
                   data: {
                     deletedAt: new Date(),
@@ -61,37 +58,27 @@ export async function POST(request: NextRequest) {
                     avatarUrl: null,
                     bio: null,
                   },
-                }),
-              ]);
-              // Fall through to create the new user below.
+                });
+                // Fall through to create the new user below
+              } else {
+                // Active user with password - cannot reclaim
+                throw new Error("This email is already in use. Sign in with that account or use a different email.");
+              }
             } else {
-              return NextResponse.json<ApiResponse>(
-                {
-                  success: false,
-                  error:
-                    "This email is already in use. Sign in with that account or use a different email.",
+              // Soft-deleted user still has this email; free it so we can create a new account.
+              await tx.user.update({
+                where: { id: existingByEmail.id },
+                data: {
+                  email: `deleted_${existingByEmail.id}_${Date.now()}@deleted.local`,
+                  username: null,
                 },
-                { status: 400 }
-              );
+              });
             }
-          } else {
-            // Soft-deleted user still has this email; free it so we can create a new account.
-            await prisma.user.update({
-              where: { id: existingByEmail.id },
-              data: {
-                email: `deleted_${existingByEmail.id}_${Date.now()}@deleted.local`,
-                username: null,
-              },
-            });
           }
-        }
-        // Hash password
-        const hashedPassword = await AuthService.hashPassword(password);
-        // Try to create user; handle unique constraint (username) or race (email on deleted row)
-        let user: Awaited<ReturnType<typeof prisma.user.create>> | null = null;
-        for (let attempt = 0; attempt < 2; attempt++) {
+
+          // Create new user atomically within the same transaction
           try {
-            user = await prisma.user.create({
+            return await tx.user.create({
               data: {
                 email,
                 password: hashedPassword,
@@ -99,7 +86,6 @@ export async function POST(request: NextRequest) {
                 username,
               },
             });
-            break;
           } catch (error: any) {
             const code = error?.code as string | undefined;
             const target = error?.meta?.target;
@@ -109,48 +95,22 @@ export async function POST(request: NextRequest) {
                 ? [target]
                 : [];
             const isEmailConflict = targetList.includes("email");
-            // P2002 = unique constraint. If email and first attempt, free any deleted row and retry once.
-            if (code === "P2002" && isEmailConflict && attempt === 0) {
-              const again = await prisma.user.findUnique({
-                where: { email },
-                select: { id: true, deletedAt: true },
-              });
-              if (again?.deletedAt != null) {
-                await prisma.user.update({
-                  where: { id: again.id },
-                  data: {
-                    email: `deleted_${again.id}_${Date.now()}@deleted.local`,
-                    username: null,
-                  },
-                });
-                continue;
-              }
+            const isUsernameConflict = targetList.includes("username");
+            
+            // If username conflict, return user-friendly error
+            if (code === "P2002" && isUsernameConflict) {
+              throw new Error("Username already taken. Try another.");
             }
-            const message = handlePrismaUniqueError(error, {
-              email: "User with this email",
-              username: "Username",
-            });
-            if (message) {
-              const isUsernameConflict = targetList.includes("username");
-              const errorMessage = isEmailConflict
-                ? "This email is already in use. Sign in or use a different email to sign up."
-                : isUsernameConflict
-                  ? "Username already taken. Try another."
-                  : message;
-              return NextResponse.json<ApiResponse>(
-                { success: false, error: errorMessage },
-                { status: 400 }
-              );
+            
+            // If email conflict (shouldn't happen in transaction, but handle gracefully)
+            if (code === "P2002" && isEmailConflict) {
+              throw new Error("This email is already in use. Sign in or use a different email to sign up.");
             }
+            
+            // Re-throw other errors
             throw error;
           }
-        }
-        if (!user) {
-          return NextResponse.json<ApiResponse>(
-            { success: false, error: "Failed to create account. Please try again." },
-            { status: 500 }
-          );
-        }
+        });
         // Generate tokens
         const accessToken = AuthService.generateAccessToken(user);
         const refreshToken = AuthService.generateRefreshToken(user);
@@ -182,6 +142,25 @@ export async function POST(request: NextRequest) {
             },
             { status: 400 }
           );
+        }
+
+        // Handle Error instances thrown from transaction (user-friendly messages)
+        if (error instanceof Error) {
+          const errorMessage = error.message;
+          // Check if it's a user-friendly error message from our transaction
+          if (
+            errorMessage.includes("already in use") ||
+            errorMessage.includes("already taken") ||
+            errorMessage.includes("Sign in")
+          ) {
+            return NextResponse.json<ApiResponse>(
+              {
+                success: false,
+                error: errorMessage,
+              },
+              { status: 400 }
+            );
+          }
         }
 
         // Sanitize error for client (logs technical details, returns user-friendly message)
