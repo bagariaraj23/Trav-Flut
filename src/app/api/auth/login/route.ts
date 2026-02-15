@@ -13,14 +13,22 @@ export async function POST(request: NextRequest) {
       try {
         const body = await rateLimitedReq.json();
 
+        // Determine if input is email or username by checking for '@' before validation
+        const originalInput = body.email?.trim() || "";
+        const isEmail = originalInput.includes("@");
+
         // Validate input
         const validatedData = loginSchema.parse(body);
         const { email, password } = validatedData;
 
-        // Find user
-        const user = await prisma.user.findUnique({
-          where: { email: email.toLowerCase() },
-        });
+        // Find user by email or username based on original input type
+        const user = isEmail
+          ? await prisma.user.findUnique({
+              where: { email },
+            })
+          : await prisma.user.findUnique({
+              where: { username: email },
+            });
 
         if (!user || !user.password) {
           return NextResponse.json<ApiResponse>(

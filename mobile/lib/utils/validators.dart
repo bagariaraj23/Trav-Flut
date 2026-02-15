@@ -28,6 +28,42 @@ class Validators {
     return null;
   }
 
+  // Email or username validation
+  static String? validateEmailOrUsername(String? value) {
+    if (value == null || value.isEmpty) {
+      return 'Email or username is required';
+    }
+
+    final trimmed = value.trim();
+
+    // Check if it's an email (contains '@')
+    if (trimmed.contains('@')) {
+      // Validate as email
+      return validateEmail(value);
+    } else {
+      // Validate as username
+      final normalized = normalizeUsernameToAscii(trimmed);
+      if (normalized.isEmpty) {
+        return 'Username is required';
+      }
+
+      if (normalized.length < 3) {
+        return 'Username must be at least 3 characters';
+      }
+
+      if (normalized.length > 30) {
+        return 'Username must be less than 30 characters';
+      }
+
+      final usernameRegex = RegExp(r'^[a-zA-Z0-9_]+$');
+      if (!usernameRegex.hasMatch(normalized)) {
+        return 'Username can only contain letters, numbers, and underscores';
+      }
+
+      return null;
+    }
+  }
+
   // Password validation
   static String? validatePassword(String? value) {
     if (value == null || value.isEmpty) {
