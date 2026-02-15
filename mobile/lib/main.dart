@@ -398,21 +398,58 @@ class _TripThreadAppRouterState extends State<TripThreadAppRouter> {
             return '/login';
           }
 
-          final requiresProfileCompletion = authProvider.requiresProfileCompletion;
+          final requiresProfileCompletion =
+              authProvider.requiresProfileCompletion;
 
           // Authenticated but profile incomplete: must complete profile before home
           if (isLoggedIn &&
               requiresProfileCompletion &&
               location != '/complete-profile') {
             debugPrint(
-                '[GoRouter] Profile incomplete, redirecting to /complete-profile');
+              '[GoRouter] Profile incomplete, redirecting to /complete-profile',
+            );
             return '/complete-profile';
           }
 
-          // On complete-profile but profile now complete: go home
+          // Helper function to check for ongoing trip and return appropriate redirect
+          String? getRedirectForOngoingTrip(
+            String fallbackRoute,
+            String logContext,
+          ) {
+            try {
+              final tripProvider = Provider.of<TripProvider>(
+                context,
+                listen: false,
+              );
+
+              // If trip provider has an ongoing trip, redirect to thread screen
+              if (tripProvider.hasOngoingTrip &&
+                  tripProvider.currentTrip != null) {
+                final tripId = tripProvider.currentTrip!.id;
+                debugPrint(
+                  '[GoRouter] $logContext with ongoing trip, redirecting to /trip/$tripId/thread',
+                );
+                return '/trip/$tripId/thread';
+              }
+            } catch (e) {
+              // TripProvider might not be available yet, default to fallback
+              debugPrint(
+                '[GoRouter] TripProvider not available yet, defaulting to $fallbackRoute: $e',
+              );
+            }
+            return null; // No ongoing trip, use fallback
+          }
+
+          // On complete-profile but profile now complete: check for ongoing trip
           if (isLoggedIn &&
               !requiresProfileCompletion &&
               location == '/complete-profile') {
+            final tripRedirect = getRedirectForOngoingTrip(
+              '/home',
+              'Profile complete',
+            );
+            if (tripRedirect != null) return tripRedirect;
+
             debugPrint('[GoRouter] Profile complete, redirecting to /home');
             return '/home';
           }
@@ -426,28 +463,12 @@ class _TripThreadAppRouterState extends State<TripThreadAppRouter> {
             if (requiresProfileCompletion) {
               return '/complete-profile';
             }
-            // Check for ongoing trip to determine redirect destination
-            try {
-              final tripProvider = Provider.of<TripProvider>(
-                context,
-                listen: false,
-              );
 
-              // If trip provider has an ongoing trip, redirect to thread screen
-              if (tripProvider.hasOngoingTrip &&
-                  tripProvider.currentTrip != null) {
-                final tripId = tripProvider.currentTrip!.id;
-                debugPrint(
-                  '[GoRouter] Already logged in with ongoing trip, redirecting to /trip/$tripId/thread',
-                );
-                return '/trip/$tripId/thread';
-              }
-            } catch (e) {
-              // TripProvider might not be available yet, default to home
-              debugPrint(
-                '[GoRouter] TripProvider not available yet, defaulting to /home: $e',
-              );
-            }
+            final tripRedirect = getRedirectForOngoingTrip(
+              '/home',
+              'Already logged in',
+            );
+            if (tripRedirect != null) return tripRedirect;
 
             debugPrint('[GoRouter] Already logged in, redirecting to /home');
             return '/home';
