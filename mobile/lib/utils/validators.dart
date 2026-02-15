@@ -81,8 +81,7 @@ class Validators {
     return null;
   }
 
-  /// Replaces Unicode lookalikes (e.g. Cyrillic) with ASCII so "kunal1234"
-  /// from any keyboard is accepted. Use when submitting username to API.
+  /// Replaces Unicode lookalikes (e.g. Cyrillic) with ASCII
   static String normalizeUsernameToAscii(String value) {
     const replacements = {
       'а': 'a', 'е': 'e', 'о': 'o', 'р': 'p', 'с': 'c', 'у': 'y', 'х': 'x',
@@ -97,10 +96,10 @@ class Validators {
     return result;
   }
 
-  // Username validation (validates after normalizing so pasted/autocomplete text works)
+  // Username validation
   static String? validateUsername(String? value) {
     if (value == null || value.isEmpty) {
-      return null; // Username is optional
+      return null;
     }
     
     final trimmed = value.trim();
@@ -124,7 +123,7 @@ class Validators {
   // Bio validation
   static String? validateBio(String? value) {
     if (value == null || value.isEmpty) {
-      return null; // Bio is optional
+      return null;
     }
     
     if (value.length > 200) {
@@ -155,7 +154,7 @@ class Validators {
   // Trip description validation
   static String? validateTripDescription(String? value) {
     if (value == null || value.isEmpty) {
-      return null; // Description is optional
+      return null;
     }
     
     if (value.length > 500) {
@@ -228,7 +227,7 @@ class Validators {
   // URL validation
   static String? validateUrl(String? value) {
     if (value == null || value.isEmpty) {
-      return null; // URL is optional
+      return null;
     }
     
     final urlRegex = RegExp(
@@ -249,7 +248,7 @@ class Validators {
   // Date validation
   static String? validateDate(DateTime? value, {DateTime? minDate, DateTime? maxDate}) {
     if (value == null) {
-      return null; // Date is optional
+      return null;
     }
     
     if (minDate != null && value.isBefore(minDate)) {
