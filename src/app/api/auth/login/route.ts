@@ -3,11 +3,13 @@ import { prisma } from "@/lib/prisma";
 import { AuthService } from "@/lib/auth";
 import { loginSchema } from "@/lib/validation";
 import { ApiResponse, AuthResponse } from "@/types/api";
-import { withRateLimit, withLogging, handleApiError } from "@/lib/middleware";
+import { withRateLimit, withLogging, withCors, handleApiError } from "@/lib/middleware";
+import { sanitizeErrorForClient } from "@/lib/prismaErrors";
 
 export async function POST(request: NextRequest) {
-  const loggedHandler = withLogging(async (req) => {
-    return await withRateLimit(req, "auth_login", async (rateLimitedReq) => {
+  return await withCors(async (req) => {
+    const loggedHandler = withLogging(async (loggedReq) => {
+      return await withRateLimit(loggedReq, "auth_login", async (rateLimitedReq) => {
       try {
         const body = await rateLimitedReq.json();
 
@@ -74,38 +76,32 @@ export async function POST(request: NextRequest) {
         };
 
         return NextResponse.json(response);
-      } catch (error: any) {
-        console.error("Login error:", error);
-        console.error("Stack trace:", error.stack);
-
-        if (error.name === "ZodError") {
+      } catch (error: unknown) {
+        // Handle validation errors (safe to show to user)
+        if (error && typeof error === "object" && "name" in error && error.name === "ZodError") {
+          const zodError = error as { errors?: Array<{ message?: string }> };
           return NextResponse.json<ApiResponse>(
             {
               success: false,
-              error: error.errors[0]?.message || "Validation error",
+              error: zodError.errors?.[0]?.message || "Validation error",
             },
             { status: 400 }
           );
         }
 
-        if (error.name === "PrismaClientKnownRequestError") {
-          console.error("Prisma Error:", {
-            code: error.code,
-            meta: error.meta,
-            message: error.message,
-          });
-        }
+        // Sanitize error for client (logs technical details, returns user-friendly message)
+        const { message, statusCode } = sanitizeErrorForClient(error, "login");
 
         return NextResponse.json<ApiResponse>(
           {
             success: false,
-            error: "Internal server error: " + error.message,
+            error: message,
           },
-          { status: 500 }
+          { status: statusCode }
         );
       }
+      });
     });
-  });
-
-  return await loggedHandler(request);
+    return await loggedHandler(req);
+  })(request);
 }

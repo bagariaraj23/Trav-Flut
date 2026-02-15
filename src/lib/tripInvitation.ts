@@ -6,6 +6,7 @@ import {
   AuthorizationError,
 } from "./errors";
 import { TripJoinRequestStatus } from "@prisma/client";
+import { handlePrismaUniqueError } from "./prismaErrors";
 
 export class TripInvitationService {
   // Send a trip invitation
@@ -86,14 +87,13 @@ export class TripInvitationService {
         };
       });
     } catch (error: any) {
+      // Use centralized error handler for unique constraint violations
+      const uniqueError = handlePrismaUniqueError(error, {
+        tripId_receiverId: "Trip invitation",
+      });
+
       // If a concurrent create hits the DB unique constraint, map to existing request
-      if (error?.code === "P2002") {
-        // Use centralized error handler for consistent messaging
-        const { handlePrismaUniqueError } = await import("@/lib/prismaErrors");
-        const uniqueError = handlePrismaUniqueError(error, {
-          tripId_receiverId: "Trip invitation",
-        });
-        
+      if (uniqueError) {
         // Try to fetch existing request for more context
         const existing = await prisma.tripJoinRequest.findUnique({
           where: { tripId_receiverId: { tripId, receiverId } },

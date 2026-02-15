@@ -64,6 +64,7 @@ dependencies:
 
   another_flushbar: ^1.12.30
   firebase_core: ^4.3.0
+  google_sign_in: ^6.2.2
   http_parser: ^4.1.2 
   crypto: ^3.0.7
 
@@ -81,7 +82,7 @@ flutter:
 
   assets:
     - .env
-    # - assets/images/
+    - assets/images/
     # - assets/icons/
 
   # fonts:
