@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { AuthService } from "@/lib/auth";
 import { ApiResponse, FollowResponse, FollowStatusResponse } from "@/types/api";
 import { withAuth, withRateLimit, withLogging } from "@/lib/middleware";
+import { handlePrismaUniqueError } from "@/lib/prismaErrors";
 
 export async function GET(
   request: NextRequest,
@@ -261,7 +262,6 @@ export async function POST(
           );
         } catch (error: any) {
           // Use centralized error handler for unique constraint violations
-          const { handlePrismaUniqueError } = await import("@/lib/prismaErrors");
           const uniqueError = handlePrismaUniqueError(error, {
             followerId_followeeId: "Follow relationship",
           });

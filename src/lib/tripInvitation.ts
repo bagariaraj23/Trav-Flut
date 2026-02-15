@@ -91,7 +91,7 @@ export class TripInvitationService {
       const uniqueError = handlePrismaUniqueError(error, {
         tripId_receiverId: "Trip invitation",
       });
-      
+
       // If a concurrent create hits the DB unique constraint, map to existing request
       if (uniqueError) {
         // Try to fetch existing request for more context

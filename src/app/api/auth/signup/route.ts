@@ -4,7 +4,7 @@ import { AuthService } from "@/lib/auth";
 import { signupSchema } from "@/lib/validation";
 import { ApiResponse, AuthResponse } from "@/types/api";
 import { withRateLimit, withLogging, withCors, handleApiError } from "@/lib/middleware";
-import { sanitizeErrorForClient } from "@/lib/prismaErrors";
+import { sanitizeErrorForClient, handlePrismaUniqueError } from "@/lib/prismaErrors";
 
 export async function POST(request: NextRequest) {
   return await withCors(async (req) => {
@@ -126,9 +126,6 @@ export async function POST(request: NextRequest) {
                 continue;
               }
             }
-            const { handlePrismaUniqueError } = await import(
-              "@/lib/prismaErrors"
-            );
             const message = handlePrismaUniqueError(error, {
               email: "User with this email",
               username: "Username",
