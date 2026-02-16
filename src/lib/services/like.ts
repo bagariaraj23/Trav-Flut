@@ -9,6 +9,8 @@ import {
   USER_FULL_SELECT,
   ENGAGEMENT_CONSTANTS,
 } from "./engagement-utils";
+import { getEntityOwner, getPostFromComment } from "../entity-owner";
+import { createNotification } from "./notification";
 
 export async function createLike(
   userId: string,
@@ -20,7 +22,7 @@ export async function createLike(
     throw new Error("Entity not found");
   }
 
-  return await prisma.$transaction(async (tx) => {
+  const like = await prisma.$transaction(async (tx) => {
     const existing = await tx.like.findFirst({
       where: { userId, entityType, entityId },
     });
@@ -28,7 +30,7 @@ export async function createLike(
       return existing;
     }
 
-    const like = await tx.like.create({
+    const newLike = await tx.like.create({
       data: { userId, entityType, entityId },
     });
 
@@ -36,8 +38,60 @@ export async function createLike(
 
     await invalidateEngagementCache("like", entityType, entityId);
 
-    return like;
+    return newLike;
   });
+
+  // Fire-and-forget: create notification without blocking response
+  void (async () => {
+    try {
+      const recipientId = await getEntityOwner(entityType, entityId);
+      if (!recipientId) return;
+
+      if (entityType === "COMMENT") {
+        const [post, comment] = await Promise.all([
+          getPostFromComment(entityId),
+          prisma.comment.findUnique({
+            where: { id: entityId },
+            select: { contentText: true },
+          }),
+        ]);
+        if (!post) return;
+        const contentPreview =
+          comment?.contentText != null
+            ? comment.contentText.length > 60
+              ? comment.contentText.slice(0, 60) + "..."
+              : comment.contentText
+            : undefined;
+        await createNotification({
+          type: "LIKE",
+          actorId: userId,
+          recipientId,
+          entityType: "COMMENT",
+          entityId,
+          metadata: {
+            postEntityType: post.entityType,
+            postEntityId: post.entityId,
+            ...(contentPreview && { contentPreview }),
+          },
+        });
+      } else {
+        await createNotification({
+          type: "LIKE",
+          actorId: userId,
+          recipientId,
+          entityType,
+          entityId,
+        });
+      }
+    } catch (err) {
+      console.error(
+        "[Notification] Failed to create LIKE notification:",
+        { entityType, entityId, actorId: userId, error: err }
+      );
+    }
+  })();
+
+  return like;
 }
 
 export async function deleteLike(

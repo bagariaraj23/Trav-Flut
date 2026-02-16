@@ -79,7 +79,7 @@ export async function GET(request: NextRequest) {
 
 // Update current user profile
 export async function PUT(request: NextRequest) {
-  return withLogging(async (req) => {
+  const handler = withLogging(async (req) => {
     return withRateLimit(req, async (rateLimitedReq) => {
       return withAuth(rateLimitedReq, async (authenticatedReq) => {
         try {
@@ -178,11 +178,12 @@ export async function PUT(request: NextRequest) {
       });
     });
   });
+  return await handler(request);
 }
 
 // Delete current user account (soft delete)
 export async function DELETE(request: NextRequest) {
-  return withLogging(async (req) => {
+  const handler = withLogging(async (req) => {
     return withRateLimit(req, async (rateLimitedReq) => {
       return withAuth(rateLimitedReq, async (authenticatedReq) => {
         try {
@@ -320,4 +321,5 @@ export async function DELETE(request: NextRequest) {
       });
     });
   });
+  return await handler(request);
 }

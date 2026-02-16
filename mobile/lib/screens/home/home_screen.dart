@@ -37,9 +37,10 @@ class _HomeScreenState extends State<HomeScreen> {
       debugPrint('[HomeScreen] Initializing providers');
       context.read<TripProvider>().initialize();
       debugPrint('[HomeScreen] TripProvider initialized');
-      // Load pending follow requests to update notification badge
-      context.read<UserProvider>().loadPendingFollowRequests();
-      debugPrint('[HomeScreen] Loading pending follow requests for notifications');
+      final userProvider = context.read<UserProvider>();
+      userProvider.loadPendingFollowRequests();
+      userProvider.loadUnreadNotificationCount();
+      debugPrint('[HomeScreen] Loading notifications for badge');
     });
   }
 
@@ -165,26 +166,15 @@ class _HomeFeedScreenState extends State<HomeFeedScreen> {
             builder: (context, userProvider, tripProvider, child) {
               final totalPending =
                   userProvider.pendingFollowRequests.length +
-                  tripProvider.pendingTripInvitations.length;
+                  tripProvider.pendingTripInvitations.length +
+                  userProvider.unreadNotificationCount;
               return Stack(
                 alignment: Alignment.center,
                 children: [
                   IconButton(
                     icon: const Icon(Icons.notifications_outlined),
                     onPressed: () {
-                      // Navigate to a consolidated notifications screen or a menu
-                      if (userProvider.pendingFollowRequests.isNotEmpty) {
-                        context.push('/follow-requests');
-                      } else if (tripProvider
-                          .pendingTripInvitations
-                          .isNotEmpty) {
-                        context.push('/trip-invites');
-                      } else {
-                        // Show a message or navigate to an empty notifications screen
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('No new notifications')),
-                        );
-                      }
+                      context.push('/notifications');
                     },
                   ),
                   if (totalPending > 0)

@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:tripthread/models/follow_status.dart';
+import 'package:tripthread/models/unified_notification.dart';
 import 'package:tripthread/models/user.dart';
 import 'package:tripthread/services/api_service.dart';
 
@@ -107,6 +108,13 @@ class UserProvider extends ChangeNotifier {
   int _discoverPage = 1;
   bool _hasMoreUsers = true;
 
+  List<UnifiedNotificationItem> _unifiedNotifications = [];
+  bool _isNotificationsLoading = false;
+  bool _notificationsLoadMore = false;
+  bool _hasMoreNotifications = true;
+  String? _unifiedNotificationsError;
+  int _unreadNotificationCount = 0;
+
   // --- GETTERS ---
   bool get isLoading => _isLoading;
   bool get isDiscoverLoading => _isDiscoverLoading;
@@ -117,6 +125,12 @@ class UserProvider extends ChangeNotifier {
   bool get hasMoreUsers => _hasMoreUsers;
   List<FollowRequestDto> get pendingFollowRequests => _pendingFollowRequests;
   String? get followRequestsError => _followRequestsError;
+  List<UnifiedNotificationItem> get unifiedNotifications => _unifiedNotifications;
+  bool get isNotificationsLoading => _isNotificationsLoading;
+  bool get notificationsLoadMore => _notificationsLoadMore;
+  bool get hasMoreNotifications => _hasMoreNotifications;
+  String? get unifiedNotificationsError => _unifiedNotificationsError;
+  int get unreadNotificationCount => _unreadNotificationCount;
 
   User? getUser(String userId) => _userCache[userId];
   UserStats? getUserStats(String userId) => _statsCache[userId];
@@ -521,6 +535,106 @@ class UserProvider extends ChangeNotifier {
     _statsCache.clear();
     _detailedFollowStatusCache.clear();
     _pendingFollowRequests.clear();
+    _unifiedNotifications.clear();
+    _unreadNotificationCount = 0;
     notifyListeners();
+  }
+
+  Future<void> loadUnifiedNotifications() async {
+    _isNotificationsLoading = true;
+    _unifiedNotificationsError = null;
+    _hasMoreNotifications = true;
+    notifyListeners();
+    try {
+      final response = await _apiService.getUnifiedNotifications(limit: 30);
+      if (response.success && response.data != null) {
+        _unifiedNotifications = response.data!.items;
+        _hasMoreNotifications = response.data!.hasMore;
+        _unifiedNotificationsError = null;
+      } else {
+        _unifiedNotificationsError =
+            response.error ?? 'Failed to load notifications';
+      }
+    } catch (e) {
+      _unifiedNotificationsError =
+          'An unexpected error occurred while loading notifications';
+      debugPrint('Load unified notifications error: $e');
+    } finally {
+      _isNotificationsLoading = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> loadMoreUnifiedNotifications() async {
+    if (_notificationsLoadMore || !_hasMoreNotifications) return;
+    if (_unifiedNotifications.isEmpty) return;
+    final oldest =
+        _unifiedNotifications
+            .map((n) => DateTime.tryParse(n.createdAt))
+            .whereType<DateTime>()
+            .reduce((a, b) => a.isBefore(b) ? a : b);
+    final cursor = oldest.toIso8601String();
+    _notificationsLoadMore = true;
+    notifyListeners();
+    try {
+      final response = await _apiService.getUnifiedNotifications(
+        limit: 30,
+        cursor: cursor,
+      );
+      if (response.success && response.data != null) {
+        final newItems = response.data!.items;
+        final seen = _unifiedNotifications.map((n) => n.id).toSet();
+        for (final n in newItems) {
+          if (!seen.contains(n.id)) {
+            seen.add(n.id);
+            _unifiedNotifications.add(n);
+          }
+        }
+        _hasMoreNotifications = response.data!.hasMore;
+      }
+    } catch (e) {
+      debugPrint('Load more notifications error: $e');
+    } finally {
+      _notificationsLoadMore = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> loadUnreadNotificationCount() async {
+    try {
+      final response = await _apiService.getUnreadNotificationCount();
+      if (response.success && response.data != null) {
+        _unreadNotificationCount = response.data!;
+        notifyListeners();
+      }
+    } catch (e) {
+      debugPrint('Load unread notification count error: $e');
+    }
+  }
+
+  void markNotificationReadLocal(String notificationId) {
+    final index =
+        _unifiedNotifications.indexWhere((n) => n.id == notificationId);
+    if (index >= 0) {
+      final n = _unifiedNotifications[index];
+      _unifiedNotifications[index] = UnifiedNotificationItem(
+        type: n.type,
+        id: n.id,
+        createdAt: n.createdAt,
+        readAt: DateTime.now().toIso8601String(),
+        actor: n.actor,
+        followRequestId: n.followRequestId,
+        entityType: n.entityType,
+        entityId: n.entityId,
+        contentPreview: n.contentPreview,
+        postEntityType: n.postEntityType,
+        postEntityId: n.postEntityId,
+        commentId: n.commentId,
+        parentCommentId: n.parentCommentId,
+        tripId: n.tripId,
+      );
+      _unreadNotificationCount = (_unreadNotificationCount - 1).clamp(0, 999999);
+      notifyListeners();
+    }
   }
 }
