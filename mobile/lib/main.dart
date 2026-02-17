@@ -23,12 +23,14 @@ import 'package:tripthread/services/trip_service.dart';
 import 'package:tripthread/services/connectivity_service.dart';
 import 'package:tripthread/services/media_service.dart';
 import 'package:tripthread/services/deep_link_service.dart';
+import 'package:tripthread/services/google_sign_in_service.dart';
 import 'package:tripthread/screens/splash_screen.dart';
 import 'package:tripthread/screens/auth/login_screen.dart';
 import 'package:tripthread/screens/auth/signup_screen.dart';
 import 'package:tripthread/screens/auth/forgot_password_screen.dart';
 import 'package:tripthread/screens/auth/reset_password_screen.dart';
 import 'package:tripthread/screens/auth/reset_password_success_screen.dart';
+import 'package:tripthread/screens/auth/complete_profile_screen.dart';
 import 'package:tripthread/screens/home/home_screen.dart';
 import 'package:tripthread/screens/profile/profile_screen.dart';
 import 'package:tripthread/screens/profile/edit_profile_screen.dart';
@@ -104,6 +106,7 @@ void main() async {
           Provider<LikeService>.value(value: likeService),
           Provider<CommentService>.value(value: commentService),
           Provider<ShareService>.value(value: shareService),
+          Provider<GoogleSignInService>.value(value: GoogleSignInService()),
           ChangeNotifierProvider<ConnectivityService>.value(
             value: connectivityService,
           ),
@@ -113,6 +116,7 @@ void main() async {
               final authProvider = AuthProvider(
                 apiService: apiService,
                 storageService: storageService,
+                googleSignInService: context.read<GoogleSignInService>(),
               );
               // Set up the unauthorized callback to trigger logout
               apiService.setUnauthorizedCallback(() {
@@ -396,12 +400,34 @@ class _TripThreadAppRouterState extends State<TripThreadAppRouter> {
             return '/login';
           }
 
-          // Redirect to home if authenticated and on auth pages
+          final requiresProfileCompletion = authProvider.requiresProfileCompletion;
+
+          // Authenticated but profile incomplete: must complete profile before home
+          if (isLoggedIn &&
+              requiresProfileCompletion &&
+              location != '/complete-profile') {
+            debugPrint(
+                '[GoRouter] Profile incomplete, redirecting to /complete-profile');
+            return '/complete-profile';
+          }
+
+          // On complete-profile but profile now complete: go home
+          if (isLoggedIn &&
+              !requiresProfileCompletion &&
+              location == '/complete-profile') {
+            debugPrint('[GoRouter] Profile complete, redirecting to /home');
+            return '/home';
+          }
+
+          // Redirect to home (or complete-profile) if authenticated and on auth pages
           if (isLoggedIn &&
               (location == '/login' ||
                   location == '/signup' ||
                   location == '/forgot-password' ||
                   location.startsWith('/reset-password'))) {
+            if (requiresProfileCompletion) {
+              return '/complete-profile';
+            }
             debugPrint('[GoRouter] Already logged in, redirecting to /home');
             return '/home';
           }
@@ -432,6 +458,10 @@ class _TripThreadAppRouterState extends State<TripThreadAppRouter> {
           GoRoute(
             path: '/reset-success',
             builder: (context, state) => const ResetPasswordSuccessScreen(),
+          ),
+          GoRoute(
+            path: '/complete-profile',
+            builder: (context, state) => const CompleteProfileScreen(),
           ),
           GoRoute(
             path: '/home',

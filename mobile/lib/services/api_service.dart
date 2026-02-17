@@ -189,7 +189,7 @@ class ApiService {
     required String email,
     required String password,
     required String name,
-    String? username,
+    required String username,
   }) async {
     try {
       debugPrint(
@@ -198,19 +198,32 @@ class ApiService {
         'email': email,
         'password': password,
         'name': name,
-        if (username != null) 'username': username,
+        'username': username,
       });
 
       debugPrint('[ApiService] Signup response: ${response.statusCode}');
+      final data = response.data;
+      final success = data['success'] == true;
+      final payload = data['data'];
+      if (success && payload != null) {
+        return ApiResponse<AuthResponse>(
+          success: true,
+          data: AuthResponse.fromJson(payload),
+        );
+      }
       return ApiResponse<AuthResponse>(
-        success: response.data['success'],
-        data: AuthResponse.fromJson(response.data['data']),
+        success: false,
+        error: data['error'] ?? data['message'] ?? 'Signup failed. Please try again.',
       );
     } on DioException catch (e) {
       debugPrint('[ApiService] Signup DioException: ${e.message}');
+      final body = e.response?.data;
+      final errorMsg = body is Map
+          ? (body['error'] ?? body['message'] ?? 'Network error occurred')
+          : 'Network error occurred';
       return ApiResponse<AuthResponse>(
         success: false,
-        error: e.response?.data['error'] ?? 'Network error occurred',
+        error: errorMsg is String ? errorMsg : 'Network error occurred',
       );
     } catch (e) {
       debugPrint('[ApiService] Signup unexpected error: $e');
@@ -246,6 +259,99 @@ class ApiService {
     } catch (e) {
       debugPrint('[ApiService] Login unexpected error: $e');
       return ApiResponse<AuthResponse>(
+        success: false,
+        error: 'An unexpected error occurred',
+      );
+    }
+  }
+
+  /// Returns [AuthResponse] on success.
+  Future<ApiResponse<AuthResponse>> signInWithGoogle(String idToken) async {
+    try {
+      debugPrint('[ApiService] Sign in with Google');
+      final response = await _dio.post('/auth/google', data: {'idToken': idToken});
+      debugPrint('[ApiService] Sign in with Google response: ${response.statusCode}');
+      final data = response.data as Map<String, dynamic>?;
+      if (data == null) {
+        return const ApiResponse<AuthResponse>(success: false, error: 'Invalid response');
+      }
+      final authData = data['data'];
+      return ApiResponse<AuthResponse>(
+        success: data['success'] == true,
+        data: authData != null ? AuthResponse.fromJson(authData as Map<String, dynamic>) : null,
+        error: data['error']?.toString(),
+      );
+    } on DioException catch (e) {
+      debugPrint('[ApiService] Sign in with Google DioException: ${e.message}');
+      final body = e.response?.data;
+      final error = body is Map ? body['error']?.toString() : null;
+      return ApiResponse<AuthResponse>(
+        success: false,
+        error: error ?? 'Network error occurred',
+      );
+    } catch (e) {
+      debugPrint('[ApiService] Sign in with Google unexpected error: $e');
+      return const ApiResponse<AuthResponse>(
+        success: false,
+        error: 'An unexpected error occurred',
+      );
+    }
+  }
+
+  Future<ApiResponse<AuthResponse>> completeProfile({
+    required String username,
+    required String password,
+    String? name,
+  }) async {
+    try {
+      debugPrint('[ApiService] Complete profile');
+      final response = await _dio.post('/auth/complete-profile', data: {
+        'username': username,
+        'password': password,
+        if (name != null && name.isNotEmpty) 'name': name,
+      });
+      debugPrint('[ApiService] Complete profile response: ${response.statusCode}');
+      final data = response.data;
+      return ApiResponse<AuthResponse>(
+        success: data['success'] == true,
+        data: data['data'] != null ? AuthResponse.fromJson(data['data']) : null,
+        error: data['error'],
+      );
+    } on DioException catch (e) {
+      debugPrint('[ApiService] Complete profile DioException: ${e.message}');
+      return ApiResponse<AuthResponse>(
+        success: false,
+        error: e.response?.data['error'] ?? 'Network error occurred',
+      );
+    } catch (e) {
+      debugPrint('[ApiService] Complete profile unexpected error: $e');
+      return ApiResponse<AuthResponse>(
+        success: false,
+        error: 'An unexpected error occurred',
+      );
+    }
+  }
+
+  Future<ApiResponse<void>> linkGoogle(String idToken) async {
+    try {
+      debugPrint('[ApiService] Link Google');
+      final response = await _dio.post('/auth/link-google', data: {'idToken': idToken});
+      debugPrint('[ApiService] Link Google response: ${response.statusCode}');
+      final data = response.data;
+      return ApiResponse<void>(
+        success: data['success'] == true,
+        error: data['error'],
+        message: data['message'],
+      );
+    } on DioException catch (e) {
+      debugPrint('[ApiService] Link Google DioException: ${e.message}');
+      return ApiResponse<void>(
+        success: false,
+        error: e.response?.data['error'] ?? 'Network error occurred',
+      );
+    } catch (e) {
+      debugPrint('[ApiService] Link Google unexpected error: $e');
+      return ApiResponse<void>(
         success: false,
         error: 'An unexpected error occurred',
       );
@@ -421,10 +527,11 @@ class ApiService {
   }) async {
     try {
       debugPrint(
-          '[ApiService] Updating profile: name=$name, username=$username, bio=$bio, avatarUrl=$avatarUrl');
+          '[ApiService] Updating profile: name=$name, username=$username, bio=${bio == null ? "null" : (bio.isEmpty ? "(empty)" : bio)}, avatarUrl=$avatarUrl');
       final response = await _dio.put('/users/me', data: {
         if (name != null) 'name': name,
         if (username != null) 'username': username,
+        // Include bio when not null so backend can clear it (empty string => null)
         if (bio != null) 'bio': bio,
         if (avatarUrl != null) 'avatarUrl': avatarUrl,
         if (isPrivate != null) 'isPrivate': isPrivate,
