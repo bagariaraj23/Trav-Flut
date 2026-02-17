@@ -1,12 +1,79 @@
 import { z } from "zod";
 
+/**
+ * Normalize username by replacing Unicode lookalikes with single ASCII letters (a-z, A-Z).
+ * Only characters that look like Latin are mapped so input from Cyrillic/Greek keyboards
+ * or paste passes validation. We use one-to-one (or to-empty) mappings so length stays
+ * within the 3–30 limit. We do NOT map every world script so intentional non-Latin
+ * usernames are unchanged; this fixes the "only letters, numbers, underscores" error
+ * when users type what they believe is ASCII.
+ */
+function normalizeUsernameToAscii(s: string): string {
+  const map: Record<string, string> = {
+    // Cyrillic lowercase → single Latin
+    "\u0430": "a", "\u0431": "b", "\u0432": "v", "\u0433": "g", "\u0434": "d",
+    "\u0435": "e", "\u0436": "z", "\u0437": "z", "\u0438": "i", "\u0439": "j",
+    "\u043a": "k", "\u043b": "l", "\u043c": "m", "\u043d": "n", "\u043e": "o",
+    "\u043f": "p", "\u0440": "r", "\u0441": "s", "\u0442": "t", "\u0443": "u",
+    "\u0444": "f", "\u0445": "x", "\u0446": "c", "\u0447": "c", "\u0448": "s",
+    "\u0449": "s", "\u044a": "", "\u044b": "y", "\u044c": "", "\u044d": "e",
+    "\u044e": "u", "\u044f": "a", "\u0456": "i", "\u0457": "i", "\u0458": "j",
+    "\u0459": "l", "\u045a": "n", "\u045b": "t", "\u045c": "k", "\u0455": "s",
+    "\u0454": "e", "\u045f": "d",
+    // Cyrillic uppercase
+    "\u0410": "A", "\u0411": "B", "\u0412": "V", "\u0413": "G", "\u0414": "D",
+    "\u0415": "E", "\u0416": "Z", "\u0417": "Z", "\u0418": "I", "\u0419": "J",
+    "\u041a": "K", "\u041b": "L", "\u041c": "M", "\u041d": "N", "\u041e": "O",
+    "\u041f": "P", "\u0420": "R", "\u0421": "S", "\u0422": "T", "\u0423": "U",
+    "\u0424": "F", "\u0425": "X", "\u0426": "C", "\u0427": "C", "\u0428": "S",
+    "\u0429": "S", "\u042a": "", "\u042b": "Y", "\u042c": "", "\u042d": "E",
+    "\u042e": "U", "\u042f": "A", "\u0406": "I", "\u0407": "I", "\u0408": "J",
+    "\u0409": "L", "\u040a": "N", "\u040b": "T", "\u040c": "K", "\u0405": "S",
+    "\u0404": "E", "\u040f": "D",
+    // Greek (lookalikes only) → single Latin
+    "\u03b1": "a", "\u03b2": "b", "\u03b5": "e", "\u03b7": "n", "\u03b9": "i",
+    "\u03ba": "k", "\u03bc": "m", "\u03bd": "v", "\u03bf": "o", "\u03c0": "p",
+    "\u03c1": "p", "\u03c2": "s", "\u03c3": "s", "\u03c4": "t", "\u03c5": "u",
+    "\u03c7": "x", "\u03c9": "w", "\u0391": "A", "\u0392": "B", "\u0395": "E",
+    "\u0399": "I", "\u039a": "K", "\u039c": "M", "\u039d": "N", "\u039f": "O",
+    "\u03a0": "P", "\u03a1": "P", "\u03a3": "S", "\u03a4": "T", "\u03a5": "Y",
+    "\u03a7": "X", "\u03a9": "W",
+  };
+  const re = new RegExp(
+    Object.keys(map)
+      .map((k) => "\\u" + k.charCodeAt(0).toString(16).padStart(4, "0"))
+      .join("|"),
+    "gu"
+  );
+  return s.replace(re, (c) => map[c] ?? c);
+}
+
+const usernameSchema = z
+  .string()
+  .transform((s) => normalizeUsernameToAscii(s.trim()))
+  .refine((s) => s.length >= 3, "Username must be at least 3 characters")
+  .refine((s) => s.length <= 30, "Username must be less than 30 characters")
+  .refine(
+    (s) => /^[a-zA-Z0-9_]+$/.test(s),
+    "Username can only contain letters, numbers, and underscores"
+  )
+  .transform((s) => s.toLowerCase());
+
+/** Strip invisible/control chars from email (paste, keyboard suggestions, etc.). */
+function normalizeEmailForLookup(email: string): string {
+  return email
+    .trim()
+    .toLowerCase()
+    .replace(/[\u200B-\u200D\uFEFF\u00AD]/g, ""); // zero-width, BOM, soft hyphen
+}
+
 // Enhanced validation schemas with better error messages and security
 export const signupSchema = z.object({
   email: z
     .string()
     .email("Please enter a valid email address")
     .max(255, "Email must be less than 255 characters")
-    .transform((email) => email.toLowerCase().trim()),
+    .transform((email) => normalizeEmailForLookup(email)),
   password: z
     .string()
     .min(8, "Password must be at least 8 characters")
@@ -24,27 +91,46 @@ export const signupSchema = z.object({
       "Name can only contain letters, spaces, hyphens, and apostrophes"
     )
     .transform((name) => name.trim()),
-  username: z
-    .string()
-    .min(3, "Username must be at least 3 characters")
-    .max(30, "Username must be less than 30 characters")
-    .regex(
-      /^[a-zA-Z0-9_]+$/,
-      "Username can only contain letters, numbers, and underscores"
-    )
-    .transform((username) => username.toLowerCase().trim())
-    .optional(),
+  username: usernameSchema,
 });
 
 export const loginSchema = z.object({
   email: z
     .string()
     .email("Please enter a valid email address")
-    .transform((email) => email.toLowerCase().trim()),
+    .transform((email) => normalizeEmailForLookup(email)),
   password: z
     .string()
     .min(1, "Password is required")
     .max(128, "Password is too long"),
+});
+
+export const authGoogleSchema = z.object({
+  idToken: z.string().min(1, "idToken is required"),
+});
+
+const passwordSchema = z
+  .string()
+  .min(8, "Password must be at least 8 characters")
+  .max(128, "Password must be less than 128 characters")
+  .regex(
+    /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/,
+    "Password must contain at least one lowercase letter, one uppercase letter, and one number"
+  );
+
+export const completeProfileSchema = z.object({
+  username: usernameSchema,
+  password: passwordSchema,
+  name: z
+    .string()
+    .min(2, "Name must be at least 2 characters")
+    .max(100, "Name must be less than 100 characters")
+    .regex(
+      /^[a-zA-Z\s'-]+$/,
+      "Name can only contain letters, spaces, hyphens, and apostrophes"
+    )
+    .transform((name) => name.trim())
+    .optional(),
 });
 
 export const updateProfileSchema = z.object({
@@ -58,25 +144,31 @@ export const updateProfileSchema = z.object({
     )
     .transform((name) => name.trim())
     .optional(),
-  username: z
-    .string()
-    .min(3, "Username must be at least 3 characters")
-    .max(30, "Username must be less than 30 characters")
-    .regex(
-      /^[a-zA-Z0-9_]+$/,
-      "Username can only contain letters, numbers, and underscores"
-    )
-    .transform((username) => username.toLowerCase().trim())
-    .optional(),
+  username: usernameSchema.optional(),
   bio: z
-    .string()
-    .max(500, "Bio must be less than 500 characters")
-    .transform((bio) => bio.trim())
+    .union([
+      z.string().max(200, "Bio must be 200 characters or less").transform((bio) => {
+        const trimmed = bio.trim();
+        return trimmed.length > 0 ? trimmed : null;
+      }),
+      z.null(),
+    ])
     .optional(),
   avatarUrl: z
     .string()
     .url("Please enter a valid URL")
     .max(2048, "URL is too long")
+    .optional(),
+  isPrivate: z
+    .union([
+      z.boolean(),
+      z.string().transform((val) => {
+        // Handle string "true"/"false" from form data or query params
+        if (val === "true" || val === "1") return true;
+        if (val === "false" || val === "0") return false;
+        throw new Error("isPrivate must be a boolean or 'true'/'false' string");
+      }),
+    ])
     .optional(),
 });
 
@@ -410,4 +502,46 @@ export const tripFilterSchema = z.object({
 export const rateLimitSchema = z.object({
   maxRequests: z.number().min(1).max(1000).default(100),
   windowMs: z.number().min(1000).max(3600000).default(60000), // 1 second to 1 hour
+});
+
+// Engagement validation schemas
+export const createLikeSchema = z.object({
+  entityType: z.enum(["TRIP_FINAL_POST", "TRIP_THREAD_ENTRY", "COMMENT"]),
+  entityId: z.string().uuid("Invalid entity ID format"),
+});
+
+export const deleteLikeSchema = z.object({
+  entityType: z.enum(["TRIP_FINAL_POST", "TRIP_THREAD_ENTRY", "COMMENT"]),
+  entityId: z.string().uuid("Invalid entity ID format"),
+});
+
+export const createCommentSchema = z.object({
+  entityType: z.enum(["TRIP_FINAL_POST", "TRIP_THREAD_ENTRY"]),
+  entityId: z.string().uuid("Invalid entity ID format"),
+  contentText: z
+    .string()
+    .min(1, "Comment cannot be empty")
+    .max(250, "Comment must be less than 250 characters")
+    .transform((text) => text.trim())
+    .refine((text) => text.length > 0, {
+      message: "Comment cannot be empty or only whitespace",
+    }),
+  parentCommentId: z
+    .string()
+    .uuid("Invalid parent comment ID format")
+    .optional(),
+});
+
+export const createShareSchema = z.object({
+  entityType: z.enum(["TRIP_FINAL_POST"]),
+  entityId: z.string().uuid("Invalid entity ID format"),
+  shareType: z.enum(["DEEP_LINK", "WEB_LINK", "EXTERNAL"]),
+  expiresAt: z
+    .string()
+    .datetime()
+    .optional()
+    .transform((val) => (val ? new Date(val) : undefined))
+    .refine((date) => !date || date > new Date(), {
+      message: "Expiration date must be in the future",
+    }),
 });

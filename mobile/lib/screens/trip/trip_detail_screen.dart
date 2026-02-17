@@ -315,7 +315,7 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
                         Icon(
                           Icons.error_outline,
                           size: 64,
-                          color: Colors.grey[400],
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
                         ),
                         const SizedBox(height: 16),
                         const Text(
@@ -331,7 +331,7 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
                           textAlign: TextAlign.center,
                           style: TextStyle(
                             fontSize: 16,
-                            color: Colors.grey[600],
+                            color: Theme.of(context).colorScheme.onSurfaceVariant,
                           ),
                         ),
                       ],
@@ -505,7 +505,11 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
             // Destinations
             Row(
               children: [
-                Icon(Icons.location_on, color: Colors.grey[600], size: 20),
+                Icon(
+                  Icons.location_on,
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  size: 20,
+                ),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
@@ -531,7 +535,11 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
             // Dates
             Row(
               children: [
-                Icon(Icons.calendar_today, color: Colors.grey[600], size: 20),
+                Icon(
+                  Icons.calendar_today,
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  size: 20,
+                ),
                 const SizedBox(width: 8),
                 Text(
                   _formatDateRange(_trip!.startDate, _trip!.endDate),
@@ -711,16 +719,25 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
               Center(
                 child: Column(
                   children: [
-                    Icon(Icons.timeline, size: 48, color: Colors.grey[400]),
+                    Icon(
+                      Icons.timeline,
+                      size: 48,
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
                     const SizedBox(height: 8),
                     Text(
                       'No entries yet',
-                      style: TextStyle(color: Colors.grey[600], fontSize: 16),
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        fontSize: 16,
+                      ),
                     ),
                     const SizedBox(height: 4),
                     Text(
                       'Start documenting your journey!',
-                      style: TextStyle(color: Colors.grey[500]),
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant.withValues(alpha: 0.6),
+                      ),
                     ),
                   ],
                 ),
@@ -887,11 +904,13 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
               optimizedUrl,
               fit: BoxFit.cover,
               errorBuilder: (context, error, stackTrace) => Container(
-                color: Colors.grey[300],
+                color: Theme.of(context).colorScheme.onSurface.withValues(
+                  alpha: Theme.of(context).brightness == Brightness.dark ? 0.18 : 0.10,
+                ),
                 alignment: Alignment.center,
                 child: Icon(
                   Icons.broken_image,
-                  color: Colors.grey[600],
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
                   size: 28,
                 ),
               ),
@@ -971,7 +990,11 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(icon, size: 16, color: Colors.grey[600]),
+        Icon(
+          icon,
+          size: 16,
+          color: Theme.of(context).colorScheme.onSurfaceVariant,
+        ),
         const SizedBox(width: 4),
         Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -985,7 +1008,7 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
             Text(
               label,
               style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                color: Colors.grey[600],
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
                 fontSize: 10,
               ),
             ),

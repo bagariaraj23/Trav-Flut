@@ -195,18 +195,51 @@ class _DiscoverTabState extends State<DiscoverTab> {
           children: [
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-              child: TextField(
-                controller: _searchController,
-                onChanged: _onSearchChanged,
-                style: const TextStyle(color: Colors.black87, fontSize: 16),
-                decoration: InputDecoration(
-                  hintText: 'Search users or trips...',
-                  hintStyle: const TextStyle(color: Colors.grey, fontSize: 16),
-                  prefixIcon: const Icon(
-                    Icons.search,
-                    color: Colors.grey,
-                    size: 22,
-                  ),
+              child: Builder(
+                builder: (context) {
+                  final theme = Theme.of(context);
+                  final colorScheme = theme.colorScheme;
+
+                  // AppTheme sets many TextStyles to inherit:false; TextField requires
+                  // both fontSize and textBaseline when inherit is false.
+                  final baseBodyLarge = theme.textTheme.bodyLarge ??
+                      const TextStyle(
+                        fontSize: 16,
+                        textBaseline: TextBaseline.alphabetic,
+                      );
+
+                  final inputStyle = TextStyle(
+                    fontSize: baseBodyLarge.fontSize ?? 16,
+                    textBaseline:
+                        baseBodyLarge.textBaseline ?? TextBaseline.alphabetic,
+                    color: colorScheme.onSurface,
+                    fontFamily: baseBodyLarge.fontFamily,
+                    fontWeight: baseBodyLarge.fontWeight,
+                    inherit: false,
+                  );
+
+                  final hintStyle = TextStyle(
+                    fontSize: baseBodyLarge.fontSize ?? 16,
+                    textBaseline:
+                        baseBodyLarge.textBaseline ?? TextBaseline.alphabetic,
+                    color: colorScheme.onSurfaceVariant,
+                    fontFamily: baseBodyLarge.fontFamily,
+                    fontWeight: baseBodyLarge.fontWeight,
+                    inherit: false,
+                  );
+
+                  return TextField(
+                    controller: _searchController,
+                    onChanged: _onSearchChanged,
+                    style: inputStyle,
+                    decoration: InputDecoration(
+                      hintText: 'Search users or trips...',
+                      hintStyle: hintStyle,
+                      prefixIcon: Icon(
+                        Icons.search,
+                        size: 22,
+                        color: colorScheme.onSurfaceVariant,
+                      ),
                   suffixIcon: _isSearching
                       ? const SizedBox(
                           width: 20,
@@ -218,10 +251,11 @@ class _DiscoverTabState extends State<DiscoverTab> {
                         )
                       : _searchController.text.isNotEmpty
                       ? IconButton(
-                          icon: const Icon(
+                          icon: Icon(
                             Icons.clear,
-                            color: Colors.grey,
                             size: 20,
+                            color:
+                                Theme.of(context).colorScheme.onSurfaceVariant,
                           ),
                           onPressed: () {
                             _searchController.clear();
@@ -238,13 +272,22 @@ class _DiscoverTabState extends State<DiscoverTab> {
                     borderSide: BorderSide.none,
                   ),
                   filled: true,
-                  fillColor: Colors.grey[100],
+                  fillColor: Theme.of(context)
+                      .colorScheme
+                      .onSurface
+                      .withValues(
+                        alpha: Theme.of(context).brightness == Brightness.dark
+                            ? 0.10
+                            : 0.04,
+                      ),
                   contentPadding: const EdgeInsets.symmetric(
                     horizontal: 16,
                     vertical: 14,
                   ),
                   isDense: true,
                 ),
+                  );
+                },
               ),
             ),
 
@@ -548,7 +591,7 @@ class _DiscoverTabState extends State<DiscoverTab> {
                     Text(
                       trip.destinations.first,
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: Colors.grey[600],
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
                         fontSize: 10,
                       ),
                       maxLines: 1,
@@ -795,7 +838,9 @@ class _DiscoverTabState extends State<DiscoverTab> {
                       '@$username',
                       style: Theme.of(
                         context,
-                      ).textTheme.bodyMedium?.copyWith(color: Colors.grey[600]),
+                      ).textTheme.bodyMedium?.copyWith(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
                       overflow: TextOverflow.ellipsis,
                       maxLines: 1,
                     ),
@@ -804,7 +849,7 @@ class _DiscoverTabState extends State<DiscoverTab> {
                       Text(
                         bio,
                         style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: Colors.grey[600],
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
                         ),
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
@@ -834,9 +879,28 @@ class _DiscoverTabState extends State<DiscoverTab> {
                             ? null
                             : () => _toggleFollow(userId, isFollowing),
                         style: OutlinedButton.styleFrom(
-                          foregroundColor: Colors.grey[800],
-                          backgroundColor: Colors.grey[100],
-                          side: BorderSide(color: Colors.grey[300]!),
+                          foregroundColor:
+                              Theme.of(context).colorScheme.onSurface,
+                          backgroundColor: Theme.of(context)
+                              .colorScheme
+                              .onSurface
+                              .withValues(
+                                alpha:
+                                    Theme.of(context).brightness == Brightness.dark
+                                        ? 0.08
+                                        : 0.04,
+                              ),
+                          side: BorderSide(
+                            color: Theme.of(context)
+                                .colorScheme
+                                .onSurface
+                                .withValues(
+                                  alpha: Theme.of(context).brightness ==
+                                          Brightness.dark
+                                      ? 0.18
+                                      : 0.10,
+                                ),
+                          ),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(18),
                           ),

@@ -36,6 +36,9 @@ model User {
   createdPlaceShares       PlaceShare[]
   sentTripJoinRequests     TripJoinRequest[] @relation("SentTripJoinRequests")
   receivedTripJoinRequests TripJoinRequest[] @relation("ReceivedTripJoinRequests")
+  likes                    Like[]            @relation("UserLikes")
+  comments                 Comment[]         @relation("UserComments")
+  shares                   Share[]           @relation("UserShares")
 
   @@map("users")
 }
@@ -56,15 +59,28 @@ model PasswordReset {
   @@map("password_resets")
 }
 
-model SecurityEvent {
-  id        String   @id @default(uuid())
-  userId    String?
-  type      String
-  meta      Json?
-  createdAt DateTime @default(now())
-  user      User?    @relation(fields: [userId], references: [id])
+enum SecurityEventType {
+  COMMENT_REPORT
+  PROFANITY_DETECTED
+  RATE_LIMIT_HIT
+  ABUSE_DETECTED
+  UNAUTHORIZED_ACCESS
+}
 
+model SecurityEvent {
+  id         String            @id @default(uuid())
+  eventType  SecurityEventType
+  userId     String?
+  entityType EntityType?
+  entityId   String?
+  ipAddress  String?
+  metadata   Json
+  createdAt  DateTime          @default(now())
+  user       User?             @relation(fields: [userId], references: [id])
+
+  @@index([eventType, createdAt])
   @@index([userId, createdAt])
+  @@index([entityType, entityId])
   @@map("security_events")
 }
 
@@ -190,10 +206,11 @@ model TripThreadEntry {
   media          Media?          @relation(fields: [mediaId], references: [id], onDelete: SetNull)
   trip           Trip            @relation(fields: [tripId], references: [id], onDelete: Cascade)
   taggedUsers    TripThreadTag[]
-
+  likeCount      Int             @default(0)
+  commentCount   Int             @default(0)
   // Canonical place link for location/check-in entries
-  placeId String?
-  place   Place?  @relation(fields: [placeId], references: [id])
+  placeId        String?
+  place          Place?          @relation(fields: [placeId], references: [id])
 
   // Shares
   placeShares PlaceShare[]
@@ -301,6 +318,9 @@ model TripFinalPost {
   createdAt        DateTime         @default(now())
   updatedAt        DateTime         @default(now()) @updatedAt
   trip             Trip             @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  likeCount        Int              @default(0)
+  commentCount     Int              @default(0)
+  shareCount       Int              @default(0)
 
   @@map("trip_final_posts")
 }
@@ -408,4 +428,64 @@ enum GenerationStatus {
   READY
   PUBLISHED
   FAILED
+}
+
+enum EntityType {
+  TRIP_FINAL_POST
+  TRIP_THREAD_ENTRY
+  COMMENT
+}
+
+enum ShareType {
+  DEEP_LINK
+  WEB_LINK
+  EXTERNAL
+}
+
+model Like {
+  id         String     @id @default(uuid())
+  userId     String
+  entityType EntityType
+  entityId   String
+  createdAt  DateTime   @default(now())
+  user       User       @relation("UserLikes", fields: [userId], references: [id])
+
+  @@unique([userId, entityType, entityId])
+  @@index([entityType, entityId, createdAt])
+  @@index([userId])
+}
+
+model Comment {
+  id              String     @id @default(uuid())
+  userId          String
+  entityType      EntityType
+  entityId        String
+  contentText     String     @db.VarChar(250)
+  parentCommentId String?
+  likeCount       Int        @default(0)
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+  user            User       @relation("UserComments", fields: [userId], references: [id])
+  parentComment   Comment?   @relation("CommentReplies", fields: [parentCommentId], references: [id])
+  replies         Comment[]  @relation("CommentReplies")
+
+  @@index([entityType, entityId, createdAt])
+  @@index([parentCommentId])
+  @@index([userId])
+}
+
+model Share {
+  id         String     @id @default(uuid())
+  userId     String
+  entityType EntityType
+  entityId   String
+  shareToken String     @unique
+  shareType  ShareType
+  expiresAt  DateTime?
+  metadata   Json
+  createdAt  DateTime   @default(now())
+  user       User       @relation("UserShares", fields: [userId], references: [id])
+
+  @@index([userId, createdAt])
+  @@index([entityType, entityId])
 }

@@ -222,13 +222,17 @@ class _PlaceSearchSheetState extends State<PlaceSearchSheet> {
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(Icons.search_off, size: 64, color: Colors.grey[400]),
+                      Icon(
+                        Icons.search_off,
+                        size: 64,
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
                       const SizedBox(height: 16),
                       Text(
                         'No places found for "${_searchController.text.trim()}"',
                         style: TextStyle(
                           fontSize: 16,
-                          color: Colors.grey[700],
+                          color: Theme.of(context).colorScheme.onSurfaceVariant.withValues(alpha: 0.9),
                           fontWeight: FontWeight.w500,
                         ),
                         textAlign: TextAlign.center,
@@ -236,7 +240,10 @@ class _PlaceSearchSheetState extends State<PlaceSearchSheet> {
                       const SizedBox(height: 8),
                       Text(
                         'Try searching with a different name\nor use the map picker instead',
-                        style: TextStyle(fontSize: 14, color: Colors.grey[500]),
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: Theme.of(context).colorScheme.onSurfaceVariant.withValues(alpha: 0.6),
+                        ),
                         textAlign: TextAlign.center,
                       ),
                       const SizedBox(height: 24),
@@ -289,21 +296,24 @@ class _PlaceSearchSheetState extends State<PlaceSearchSheet> {
                       Icon(
                         Icons.location_searching,
                         size: 64,
-                        color: Colors.grey[400],
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
                       ),
                       const SizedBox(height: 16),
                       Text(
                         'Start typing to search',
                         style: TextStyle(
                           fontSize: 16,
-                          color: Colors.grey[600],
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
                           fontWeight: FontWeight.w500,
                         ),
                       ),
                       const SizedBox(height: 8),
                       Text(
                         'Enter at least 2 characters',
-                        style: TextStyle(fontSize: 14, color: Colors.grey[500]),
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: Theme.of(context).colorScheme.onSurfaceVariant.withValues(alpha: 0.6),
+                        ),
                       ),
                     ],
                   ),
@@ -321,7 +331,12 @@ class _PlaceSearchSheetState extends State<PlaceSearchSheet> {
       elevation: 0,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
-        side: BorderSide(color: Colors.grey[300]!, width: 1),
+        side: BorderSide(
+          color: Theme.of(context).colorScheme.onSurface.withValues(
+            alpha: Theme.of(context).brightness == Brightness.dark ? 0.18 : 0.10,
+          ),
+          width: 1,
+        ),
       ),
       child: ListTile(
         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -345,7 +360,10 @@ class _PlaceSearchSheetState extends State<PlaceSearchSheet> {
                 padding: const EdgeInsets.only(top: 4),
                 child: Text(
                   place.address!,
-                  style: TextStyle(color: Colors.grey[600], fontSize: 13),
+                  style: TextStyle(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    fontSize: 13,
+                  ),
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                 ),
@@ -354,7 +372,7 @@ class _PlaceSearchSheetState extends State<PlaceSearchSheet> {
         trailing: Icon(
           Icons.arrow_forward_ios,
           size: 16,
-          color: Colors.grey[400],
+          color: Theme.of(context).colorScheme.onSurfaceVariant,
         ),
         onTap: () => Navigator.of(context).pop(place),
       ),

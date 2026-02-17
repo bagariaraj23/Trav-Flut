@@ -3,10 +3,11 @@ import { prisma } from "@/lib/prisma";
 import { AuthService } from "@/lib/auth";
 import { ApiResponse, FollowRequestDto } from "@/types/api";
 import { withAuth, withRateLimit, withLogging } from "@/lib/middleware";
+import { handlePrismaUniqueError } from "@/lib/prismaErrors";
 
 // Create a follow request
 export async function POST(request: NextRequest) {
-  return withLogging(async (req) => {
+  const loggedHandler = withLogging(async (req) => {
     return withRateLimit(req, async (rateLimitedReq) => {
       return withAuth(rateLimitedReq, async (authenticatedReq) => {
         try {
@@ -145,7 +146,6 @@ export async function POST(request: NextRequest) {
           );
         } catch (error: any) {
           // Use centralized error handler for unique constraint violations
-          const { handlePrismaUniqueError } = await import("@/lib/prismaErrors");
           const uniqueError = handlePrismaUniqueError(error, {
             followerId_followeeId: "Follow request",
           });
@@ -163,12 +163,14 @@ export async function POST(request: NextRequest) {
         }
       });
     });
-  })(request);
+  });
+  
+  return await loggedHandler(request);
 }
 
 // Get all pending follow requests for current user
 export async function GET(request: NextRequest) {
-  return withLogging(async (req) => {
+  const handler = withLogging(async (req) => {
     return withRateLimit(req, async (rateLimitedReq) => {
       return withAuth(rateLimitedReq, async (authenticatedReq) => {
         try {
@@ -237,7 +239,8 @@ export async function GET(request: NextRequest) {
         }
       });
     });
-  })(request);
+  });
+  return handler(request);
 }
 
 // Delete/cancel a follow request
@@ -292,5 +295,5 @@ export async function DELETE(request: NextRequest) {
         }
       });
     });
-  })(request);
+  });
 }

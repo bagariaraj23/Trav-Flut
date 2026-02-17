@@ -22,6 +22,9 @@ export interface UserProfile {
   isPrivate: boolean;
   createdAt: string;
   updatedAt: string;
+  profileComplete?: boolean;
+  /** True when the user has linked a Google account (for Settings UI). */
+  hasGoogleLinked?: boolean;
 }
 
 export interface UserStats {
@@ -85,13 +88,13 @@ export interface TripResponse {
   endDate?: string | null;
   destinations: string[];
   mood?:
-  | "RELAXED"
-  | "ADVENTURE"
-  | "SPIRITUAL"
-  | "CULTURAL"
-  | "PARTY"
-  | "MIXED"
-  | null;
+    | "RELAXED"
+    | "ADVENTURE"
+    | "SPIRITUAL"
+    | "CULTURAL"
+    | "PARTY"
+    | "MIXED"
+    | null;
   type?: "SOLO" | "GROUP" | "COUPLE" | "FAMILY" | null;
   coverMediaId?: string | null;
   status: "UPCOMING" | "ONGOING" | "ENDED";
@@ -162,6 +165,10 @@ export interface TripFinalPostResponse {
   createdAt: string;
   updatedAt: string;
   trip?: TripResponse | null;
+  likeCount?: number;
+  commentCount?: number;
+  shareCount?: number;
+  hasLiked?: boolean;
 }
 
 export interface MediaResponse {

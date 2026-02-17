@@ -269,7 +269,9 @@ class _FinalPostEditScreenState extends State<FinalPostEditScreen> {
                     style: Theme.of(context)
                         .textTheme
                         .bodySmall
-                        ?.copyWith(color: Colors.grey[700]),
+                        ?.copyWith(
+                          color: Theme.of(context).colorScheme.onSurfaceVariant.withValues(alpha: 0.9),
+                        ),
                   ),
               ],
             ),

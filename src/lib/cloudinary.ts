@@ -3,7 +3,7 @@ import { randomUUID } from "crypto";
 import { MediaType } from "@prisma/client";
 import { AppError, ValidationError } from "./errors";
 import { validateFileUpload } from "./security";
-import { prisma } from "./db";
+import { prisma } from "./prisma";
 
 const requiredEnvVars = [
   "CLOUDINARY_CLOUD_NAME",
@@ -39,8 +39,9 @@ const ALLOWED_FORMATS_BY_RESOURCE_TYPE: Record<string, string[]> = {
 };
 
 const USER_STORAGE_QUOTA_BYTES =
-  Number(process.env.MEDIA_TOTAL_STORAGE_LIMIT_BYTES ?? 5 * 1024 * 1024 * 1024) ||
-  0;
+  Number(
+    process.env.MEDIA_TOTAL_STORAGE_LIMIT_BYTES ?? 5 * 1024 * 1024 * 1024
+  ) || 0;
 
 function detectMimeType(buffer: Buffer): string | null {
   if (buffer.length >= 3) {
@@ -50,7 +51,9 @@ function detectMimeType(buffer: Buffer): string | null {
   }
 
   if (buffer.length >= 8) {
-    const pngHeader = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+    const pngHeader = Buffer.from([
+      0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
+    ]);
     if (buffer.subarray(0, 8).equals(pngHeader)) {
       return "image/png";
     }
@@ -205,7 +208,9 @@ export class CloudinaryService {
     ensureConfigured();
 
     if (!data.secure_url || !data.public_id) {
-      throw new ValidationError("Cloudinary response is missing required fields");
+      throw new ValidationError(
+        "Cloudinary response is missing required fields"
+      );
     }
 
     if (
@@ -356,7 +361,10 @@ export class CloudinaryService {
         try {
           await CloudinaryService.deleteMedia(media.publicId);
         } catch (cleanupError) {
-          console.error("[Cloudinary] Failed to clean up stale media:", cleanupError);
+          console.error(
+            "[Cloudinary] Failed to clean up stale media:",
+            cleanupError
+          );
         }
       }
     } catch (error) {

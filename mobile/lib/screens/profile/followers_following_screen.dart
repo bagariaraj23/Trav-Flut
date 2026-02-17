@@ -191,12 +191,14 @@ class _FollowersFollowingScreenState extends State<FollowersFollowingScreen> {
               Icon(
                 Icons.error_outline,
                 size: 64,
-                color: Colors.grey[400],
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
               ),
               const SizedBox(height: 16),
               Text(
                 _error!,
-                style: TextStyle(color: Colors.grey[600]),
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 16),
@@ -228,7 +230,7 @@ class _FollowersFollowingScreenState extends State<FollowersFollowingScreen> {
                     ? Icons.people_outline
                     : Icons.person_outline,
                 size: 64,
-                color: Colors.grey[400],
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
               ),
               const SizedBox(height: 16),
               Text(
@@ -237,7 +239,7 @@ class _FollowersFollowingScreenState extends State<FollowersFollowingScreen> {
                     : 'Not following anyone yet',
                 style: TextStyle(
                   fontSize: 18,
-                  color: Colors.grey[600],
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
                   fontWeight: FontWeight.w500,
                 ),
                 textAlign: TextAlign.center,
@@ -249,7 +251,7 @@ class _FollowersFollowingScreenState extends State<FollowersFollowingScreen> {
                     : 'Start following people to see them here',
                 style: TextStyle(
                   fontSize: 14,
-                  color: Colors.grey[500],
+                  color: Theme.of(context).colorScheme.onSurfaceVariant.withValues(alpha: 0.6),
                 ),
                 textAlign: TextAlign.center,
               ),
@@ -447,7 +449,7 @@ class _FollowersFollowingScreenState extends State<FollowersFollowingScreen> {
                       Text(
                         '@${user.username}',
                         style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                              color: Colors.grey[600],
+                              color: Theme.of(context).colorScheme.onSurfaceVariant,
                             ),
                         overflow: TextOverflow.ellipsis,
                         maxLines: 1,
@@ -458,7 +460,7 @@ class _FollowersFollowingScreenState extends State<FollowersFollowingScreen> {
                       Text(
                         user.bio!,
                         style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                              color: Colors.grey[600],
+                              color: Theme.of(context).colorScheme.onSurfaceVariant,
                             ),
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
@@ -474,9 +476,25 @@ class _FollowersFollowingScreenState extends State<FollowersFollowingScreen> {
                       ? null
                       : () => _handleUnfollow(user.id, currentUserId),
                   style: OutlinedButton.styleFrom(
-                    foregroundColor: Colors.grey[800],
-                    backgroundColor: Colors.grey[100],
-                    side: BorderSide(color: Colors.grey[300]!),
+                    foregroundColor: Theme.of(context).colorScheme.onSurface,
+                    backgroundColor: Theme.of(context)
+                        .colorScheme
+                        .onSurface
+                        .withValues(
+                          alpha: Theme.of(context).brightness == Brightness.dark
+                              ? 0.08
+                              : 0.04,
+                        ),
+                    side: BorderSide(
+                      color: Theme.of(context)
+                          .colorScheme
+                          .onSurface
+                          .withValues(
+                            alpha: Theme.of(context).brightness == Brightness.dark
+                                ? 0.18
+                                : 0.10,
+                          ),
+                    ),
                     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                     minimumSize: const Size(0, 32),
                   ),

@@ -6,53 +6,34 @@ import type { PlaceInput } from "@/lib/place";
 import type { ApiResponse } from "@/types/api";
 import { Place } from "@prisma/client";
 import { getAuthSession } from "@/lib/auth";
-import { enforceRateLimit } from "@/lib/security";
+import { withRateLimit, withLogging, handleApiError } from "@/lib/middleware";
 
 export async function GET(request: NextRequest) {
-  try {
-    const { searchParams } = new URL(request.url);
-    const q = searchParams.get("q")?.trim() ?? "";
-    const lat = searchParams.get("lat");
-    const lng = searchParams.get("lng");
-    const limit = searchParams.get("limit");
-
-    // Early return for empty queries
-    if (q.length < 2) {
-      return NextResponse.json<ApiResponse>({ success: true, data: [] });
-    }
-
-    // Get authenticated user if available
+  const loggedHandler = withLogging(async (req) => {
+    // Get authenticated user if available for rate limiting
     const session = await getAuthSession();
     const userId = session?.user?.id;
 
-    // Enhanced rate limiting with security checks
-    const rateLimitResult = await enforceRateLimit(request, userId, "places:search");
-    if (!rateLimitResult.allowed) {
-      return NextResponse.json<ApiResponse>(
-        {
-          success: false,
-          error: "Rate limit exceeded",
-          meta: {
-            resetAt: new Date(rateLimitResult.resetAt * 1000).toISOString(),
-            retryAfter: rateLimitResult.resetAt - Math.floor(Date.now() / 1000)
-          }
-        },
-        {
-          status: 429,
-          headers: {
-            'Retry-After': String(rateLimitResult.resetAt - Math.floor(Date.now() / 1000))
-          }
-        }
-      );
-    }
+    return withRateLimit(req, 'places', async (rateLimitedReq) => {
+      try {
+        const { searchParams } = new URL(rateLimitedReq.url);
+        const q = searchParams.get("q")?.trim() ?? "";
+        const lat = searchParams.get("lat");
+        const lng = searchParams.get("lng");
+        const limit = searchParams.get("limit");
 
-    const normalizedResults = await searchPlaces({
-      q,
-      lat: lat ? parseFloat(lat) : undefined,
-      lng: lng ? parseFloat(lng) : undefined,
-      limit: limit ? parseInt(limit, 10) : 10,
-      userId,
-    });
+        // Early return for empty queries
+        if (q.length < 2) {
+          return NextResponse.json<ApiResponse>({ success: true, data: [] });
+        }
+
+        const normalizedResults = await searchPlaces({
+          q,
+          lat: lat ? parseFloat(lat) : undefined,
+          lng: lng ? parseFloat(lng) : undefined,
+          limit: limit ? parseInt(limit, 10) : 10,
+          userId,
+        });
 
     if (normalizedResults.length === 0) {
       return NextResponse.json<ApiResponse>({ success: true, data: [] });
@@ -84,15 +65,15 @@ export async function GET(request: NextRequest) {
       (place): place is Place => place !== null
     );
 
-    return NextResponse.json<ApiResponse<Place[]>>({
-      success: true,
-      data: resolvedPlaces,
-    });
-  } catch (error) {
-    console.error("[Search] Error:", error);
-    return NextResponse.json<ApiResponse>(
-      { success: false, error: "Internal server error" },
-      { status: 500 }
-    );
-  }
+        return NextResponse.json<ApiResponse<Place[]>>({
+          success: true,
+          data: resolvedPlaces,
+        });
+      } catch (error) {
+        return handleApiError(error);
+      }
+    }, { userId });
+  });
+  
+  return await loggedHandler(request);
 }

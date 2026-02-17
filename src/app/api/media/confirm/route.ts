@@ -1,11 +1,8 @@
 import { NextRequest } from "next/server";
 import { z } from "zod";
 import { ok, badRequest, serverError } from "@/lib/response-helpers";
-import {
-  withAuth,
-  AuthenticatedRequest,
-} from "@/lib/middleware";
-import { prisma } from "@/lib/db";
+import { withAuth, AuthenticatedRequest } from "@/lib/middleware";
+import { prisma } from "@/lib/prisma";
 import { CloudinaryService } from "@/lib/cloudinary";
 
 const mediaUsageEnum = z.enum(["trip_cover", "thread_entry", "general"]);
@@ -29,8 +26,7 @@ async function handler(request: AuthenticatedRequest) {
   try {
     const body = await request.json();
 
-    const { tripId, usage, ...cloudinaryPayload } =
-      confirmSchema.parse(body);
+    const { tripId, usage, ...cloudinaryPayload } = confirmSchema.parse(body);
 
     if (tripId) {
       const trip = await prisma.trip.findFirst({

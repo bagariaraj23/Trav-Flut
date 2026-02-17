@@ -1,11 +1,17 @@
 import 'package:flutter/foundation.dart';
 import 'package:tripthread/models/trip.dart';
 import 'package:tripthread/services/api_service.dart';
+import 'package:tripthread/providers/engagement_provider.dart';
 
 class FeedProvider extends ChangeNotifier {
   final ApiService _apiService;
+  final EngagementProvider? _engagementProvider;
 
-  FeedProvider({required ApiService apiService}) : _apiService = apiService;
+  FeedProvider({
+    required ApiService apiService,
+    EngagementProvider? engagementProvider,
+  }) : _apiService = apiService,
+       _engagementProvider = engagementProvider;
 
   // Home Feed State
   final List<TripFinalPost> _homeFeedPosts = [];
@@ -32,6 +38,14 @@ class FeedProvider extends ChangeNotifier {
   String? get discoverTripsError => _discoverTripsError;
   bool get hasMoreDiscoverTrips => _hasMoreDiscoverTrips;
 
+  // Update a post in the home feed
+  void updatePost(int index, TripFinalPost updatedPost) {
+    if (index >= 0 && index < _homeFeedPosts.length) {
+      _homeFeedPosts[index] = updatedPost;
+      notifyListeners();
+    }
+  }
+
   // Home Feed Methods
   Future<void> loadHomeFeed({bool refresh = false}) async {
     try {
@@ -56,13 +70,17 @@ class FeedProvider extends ChangeNotifier {
       _isHomeFeedLoading = true;
       notifyListeners();
 
-      debugPrint('[FeedProvider] Loading home feed, page: $_homeFeedPage, limit: 20');
+      debugPrint(
+        '[FeedProvider] Loading home feed, page: $_homeFeedPage, limit: 20',
+      );
       final response = await _apiService.getHomeFeed(
         page: _homeFeedPage,
         limit: 20,
       );
 
-      debugPrint('[FeedProvider] Home feed API response: success=${response.success}, error=${response.error}');
+      debugPrint(
+        '[FeedProvider] Home feed API response: success=${response.success}, error=${response.error}',
+      );
 
       if (response.success && response.data != null) {
         final data = response.data!;
@@ -70,7 +88,9 @@ class FeedProvider extends ChangeNotifier {
 
         // Validate response structure
         if (!data.containsKey('items') || !data.containsKey('hasNext')) {
-          throw Exception('Invalid response structure: missing required fields');
+          throw Exception(
+            'Invalid response structure: missing required fields',
+          );
         }
 
         final items = data['items'];
@@ -87,7 +107,9 @@ class FeedProvider extends ChangeNotifier {
           try {
             final item = items[i];
             if (item is! Map<String, dynamic>) {
-              debugPrint('[FeedProvider] Warning: item $i is not a Map, got ${item.runtimeType}');
+              debugPrint(
+                '[FeedProvider] Warning: item $i is not a Map, got ${item.runtimeType}',
+              );
               continue;
             }
 
@@ -95,7 +117,9 @@ class FeedProvider extends ChangeNotifier {
             final isPrivate = item['isPrivate'] ?? false;
             final isFollowing = item['isFollowing'] ?? false;
             if (isPrivate && !isFollowing) {
-              debugPrint('[FeedProvider] Skipping private post from non-followed user');
+              debugPrint(
+                '[FeedProvider] Skipping private post from non-followed user',
+              );
               continue;
             }
 
@@ -119,7 +143,12 @@ class FeedProvider extends ChangeNotifier {
         _homeFeedPage++;
         _homeFeedError = null;
 
-        debugPrint('[FeedProvider] Home feed updated: ${_homeFeedPosts.length} posts, hasNext: $_hasMoreHomeFeedPosts, page: $_homeFeedPage');
+        debugPrint(
+          '[FeedProvider] Home feed updated: ${_homeFeedPosts.length} posts, hasNext: $_hasMoreHomeFeedPosts, page: $_homeFeedPage',
+        );
+
+        // Sync engagement data with EngagementProvider
+        _syncEngagementData(posts);
       } else {
         _homeFeedError = response.error ?? 'Failed to load home feed';
         debugPrint('[FeedProvider] Home feed failed: $_homeFeedError');
@@ -147,7 +176,8 @@ class FeedProvider extends ChangeNotifier {
         _hasMoreDiscoverTrips = true;
         _discoverTripsError = null;
         debugPrint(
-            '[FeedProvider] Refreshing discover trips, page: $_discoverTripsPage');
+          '[FeedProvider] Refreshing discover trips, page: $_discoverTripsPage',
+        );
       }
 
       if (!_hasMoreDiscoverTrips) {
@@ -159,7 +189,8 @@ class FeedProvider extends ChangeNotifier {
       notifyListeners();
 
       debugPrint(
-          '[FeedProvider] Loading discover trips, page: $_discoverTripsPage, limit: 20, status: $status, mood: $mood');
+        '[FeedProvider] Loading discover trips, page: $_discoverTripsPage, limit: 20, status: $status, mood: $mood',
+      );
       final response = await _apiService.getDiscoverTrips(
         page: _discoverTripsPage,
         limit: 20,
@@ -169,14 +200,17 @@ class FeedProvider extends ChangeNotifier {
       );
 
       debugPrint(
-          '[FeedProvider] Discover trips API response: success=${response.success}, error=${response.error}');
+        '[FeedProvider] Discover trips API response: success=${response.success}, error=${response.error}',
+      );
 
       if (response.success && response.data != null) {
         final data = response.data!;
 
         // Validate response structure
         if (!data.containsKey('items') || !data.containsKey('hasNext')) {
-          throw Exception('Invalid response structure: missing required fields');
+          throw Exception(
+            'Invalid response structure: missing required fields',
+          );
         }
 
         final items = data['items'];
@@ -194,7 +228,8 @@ class FeedProvider extends ChangeNotifier {
             final item = items[i];
             if (item is! Map<String, dynamic>) {
               debugPrint(
-                  '[FeedProvider] Warning: item $i is not a Map, got ${item.runtimeType}');
+                '[FeedProvider] Warning: item $i is not a Map, got ${item.runtimeType}',
+              );
               continue;
             }
 
@@ -224,11 +259,13 @@ class FeedProvider extends ChangeNotifier {
         _discoverTripsError = null;
 
         debugPrint(
-            '[FeedProvider] Discover trips updated: ${_discoverTrips.length} trips, hasNext: $_hasMoreDiscoverTrips, page: $_discoverTripsPage');
+          '[FeedProvider] Discover trips updated: ${_discoverTrips.length} trips, hasNext: $_hasMoreDiscoverTrips, page: $_discoverTripsPage',
+        );
       } else {
         _discoverTripsError = response.error ?? 'Failed to load discover trips';
         debugPrint(
-            '[FeedProvider] Discover trips failed: $_discoverTripsError');
+          '[FeedProvider] Discover trips failed: $_discoverTripsError',
+        );
       }
     } catch (e) {
       _discoverTripsError = 'An unexpected error occurred: $e';
@@ -278,5 +315,30 @@ class FeedProvider extends ChangeNotifier {
     _homeFeedError = null;
     _discoverTripsError = null;
     notifyListeners();
+  }
+
+  // Sync engagement data with EngagementProvider from server truth.
+  // Overwrite from feed so multi-user and refresh show correct state,
+  // but skip posts currently being toggled (in-flight like/unlike).
+  void _syncEngagementData(List<TripFinalPost> posts) {
+    final engagementProvider = _engagementProvider;
+    if (engagementProvider == null) {
+      debugPrint(
+        '[FeedProvider] EngagementProvider not available, skipping sync',
+      );
+      return;
+    }
+
+    for (final post in posts) {
+      if (engagementProvider.isToggling(post.id)) continue;
+      engagementProvider.setLikeStatus(
+        post.id,
+        post.hasLiked,
+        count: post.likeCount,
+      );
+      debugPrint(
+        '[FeedProvider] Synced engagement for post ${post.id}: liked=${post.hasLiked}, count=${post.likeCount}',
+      );
+    }
   }
 }

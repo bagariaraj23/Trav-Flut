@@ -174,7 +174,7 @@ class _PlaceSearchFieldState extends State<PlaceSearchField> {
                                     place.address!,
                                     style: TextStyle(
                                       fontSize: 12,
-                                      color: Colors.grey[600],
+                                      color: Theme.of(context).colorScheme.onSurfaceVariant,
                                     ),
                                   ),
                               ],

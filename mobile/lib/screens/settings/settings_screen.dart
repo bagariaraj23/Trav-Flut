@@ -2,221 +2,389 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
 import 'package:tripthread/providers/auth_provider.dart';
+import 'package:tripthread/services/google_sign_in_service.dart';
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
 
+  Widget _buildSettingsTile({
+    required BuildContext context,
+    required IconData icon,
+    required String title,
+    required VoidCallback onTap,
+    Color? iconColor,
+    Color? textColor,
+  }) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
+    return InkWell(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+        child: Row(
+          children: [
+            Icon(icon, color: iconColor ?? colorScheme.onSurface),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Text(
+                title,
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.normal,
+                  color: textColor ?? colorScheme.onSurface,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    return PopScope(
-      canPop: true,
-      onPopInvokedWithResult: (didPop, result) {
-        if (!didPop) {
-          if (context.canPop()) {
-            context.pop();
-          } else {
-            context.go('/home');
-          }
+    return Consumer<AuthProvider>(
+      builder: (context, authProvider, child) {
+        final theme = Theme.of(context);
+        final colorScheme = theme.colorScheme;
+
+        if (authProvider.isLoading) {
+          return Scaffold(
+            body: Center(
+              child: CircularProgressIndicator(color: colorScheme.primary),
+            ),
+          );
         }
-      },
-      child: Scaffold(
-        appBar: AppBar(
-          title: const Text('Settings'),
-          leading: IconButton(
-            icon: const Icon(Icons.arrow_back),
-            onPressed: () {
+
+        if (!authProvider.isAuthenticated) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (context.mounted) {
+              context.go('/login');
+            }
+          });
+          return Scaffold(
+            body: Center(
+              child: CircularProgressIndicator(color: colorScheme.primary),
+            ),
+          );
+        }
+
+        return PopScope(
+          canPop: true,
+          onPopInvokedWithResult: (didPop, result) {
+            if (!didPop) {
               if (context.canPop()) {
                 context.pop();
               } else {
                 context.go('/home');
               }
-            },
-          ),
-        ),
-      body: ListView(
-        children: [
-          // Profile Section
-          const SizedBox(height: 16),
-          const Padding(
-            padding: EdgeInsets.symmetric(horizontal: 16),
-            child: Text(
-              'Account',
-              style: TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w500,
-                color: Colors.grey,
+            }
+          },
+          child: Scaffold(
+            appBar: AppBar(
+              title: const Text('Settings'),
+              leading: IconButton(
+                icon: const Icon(Icons.arrow_back),
+                onPressed: () {
+                  if (context.canPop()) {
+                    context.pop();
+                  } else {
+                    context.go('/home');
+                  }
+                },
               ),
             ),
-          ),
-          ListTile(
-            leading: const Icon(Icons.lock_outline),
-            title: const Text('Change Password'),
-            onTap: () {
-              showDialog(
-                context: context,
-                builder: (BuildContext context) {
-                  return AlertDialog(
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
+            body: ListView(
+              children: [
+                const SizedBox(height: 16),
+                const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 16),
+                  child: Text(
+                    'Linked accounts',
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                      color: Colors.grey,
                     ),
-                    title: const Text('Change Password'),
-                    content: const Text(
-                      'Are you sure you want to change your password? '
-                      'A reset link will be sent to your email.',
-                    ),
-                    actions: [
-                      TextButton(
-                        onPressed: () => Navigator.of(context).pop(),
-                        child: const Text('Cancel'),
-                      ),
-                      TextButton(
-                        onPressed: () async {
-                          Navigator.of(context).pop();
-                          final authProvider = context.read<AuthProvider>();
-                          final user = authProvider.currentUser;
-
-                          if (user != null) {
-                            final success = await authProvider.forgotPassword(
-                              email: user.email,
-                            );
-
-                            if (context.mounted) {
-                              if (success) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
-                                    content: Text(
-                                        'Password reset link has been sent to your email.'),
-                                    backgroundColor: Colors.green,
-                                  ),
-                                );
-                              } else {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
-                                    content: Text(
-                                        'Failed to send reset link. Please try again.'),
-                                    backgroundColor: Colors.red,
-                                  ),
-                                );
-                              }
-                            }
-                          }
-                        },
-                        style: TextButton.styleFrom(
-                          foregroundColor:
-                              Theme.of(context).colorScheme.primary,
+                  ),
+                ),
+                _buildSettingsTile(
+                  context: context,
+                  icon: authProvider.currentUser?.hasGoogleLinked == true
+                      ? Icons.check_circle
+                      : Icons.link,
+                  title: authProvider.currentUser?.hasGoogleLinked == true
+                      ? 'Google account linked'
+                      : 'Link Google account',
+                  iconColor: authProvider.currentUser?.hasGoogleLinked == true
+                      ? Colors.green
+                      : null,
+                  onTap: () async {
+                    final googleSignIn = context.read<GoogleSignInService>();
+                    final result = await googleSignIn.signInWithAccountPicker();
+                    if (!context.mounted) return;
+                    final idToken = result is GoogleSignInNativeSuccess
+                        ? result.idToken
+                        : null;
+                    if (idToken == null) {
+                      if (result is GoogleSignInNativeCancelled) return;
+                      if (result is GoogleSignInNativeDeveloperError) {
+                        // Log technical details for developers, show user-friendly message
+                        debugPrint(
+                          '[SettingsScreen] Google Sign-In configuration error (SHA-1 not configured)',
+                        );
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text(
+                              'Google Sign-In is not properly configured. Please contact support.',
+                            ),
+                            duration: Duration(seconds: 5),
+                            backgroundColor: Colors.red,
+                          ),
+                        );
+                        return;
+                      }
+                      if (result is GoogleSignInNativeFailure) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(result.message),
+                            backgroundColor: Colors.red,
+                          ),
+                        );
+                        return;
+                      }
+                      return;
+                    }
+                    final authProvider = context.read<AuthProvider>();
+                    final message = await authProvider.linkGoogle(idToken);
+                    if (!context.mounted) return;
+                    if (message != null) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(message),
+                          backgroundColor: Colors.green,
                         ),
-                        child: const Text('Change Password'),
-                      ),
-                    ],
-                  );
-                },
-              );
-            },
-          ),
+                      );
+                    } else {
+                      final errorText = authProvider.error ??
+                          'Failed to link Google account.';
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(errorText),
+                          backgroundColor: Colors.red,
+                        ),
+                      );
+                      // So next tap shows account picker instead of reusing the same account
+                      if (errorText.toLowerCase().contains('already linked to another account')) {
+                        await googleSignIn.signOut();
+                      }
+                    }
+                  },
+                ),
+                const Divider(),
+                const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 16),
+                  child: Text(
+                    'Account',
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                      color: Colors.grey,
+                    ),
+                  ),
+                ),
+                _buildSettingsTile(
+                  context: context,
+                  icon: Icons.lock_outline,
+                  title: 'Change Password',
+                  onTap: () {
+                    showDialog(
+                      context: context,
+                      builder: (BuildContext dialogContext) {
+                        return AlertDialog(
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                          title: const Text('Change Password'),
+                          content: const Text(
+                            'Are you sure you want to change your password? '
+                            'A reset link will be sent to your email.',
+                          ),
+                          actions: [
+                            TextButton(
+                              onPressed: () =>
+                                  Navigator.of(dialogContext).pop(),
+                              child: const Text('Cancel'),
+                            ),
+                            TextButton(
+                              onPressed: () async {
+                                Navigator.of(dialogContext).pop();
+                                final authProvider = context
+                                    .read<AuthProvider>();
+                                final user = authProvider.currentUser;
 
-          const Divider(),
+                                if (user != null && user.email.isNotEmpty) {
+                                  final success = await authProvider
+                                      .forgotPassword(email: user.email);
 
-          // Logout Option
-          ListTile(
-            leading: const Icon(Icons.logout),
-            title: const Text('Logout'),
-            onTap: () async {
-              final authProvider = context.read<AuthProvider>();
-              await authProvider.logout();
-              if (context.mounted) {
-                context.go('/login');
-              }
-            },
-          ),
+                                  if (context.mounted) {
+                                    if (success) {
+                                      ScaffoldMessenger.of(
+                                        context,
+                                      ).showSnackBar(
+                                        const SnackBar(
+                                          content: Text(
+                                            'Password reset link has been sent to your email.',
+                                          ),
+                                          backgroundColor: Colors.green,
+                                        ),
+                                      );
+                                    } else {
+                                      ScaffoldMessenger.of(
+                                        context,
+                                      ).showSnackBar(
+                                        SnackBar(
+                                          content: Text(
+                                            authProvider.error ??
+                                                'Failed to send reset link. Please try again.',
+                                          ),
+                                          backgroundColor: Colors.red,
+                                        ),
+                                      );
+                                    }
+                                  }
+                                } else {
+                                  if (context.mounted) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(
+                                        content: Text(
+                                          'Unable to retrieve user email. Please try again.',
+                                        ),
+                                        backgroundColor: Colors.red,
+                                      ),
+                                    );
+                                  }
+                                }
+                              },
+                              style: TextButton.styleFrom(
+                                foregroundColor: colorScheme.primary,
+                              ),
+                              child: const Text('Change Password'),
+                            ),
+                          ],
+                        );
+                      },
+                    );
+                  },
+                ),
+                const Divider(),
+                _buildSettingsTile(
+                  context: context,
+                  icon: Icons.logout,
+                  title: 'Logout',
+                  onTap: () async {
+                    final authProvider = context.read<AuthProvider>();
+                    await authProvider.logout();
+                    if (context.mounted) {
+                      context.go('/login');
+                    }
+                  },
+                ),
+                const Divider(),
+                _buildSettingsTile(
+                  context: context,
+                  icon: Icons.delete_outline,
+                  title: 'Delete Account',
+                  iconColor: Colors.red,
+                  textColor: Colors.red,
+                  onTap: () {
+                    showDialog(
+                      context: context,
+                      builder: (BuildContext dialogContext) {
+                        return AlertDialog(
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                          title: const Text(
+                            'Delete Account',
+                            style: TextStyle(color: Colors.red),
+                          ),
+                          content: const Text(
+                            'Are you sure you want to delete your account? '
+                            'This action cannot be undone. All your data will be permanently deleted.',
+                          ),
+                          actions: [
+                            TextButton(
+                              onPressed: () =>
+                                  Navigator.of(dialogContext).pop(),
+                              child: const Text('Cancel'),
+                            ),
+                            TextButton(
+                              onPressed: () async {
+                                Navigator.of(dialogContext).pop();
 
-          const Divider(),
+                                showDialog(
+                                  context: context,
+                                  barrierDismissible: false,
+                                  builder: (BuildContext loadingContext) {
+                                    return const Center(
+                                      child: CircularProgressIndicator(),
+                                    );
+                                  },
+                                );
 
-          // Delete Account Option
-          ListTile(
-            leading: const Icon(Icons.delete_outline, color: Colors.red),
-            title: const Text(
-              'Delete Account',
-              style: TextStyle(color: Colors.red),
+                                final authProvider = context
+                                    .read<AuthProvider>();
+                                final success = await authProvider
+                                    .deleteAccount();
+
+                                if (context.mounted) {
+                                  Navigator.of(context).pop();
+
+                                  if (success) {
+                                    if (context.mounted) {
+                                      context.go('/login');
+                                      ScaffoldMessenger.of(
+                                        context,
+                                      ).showSnackBar(
+                                        const SnackBar(
+                                          content: Text(
+                                            'Your account has been deleted successfully.',
+                                          ),
+                                          backgroundColor: Colors.green,
+                                        ),
+                                      );
+                                    }
+                                  } else {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(
+                                        content: Text(
+                                          authProvider.error ??
+                                              'Failed to delete account. Please try again.',
+                                        ),
+                                        backgroundColor: Colors.red,
+                                      ),
+                                    );
+                                  }
+                                }
+                              },
+                              style: TextButton.styleFrom(
+                                foregroundColor: Colors.red,
+                              ),
+                              child: const Text('Delete Account'),
+                            ),
+                          ],
+                        );
+                      },
+                    );
+                  },
+                ),
+              ],
             ),
-            onTap: () {
-              showDialog(
-                context: context,
-                builder: (BuildContext context) {
-                  return AlertDialog(
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                    title: const Text(
-                      'Delete Account',
-                      style: TextStyle(color: Colors.red),
-                    ),
-                    content: const Text(
-                      'Are you sure you want to delete your account? '
-                      'This action cannot be undone. All your data will be permanently deleted.',
-                    ),
-                    actions: [
-                      TextButton(
-                        onPressed: () => Navigator.of(context).pop(),
-                        child: const Text('Cancel'),
-                      ),
-                      TextButton(
-                        onPressed: () async {
-                          Navigator.of(context).pop();
-
-                          showDialog(
-                            context: context,
-                            barrierDismissible: false,
-                            builder: (BuildContext context) {
-                              return const Center(
-                                child: CircularProgressIndicator(),
-                              );
-                            },
-                          );
-
-                          final authProvider = context.read<AuthProvider>();
-                          final success = await authProvider.deleteAccount();
-
-                          if (context.mounted) {
-                            Navigator.of(context).pop();
-
-                            if (success) {
-                              if (context.mounted) {
-                                context.go('/login');
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
-                                    content: Text(
-                                        'Your account has been deleted successfully.'),
-                                    backgroundColor: Colors.green,
-                                  ),
-                                );
-                              }
-                            } else {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                  content: Text(
-                                    authProvider.error ??
-                                        'Failed to delete account. Please try again.',
-                                  ),
-                                  backgroundColor: Colors.red,
-                                ),
-                              );
-                            }
-                          }
-                        },
-                        style: TextButton.styleFrom(
-                          foregroundColor: Colors.red,
-                        ),
-                        child: const Text('Delete Account'),
-                      ),
-                    ],
-                  );
-                },
-              );
-            },
           ),
-        ],
-      ),
-      ),
+        );
+      },
     );
   }
 }

@@ -13,9 +13,9 @@ import {
   handleApiError,
 } from "@/lib/middleware";
 
-function toResponse(finalPost: Awaited<
-  ReturnType<typeof TripFinalizerService.getFinalPost>
->): TripFinalPostResponse {
+function toResponse(
+  finalPost: Awaited<ReturnType<typeof TripFinalizerService.getFinalPost>>
+): TripFinalPostResponse {
   return {
     ...finalPost,
     caption: finalPost.caption ?? undefined,
@@ -56,7 +56,7 @@ export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  return withLogging(async (req) => {
+  const loggedHandler = withLogging(async (req) => {
     return withRateLimit(req, async (rateLimitedReq) => {
       return withAuth(rateLimitedReq, async (authenticatedReq) => {
         try {
@@ -80,7 +80,9 @@ export async function GET(
         }
       });
     });
-  })(request);
+  });
+
+  return await loggedHandler(request);
 }
 
 export async function PUT(
@@ -100,7 +102,8 @@ export async function PUT(
             return permissionError;
           }
 
-          const body = (await authenticatedReq.json()) as UpdateFinalPostRequest;
+          const body =
+            (await authenticatedReq.json()) as UpdateFinalPostRequest;
           const finalPost = await TripFinalizerService.updateFinalPost(
             tripId,
             body
@@ -116,5 +119,5 @@ export async function PUT(
         }
       });
     });
-  })(request);
+  });
 }

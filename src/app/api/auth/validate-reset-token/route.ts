@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { validateResetToken } from "@/lib/services/passwordReset";
 import { z } from "zod";
+import { withRateLimit, withLogging } from "@/lib/middleware";
 
 const validateSchema = z.object({
   token: z.string().min(16),
@@ -9,35 +10,45 @@ const validateSchema = z.object({
 });
 
 export async function POST(request: NextRequest) {
-  try {
-    const body = await request.json();
-    const { token, email, allowUsed } = validateSchema.parse(body);
+  const loggedHandler = withLogging(async (req) => {
+    return withRateLimit(req, "auth_validate", async (rateLimitedReq) => {
+      try {
+        const body = await rateLimitedReq.json();
+        const { token, email, allowUsed } = validateSchema.parse(body);
 
-    const result = await validateResetToken(token, email, allowUsed ?? false);
+        const result = await validateResetToken(
+          token,
+          email,
+          allowUsed ?? false
+        );
 
-    if (!result.valid) {
-      return NextResponse.json(
-        {
-          valid: false,
-          error: result.error || "unknown-error",
-          message: getErrorMessage(result.error || "unknown-error"),
-        },
-        { status: 400 }
-      );
-    }
+        if (!result.valid) {
+          return NextResponse.json(
+            {
+              valid: false,
+              error: result.error || "unknown-error",
+              message: getErrorMessage(result.error || "unknown-error"),
+            },
+            { status: 400 }
+          );
+        }
 
-    return NextResponse.json({ valid: true });
-  } catch (error) {
-    console.error("Error validating reset token:", error);
-    return NextResponse.json(
-      {
-        valid: false,
-        error: "validation-error",
-        message: "An error occurred while validating the reset token.",
-      },
-      { status: 500 }
-    );
-  }
+        return NextResponse.json({ valid: true });
+      } catch (error) {
+        console.error("Error validating reset token:", error);
+        return NextResponse.json(
+          {
+            valid: false,
+            error: "validation-error",
+            message: "An error occurred while validating the reset token.",
+          },
+          { status: 500 }
+        );
+      }
+    });
+  });
+  
+  return await loggedHandler(request);
 }
 
 function getErrorMessage(error: string): string {
