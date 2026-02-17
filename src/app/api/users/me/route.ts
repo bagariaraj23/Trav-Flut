@@ -1,16 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { withAuth, withRateLimit, withLogging } from "@/lib/middleware";
+import { withAuth, withRateLimit, withLogging, handleApiError } from "@/lib/middleware";
 import { ApiResponse, UserProfile } from "@/types/api";
 import { CloudinaryService } from "@/lib/cloudinary";
 import { updateProfileSchema } from "@/lib/validation";
 import { handlePrismaUniqueError } from "@/lib/prismaErrors";
+import { PerformanceMonitor } from "@/lib/monitoring";
 
 // Get current user profile
 export async function GET(request: NextRequest) {
   const loggedHandler = withLogging(async (req) => {
     return withRateLimit(req, async (rateLimitedReq) => {
       return withAuth(rateLimitedReq, async (authenticatedReq) => {
+        const endTimer = PerformanceMonitor.getInstance().startTimer("get_user_profile");
         try {
           const currentUserId = authenticatedReq.user!.userId;
           console.log(`[API] GET /users/me - User: ${currentUserId}`);
@@ -71,19 +73,17 @@ export async function GET(request: NextRequest) {
             hasGoogleLinked,
           };
 
+          endTimer();
           return NextResponse.json<ApiResponse<UserProfile>>({
             success: true,
             data: userResponse,
           });
         } catch (error: any) {
-          console.error(`[API] GET /users/me - Error:`, error);
-          return NextResponse.json<ApiResponse>(
-            {
-              success: false,
-              error: "Internal server error",
-            },
-            { status: 500 }
-          );
+          endTimer();
+          return handleApiError(error, {
+            endpoint: "GET /users/me",
+            userId: authenticatedReq.user?.userId,
+          });
         }
       });
     });
@@ -97,6 +97,7 @@ export async function PUT(request: NextRequest) {
   const loggedHandler = withLogging(async (req) => {
     return withRateLimit(req, async (rateLimitedReq) => {
       return withAuth(rateLimitedReq, async (authenticatedReq) => {
+        const endTimer = PerformanceMonitor.getInstance().startTimer("update_user_profile");
         try {
           const currentUserId = authenticatedReq.user!.userId;
           let body: Record<string, unknown>;
@@ -220,19 +221,40 @@ export async function PUT(request: NextRequest) {
             createdAt: updatedUser.createdAt.toISOString(),
             updatedAt: updatedUser.updatedAt.toISOString(),
           };
+          endTimer();
           return NextResponse.json<ApiResponse<UserProfile>>({
             success: true,
             data: userResponse,
           });
         } catch (error: any) {
-          console.error(`[API] PUT /users/me - Error:`, error);
-          return NextResponse.json<ApiResponse>(
-            {
-              success: false,
-              error: "Internal server error",
-            },
-            { status: 500 }
-          );
+          endTimer();
+          // Handle username requirement error
+          if (error.message === "Username is required to update profile details.") {
+            return NextResponse.json<ApiResponse>(
+              {
+                success: false,
+                error: error.message,
+              },
+              { status: 400 }
+            );
+          }
+          
+          // Handle unique constraint violations
+          const message = handlePrismaUniqueError(error, { username: "Username" });
+          if (message) {
+            return NextResponse.json<ApiResponse>(
+              {
+                success: false,
+                error: message,
+              },
+              { status: 400 }
+            );
+          }
+          
+          return handleApiError(error, {
+            endpoint: "PUT /users/me",
+            userId: authenticatedReq.user?.userId,
+          });
         }
       });
     });
@@ -245,6 +267,7 @@ export async function DELETE(request: NextRequest) {
   const loggedHandler = withLogging(async (req) => {
     return withRateLimit(req, async (rateLimitedReq) => {
       return withAuth(rateLimitedReq, async (authenticatedReq) => {
+        const endTimer = PerformanceMonitor.getInstance().startTimer("delete_user_account");
         try {
           const currentUserId = authenticatedReq.user!.userId;
           console.log(`[API] DELETE /users/me - User: ${currentUserId}`);
@@ -364,19 +387,17 @@ export async function DELETE(request: NextRequest) {
             `[API] DELETE /users/me - Account deleted successfully: ${currentUserId}`
           );
 
+          endTimer();
           return NextResponse.json<ApiResponse>({
             success: true,
             message: "Account deleted successfully",
           });
         } catch (error: any) {
-          console.error(`[API] DELETE /users/me - Error:`, error);
-          return NextResponse.json<ApiResponse>(
-            {
-              success: false,
-              error: "Internal server error",
-            },
-            { status: 500 }
-          );
+          endTimer();
+          return handleApiError(error, {
+            endpoint: "DELETE /users/me",
+            userId: authenticatedReq.user?.userId,
+          });
         }
       });
     });

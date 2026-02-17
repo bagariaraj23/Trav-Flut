@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { z } from "zod";
 import { ok, badRequest, serverError } from "@/lib/response-helpers";
-import { AuthenticatedRequest, withAuth } from "@/lib/middleware";
+import { AuthenticatedRequest, withAuth, withLogging } from "@/lib/middleware";
 import { prisma } from "@/lib/prisma";
 import { CloudinaryService } from "@/lib/cloudinary";
 
@@ -107,5 +107,7 @@ async function handler(request: AuthenticatedRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  return withAuth(request, handler);
+  return withLogging(async (req) => {
+    return withAuth(req, handler);
+  })(request);
 }

@@ -4,6 +4,7 @@ import { MediaType } from "@prisma/client";
 import { AppError, ValidationError } from "./errors";
 import { validateFileUpload } from "./security";
 import { prisma } from "./prisma";
+import { retry } from "./retry";
 
 const requiredEnvVars = [
   "CLOUDINARY_CLOUD_NAME",
@@ -264,11 +265,33 @@ export class CloudinaryService {
     // Verify reported mime type using magic number
     let verificationPassed = false;
     try {
-      const response = await fetch(data.secure_url, {
-        method: "GET",
-        headers: { Range: "bytes=0-511" },
-        cache: "no-store",
-      });
+      // Retry Cloudinary fetch with exponential backoff
+      const response = await retry(
+        async () => {
+          const res = await fetch(data.secure_url, {
+            method: "GET",
+            headers: { Range: "bytes=0-511" },
+            cache: "no-store",
+          });
+          if (!res.ok && res.status >= 500) {
+            throw new Error(`Cloudinary fetch error: ${res.status} ${res.statusText}`);
+          }
+          return res;
+        },
+        {
+          maxRetries: 2,
+          initialDelayMs: 500,
+          retryIf: (error) => {
+            // Retry on network errors and 5xx server errors
+            if (error instanceof Error) {
+              return error.message.includes('Cloudinary fetch error') ||
+                     error.message.includes('fetch') ||
+                     error.message.includes('network');
+            }
+            return false;
+          },
+        }
+      );
 
       if (response.ok) {
         const buffer = Buffer.from(await response.arrayBuffer());
@@ -339,7 +362,25 @@ export class CloudinaryService {
 
   static async deleteMedia(publicId: string): Promise<void> {
     ensureConfigured();
-    await cloudinary.uploader.destroy(publicId);
+    // Retry Cloudinary delete with exponential backoff
+    await retry(
+      async () => {
+        await cloudinary.uploader.destroy(publicId);
+      },
+      {
+        maxRetries: 2,
+        initialDelayMs: 500,
+        retryIf: (error) => {
+          // Retry on network errors and 5xx server errors
+          if (error instanceof Error) {
+            return error.message.includes('network') || 
+                   error.message.includes('timeout') ||
+                   error.message.includes('ECONNRESET');
+          }
+          return false;
+        },
+      }
+    );
     await prisma.media.deleteMany({ where: { publicId } });
   }
 

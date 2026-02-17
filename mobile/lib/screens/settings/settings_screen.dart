@@ -167,7 +167,8 @@ class SettingsScreen extends StatelessWidget {
                         ),
                       );
                     } else {
-                      final errorText = authProvider.error ??
+                      final errorText =
+                          authProvider.error ??
                           'Failed to link Google account.';
                       ScaffoldMessenger.of(context).showSnackBar(
                         SnackBar(
@@ -176,7 +177,9 @@ class SettingsScreen extends StatelessWidget {
                         ),
                       );
                       // So next tap shows account picker instead of reusing the same account
-                      if (errorText.toLowerCase().contains('already linked to another account')) {
+                      if (errorText.toLowerCase().contains(
+                        'already linked to another account',
+                      )) {
                         await googleSignIn.signOut();
                       }
                     }
@@ -283,12 +286,53 @@ class SettingsScreen extends StatelessWidget {
                   context: context,
                   icon: Icons.logout,
                   title: 'Logout',
-                  onTap: () async {
-                    final authProvider = context.read<AuthProvider>();
-                    await authProvider.logout();
-                    if (context.mounted) {
-                      context.go('/login');
-                    }
+                  onTap: () {
+                    showDialog(
+                      context: context,
+                      builder: (BuildContext dialogContext) {
+                        return AlertDialog(
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                          title: const Text('Logout'),
+                          content: const Text('Choose how you want to logout:'),
+                          actions: [
+                            TextButton(
+                              onPressed: () =>
+                                  Navigator.of(dialogContext).pop(),
+                              child: const Text('Cancel'),
+                            ),
+                            TextButton(
+                              onPressed: () async {
+                                Navigator.of(dialogContext).pop();
+                                final authProvider = context
+                                    .read<AuthProvider>();
+                                await authProvider.logout(logoutAll: false);
+                                if (context.mounted) {
+                                  context.go('/login');
+                                }
+                              },
+                              child: const Text('Logout'),
+                            ),
+                            TextButton(
+                              onPressed: () async {
+                                Navigator.of(dialogContext).pop();
+                                final authProvider = context
+                                    .read<AuthProvider>();
+                                await authProvider.logout(logoutAll: true);
+                                if (context.mounted) {
+                                  context.go('/login');
+                                }
+                              },
+                              style: TextButton.styleFrom(
+                                foregroundColor: Colors.red,
+                              ),
+                              child: const Text('Logout from all devices'),
+                            ),
+                          ],
+                        );
+                      },
+                    );
                   },
                 ),
                 const Divider(),

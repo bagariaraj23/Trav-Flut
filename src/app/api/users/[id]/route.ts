@@ -4,12 +4,14 @@ import { AuthService } from "@/lib/auth";
 import { updateProfileSchema } from "@/lib/validation";
 import { ApiResponse, UserProfile, UserStats } from "@/types/api";
 import { handlePrismaUniqueError } from "@/lib/prismaErrors";
+import { PerformanceMonitor } from "@/lib/monitoring";
 
 // Get user profile
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const endTimer = PerformanceMonitor.getInstance().startTimer("get_user_by_id");
   try {
     const { id } = await params;
     const userId = id;
@@ -41,6 +43,7 @@ export async function GET(
     });
 
     if (!user) {
+      endTimer();
       return NextResponse.json<ApiResponse>(
         {
           success: false,
@@ -77,6 +80,7 @@ export async function GET(
             updatedAt: user.updatedAt.toISOString(),
           };
 
+          endTimer();
           return NextResponse.json<
             ApiResponse<UserProfile & { message?: string }>
           >({
@@ -88,6 +92,7 @@ export async function GET(
           });
         }
       } else {
+        endTimer();
         return NextResponse.json<ApiResponse>(
           {
             success: false,
@@ -108,11 +113,13 @@ export async function GET(
       updatedAt: user.updatedAt.toISOString(),
     };
 
+    endTimer();
     return NextResponse.json<ApiResponse<UserProfile>>({
       success: true,
       data: userProfile,
     });
   } catch (error: any) {
+    endTimer();
     console.error("Get user error:", error);
 
     return NextResponse.json<ApiResponse>(
@@ -130,6 +137,7 @@ export async function PUT(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const endTimer = PerformanceMonitor.getInstance().startTimer("update_user_by_id");
   try {
     const { id } = await params;
     const userId = id;
@@ -196,11 +204,13 @@ export async function PUT(
       createdAt: updatedUser.createdAt.toISOString(),
       updatedAt: updatedUser.updatedAt.toISOString(),
     };
+    endTimer();
     return NextResponse.json<ApiResponse<UserProfile>>({
       success: true,
       data: userProfile,
     });
   } catch (error: any) {
+    endTimer();
     if (error.name === "ZodError") {
       return NextResponse.json<ApiResponse>(
         {

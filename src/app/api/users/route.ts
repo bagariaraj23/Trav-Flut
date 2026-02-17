@@ -24,7 +24,10 @@ export interface PaginatedResponse<T> {
   hasNext: boolean;
 }
 
+import { PerformanceMonitor } from "@/lib/monitoring";
+
 export async function GET(request: NextRequest) {
+  const endTimer = PerformanceMonitor.getInstance().startTimer("get_users_discover");
   try {
     // Verify authentication
     const authHeader = request.headers.get("authorization");
@@ -280,11 +283,13 @@ export async function GET(request: NextRequest) {
       hasNext,
     };
 
+    endTimer();
     return NextResponse.json<ApiResponse<PaginatedResponse<DiscoverUserDto>>>({
       success: true,
       data: response,
     });
   } catch (error: any) {
+    endTimer();
     console.error("Discover users error:", error);
 
     return NextResponse.json<ApiResponse>(

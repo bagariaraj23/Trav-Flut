@@ -340,11 +340,12 @@ class AuthProvider extends ChangeNotifier {
     }
   }
 
-  Future<void> logout() async {
+  Future<void> logout({bool logoutAll = false}) async {
     try {
+      debugPrint('[AuthProvider] Logout called (logoutAll: $logoutAll)');
       final refreshToken = await _storageService.getRefreshToken();
       if (refreshToken != null) {
-        await _apiService.logout();
+        await _apiService.logout(logoutAll: logoutAll);
       }
     } catch (e) {
       debugPrint('Logout error: $e');

@@ -5,11 +5,13 @@ import { signupSchema } from "@/lib/validation";
 import { ApiResponse, AuthResponse } from "@/types/api";
 import { withRateLimit, withLogging, withCors, handleApiError } from "@/lib/middleware";
 import { sanitizeErrorForClient, handlePrismaUniqueError } from "@/lib/prismaErrors";
+import { PerformanceMonitor } from "@/lib/monitoring";
 
 export async function POST(request: NextRequest) {
   return await withCors(async (req) => {
     const loggedHandler = withLogging(async (loggedReq) => {
       return await withRateLimit(loggedReq, "auth_signup", async (rateLimitedReq) => {
+      const endTimer = PerformanceMonitor.getInstance().startTimer("auth_signup");
       try {
         const body = await rateLimitedReq.json();
         // Validate input
@@ -132,6 +134,7 @@ export async function POST(request: NextRequest) {
         };
         return NextResponse.json(response, { status: 201 });
       } catch (error: unknown) {
+        endTimer();
         // Handle validation errors (safe to show to user)
         if (error && typeof error === "object" && "name" in error && error.name === "ZodError") {
           const zodError = error as { errors?: Array<{ message?: string }> };

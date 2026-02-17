@@ -2,14 +2,18 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { AuthService } from "@/lib/auth";
 import { ApiResponse, TripResponse } from "@/types/api";
+import { withLogging, handleApiError } from "@/lib/middleware";
+import { PerformanceMonitor } from "@/lib/monitoring";
 
 // Get trip by ID
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  try {
-    const { id } = await params;
+  return withLogging(async (req) => {
+    const endTimer = PerformanceMonitor.getInstance().startTimer("get_trip_by_id");
+    try {
+      const { id } = await params;
     const tripId = id;
 
     // Verify authentication
@@ -245,19 +249,16 @@ export async function GET(
         : undefined,
     };
 
-    return NextResponse.json<ApiResponse<TripResponse>>({
-      success: true,
-      data: tripResponse,
-    });
-  } catch (error: any) {
-    console.error("Get trip error:", error);
-
-    return NextResponse.json<ApiResponse>(
-      {
-        success: false,
-        error: "Internal server error",
-      },
-      { status: 500 }
-    );
-  }
+      endTimer();
+      return NextResponse.json<ApiResponse<TripResponse>>({
+        success: true,
+        data: tripResponse,
+      });
+    } catch (error: any) {
+      endTimer();
+      return handleApiError(error, {
+        endpoint: "GET /trips/[id]",
+      });
+    }
+  })(request);
 }
