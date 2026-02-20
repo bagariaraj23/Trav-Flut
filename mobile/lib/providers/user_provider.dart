@@ -554,6 +554,8 @@ class UserProvider extends ChangeNotifier {
     _isNotificationsLoading = true;
     _unifiedNotificationsError = null;
     _hasMoreNotifications = true;
+    // Reset cursor to null for fresh load (first page doesn't need cursor)
+    // Server will return nextCursor in response for subsequent pagination
     _notificationsCursor = null;
     notifyListeners();
     try {
@@ -561,6 +563,7 @@ class UserProvider extends ChangeNotifier {
       if (response.success && response.data != null) {
         _unifiedNotifications = response.data!.items;
         _hasMoreNotifications = response.data!.hasMore;
+        // Store cursor from server for loadMore pagination
         _notificationsCursor = response.data!.nextCursor;
         _unifiedNotificationsError = null;
       } else {

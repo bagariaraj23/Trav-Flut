@@ -97,7 +97,25 @@ function parseCursor(cursor?: string): MergedCursor | null {
         source: parsed.source,
       }
     }
-  } catch {}
+  } catch (error) {
+    // Log invalid cursor in all environments (can indicate client bugs or malicious requests)
+    // Use error level in production, warn in development for visibility
+    const logLevel = process.env.NODE_ENV === 'development' ? console.warn : console.error
+    logLevel('[Notification] Invalid cursor format - falling back to first page', {
+      cursorLength: cursor.length,
+      error: error instanceof Error ? error.message : 'Parse failed',
+      // Only log cursor preview in development (privacy/security concern in production)
+      ...(process.env.NODE_ENV === 'development' && { cursorPreview: cursor.substring(0, 30) + '...' }),
+    })
+    return null
+  }
+  // Validation failed (wrong version or missing fields)
+  const logLevel = process.env.NODE_ENV === 'development' ? console.warn : console.error
+  logLevel('[Notification] Cursor validation failed - falling back to first page', {
+    cursorLength: cursor.length,
+    // Only log cursor preview in development
+    ...(process.env.NODE_ENV === 'development' && { cursorPreview: cursor.substring(0, 30) + '...' }),
+  })
   return null
 }
 
@@ -141,6 +159,15 @@ export async function createNotification(params: CreateNotificationParams) {
  * Returns merged notifications for the user: follow requests + like/comment.
  * Sorted by createdAt desc. Supports cursor-based pagination via opaque `before` token.
  */
+// Multiplier for fetching items per source when using strict cursor pagination.
+// We fetch more than `limit` because:
+// 1. We merge two sources (follow requests + notifications) which may have different distributions
+// 2. After merging and sorting, we filter to items strictly older than cursor
+// 3. This ensures we have enough items to fill the requested page size
+// Tune based on production metrics if merge ratio differs significantly from 1:1
+const STRICT_CURSOR_FETCH_MULTIPLIER = 3
+const MIN_FETCH_PER_SOURCE = 50
+
 export async function getMergedNotifications(
   recipientId: string,
   limit: number = 30,
@@ -149,7 +176,9 @@ export async function getMergedNotifications(
   const parsedCursor = parseCursor(before)
   const beforeDate = parsedCursor ? new Date(parsedCursor.createdAt) : undefined
   const useStrictCursor = !!parsedCursor
-  const takePerSource = useStrictCursor ? Math.max(limit * 3, 50) : limit + 1
+  const takePerSource = useStrictCursor
+    ? Math.max(limit * STRICT_CURSOR_FETCH_MULTIPLIER, MIN_FETCH_PER_SOURCE)
+    : limit + 1
   const followWhere = beforeDate
     ? {
         followeeId: recipientId,
