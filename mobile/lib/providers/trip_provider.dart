@@ -18,6 +18,7 @@ class TripProvider extends ChangeNotifier {
   bool _isTripInvitesLoading = false;
   String? _error;
   String? _tripInvitesError;
+  bool _hasCompletedInitialOngoingTripRedirect = false;
 
   // Getters
   Trip? get currentTrip => _currentTrip;
@@ -583,6 +584,14 @@ class TripProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  void markInitialOngoingTripRedirectComplete() {
+    _hasCompletedInitialOngoingTripRedirect = true;
+    notifyListeners();
+  }
+
+  bool get hasCompletedInitialOngoingTripRedirect =>
+      _hasCompletedInitialOngoingTripRedirect;
+
   // Clear current trip (for logout)
   void clearData() {
     _currentTrip = null;
@@ -592,6 +601,7 @@ class TripProvider extends ChangeNotifier {
     _sentTripInvitations = [];
     _error = null;
     _tripInvitesError = null;
+    _hasCompletedInitialOngoingTripRedirect = false;
     notifyListeners();
   }
 }

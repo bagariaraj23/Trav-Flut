@@ -145,8 +145,14 @@ void main() async {
           ChangeNotifierProvider<TripProvider>(
             create: (context) {
               debugPrint('[main] Creating TripProvider');
+              final authProvider = context.read<AuthProvider>();
               final provider = TripProvider(tripService: tripService);
               tripService.setStorageService(storageService);
+              authProvider.addListener(() {
+                if (!authProvider.isAuthenticated) {
+                  provider.clearData();
+                }
+              });
               return provider;
             },
           ),
@@ -429,6 +435,7 @@ class _TripThreadAppRouterState extends State<TripThreadAppRouter> {
                 debugPrint(
                   '[GoRouter] $logContext with ongoing trip, redirecting to /trip/$tripId/thread',
                 );
+                tripProvider.markInitialOngoingTripRedirectComplete();
                 return '/trip/$tripId/thread';
               }
             } catch (e) {

@@ -4,15 +4,11 @@ import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
 import 'package:tripthread/providers/trip_provider.dart';
 
-/// A floating bubble button that appears at the top center of the screen
-/// when a user has an ongoing trip. Allows quick navigation between
-/// the trip thread entry screen and home feed.
-///
-/// Features:
-/// - Fully responsive sizing based on screen density
-/// - Theme-aware colors for light/dark mode
-/// - Proper safe area handling for all devices
-/// - Smooth animations with Material 3 design
+/// Persists bubble position across screen navigations.
+Offset? _savedBubblePosition;
+
+/// A floating bubble button when user has an ongoing trip.
+/// Draggable anywhere on screen; tap to navigate Home <-> Thread.
 class FloatingTripNavButton extends StatefulWidget {
   const FloatingTripNavButton({super.key});
 
@@ -26,6 +22,12 @@ class _FloatingTripNavButtonState extends State<FloatingTripNavButton>
   late Animation<double> _fadeAnimation;
   late Animation<double> _scaleAnimation;
 
+  Offset? _position;
+  Offset? _dragStart;
+
+  static const double _buttonSize = 48.0;
+  static const double _dragSpeedMultiplier = 1.2;
+
   @override
   void initState() {
     super.initState();
@@ -33,11 +35,9 @@ class _FloatingTripNavButtonState extends State<FloatingTripNavButton>
       duration: const Duration(milliseconds: 300),
       vsync: this,
     );
-
     _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
       CurvedAnimation(parent: _animationController, curve: Curves.easeInOut),
     );
-
     _scaleAnimation = Tween<double>(begin: 0.8, end: 1.0).animate(
       CurvedAnimation(parent: _animationController, curve: Curves.easeOutBack),
     );
@@ -64,138 +64,156 @@ class _FloatingTripNavButtonState extends State<FloatingTripNavButton>
         final hasOngoingTrip = tripProvider.hasOngoingTrip;
         final currentTrip = tripProvider.currentTrip;
 
-        // Update animation based on visibility
         WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted) {
-            _updateVisibility(hasOngoingTrip && currentTrip != null);
-          }
+          if (mounted) _updateVisibility(hasOngoingTrip && currentTrip != null);
         });
 
         if (!hasOngoingTrip || currentTrip == null) {
           return const SizedBox.shrink();
         }
 
-        // Get current route to determine which icon to show
         final router = GoRouter.of(context);
-        final currentLocation = router.routerDelegate.currentConfiguration.uri
-            .toString();
+        final location = router.routerDelegate.currentConfiguration.uri.toString();
         final isOnThreadScreen =
-            currentLocation.contains('/trip/') &&
-            currentLocation.contains('/thread');
+            location.contains('/trip/') && location.contains('/thread');
 
-        return FadeTransition(
-          opacity: _fadeAnimation,
-          child: ScaleTransition(
-            scale: _scaleAnimation,
-            child: _buildButton(context, isOnThreadScreen, currentTrip.id),
-          ),
+        // Use Align so we don't use Positioned (valid only as direct Stack child).
+        return LayoutBuilder(
+          builder: (context, constraints) {
+            final mediaQuery = MediaQuery.of(context);
+            final theme = Theme.of(context);
+            final topSpacing =
+                mediaQuery.padding.top + (theme.useMaterial3 ? 8.0 : 12.0);
+            final maxTop = constraints.maxHeight -
+                _buttonSize -
+                mediaQuery.padding.bottom;
+            final maxLeft = constraints.maxWidth - _buttonSize;
+
+            final defaultPos = Offset(
+              (constraints.maxWidth - _buttonSize) / 2,
+              topSpacing,
+            );
+            final pos = _position ?? _savedBubblePosition ?? defaultPos;
+            final clampedPos = Offset(
+              pos.dx.clamp(0.0, maxLeft),
+              pos.dy.clamp(topSpacing, maxTop),
+            );
+
+            // Alignment: -1,-1 = top-left, 1,1 = bottom-right
+            final alignX = constraints.maxWidth > 0
+                ? 2.0 * (clampedPos.dx + _buttonSize / 2) / constraints.maxWidth - 1.0
+                : 0.0;
+            final alignY = constraints.maxHeight > 0
+                ? 2.0 * (clampedPos.dy + _buttonSize / 2) / constraints.maxHeight - 1.0
+                : 0.0;
+
+            return Align(
+              alignment: Alignment(alignX.clamp(-1.0, 1.0), alignY.clamp(-1.0, 1.0)),
+              child: GestureDetector(
+                onPanStart: (_) {
+                  _dragStart = clampedPos;
+                  _position = clampedPos;
+                },
+                onPanUpdate: (details) {
+                  if (_dragStart != null) {
+                    setState(() {
+                      final d = _dragSpeedMultiplier;
+                      _position = Offset(
+                        (_dragStart!.dx + details.delta.dx * d)
+                            .clamp(0.0, maxLeft),
+                        (_dragStart!.dy + details.delta.dy * d)
+                            .clamp(topSpacing, maxTop),
+                      );
+                      _dragStart = _position;
+                    });
+                  }
+                },
+                onPanEnd: (_) {
+                  _savedBubblePosition = _position ?? clampedPos;
+                },
+                child: FadeTransition(
+                  opacity: _fadeAnimation,
+                  child: ScaleTransition(
+                    scale: _scaleAnimation,
+                    child: _buildButtonContent(
+                      context,
+                      isOnThreadScreen,
+                      currentTrip!.id,
+                    ),
+                  ),
+                ),
+              ),
+            );
+          },
         );
       },
     );
   }
 
-  Widget _buildButton(
+  Widget _buildButtonContent(
     BuildContext context,
     bool isOnThreadScreen,
     String tripId,
   ) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
-    final mediaQuery = MediaQuery.of(context);
+    final iconSize = _buttonSize * 0.5;
+    final borderRadius = _buttonSize / 2;
 
-    // Dynamic sizing based on screen density and device type
-    // Base size follows Material Design touch target guidelines (48dp minimum)
-    // Scale based on device pixel ratio for better appearance on high-DPI screens
-    final double baseSize = 48.0;
-    final double pixelRatio = mediaQuery.devicePixelRatio;
-    final double sizeMultiplier = pixelRatio > 2.0
-        ? 1.1
-        : 1.0; // Slightly larger on high-DPI
-    final double buttonSize = baseSize * sizeMultiplier;
-
-    // Icon size scales proportionally (typically 60% of button size)
-    final double iconSize = buttonSize * 0.5;
-
-    // Dynamic spacing from top - accounts for safe area and provides consistent spacing
-    // Uses theme spacing units for consistency
-    final double topSpacing =
-        mediaQuery.padding.top +
-        (theme.useMaterial3 ? 8.0 : 12.0); // Material 3 uses tighter spacing
-
-    // Border radius for circular button (half of size)
-    final double borderRadius = buttonSize / 2;
-
-    // Determine icon and navigation target
     final IconData icon;
     final String targetRoute;
     final String semanticLabel;
 
     if (isOnThreadScreen) {
-      // On thread screen, show home icon to navigate to home
       icon = Icons.home_rounded;
       targetRoute = '/home';
-      semanticLabel = 'Navigate to home feed';
+      semanticLabel = 'Go to home. Drag to move.';
     } else {
-      // On home or other screens, show thread icon to navigate to thread
       icon = Icons.timeline_rounded;
       targetRoute = '/trip/$tripId/thread';
-      semanticLabel = 'Navigate to trip thread entries';
+      semanticLabel = 'Go to trip thread. Drag to move.';
     }
 
-    // Theme-aware colors using Material 3 color scheme
-    // Use primary color with proper opacity for better visibility
-    final Color buttonColor = colorScheme.primary;
-    final Color iconColor = colorScheme.onPrimary;
+    final shadowOpacity =
+        theme.brightness == Brightness.dark ? 0.4 : 0.15;
+    final shadowBlur = theme.brightness == Brightness.dark ? 16.0 : 12.0;
+    final shadowOffset = theme.brightness == Brightness.dark ? 6.0 : 4.0;
 
-    // Dynamic shadow based on theme brightness
-    // Dark mode needs stronger shadow, light mode needs subtle shadow
-    final double shadowOpacity = theme.brightness == Brightness.dark
-        ? 0.4
-        : 0.15;
-    final double shadowBlur = theme.brightness == Brightness.dark ? 16.0 : 12.0;
-    final double shadowOffset = theme.brightness == Brightness.dark ? 6.0 : 4.0;
-
-    return Positioned(
-      top: topSpacing,
-      left: 0,
-      right: 0,
-      child: Center(
-        child: Semantics(
-          label: semanticLabel,
-          button: true,
-          hint: 'Double tap to navigate',
-          child: Material(
-            color: Colors.transparent,
-            elevation: 0, // We use custom shadow instead
-            child: InkWell(
-              onTap: () {
-                // Haptic feedback for better UX on supported platforms
-                if (Theme.of(context).platform == TargetPlatform.iOS ||
-                    Theme.of(context).platform == TargetPlatform.android) {
-                  HapticFeedback.lightImpact();
-                }
-                context.go(targetRoute);
-              },
-              borderRadius: BorderRadius.circular(borderRadius),
-              child: Container(
-                width: buttonSize,
-                height: buttonSize,
-                decoration: BoxDecoration(
-                  color: buttonColor,
-                  shape: BoxShape.circle,
-                  // Material 3 elevation shadow
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: shadowOpacity),
-                      blurRadius: shadowBlur,
-                      offset: Offset(0, shadowOffset),
-                      spreadRadius: 0,
-                    ),
-                  ],
+    return Semantics(
+      label: semanticLabel,
+      button: true,
+      hint: 'Tap to navigate, drag to move',
+      child: Material(
+        color: Colors.transparent,
+        elevation: 0,
+        child: InkWell(
+          onTap: () {
+            if (Theme.of(context).platform == TargetPlatform.iOS ||
+                Theme.of(context).platform == TargetPlatform.android) {
+              HapticFeedback.lightImpact();
+            }
+            context.go(
+              targetRoute,
+              extra: targetRoute == '/home' ? {'explicitHome': true} : null,
+            );
+          },
+          borderRadius: BorderRadius.circular(borderRadius),
+          child: Container(
+            width: _buttonSize,
+            height: _buttonSize,
+            decoration: BoxDecoration(
+              color: colorScheme.primary,
+              shape: BoxShape.circle,
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: shadowOpacity),
+                  blurRadius: shadowBlur,
+                  offset: Offset(0, shadowOffset),
+                  spreadRadius: 0,
                 ),
-                child: Icon(icon, color: iconColor, size: iconSize),
-              ),
+              ],
             ),
+            child: Icon(icon, color: colorScheme.onPrimary, size: iconSize),
           ),
         ),
       ),

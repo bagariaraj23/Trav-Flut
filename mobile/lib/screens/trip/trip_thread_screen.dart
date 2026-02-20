@@ -74,17 +74,22 @@ class _TripThreadScreenState extends State<TripThreadScreen> {
   final GlobalKey _stackKey = GlobalKey();
 
   bool _wasOngoingTrip = false;
+  TripProvider? _tripProvider;
 
   @override
   void initState() {
     super.initState();
-    _loadTrip();
-    _loadTripParticipants();
     _textController.addListener(_onTextChanged);
 
-    // Listen to TripProvider changes to detect when trip ends
+    // Defer _loadTrip and _loadTripParticipants - they call clearCurrentTripEntries
+    // and setState which trigger notifyListeners during build if run in initState
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _loadTrip();
+      _loadTripParticipants();
+
       final tripProvider = context.read<TripProvider>();
+      _tripProvider = tripProvider;
       _wasOngoingTrip = tripProvider.hasOngoingTrip;
       tripProvider.addListener(_onTripProviderChanged);
     });
@@ -118,11 +123,10 @@ class _TripThreadScreenState extends State<TripThreadScreen> {
 
   @override
   void dispose() {
-    // Remove listener
+    // Remove listener - use stored reference to avoid context.read on deactivated widget
     try {
-      context.read<TripProvider>().removeListener(_onTripProviderChanged);
+      _tripProvider?.removeListener(_onTripProviderChanged);
     } catch (e) {
-      // Provider might be disposed already
       debugPrint('[TripThreadScreen] Error removing listener: $e');
     }
 
@@ -203,8 +207,12 @@ class _TripThreadScreenState extends State<TripThreadScreen> {
       final apiService = context.read<ApiService>();
       final participants = await apiService.getTripParticipants(widget.tripId);
       if (mounted) {
-        setState(() {
-          _tripParticipants = participants;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) {
+            setState(() {
+              _tripParticipants = participants;
+            });
+          }
         });
       }
     } catch (e) {
@@ -781,7 +789,7 @@ class _TripThreadScreenState extends State<TripThreadScreen> {
           if (context.canPop()) {
             context.pop();
           } else {
-            context.go('/home');
+            context.go('/home', extra: {'explicitHome': true});
           }
         },
         child: const Scaffold(body: Center(child: CircularProgressIndicator())),
@@ -796,7 +804,7 @@ class _TripThreadScreenState extends State<TripThreadScreen> {
           if (context.canPop()) {
             context.pop();
           } else {
-            context.go('/home');
+            context.go('/home', extra: {'explicitHome': true});
           }
         },
         child: Scaffold(
@@ -819,14 +827,17 @@ class _TripThreadScreenState extends State<TripThreadScreen> {
         // Always handle navigation ourselves
         if (context.canPop()) {
           context.pop();
-        } else {
-          final extra = GoRouterState.of(context).extra;
-          final from = (extra is Map && extra['from'] != null)
-              ? extra['from'] as String
-              : '/trip/${widget.tripId}';
-          context.go(from);
-        }
-      },
+          } else {
+            final extra = GoRouterState.of(context).extra;
+            final from = (extra is Map && extra['from'] != null)
+                ? extra['from'] as String
+                : '/trip/${widget.tripId}';
+            context.go(
+              from,
+              extra: from == '/home' ? {'explicitHome': true} : null,
+            );
+          }
+        },
       child: Scaffold(
         appBar: AppBar(
           title: Text(_trip?.title ?? 'Trip Thread'),
@@ -843,7 +854,10 @@ class _TripThreadScreenState extends State<TripThreadScreen> {
                 final from = (extra is Map && extra['from'] != null)
                     ? extra['from'] as String
                     : '/trip/${widget.tripId}';
-                context.go(from);
+                context.go(
+                  from,
+                  extra: from == '/home' ? {'explicitHome': true} : null,
+                );
               }
             },
           ),
@@ -853,7 +867,7 @@ class _TripThreadScreenState extends State<TripThreadScreen> {
           children: [
             Column(
               children: [
-                // Thread entries
+                // Thread entries - extra bottom padding so last items are above add-entry bar
                 Expanded(
                   child: Consumer<TripProvider>(
                     builder: (context, tripProvider, child) {
@@ -976,7 +990,12 @@ class _TripThreadScreenState extends State<TripThreadScreen> {
 
                       return ListView.builder(
                         controller: _scrollController,
-                        padding: const EdgeInsets.all(16),
+                        padding: EdgeInsets.only(
+                          left: 16,
+                          right: 16,
+                          top: 16,
+                          bottom: 16 + (canAddEntries ? 180 : 0),
+                        ),
                         itemCount: entries.length,
                         itemBuilder: (context, index) {
                           return _buildThreadEntry(entries[index]);
@@ -985,11 +1004,16 @@ class _TripThreadScreenState extends State<TripThreadScreen> {
                     },
                   ),
                 ),
-
-                // Add entry section
-                if (canAddEntries) _buildAddEntrySection(),
               ],
             ),
+            // Add entry section - pinned to bottom so no gap
+            if (canAddEntries)
+              Positioned(
+                left: 0,
+                right: 0,
+                bottom: 0,
+                child: _buildAddEntrySection(),
+              ),
             // Mention autocomplete menu - positioned relative to text field
             if (_mentionQuery != null)
               Builder(builder: (context) => _buildMentionMenu(context)),
@@ -1237,6 +1261,7 @@ class _TripThreadScreenState extends State<TripThreadScreen> {
                 ],
               ),
               child: Column(
+                mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   // Header
@@ -1281,7 +1306,7 @@ class _TripThreadScreenState extends State<TripThreadScreen> {
 
                   const SizedBox(height: 8),
 
-                  // Content
+                  // Content - limit lines to prevent overflow, allow expansion via tap if needed
                   if (entry.contentText != null) ...[
                     Text(
                       entry.contentText!,
@@ -1289,8 +1314,8 @@ class _TripThreadScreenState extends State<TripThreadScreen> {
                         color: Theme.of(context).colorScheme.onSurface,
                         height: 1.5,
                       ),
-                      overflow: TextOverflow.visible,
-                      maxLines: null,
+                      maxLines: 20,
+                      overflow: TextOverflow.ellipsis,
                     ),
                     const SizedBox(height: 8),
                   ],
@@ -1324,6 +1349,7 @@ class _TripThreadScreenState extends State<TripThreadScreen> {
                           ),
                         ),
                         child: Column(
+                          mainAxisSize: MainAxisSize.min,
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             // Place name and icon
@@ -1346,6 +1372,7 @@ class _TripThreadScreenState extends State<TripThreadScreen> {
                                 const SizedBox(width: 8),
                                 Expanded(
                                   child: Column(
+                                    mainAxisSize: MainAxisSize.min,
                                     crossAxisAlignment:
                                         CrossAxisAlignment.start,
                                     children: [
@@ -1718,28 +1745,19 @@ class _TripThreadScreenState extends State<TripThreadScreen> {
       maxHeight = availableHeight * 0.5;
     }
 
-    return Container(
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surface,
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
-            blurRadius: 8,
-            offset: const Offset(0, -2),
-          ),
-        ],
-      ),
-      child: SafeArea(
-        child: ConstrainedBox(
-          constraints: BoxConstraints(maxHeight: maxHeight),
-          child: SingleChildScrollView(
-            child: Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Entry type selector - Horizontally scrollable
+    final padding = EdgeInsets.fromLTRB(
+      16,
+      16,
+      16,
+      8 + mediaQuery.padding.bottom,
+    );
+    final content = Padding(
+      padding: padding,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+                  // Entry type selector
                   SingleChildScrollView(
                     scrollDirection: Axis.horizontal,
                     child: Row(
@@ -2272,6 +2290,7 @@ class _TripThreadScreenState extends State<TripThreadScreen> {
                         child: TextField(
                           key: _textFieldKey,
                           controller: _textController,
+                          autofocus: true,
                           decoration: InputDecoration(
                             hintText: _getInputHint(),
                             border: OutlineInputBorder(
@@ -2355,9 +2374,28 @@ class _TripThreadScreenState extends State<TripThreadScreen> {
                   ),
                 ],
               ),
-            ),
+            );
+
+    return Container(
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surface,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.05),
+            blurRadius: 8,
+            offset: const Offset(0, -2),
           ),
-        ),
+        ],
+      ),
+      child: SafeArea(
+        top: false,
+        bottom: false,
+        child: keyboardInset > 0
+            ? ConstrainedBox(
+                constraints: BoxConstraints(maxHeight: maxHeight),
+                child: SingleChildScrollView(child: content),
+              )
+            : content,
       ),
     );
   }

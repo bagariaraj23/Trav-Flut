@@ -43,20 +43,29 @@ class _HomeScreenState extends State<HomeScreen> {
       // Check if widget is still mounted before using context
       if (!mounted) return;
 
-      // Check if there's an ongoing trip and redirect to thread screen
-      // Only redirect if we're on the home route (not a deep link or intentional navigation)
-      if (tripProvider.hasOngoingTrip && tripProvider.currentTrip != null) {
-        final router = GoRouter.of(context);
+      // Redirect to thread only once on initial app load when there's an ongoing trip.
+      // After that, user can freely navigate back to home/trips without redirect loop.
+      final router = GoRouter.of(context);
+      final routeExtra = GoRouterState.of(context).extra;
+      final isExplicitHome =
+          routeExtra is Map && routeExtra['explicitHome'] == true;
+      final hasCompletedInitial =
+          tripProvider.hasCompletedInitialOngoingTripRedirect;
+
+      if (!isExplicitHome &&
+          !hasCompletedInitial &&
+          tripProvider.hasOngoingTrip &&
+          tripProvider.currentTrip != null) {
         final currentLocation = router.routerDelegate.currentConfiguration.uri
             .toString();
 
         // Only redirect if we're on /home (not /trips or other tabs)
-        // This ensures we don't interrupt user navigation
         if (currentLocation == '/home' || currentLocation == '/') {
           final tripId = tripProvider.currentTrip!.id;
           debugPrint(
-            '[HomeScreen] Ongoing trip detected, redirecting to /trip/$tripId/thread',
+            '[HomeScreen] Initial load with ongoing trip, redirecting to /trip/$tripId/thread',
           );
+          tripProvider.markInitialOngoingTripRedirectComplete();
           router.go('/trip/$tripId/thread');
           return;
         }
@@ -186,6 +195,7 @@ class _HomeFeedScreenState extends State<HomeFeedScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
+        centerTitle: false,
         title: const Text('TripThread'),
         actions: [
           IconButton(
@@ -862,6 +872,7 @@ class _TripsTabState extends State<TripsTab> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
+        centerTitle: false,
         title: const Text('My Trips'),
         actions: [
           Consumer<TripProvider>(
@@ -1348,6 +1359,7 @@ class ProfileTab extends StatelessWidget {
 
         return Scaffold(
           appBar: AppBar(
+            centerTitle: false,
             title: const Text('Profile'),
             actions: [
               IconButton(
