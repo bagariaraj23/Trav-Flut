@@ -12,6 +12,7 @@ import {
   ENGAGEMENT_CONSTANTS,
 } from "./engagement-utils";
 import { getEntityOwner, getPostFromComment, getTripIdFromEntry } from "../entity-owner";
+import { canViewEntity } from "../auth/permissions";
 import { createNotification } from "./notification";
 
 /** Extract @username mentions from text (case-insensitive, unique). */
@@ -126,6 +127,10 @@ export async function createComment(
   void (async () => {
     const contentPreview =
       sanitizedText.length > 60 ? sanitizedText.slice(0, 60) + "..." : sanitizedText;
+    const threadTripId =
+      finalEntityType === "TRIP_THREAD_ENTRY"
+        ? await getTripIdFromEntry(finalEntityId)
+        : null;
 
     // 1. Comment / Reply notification
     try {
@@ -155,6 +160,10 @@ export async function createComment(
             contentPreview,
             commentId: comment.id,
             ...(parentCommentId && { parentCommentId }),
+            ...(threadTripId && { tripId: threadTripId }),
+            ...(finalEntityType === "TRIP_THREAD_ENTRY" && {
+              threadEntryId: finalEntityId,
+            }),
           },
         });
       }
@@ -196,6 +205,12 @@ export async function createComment(
 
         for (const u of users) {
           if (u.id === userId) continue;
+          const canRecipientView = await canViewEntity(
+            u.id,
+            postInfo.entityType,
+            postInfo.entityId
+          );
+          if (!canRecipientView) continue;
           try {
             await createNotification({
               type: "TAG",
@@ -209,6 +224,9 @@ export async function createComment(
                 postEntityId: postInfo.entityId,
                 commentId: comment.id,
                 ...(tripId && { tripId }),
+                ...(postInfo.entityType === "TRIP_THREAD_ENTRY" && {
+                  threadEntryId: postInfo.entityId,
+                }),
               },
             });
           } catch (tagErr) {

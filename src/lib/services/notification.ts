@@ -34,6 +34,8 @@ export type UnifiedNotificationItem = {
   parentCommentId?: string
   /** For TAG: trip id to navigate to /trip/:tripId/thread */
   tripId?: string
+  /** For thread navigation highlight */
+  threadEntryId?: string
 }
 
 /**
@@ -152,7 +154,10 @@ export async function getMergedNotifications(
         ...(meta?.parentCommentId != null && {
           parentCommentId: String(meta.parentCommentId),
         }),
-        ...(meta?.tripId != null && { tripId: String(meta.tripId) })
+        ...(meta?.tripId != null && { tripId: String(meta.tripId) }),
+        ...(meta?.threadEntryId != null && {
+          threadEntryId: String(meta.threadEntryId),
+        })
       }
     }
   )

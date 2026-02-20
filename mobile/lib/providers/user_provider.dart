@@ -62,13 +62,13 @@ class DetailedFollowStatus {
   }
 
   Map<String, dynamic> toJson() => {
-        'isFollowing': isFollowing,
-        'isFollowedBy': isFollowedBy,
-        'isRequestPending': isRequestPending,
-        'isPrivate': isPrivate,
-        'requestId': requestId,
-        'requestStatus': requestStatus,
-      };
+    'isFollowing': isFollowing,
+    'isFollowedBy': isFollowedBy,
+    'isRequestPending': isRequestPending,
+    'isPrivate': isPrivate,
+    'requestId': requestId,
+    'requestStatus': requestStatus,
+  };
 }
 
 class UserProvider extends ChangeNotifier {
@@ -125,7 +125,8 @@ class UserProvider extends ChangeNotifier {
   bool get hasMoreUsers => _hasMoreUsers;
   List<FollowRequestDto> get pendingFollowRequests => _pendingFollowRequests;
   String? get followRequestsError => _followRequestsError;
-  List<UnifiedNotificationItem> get unifiedNotifications => _unifiedNotifications;
+  List<UnifiedNotificationItem> get unifiedNotifications =>
+      _unifiedNotifications;
   bool get isNotificationsLoading => _isNotificationsLoading;
   bool get notificationsLoadMore => _notificationsLoadMore;
   bool get hasMoreNotifications => _hasMoreNotifications;
@@ -307,7 +308,10 @@ class UserProvider extends ChangeNotifier {
     }
   }
 
-  Future<bool> cancelFollowRequest(String userId, {String? currentUserId}) async {
+  Future<bool> cancelFollowRequest(
+    String userId, {
+    String? currentUserId,
+  }) async {
     try {
       _isLoading = true;
       _error = null;
@@ -340,7 +344,7 @@ class UserProvider extends ChangeNotifier {
       _isFollowRequestsLoading = true;
       isProcessingRequestId = requestId;
       notifyListeners();
-      
+
       // Get the request to find followerId before accepting
       final request = _pendingFollowRequests.firstWhere(
         (r) => r.id == requestId,
@@ -348,18 +352,19 @@ class UserProvider extends ChangeNotifier {
       );
       final followerId = request.followerId;
       final followeeId = request.followeeId;
-      
+
       final response = await _apiService.acceptFollowRequest(requestId);
       if (response.success) {
-        _pendingFollowRequests
-            .removeWhere((request) => request.id == requestId);
-        
+        _pendingFollowRequests.removeWhere(
+          (request) => request.id == requestId,
+        );
+
         // Update stats for both users after accepting
         // Current user (followee) gets a new follower
         await fetchUserStats(followeeId);
         // Follower gets a new following
         await fetchUserStats(followerId);
-        
+
         notifyListeners();
         return true;
       }
@@ -381,7 +386,7 @@ class UserProvider extends ChangeNotifier {
       _isFollowRequestsLoading = true;
       isProcessingRequestId = requestId;
       notifyListeners();
-      
+
       // Get the request to find followerId before rejecting
       // Note: Rejecting doesn't change stats, but we keep this for consistency
       final request = _pendingFollowRequests.firstWhere(
@@ -389,15 +394,16 @@ class UserProvider extends ChangeNotifier {
         orElse: () => throw Exception('Request not found'),
       );
       final followeeId = request.followeeId;
-      
+
       final response = await _apiService.rejectFollowRequest(requestId);
       if (response.success) {
-        _pendingFollowRequests
-            .removeWhere((request) => request.id == requestId);
-        
+        _pendingFollowRequests.removeWhere(
+          (request) => request.id == requestId,
+        );
+
         // Stats don't change on reject, but refresh to ensure consistency
         await fetchUserStats(followeeId);
-        
+
         notifyListeners();
         return true;
       }
@@ -415,10 +421,11 @@ class UserProvider extends ChangeNotifier {
   }
 
   // --- Discover Functions ---
-  Future<void> searchUsers(
-      {String? search,
-      bool refresh = false,
-      bool prioritizeFollowed = false}) async {
+  Future<void> searchUsers({
+    String? search,
+    bool refresh = false,
+    bool prioritizeFollowed = false,
+  }) async {
     if (refresh) {
       _discoverPage = 1;
       _discoverUsers.clear();
@@ -463,13 +470,14 @@ class UserProvider extends ChangeNotifier {
     }
   }
 
-  Future<bool> updateProfile(
-      {required String userId,
-      String? name,
-      String? username,
-      String? bio,
-      String? avatarUrl,
-      bool? isPrivate}) async {
+  Future<bool> updateProfile({
+    required String userId,
+    String? name,
+    String? username,
+    String? bio,
+    String? avatarUrl,
+    bool? isPrivate,
+  }) async {
     try {
       _isLoading = true;
       _error = null;
@@ -568,11 +576,10 @@ class UserProvider extends ChangeNotifier {
   Future<void> loadMoreUnifiedNotifications() async {
     if (_notificationsLoadMore || !_hasMoreNotifications) return;
     if (_unifiedNotifications.isEmpty) return;
-    final oldest =
-        _unifiedNotifications
-            .map((n) => DateTime.tryParse(n.createdAt))
-            .whereType<DateTime>()
-            .reduce((a, b) => a.isBefore(b) ? a : b);
+    final oldest = _unifiedNotifications
+        .map((n) => DateTime.tryParse(n.createdAt))
+        .whereType<DateTime>()
+        .reduce((a, b) => a.isBefore(b) ? a : b);
     final cursor = oldest.toIso8601String();
     _notificationsLoadMore = true;
     notifyListeners();
@@ -612,29 +619,35 @@ class UserProvider extends ChangeNotifier {
     }
   }
 
-  void markNotificationReadLocal(String notificationId) {
-    final index =
-        _unifiedNotifications.indexWhere((n) => n.id == notificationId);
-    if (index >= 0) {
-      final n = _unifiedNotifications[index];
-      _unifiedNotifications[index] = UnifiedNotificationItem(
-        type: n.type,
-        id: n.id,
-        createdAt: n.createdAt,
-        readAt: DateTime.now().toIso8601String(),
-        actor: n.actor,
-        followRequestId: n.followRequestId,
-        entityType: n.entityType,
-        entityId: n.entityId,
-        contentPreview: n.contentPreview,
-        postEntityType: n.postEntityType,
-        postEntityId: n.postEntityId,
-        commentId: n.commentId,
-        parentCommentId: n.parentCommentId,
-        tripId: n.tripId,
-      );
-      _unreadNotificationCount = (_unreadNotificationCount - 1).clamp(0, 999999);
-      notifyListeners();
-    }
+  bool markNotificationReadLocal(String notificationId) {
+    final index = _unifiedNotifications.indexWhere(
+      (n) => n.id == notificationId,
+    );
+    if (index < 0) return false;
+
+    final n = _unifiedNotifications[index];
+    final wasUnread = n.readAt == null || n.readAt!.isEmpty;
+    if (!wasUnread) return false;
+
+    _unifiedNotifications[index] = UnifiedNotificationItem(
+      type: n.type,
+      id: n.id,
+      createdAt: n.createdAt,
+      readAt: DateTime.now().toIso8601String(),
+      actor: n.actor,
+      followRequestId: n.followRequestId,
+      entityType: n.entityType,
+      entityId: n.entityId,
+      contentPreview: n.contentPreview,
+      postEntityType: n.postEntityType,
+      postEntityId: n.postEntityId,
+      commentId: n.commentId,
+      parentCommentId: n.parentCommentId,
+      tripId: n.tripId,
+      threadEntryId: n.threadEntryId,
+    );
+    _unreadNotificationCount = (_unreadNotificationCount - 1).clamp(0, 999999);
+    notifyListeners();
+    return true;
   }
 }

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
@@ -8,12 +10,7 @@ import 'package:tripthread/providers/auth_provider.dart';
 import 'package:tripthread/services/api_service.dart';
 
 /// Time grouping for notifications
-enum NotificationTimeGroup {
-  today,
-  yesterday,
-  thisWeek,
-  older,
-}
+enum NotificationTimeGroup { today, yesterday, thisWeek, older }
 
 /// Unified notifications: follow requests in separate section, engagement with time groups.
 class NotificationsScreen extends StatefulWidget {
@@ -36,12 +33,15 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     });
   }
 
-  List<UnifiedNotificationItem> _followRequests(List<UnifiedNotificationItem> all) =>
-      all.where((n) => n.isFollowRequest).toList();
+  List<UnifiedNotificationItem> _followRequests(
+    List<UnifiedNotificationItem> all,
+  ) => all.where((n) => n.isFollowRequest).toList();
 
-  List<UnifiedNotificationItem> _engagementNotifications(List<UnifiedNotificationItem> all) =>
-      all.where((n) =>
-          n.isLike || n.isComment || n.isCommentReply || n.isTag).toList();
+  List<UnifiedNotificationItem> _engagementNotifications(
+    List<UnifiedNotificationItem> all,
+  ) => all
+      .where((n) => n.isLike || n.isComment || n.isCommentReply || n.isTag)
+      .toList();
 
   NotificationTimeGroup _timeGroup(String createdAt) {
     final dt = DateTime.tryParse(createdAt);
@@ -110,36 +110,72 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     return map.values.toList();
   }
 
+  Future<void> _markNotificationsAsRead(
+    List<UnifiedNotificationItem> notifications,
+    UserProvider userProvider,
+  ) async {
+    if (notifications.isEmpty) return;
+    final apiService = context.read<ApiService>();
+    var markedAny = false;
+
+    for (final notification in notifications) {
+      try {
+        final response = await apiService.markNotificationRead(notification.id);
+        if (response.success) {
+          final changed = userProvider.markNotificationReadLocal(
+            notification.id,
+          );
+          markedAny = markedAny || changed;
+        }
+      } catch (_) {}
+    }
+
+    if (markedAny) {
+      await userProvider.loadUnreadNotificationCount();
+    }
+  }
+
+  void _navigateToThread(String tripId, {String? highlightEntryId}) {
+    context.push(
+      '/trip/$tripId/thread',
+      extra: highlightEntryId != null && highlightEntryId.isNotEmpty
+          ? {'highlightEntryId': highlightEntryId}
+          : null,
+    );
+  }
+
   Future<void> _onTapEngagementGroup(
     List<UnifiedNotificationItem> group,
     UserProvider userProvider,
   ) async {
     if (group.isEmpty) return;
     final first = group.first;
+    final navEntityType = first.navEntityType;
+    final navEntityId = first.navEntityId;
+    final threadEntryId = first.highlightThreadEntryId;
+    final threadTripId = first.tripId;
+    final isThreadEntryNavigation =
+        navEntityType == 'TRIP_THREAD_ENTRY' || threadEntryId != null;
 
-    if (first.isTag &&
-        first.tripId != null &&
-        first.tripId!.isNotEmpty) {
-      final apiService = context.read<ApiService>();
-      for (final n in group) {
-        userProvider.markNotificationReadLocal(n.id);
+    if (isThreadEntryNavigation) {
+      if (threadTripId == null || threadTripId.isEmpty) {
+        context.go('/home');
+        return;
       }
-      userProvider.loadUnreadNotificationCount();
-      if (!mounted) return;
-      context.push('/trip/${first.tripId}/thread');
-      for (final n in group) {
-        try {
-          await apiService.markNotificationRead(n.id);
-        } catch (_) {}
-      }
-      if (mounted) {
-        userProvider.loadUnreadNotificationCount();
-      }
+      _navigateToThread(
+        threadTripId,
+        highlightEntryId: threadEntryId ?? navEntityId,
+      );
+      unawaited(_markNotificationsAsRead(group, userProvider));
       return;
     }
 
-    final navEntityType = first.navEntityType;
-    final navEntityId = first.navEntityId;
+    if (first.isTag && first.tripId != null && first.tripId!.isNotEmpty) {
+      _navigateToThread(first.tripId!, highlightEntryId: first.threadEntryId);
+      unawaited(_markNotificationsAsRead(group, userProvider));
+      return;
+    }
+
     final scrollToCommentId = first.scrollToCommentId;
 
     if (navEntityType == null || navEntityId == null || navEntityId.isEmpty) {
@@ -147,26 +183,13 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       return;
     }
 
-    final apiService = context.read<ApiService>();
-    for (final n in group) {
-      userProvider.markNotificationReadLocal(n.id);
-    }
-    userProvider.loadUnreadNotificationCount();
-    if (!mounted) return;
     context.push(
       '/post/$navEntityType/$navEntityId',
       extra: scrollToCommentId != null && scrollToCommentId.isNotEmpty
           ? {'scrollToCommentId': scrollToCommentId}
           : null,
     );
-    for (final n in group) {
-      try {
-        await apiService.markNotificationRead(n.id);
-      } catch (_) {}
-    }
-    if (mounted) {
-      userProvider.loadUnreadNotificationCount();
-    }
+    unawaited(_markNotificationsAsRead(group, userProvider));
   }
 
   Future<void> _handleAcceptRequest(String requestId, String actorName) async {
@@ -236,30 +259,35 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   }
 
   Future<void> _onTapNotification(UnifiedNotificationItem n) async {
+    final userProvider = context.read<UserProvider>();
+
     if (n.isFollowRequest) {
       context.push('/profile/${n.actor.id}');
       return;
     }
 
+    final navEntityType = n.navEntityType;
+    final navEntityId = n.navEntityId;
+    final threadEntryId = n.highlightThreadEntryId;
+    final isThreadEntryNavigation =
+        navEntityType == 'TRIP_THREAD_ENTRY' || threadEntryId != null;
+
+    if (isThreadEntryNavigation) {
+      if (n.tripId == null || n.tripId!.isEmpty) {
+        context.go('/home');
+        return;
+      }
+      _navigateToThread(
+        n.tripId!,
+        highlightEntryId: threadEntryId ?? navEntityId,
+      );
+      unawaited(_markNotificationsAsRead([n], userProvider));
+      return;
+    }
+
     if (n.isTag) {
-      var response = await context.read<ApiService>().markNotificationRead(n.id);
-      if (!response.success) {
-        response = await context.read<ApiService>().markNotificationRead(n.id);
-      }
-      if (!mounted) return;
-      if (response.success) {
-        context.read<UserProvider>().markNotificationReadLocal(n.id);
-        context.read<UserProvider>().loadUnreadNotificationCount();
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(response.error ?? 'Failed to mark as read'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
       if (n.tripId != null && n.tripId!.isNotEmpty) {
-        context.push('/trip/${n.tripId}/thread');
+        _navigateToThread(n.tripId!, highlightEntryId: n.threadEntryId);
       } else if (n.navEntityType != null &&
           n.navEntityId != null &&
           n.navEntityId!.isNotEmpty) {
@@ -272,34 +300,16 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       } else {
         context.go('/home');
       }
+      unawaited(_markNotificationsAsRead([n], userProvider));
       return;
     }
 
     if (n.isLike || n.isComment || n.isCommentReply) {
-      final navEntityType = n.navEntityType;
-      final navEntityId = n.navEntityId;
       final scrollToCommentId = n.scrollToCommentId;
 
       if (navEntityType == null || navEntityId == null) {
         context.go('/home');
         return;
-      }
-
-      var response = await context.read<ApiService>().markNotificationRead(n.id);
-      if (!response.success) {
-        response = await context.read<ApiService>().markNotificationRead(n.id);
-      }
-      if (!mounted) return;
-      if (response.success) {
-        context.read<UserProvider>().markNotificationReadLocal(n.id);
-        context.read<UserProvider>().loadUnreadNotificationCount();
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(response.error ?? 'Failed to mark as read'),
-            backgroundColor: Colors.red,
-          ),
-        );
       }
 
       context.push(
@@ -308,6 +318,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
             ? {'scrollToCommentId': scrollToCommentId}
             : null,
       );
+      unawaited(_markNotificationsAsRead([n], userProvider));
     }
   }
 
@@ -376,8 +387,12 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
               );
             }
 
-            final followReqs = _followRequests(userProvider.unifiedNotifications);
-            final engagement = _engagementNotifications(userProvider.unifiedNotifications);
+            final followReqs = _followRequests(
+              userProvider.unifiedNotifications,
+            );
+            final engagement = _engagementNotifications(
+              userProvider.unifiedNotifications,
+            );
 
             if (followReqs.isEmpty && engagement.isEmpty) {
               return Center(
@@ -393,21 +408,18 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                     Text(
                       'No notifications yet',
                       style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                            color: Theme.of(context)
-                                .colorScheme
-                                .onSurfaceVariant,
-                          ),
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
                     ),
                     const SizedBox(height: 8),
                     Text(
                       'Likes, comments and follow requests\nwill appear here',
                       textAlign: TextAlign.center,
                       style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                            color: Theme.of(context)
-                                .colorScheme
-                                .onSurfaceVariant
-                                .withValues(alpha: 0.7),
-                          ),
+                        color: Theme.of(
+                          context,
+                        ).colorScheme.onSurfaceVariant.withValues(alpha: 0.7),
+                      ),
                     ),
                   ],
                 ),
@@ -426,7 +438,11 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                     _buildFollowRequestsSummaryTile(context, followReqs),
                     const SizedBox(height: 16),
                   ],
-                  ..._buildTimeGroupedSections(context, engagement, userProvider),
+                  ..._buildTimeGroupedSections(
+                    context,
+                    engagement,
+                    userProvider,
+                  ),
                   if (userProvider.notificationsLoadMore)
                     const Padding(
                       padding: EdgeInsets.all(16),
@@ -482,10 +498,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     final avatarsToShow = followReqs.take(2).toList();
 
     return Material(
-      color: Theme.of(context)
-          .colorScheme
-          .primary
-          .withValues(alpha: 0.08),
+      color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.08),
       child: InkWell(
         onTap: () => context.push('/follow-requests'),
         child: Container(
@@ -501,97 +514,101 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             child: Row(
               children: [
-              SizedBox(
-                width: avatarSize + (avatarsToShow.length > 1 ? avatarSize - overlap : 0),
-                height: avatarSize,
-                child: Stack(
-                  children: [
-                    for (var i = 0; i < avatarsToShow.length; i++)
-                      Positioned(
-                        left: i * (avatarSize - overlap),
-                        child: Container(
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            border: Border.all(
-                              color: Theme.of(context).scaffoldBackgroundColor,
-                              width: 2,
+                SizedBox(
+                  width:
+                      avatarSize +
+                      (avatarsToShow.length > 1 ? avatarSize - overlap : 0),
+                  height: avatarSize,
+                  child: Stack(
+                    children: [
+                      for (var i = 0; i < avatarsToShow.length; i++)
+                        Positioned(
+                          left: i * (avatarSize - overlap),
+                          child: Container(
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              border: Border.all(
+                                color: Theme.of(
+                                  context,
+                                ).scaffoldBackgroundColor,
+                                width: 2,
+                              ),
                             ),
-                          ),
-                          child: CircleAvatar(
-                            radius: avatarSize / 2 - 1,
-                            backgroundColor:
-                                Theme.of(context).colorScheme.primaryContainer,
-                            backgroundImage: avatarsToShow[i].actor.avatarUrl !=
-                                        null &&
-                                    avatarsToShow[i].actor.avatarUrl!.isNotEmpty
-                                ? CachedNetworkImageProvider(
-                                    avatarsToShow[i].actor.avatarUrl!,
-                                  )
-                                : null,
-                            child:
-                                avatarsToShow[i].actor.avatarUrl == null ||
-                                        avatarsToShow[i]
-                                            .actor
-                                            .avatarUrl!
-                                            .isEmpty
-                                    ? Text(
-                                        avatarsToShow[i]
-                                            .actor
-                                            .displayName
-                                            .isNotEmpty
-                                            ? avatarsToShow[i]
-                                                .actor
-                                                .displayName
+                            child: CircleAvatar(
+                              radius: avatarSize / 2 - 1,
+                              backgroundColor: Theme.of(
+                                context,
+                              ).colorScheme.primaryContainer,
+                              backgroundImage:
+                                  avatarsToShow[i].actor.avatarUrl != null &&
+                                      avatarsToShow[i]
+                                          .actor
+                                          .avatarUrl!
+                                          .isNotEmpty
+                                  ? CachedNetworkImageProvider(
+                                      avatarsToShow[i].actor.avatarUrl!,
+                                    )
+                                  : null,
+                              child:
+                                  avatarsToShow[i].actor.avatarUrl == null ||
+                                      avatarsToShow[i].actor.avatarUrl!.isEmpty
+                                  ? Text(
+                                      avatarsToShow[i]
+                                              .actor
+                                              .displayName
+                                              .isNotEmpty
+                                          ? avatarsToShow[i].actor.displayName
                                                 .substring(0, 1)
                                                 .toUpperCase()
-                                            : '?',
-                                        style: TextStyle(
-                                          color: Theme.of(context)
-                                              .colorScheme
-                                              .onPrimaryContainer,
-                                          fontSize: 16,
-                                        ),
-                                      )
-                                    : null,
+                                          : '?',
+                                      style: TextStyle(
+                                        color: Theme.of(
+                                          context,
+                                        ).colorScheme.onPrimaryContainer,
+                                        fontSize: 16,
+                                      ),
+                                    )
+                                  : null,
+                            ),
                           ),
                         ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        'Follow requests',
+                        style: Theme.of(context).textTheme.labelMedium
+                            ?.copyWith(
+                              color: Theme.of(context)
+                                  .colorScheme
+                                  .onSurfaceVariant
+                                  .withValues(alpha: 0.8),
+                            ),
                       ),
-                  ],
+                      const SizedBox(height: 2),
+                      Text(
+                        label,
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          fontWeight: FontWeight.w500,
+                        ),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      'Follow requests',
-                      style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                            color: Theme.of(context)
-                                .colorScheme
-                                .onSurfaceVariant
-                                .withValues(alpha: 0.8),
-                          ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      label,
-                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                            fontWeight: FontWeight.w500,
-                          ),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ],
+                Icon(
+                  Icons.chevron_right,
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  size: 24,
                 ),
-              ),
-              Icon(
-                Icons.chevron_right,
-                color: Theme.of(context).colorScheme.onSurfaceVariant,
-                size: 24,
-              ),
-            ],
+              ],
             ),
           ),
         ),
@@ -605,9 +622,9 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       child: Text(
         title,
         style: Theme.of(context).textTheme.titleMedium?.copyWith(
-              fontWeight: FontWeight.w600,
-              color: Theme.of(context).colorScheme.primary,
-            ),
+          fontWeight: FontWeight.w600,
+          color: Theme.of(context).colorScheme.primary,
+        ),
       ),
     );
   }
@@ -636,11 +653,9 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       if (_useGroupedTiles(g)) {
         final entityGroups = _groupEngagementByEntity(items);
         for (final group in entityGroups) {
-          widgets.add(_buildEngagementSummaryTile(
-            context,
-            group,
-            userProvider,
-          ));
+          widgets.add(
+            _buildEngagementSummaryTile(context, group, userProvider),
+          );
         }
       } else {
         for (final n in items) {
@@ -729,7 +744,8 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
             child: Row(
               children: [
                 SizedBox(
-                  width: avatarSize +
+                  width:
+                      avatarSize +
                       (avatarsToShow.length > 1 ? avatarSize - overlap : 0),
                   height: avatarSize,
                   child: Stack(
@@ -741,47 +757,43 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                             decoration: BoxDecoration(
                               shape: BoxShape.circle,
                               border: Border.all(
-                                color:
-                                    Theme.of(context).scaffoldBackgroundColor,
+                                color: Theme.of(
+                                  context,
+                                ).scaffoldBackgroundColor,
                                 width: 2,
                               ),
                             ),
                             child: CircleAvatar(
                               radius: avatarSize / 2 - 1,
-                              backgroundColor: Theme.of(context)
-                                  .colorScheme
-                                  .primaryContainer,
-                              backgroundImage: avatarsToShow[i]
-                                          .actor.avatarUrl !=
-                                      null &&
-                                  avatarsToShow[i]
-                                      .actor
-                                      .avatarUrl!
-                                      .isNotEmpty
+                              backgroundColor: Theme.of(
+                                context,
+                              ).colorScheme.primaryContainer,
+                              backgroundImage:
+                                  avatarsToShow[i].actor.avatarUrl != null &&
+                                      avatarsToShow[i]
+                                          .actor
+                                          .avatarUrl!
+                                          .isNotEmpty
                                   ? CachedNetworkImageProvider(
                                       avatarsToShow[i].actor.avatarUrl!,
                                     )
                                   : null,
-                              child: avatarsToShow[i].actor.avatarUrl == null ||
-                                      avatarsToShow[i]
-                                          .actor
-                                          .avatarUrl!
-                                          .isEmpty
+                              child:
+                                  avatarsToShow[i].actor.avatarUrl == null ||
+                                      avatarsToShow[i].actor.avatarUrl!.isEmpty
                                   ? Text(
                                       avatarsToShow[i]
                                               .actor
                                               .displayName
                                               .isNotEmpty
-                                          ? avatarsToShow[i]
-                                              .actor
-                                              .displayName
-                                              .substring(0, 1)
-                                              .toUpperCase()
+                                          ? avatarsToShow[i].actor.displayName
+                                                .substring(0, 1)
+                                                .toUpperCase()
                                           : '?',
                                       style: TextStyle(
-                                        color: Theme.of(context)
-                                            .colorScheme
-                                            .onPrimaryContainer,
+                                        color: Theme.of(
+                                          context,
+                                        ).colorScheme.onPrimaryContainer,
                                         fontSize: 16,
                                       ),
                                     )
@@ -800,7 +812,8 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                     children: [
                       Text(
                         subtitle,
-                        style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                        style: Theme.of(context).textTheme.labelMedium
+                            ?.copyWith(
                               color: Theme.of(context)
                                   .colorScheme
                                   .onSurfaceVariant
@@ -811,8 +824,8 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                       Text(
                         label,
                         style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                              fontWeight: FontWeight.w500,
-                            ),
+                          fontWeight: FontWeight.w500,
+                        ),
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                       ),
@@ -821,14 +834,14 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                         const SizedBox(height: 4),
                         Text(
                           '"${contentPreview.length > 50 ? '${contentPreview.substring(0, 50)}...' : contentPreview}"',
-                          style:
-                              Theme.of(context).textTheme.bodySmall?.copyWith(
-                                    color: Theme.of(context)
-                                        .colorScheme
-                                        .onSurfaceVariant
-                                        .withValues(alpha: 0.9),
-                                    fontStyle: FontStyle.italic,
-                                  ),
+                          style: Theme.of(context).textTheme.bodySmall
+                              ?.copyWith(
+                                color: Theme.of(context)
+                                    .colorScheme
+                                    .onSurfaceVariant
+                                    .withValues(alpha: 0.9),
+                                fontStyle: FontStyle.italic,
+                              ),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
@@ -893,14 +906,12 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       icon = Icons.comment;
     }
 
-    final isUnread = n.isFollowRequest ||
+    final isUnread =
+        n.isFollowRequest ||
         ((n.isLike || n.isComment || n.isCommentReply || n.isTag) &&
             (n.readAt == null || (n.readAt?.isEmpty ?? true)));
     final backgroundColor = isUnread
-        ? Theme.of(context)
-            .colorScheme
-            .primary
-            .withValues(alpha: 0.08)
+        ? Theme.of(context).colorScheme.primary.withValues(alpha: 0.08)
         : Colors.transparent;
 
     return Material(
@@ -925,9 +936,11 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
               children: [
                 CircleAvatar(
                   radius: 24,
-                  backgroundColor: Theme.of(context).colorScheme.primaryContainer,
-                  backgroundImage: n.actor.avatarUrl != null &&
-                          n.actor.avatarUrl!.isNotEmpty
+                  backgroundColor: Theme.of(
+                    context,
+                  ).colorScheme.primaryContainer,
+                  backgroundImage:
+                      n.actor.avatarUrl != null && n.actor.avatarUrl!.isNotEmpty
                       ? CachedNetworkImageProvider(n.actor.avatarUrl!)
                       : null,
                   child: n.actor.avatarUrl == null || n.actor.avatarUrl!.isEmpty
@@ -936,8 +949,9 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                               ? actorName.substring(0, 1).toUpperCase()
                               : '?',
                           style: TextStyle(
-                            color:
-                                Theme.of(context).colorScheme.onPrimaryContainer,
+                            color: Theme.of(
+                              context,
+                            ).colorScheme.onPrimaryContainer,
                             fontSize: 18,
                           ),
                         )
@@ -959,10 +973,8 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                           Expanded(
                             child: Text(
                               title,
-                              style:
-                                  Theme.of(context).textTheme.bodyLarge?.copyWith(
-                                        fontWeight: FontWeight.w500,
-                                      ),
+                              style: Theme.of(context).textTheme.bodyLarge
+                                  ?.copyWith(fontWeight: FontWeight.w500),
                             ),
                           ),
                         ],
@@ -971,10 +983,11 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                         const SizedBox(height: 4),
                         Text(
                           subtitle,
-                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                color: Theme.of(context)
-                                    .colorScheme
-                                    .onSurfaceVariant,
+                          style: Theme.of(context).textTheme.bodySmall
+                              ?.copyWith(
+                                color: Theme.of(
+                                  context,
+                                ).colorScheme.onSurfaceVariant,
                                 fontStyle: FontStyle.italic,
                               ),
                           maxLines: 2,

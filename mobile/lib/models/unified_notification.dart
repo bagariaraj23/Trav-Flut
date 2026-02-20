@@ -10,15 +10,22 @@ class UnifiedNotificationItem {
   final String? entityType;
   final String? entityId;
   final String? contentPreview;
+
   /// For comment-like: post to navigate to
   final String? postEntityType;
   final String? postEntityId;
+
   /// For scroll-to-comment: comment id to scroll to
   final String? commentId;
+
   /// For COMMENT_REPLY: parent comment id (for grouping)
   final String? parentCommentId;
+
   /// For TAG: trip id to navigate to /trip/:tripId/thread
   final String? tripId;
+
+  /// Optional thread entry target for in-thread highlight
+  final String? threadEntryId;
 
   const UnifiedNotificationItem({
     required this.type,
@@ -35,6 +42,7 @@ class UnifiedNotificationItem {
     this.commentId,
     this.parentCommentId,
     this.tripId,
+    this.threadEntryId,
   });
 
   factory UnifiedNotificationItem.fromJson(Map<String, dynamic> json) {
@@ -55,6 +63,7 @@ class UnifiedNotificationItem {
       commentId: json['commentId'] as String?,
       parentCommentId: json['parentCommentId'] as String?,
       tripId: json['tripId'] as String?,
+      threadEntryId: json['threadEntryId'] as String?,
     );
   }
 
@@ -73,6 +82,11 @@ class UnifiedNotificationItem {
   /// For deep link: comment id to scroll to (for post-comment and comment-like)
   String? get scrollToCommentId =>
       commentId ?? (isLike && entityType == 'COMMENT' ? entityId : null);
+
+  /// For deep link: thread entry id when notification originates from thread entries
+  String? get highlightThreadEntryId =>
+      threadEntryId ??
+      (navEntityType == 'TRIP_THREAD_ENTRY' ? navEntityId : null);
 }
 
 class UnifiedNotificationActor {

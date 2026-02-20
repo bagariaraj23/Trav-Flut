@@ -400,14 +400,16 @@ class _TripThreadAppRouterState extends State<TripThreadAppRouter> {
             return '/login';
           }
 
-          final requiresProfileCompletion = authProvider.requiresProfileCompletion;
+          final requiresProfileCompletion =
+              authProvider.requiresProfileCompletion;
 
           // Authenticated but profile incomplete: must complete profile before home
           if (isLoggedIn &&
               requiresProfileCompletion &&
               location != '/complete-profile') {
             debugPrint(
-                '[GoRouter] Profile incomplete, redirecting to /complete-profile');
+              '[GoRouter] Profile incomplete, redirecting to /complete-profile',
+            );
             return '/complete-profile';
           }
 
@@ -523,7 +525,12 @@ class _TripThreadAppRouterState extends State<TripThreadAppRouter> {
             path: '/trip/:tripId/thread',
             builder: (context, state) {
               final tripId = state.pathParameters['tripId']!;
-              return TripThreadScreen(tripId: tripId);
+              final extra = state.extra as Map<String, dynamic>?;
+              final highlightEntryId = extra?['highlightEntryId'] as String?;
+              return TripThreadScreen(
+                tripId: tripId,
+                highlightEntryId: highlightEntryId,
+              );
             },
           ),
           GoRoute(
@@ -576,8 +583,7 @@ class _TripThreadAppRouterState extends State<TripThreadAppRouter> {
               final entityType = state.pathParameters['entityType']!;
               final entityId = state.pathParameters['entityId']!;
               final extra = state.extra as Map<String, dynamic>?;
-              final scrollToCommentId =
-                  extra?['scrollToCommentId'] as String?;
+              final scrollToCommentId = extra?['scrollToCommentId'] as String?;
               return PostDetailScreen(
                 entityType: entityType,
                 entityId: entityId,

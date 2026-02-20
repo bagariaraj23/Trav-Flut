@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:tripthread/providers/trip_provider.dart';
 import 'package:tripthread/providers/auth_provider.dart';
+import 'package:tripthread/providers/engagement_provider.dart';
 import 'package:tripthread/models/trip.dart';
 import 'package:tripthread/models/place.dart';
 import 'package:tripthread/widgets/sheets/map_picker_sheet.dart';
@@ -38,15 +40,22 @@ Color _getAvatarColor(String userId, String currentUserId) {
 
 class TripThreadScreen extends StatefulWidget {
   final String tripId;
+  final String? highlightEntryId;
 
-  const TripThreadScreen({super.key, required this.tripId});
+  const TripThreadScreen({
+    super.key,
+    required this.tripId,
+    this.highlightEntryId,
+  });
 
   @override
   State<TripThreadScreen> createState() => _TripThreadScreenState();
 }
 
-class _TripThreadScreenState extends State<TripThreadScreen> {
+class _TripThreadScreenState extends State<TripThreadScreen>
+    with SingleTickerProviderStateMixin {
   final _textController = TextEditingController();
+  final FocusNode _entryInputFocusNode = FocusNode();
   final _locationController = TextEditingController();
   final _scrollController = ScrollController();
   final _placeSearchScrollController = ScrollController();
@@ -64,6 +73,10 @@ class _TripThreadScreenState extends State<TripThreadScreen> {
   VideoPlayerController? _pendingVideoController;
   bool _pendingVideoInitialized = false;
   bool _isSubmitting = false;
+  TripThreadEntry? _replyingToEntry;
+  late final AnimationController _replyBannerController;
+  late final Animation<double> _replyBannerFadeAnimation;
+  late final Animation<double> _replyBannerScaleAnimation;
 
   // Mention/tagging state
   List<TripParticipant> _tripParticipants = [];
@@ -75,6 +88,20 @@ class _TripThreadScreenState extends State<TripThreadScreen> {
   @override
   void initState() {
     super.initState();
+    _replyBannerController = AnimationController(
+      duration: const Duration(milliseconds: 220),
+      vsync: this,
+    );
+    _replyBannerFadeAnimation = CurvedAnimation(
+      parent: _replyBannerController,
+      curve: Curves.easeOutCubic,
+    );
+    _replyBannerScaleAnimation = Tween<double>(begin: 0.97, end: 1.0).animate(
+      CurvedAnimation(
+        parent: _replyBannerController,
+        curve: Curves.easeOutBack,
+      ),
+    );
     _loadTrip();
     _loadTripParticipants();
     _textController.addListener(_onTextChanged);
@@ -90,8 +117,10 @@ class _TripThreadScreenState extends State<TripThreadScreen> {
   void dispose() {
     _textController.removeListener(_onTextChanged);
     _textController.dispose();
+    _entryInputFocusNode.dispose();
     _locationController.dispose();
     _scrollController.dispose();
+    _replyBannerController.dispose();
     _disposePendingVideoController();
     super.dispose();
   }
@@ -280,6 +309,7 @@ class _TripThreadScreenState extends State<TripThreadScreen> {
 
       if (trip != null) {
         await tripProvider.loadCurrentTripEntries(widget.tripId);
+        _syncEntryEngagementState();
         if (mounted) {
           setState(() {
             _isLoadingEntries = false;
@@ -293,6 +323,18 @@ class _TripThreadScreenState extends State<TripThreadScreen> {
         }
       }
     }
+  }
+
+  void _syncEntryEngagementState() {
+    final entries = context.read<TripProvider>().currentTripEntries;
+    if (entries.isEmpty) return;
+    final engagementProvider = context.read<EngagementProvider>();
+    engagementProvider.syncLikeCounts({
+      for (final entry in entries) entry.id: entry.likeCount,
+    });
+    engagementProvider.setLikeStatusBatch({
+      for (final entry in entries) entry.id: entry.hasLiked,
+    });
   }
 
   Future<void> _addEntry() async {
@@ -406,6 +448,10 @@ class _TripThreadScreenState extends State<TripThreadScreen> {
       }
 
       if (success) {
+        setState(() {
+          _replyingToEntry = null;
+        });
+        _replyBannerController.reset();
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (_scrollController.hasClients) {
             _scrollController.animateTo(
@@ -423,6 +469,120 @@ class _TripThreadScreenState extends State<TripThreadScreen> {
         });
       }
     }
+  }
+
+  void _startReplyToEntry(TripThreadEntry entry) {
+    HapticFeedback.selectionClick();
+    final username = entry.author.username;
+    final mentionPrefix = username != null && username.isNotEmpty
+        ? '@$username '
+        : '';
+
+    setState(() {
+      _replyingToEntry = entry;
+      _selectedType = ThreadEntryType.text;
+    });
+
+    if (mentionPrefix.isNotEmpty &&
+        !_textController.text.trimLeft().startsWith(mentionPrefix)) {
+      final existing = _textController.text.trimLeft();
+      _textController.value = TextEditingValue(
+        text: '$mentionPrefix$existing',
+        selection: TextSelection.collapsed(
+          offset: ('$mentionPrefix$existing').length,
+        ),
+      );
+    }
+    _replyBannerController.forward(from: 0);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _entryInputFocusNode.requestFocus();
+    });
+  }
+
+  Widget _buildReplySwipeBackground() {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      alignment: Alignment.centerLeft,
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            Icons.reply,
+            color: Theme.of(context).colorScheme.primary,
+            size: 20,
+          ),
+          const SizedBox(width: 8),
+          Text(
+            'Reply',
+            style: TextStyle(
+              color: Theme.of(context).colorScheme.primary,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildThreadEntryLikeButton(
+    TripThreadEntry entry, {
+    required bool hasLiked,
+    required int likeCount,
+    required bool isToggling,
+  }) {
+    return InkWell(
+      onTap: isToggling
+          ? null
+          : () async {
+              try {
+                await context.read<EngagementProvider>().toggleLike(
+                  'TRIP_THREAD_ENTRY',
+                  entry.id,
+                );
+              } catch (_) {}
+            },
+      borderRadius: BorderRadius.circular(999),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (isToggling)
+              const SizedBox(
+                width: 12,
+                height: 12,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              )
+            else
+              Icon(
+                hasLiked ? Icons.favorite : Icons.favorite_border,
+                size: 16,
+                color: hasLiked
+                    ? Colors.red
+                    : Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+            if (likeCount > 0) ...[
+              const SizedBox(width: 4),
+              Text(
+                '$likeCount',
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: hasLiked
+                      ? Colors.red
+                      : Theme.of(context).colorScheme.onSurfaceVariant,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
   }
 
   Future<void> _pickImage({bool fromCamera = false}) async {
@@ -454,9 +614,9 @@ class _TripThreadScreenState extends State<TripThreadScreen> {
       }
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error picking image: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Error picking image: $e')));
     }
   }
 
@@ -530,9 +690,9 @@ class _TripThreadScreenState extends State<TripThreadScreen> {
       }
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error picking media: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Error picking media: $e')));
     }
   }
 
@@ -565,9 +725,9 @@ class _TripThreadScreenState extends State<TripThreadScreen> {
       }
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error picking video: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Error picking video: $e')));
     }
   }
 
@@ -790,6 +950,7 @@ class _TripThreadScreenState extends State<TripThreadScreen> {
         }
       },
       child: Scaffold(
+        resizeToAvoidBottomInset: true,
         appBar: AppBar(
           title: Text(_trip?.title ?? 'Trip Thread'),
           backgroundColor: Theme.of(context).colorScheme.primary,
@@ -810,152 +971,164 @@ class _TripThreadScreenState extends State<TripThreadScreen> {
             },
           ),
         ),
-        body: Stack(
-          key: _stackKey,
-          children: [
-            Column(
-              children: [
-                // Thread entries
-                Expanded(
-                  child: Consumer<TripProvider>(
-                    builder: (context, tripProvider, child) {
-                      // Only show entries if they belong to the current trip
-                      final allEntries = tripProvider.currentTripEntries;
-                      final entries = allEntries
-                          .where((entry) => entry.tripId == widget.tripId)
-                          .toList();
+        body: GestureDetector(
+          behavior: HitTestBehavior.translucent,
+          onTap: () => FocusScope.of(context).unfocus(),
+          child: Stack(
+            key: _stackKey,
+            children: [
+              Column(
+                children: [
+                  // Thread entries
+                  Expanded(
+                    child: Consumer<TripProvider>(
+                      builder: (context, tripProvider, child) {
+                        // Only show entries if they belong to the current trip
+                        final allEntries = tripProvider.currentTripEntries;
+                        final entries = allEntries
+                            .where((entry) => entry.tripId == widget.tripId)
+                            .toList();
 
-                      // Show loading indicator while entries are being loaded
-                      if (_isLoadingEntries && entries.isEmpty) {
-                        return const Center(child: CircularProgressIndicator());
-                      }
+                        // Show loading indicator while entries are being loaded
+                        if (_isLoadingEntries && entries.isEmpty) {
+                          return const Center(
+                            child: CircularProgressIndicator(),
+                          );
+                        }
 
-                      if (entries.isEmpty) {
-                        return CustomScrollView(
-                          slivers: [
-                            SliverFillRemaining(
-                              hasScrollBody: false,
-                              child: Center(
-                                child: Padding(
-                                  padding: const EdgeInsets.all(32),
-                                  child: Column(
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    children: [
-                                      Container(
-                                        padding: const EdgeInsets.all(24),
-                                        decoration: BoxDecoration(
-                                          color: Theme.of(context)
-                                              .colorScheme
-                                              .primaryContainer
-                                              .withValues(alpha: 0.3),
-                                          shape: BoxShape.circle,
-                                          boxShadow: [
-                                            BoxShadow(
-                                              color: Theme.of(context)
-                                                  .colorScheme
-                                                  .primary
-                                                  .withValues(alpha: 0.1),
-                                              blurRadius: 20,
-                                              spreadRadius: 5,
-                                            ),
-                                          ],
-                                        ),
-                                        child: Icon(
-                                          Icons.timeline,
-                                          size: 64,
-                                          color: Theme.of(
-                                            context,
-                                          ).colorScheme.primary,
-                                        ),
-                                      ),
-                                      const SizedBox(height: 24),
-                                      Text(
-                                        'No entries yet',
-                                        style: Theme.of(context)
-                                            .textTheme
-                                            .headlineSmall
-                                            ?.copyWith(
-                                              color: Theme.of(
-                                                context,
-                                              ).colorScheme.onSurface,
-                                              fontWeight: FontWeight.w600,
-                                            ),
-                                      ),
-                                      const SizedBox(height: 12),
-                                      Text(
-                                        canAddEntries
-                                            ? 'Start documenting your journey!\nShare your experiences, photos, and locations.'
-                                            : 'This trip has no entries yet.\nCheck back later for updates.',
-                                        style: Theme.of(context)
-                                            .textTheme
-                                            .bodyMedium
-                                            ?.copyWith(
-                                              color: Theme.of(context)
-                                                  .colorScheme
-                                                  .onSurface
-                                                  .withValues(alpha: 0.7),
-                                              height: 1.5,
-                                            ),
-                                        textAlign: TextAlign.center,
-                                      ),
-                                      if (canAddEntries) ...[
-                                        const SizedBox(height: 24),
-                                        ElevatedButton.icon(
-                                          onPressed: () {
-                                            ScaffoldMessenger.of(
-                                              context,
-                                            ).showSnackBar(
-                                              const SnackBar(
-                                                content: Text(
-                                                  'Ready to share! Start typing below.',
-                                                ),
-                                                duration: Duration(seconds: 2),
+                        if (entries.isEmpty) {
+                          return CustomScrollView(
+                            slivers: [
+                              SliverFillRemaining(
+                                hasScrollBody: false,
+                                child: Center(
+                                  child: Padding(
+                                    padding: const EdgeInsets.all(32),
+                                    child: Column(
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.center,
+                                      children: [
+                                        Container(
+                                          padding: const EdgeInsets.all(24),
+                                          decoration: BoxDecoration(
+                                            color: Theme.of(context)
+                                                .colorScheme
+                                                .primaryContainer
+                                                .withValues(alpha: 0.3),
+                                            shape: BoxShape.circle,
+                                            boxShadow: [
+                                              BoxShadow(
+                                                color: Theme.of(context)
+                                                    .colorScheme
+                                                    .primary
+                                                    .withValues(alpha: 0.1),
+                                                blurRadius: 20,
+                                                spreadRadius: 5,
                                               ),
-                                            );
-                                          },
-                                          icon: const Icon(Icons.add),
-                                          label: const Text('Add First Entry'),
-                                          style: ElevatedButton.styleFrom(
-                                            backgroundColor: Theme.of(
+                                            ],
+                                          ),
+                                          child: Icon(
+                                            Icons.timeline,
+                                            size: 64,
+                                            color: Theme.of(
                                               context,
                                             ).colorScheme.primary,
-                                            foregroundColor: Colors.white,
-                                            padding: const EdgeInsets.symmetric(
-                                              horizontal: 24,
-                                              vertical: 12,
-                                            ),
                                           ),
                                         ),
+                                        const SizedBox(height: 24),
+                                        Text(
+                                          'No entries yet',
+                                          style: Theme.of(context)
+                                              .textTheme
+                                              .headlineSmall
+                                              ?.copyWith(
+                                                color: Theme.of(
+                                                  context,
+                                                ).colorScheme.onSurface,
+                                                fontWeight: FontWeight.w600,
+                                              ),
+                                        ),
+                                        const SizedBox(height: 12),
+                                        Text(
+                                          canAddEntries
+                                              ? 'Start documenting your journey!\nShare your experiences, photos, and locations.'
+                                              : 'This trip has no entries yet.\nCheck back later for updates.',
+                                          style: Theme.of(context)
+                                              .textTheme
+                                              .bodyMedium
+                                              ?.copyWith(
+                                                color: Theme.of(context)
+                                                    .colorScheme
+                                                    .onSurface
+                                                    .withValues(alpha: 0.7),
+                                                height: 1.5,
+                                              ),
+                                          textAlign: TextAlign.center,
+                                        ),
+                                        if (canAddEntries) ...[
+                                          const SizedBox(height: 24),
+                                          ElevatedButton.icon(
+                                            onPressed: () {
+                                              ScaffoldMessenger.of(
+                                                context,
+                                              ).showSnackBar(
+                                                const SnackBar(
+                                                  content: Text(
+                                                    'Ready to share! Start typing below.',
+                                                  ),
+                                                  duration: Duration(
+                                                    seconds: 2,
+                                                  ),
+                                                ),
+                                              );
+                                            },
+                                            icon: const Icon(Icons.add),
+                                            label: const Text(
+                                              'Add First Entry',
+                                            ),
+                                            style: ElevatedButton.styleFrom(
+                                              backgroundColor: Theme.of(
+                                                context,
+                                              ).colorScheme.primary,
+                                              foregroundColor: Colors.white,
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                    horizontal: 24,
+                                                    vertical: 12,
+                                                  ),
+                                            ),
+                                          ),
+                                        ],
                                       ],
-                                    ],
+                                    ),
                                   ),
                                 ),
                               ),
-                            ),
-                          ],
+                            ],
+                          );
+                        }
+
+                        return ListView.builder(
+                          controller: _scrollController,
+                          padding: const EdgeInsets.all(16),
+                          itemCount: entries.length,
+                          itemBuilder: (context, index) {
+                            return _buildThreadEntry(entries[index]);
+                          },
                         );
-                      }
-
-                      return ListView.builder(
-                        controller: _scrollController,
-                        padding: const EdgeInsets.all(16),
-                        itemCount: entries.length,
-                        itemBuilder: (context, index) {
-                          return _buildThreadEntry(entries[index]);
-                        },
-                      );
-                    },
+                      },
+                    ),
                   ),
-                ),
 
-                // Add entry section
-                if (canAddEntries) _buildAddEntrySection(),
-              ],
-            ),
-            // Mention autocomplete menu - positioned relative to text field
-            if (_mentionQuery != null)
-              Builder(builder: (context) => _buildMentionMenu(context)),
-          ],
+                  // Add entry section
+                  if (canAddEntries) _buildAddEntrySection(),
+                ],
+              ),
+              // Mention autocomplete menu - positioned relative to text field
+              if (_mentionQuery != null)
+                Builder(builder: (context) => _buildMentionMenu(context)),
+            ],
+          ),
         ),
       ),
     );
@@ -1000,18 +1173,23 @@ class _TripThreadScreenState extends State<TripThreadScreen> {
     final keyboardHeight = MediaQuery.of(context).viewInsets.bottom;
     final stackSize = stackRenderBox.size;
 
-    final hasKeyboard = keyboardHeight > 100;
-    final menuLeft = relativePosition.dx.clamp(0.0, stackSize.width - 200.0);
-    final menuWidth = size.width.clamp(200.0, 400.0);
+    final hasKeyboard = keyboardHeight > 0;
+    final menuWidth = size.width
+        .clamp(120.0, 400.0)
+        .toDouble()
+        .clamp(0.0, stackSize.width);
+    final maxMenuLeft = (stackSize.width - menuWidth).clamp(
+      0.0,
+      stackSize.width,
+    );
+    final menuLeft = relativePosition.dx.clamp(0.0, maxMenuLeft);
 
     double menuTop;
+    final maxTop = (stackSize.height - 100.0).clamp(0.0, stackSize.height);
     if (hasKeyboard) {
-      menuTop = (relativePosition.dy - 8).clamp(0.0, stackSize.height - 100.0);
+      menuTop = (relativePosition.dy - 8).clamp(0.0, maxTop);
     } else {
-      menuTop = (relativePosition.dy + size.height + 8).clamp(
-        0.0,
-        stackSize.height - 100.0,
-      );
+      menuTop = (relativePosition.dy + size.height + 8).clamp(0.0, maxTop);
     }
 
     final spaceAbove = menuTop;
@@ -1019,8 +1197,11 @@ class _TripThreadScreenState extends State<TripThreadScreen> {
     final availableHeight = hasKeyboard ? spaceAbove : spaceBelow;
     const itemHeight = 56.0;
     final maxItems = (availableHeight / itemHeight).floor().clamp(1, 5);
-    final menuHeight =
+    final maxHeightCap = (stackSize.height * 0.7).clamp(36.0, 280.0).toDouble();
+    final minHeightCap = maxHeightCap < 44.0 ? maxHeightCap : 44.0;
+    final desiredHeight =
         (filtered.length > maxItems ? maxItems : filtered.length) * itemHeight;
+    final menuHeight = desiredHeight.clamp(minHeightCap, maxHeightCap);
 
     debugPrint(
       '[MentionMenu] Showing menu: query="$query", filtered=${filtered.length}, position=($menuLeft, $menuTop), width=$menuWidth, keyboard=$hasKeyboard',
@@ -1036,7 +1217,7 @@ class _TripThreadScreenState extends State<TripThreadScreen> {
         child: Container(
           constraints: BoxConstraints(
             maxHeight: menuHeight,
-            minHeight: itemHeight,
+            minHeight: minHeightCap,
           ),
           decoration: BoxDecoration(
             color: Theme.of(context).colorScheme.surface,
@@ -1110,323 +1291,354 @@ class _TripThreadScreenState extends State<TripThreadScreen> {
   Widget _buildThreadEntry(TripThreadEntry entry) {
     final isCurrentUser =
         context.read<AuthProvider>().currentUser?.id == entry.authorId;
+    final engagementProvider = context.watch<EngagementProvider>();
+    final hasLiked = engagementProvider.likeStatus.containsKey(entry.id)
+        ? engagementProvider.isLiked(entry.id)
+        : entry.hasLiked;
+    final likeCount = engagementProvider.likeCounts.containsKey(entry.id)
+        ? engagementProvider.getLikeCount(entry.id)
+        : entry.likeCount;
+    final isToggling = engagementProvider.isToggling(entry.id);
 
-    return Container(
-      margin: const EdgeInsets.only(bottom: 16),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Avatar
-          Builder(
-            builder: (context) {
-              final currentUserId = context
-                  .read<AuthProvider>()
-                  .currentUser
-                  ?.id;
-              final avatarColor = _getAvatarColor(
-                entry.authorId,
-                currentUserId ?? '',
-              );
-              return CircleAvatar(
-                radius: 18,
-                backgroundColor: avatarColor,
-                backgroundImage: entry.author.avatarUrl != null
-                    ? NetworkImage(entry.author.avatarUrl!)
-                    : null,
-                child: entry.author.avatarUrl == null
-                    ? Text(
-                        entry.author.name?.substring(0, 1).toUpperCase() ?? 'U',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 14,
-                        ),
-                      )
-                    : null,
-              );
-            },
-          ),
+    return Dismissible(
+      key: ValueKey('entry-reply-${entry.id}'),
+      direction: DismissDirection.startToEnd,
+      background: _buildReplySwipeBackground(),
+      confirmDismiss: (direction) async {
+        if (direction == DismissDirection.startToEnd) {
+          _startReplyToEntry(entry);
+          return false;
+        }
+        return false;
+      },
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 16),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Avatar
+            Builder(
+              builder: (context) {
+                final currentUserId = context
+                    .read<AuthProvider>()
+                    .currentUser
+                    ?.id;
+                final avatarColor = _getAvatarColor(
+                  entry.authorId,
+                  currentUserId ?? '',
+                );
+                return CircleAvatar(
+                  radius: 18,
+                  backgroundColor: avatarColor,
+                  backgroundImage: entry.author.avatarUrl != null
+                      ? NetworkImage(entry.author.avatarUrl!)
+                      : null,
+                  child: entry.author.avatarUrl == null
+                      ? Text(
+                          entry.author.name?.substring(0, 1).toUpperCase() ??
+                              'U',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 14,
+                          ),
+                        )
+                      : null,
+                );
+              },
+            ),
 
-          const SizedBox(width: 12),
+            const SizedBox(width: 12),
 
-          // Entry content
-          Expanded(
-            child: Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: isCurrentUser
-                    ? Theme.of(
-                        context,
-                      ).colorScheme.primary.withValues(alpha: 0.12)
-                    : (Theme.of(context).brightness == Brightness.dark
-                        ? Theme.of(context)
-                            .colorScheme
-                            .onSurface
-                            .withValues(alpha: 0.06)
-                        : const Color(0xFFFAF9F6)),
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(
+            // Entry content
+            Expanded(
+              child: Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
                   color: isCurrentUser
                       ? Theme.of(
                           context,
-                        ).colorScheme.primary.withValues(alpha: 0.3)
+                        ).colorScheme.primary.withValues(alpha: 0.12)
                       : (Theme.of(context).brightness == Brightness.dark
-                          ? Theme.of(context)
-                              .colorScheme
-                              .onSurface
-                              .withValues(alpha: 0.18)
-                          : Theme.of(context).colorScheme.onSurface.withValues(
-                            alpha: Theme.of(context).brightness == Brightness.dark ? 0.18 : 0.10,
-                          )),
-                  width: 1.5,
-                ),
-                boxShadow: [
-                  BoxShadow(
+                            ? Theme.of(
+                                context,
+                              ).colorScheme.onSurface.withValues(alpha: 0.06)
+                            : const Color(0xFFFAF9F6)),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(
                     color: isCurrentUser
                         ? Theme.of(
                             context,
-                          ).colorScheme.primary.withValues(alpha: 0.1)
-                        : Colors.black.withValues(alpha: 0.04),
-                    blurRadius: 6,
-                    offset: const Offset(0, 2),
+                          ).colorScheme.primary.withValues(alpha: 0.3)
+                        : (Theme.of(context).brightness == Brightness.dark
+                              ? Theme.of(
+                                  context,
+                                ).colorScheme.onSurface.withValues(alpha: 0.18)
+                              : Theme.of(
+                                  context,
+                                ).colorScheme.onSurface.withValues(
+                                  alpha:
+                                      Theme.of(context).brightness ==
+                                          Brightness.dark
+                                      ? 0.18
+                                      : 0.10,
+                                )),
+                    width: 1.5,
                   ),
-                ],
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Header
-                  Row(
-                    children: [
-                      Flexible(
-                        child: Text(
-                          entry.author.name ?? 'User',
-                          style: Theme.of(context).textTheme.titleSmall
-                              ?.copyWith(
-                                fontWeight: FontWeight.w600,
-                                color: isCurrentUser
-                                    ? Theme.of(context).colorScheme.primary
-                                    : Theme.of(context).colorScheme.onSurface,
-                              ),
-                          overflow: TextOverflow.ellipsis,
-                          maxLines: 1,
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      _buildEntryTypeIcon(entry.type),
-                      const SizedBox(width: 8),
-                      Flexible(
-                        child: Text(
-                          _formatDateTime(entry.createdAt),
-                          style: Theme.of(context).textTheme.bodySmall
-                              ?.copyWith(
-                                color: isCurrentUser
-                                    ? Theme.of(context).colorScheme.primary
-                                          .withValues(alpha: 0.8)
-                                    : Theme.of(context)
-                                        .colorScheme
-                                        .onSurfaceVariant,
-                                fontWeight: FontWeight.w500,
-                              ),
-                          overflow: TextOverflow.ellipsis,
-                          maxLines: 1,
-                        ),
-                      ),
-                    ],
-                  ),
-
-                  const SizedBox(height: 8),
-
-                  // Content
-                  if (entry.contentText != null) ...[
-                    Text(
-                      entry.contentText!,
-                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: Theme.of(context).colorScheme.onSurface,
-                        height: 1.5,
-                      ),
-                      overflow: TextOverflow.visible,
-                      maxLines: null,
+                  boxShadow: [
+                    BoxShadow(
+                      color: isCurrentUser
+                          ? Theme.of(
+                              context,
+                            ).colorScheme.primary.withValues(alpha: 0.1)
+                          : Colors.black.withValues(alpha: 0.04),
+                      blurRadius: 6,
+                      offset: const Offset(0, 2),
                     ),
-                    const SizedBox(height: 8),
                   ],
-
-                  // Location card with theme colors
-                  if (entry.type == ThreadEntryType.location ||
-                      entry.locationName != null ||
-                      entry.place != null ||
-                      entry.gpsCoordinates != null)
-                    GestureDetector(
-                      onTap: () {
-                        if (entry.place != null) {
-                          context.push(
-                            '/trip/${widget.tripId}/map',
-                            extra: {
-                              'tripTitle': _trip?.title ?? 'Trip Map',
-                              'initialZoomLocation': entry.place,
-                            },
-                          );
-                        }
-                      },
-                      child: Container(
-                        margin: const EdgeInsets.only(top: 8),
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: Colors.red[50],
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(
-                            color: Colors.red[200]!,
-                            width: 1.5,
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Header
+                    Row(
+                      children: [
+                        Flexible(
+                          child: Text(
+                            entry.author.name ?? 'User',
+                            style: Theme.of(context).textTheme.titleSmall
+                                ?.copyWith(
+                                  fontWeight: FontWeight.w600,
+                                  color: isCurrentUser
+                                      ? Theme.of(context).colorScheme.primary
+                                      : Theme.of(context).colorScheme.onSurface,
+                                ),
+                            overflow: TextOverflow.ellipsis,
+                            maxLines: 1,
                           ),
                         ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            // Place name and icon
-                            Row(
-                              children: [
-                                Container(
-                                  padding: const EdgeInsets.all(8),
-                                  decoration: BoxDecoration(
-                                    color: Colors.red[100],
-                                    borderRadius: BorderRadius.circular(8),
-                                  ),
-                                  child: Icon(
-                                    entry.type == ThreadEntryType.checkin
-                                        ? Icons.check_circle
-                                        : Icons.location_on,
-                                    size: 18,
-                                    color: Colors.red[700],
-                                  ),
+                        const SizedBox(width: 8),
+                        _buildEntryTypeIcon(entry.type),
+                        const SizedBox(width: 8),
+                        Flexible(
+                          child: Text(
+                            _formatDateTime(entry.createdAt),
+                            style: Theme.of(context).textTheme.bodySmall
+                                ?.copyWith(
+                                  color: isCurrentUser
+                                      ? Theme.of(context).colorScheme.primary
+                                            .withValues(alpha: 0.8)
+                                      : Theme.of(
+                                          context,
+                                        ).colorScheme.onSurfaceVariant,
+                                  fontWeight: FontWeight.w500,
                                 ),
-                                const SizedBox(width: 8),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        entry.place?.name ??
-                                            entry.locationName ??
-                                            'Location',
-                                        style: TextStyle(
-                                          color: Colors.red[900],
-                                          fontWeight: FontWeight.w600,
-                                          fontSize: 14,
-                                        ),
-                                        overflow: TextOverflow.ellipsis,
-                                        maxLines: 2,
-                                      ),
-                                      if (entry.place?.address != null)
+                            overflow: TextOverflow.ellipsis,
+                            maxLines: 1,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        _buildThreadEntryLikeButton(
+                          entry,
+                          hasLiked: hasLiked,
+                          likeCount: likeCount,
+                          isToggling: isToggling,
+                        ),
+                      ],
+                    ),
+
+                    const SizedBox(height: 8),
+
+                    // Content
+                    if (entry.contentText != null) ...[
+                      Text(
+                        entry.contentText!,
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          color: Theme.of(context).colorScheme.onSurface,
+                          height: 1.5,
+                        ),
+                        overflow: TextOverflow.visible,
+                        maxLines: null,
+                      ),
+                      const SizedBox(height: 8),
+                    ],
+
+                    // Location card with theme colors
+                    if (entry.type == ThreadEntryType.location ||
+                        entry.locationName != null ||
+                        entry.place != null ||
+                        entry.gpsCoordinates != null)
+                      GestureDetector(
+                        onTap: () {
+                          if (entry.place != null) {
+                            context.push(
+                              '/trip/${widget.tripId}/map',
+                              extra: {
+                                'tripTitle': _trip?.title ?? 'Trip Map',
+                                'initialZoomLocation': entry.place,
+                              },
+                            );
+                          }
+                        },
+                        child: Container(
+                          margin: const EdgeInsets.only(top: 8),
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: Colors.red[50],
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(
+                              color: Colors.red[200]!,
+                              width: 1.5,
+                            ),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              // Place name and icon
+                              Row(
+                                children: [
+                                  Container(
+                                    padding: const EdgeInsets.all(8),
+                                    decoration: BoxDecoration(
+                                      color: Colors.red[100],
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    child: Icon(
+                                      entry.type == ThreadEntryType.checkin
+                                          ? Icons.check_circle
+                                          : Icons.location_on,
+                                      size: 18,
+                                      color: Colors.red[700],
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
                                         Text(
-                                          entry.place!.address!,
+                                          entry.place?.name ??
+                                              entry.locationName ??
+                                              'Location',
                                           style: TextStyle(
-                                            color: Colors.red[700]!.withValues(
-                                              alpha: 0.8,
-                                            ),
-                                            fontSize: 12,
+                                            color: Colors.red[900],
+                                            fontWeight: FontWeight.w600,
+                                            fontSize: 14,
                                           ),
                                           overflow: TextOverflow.ellipsis,
                                           maxLines: 2,
                                         ),
-                                    ],
-                                  ),
-                                ),
-                                if (entry.place != null)
-                                  IconButton(
-                                    onPressed: () {
-                                      context.push(
-                                        '/trip/${widget.tripId}/map',
-                                        extra: {
-                                          'tripTitle':
-                                              _trip?.title ?? 'Trip Map',
-                                          'initialZoomLocation': entry.place,
-                                        },
-                                      );
-                                    },
-                                    icon: const Icon(
-                                      Icons.map_outlined,
-                                      size: 20,
-                                    ),
-                                    style: IconButton.styleFrom(
-                                      visualDensity: VisualDensity.compact,
-                                      padding: const EdgeInsets.all(8),
-                                      backgroundColor: Colors.red[100],
-                                      foregroundColor: Colors.red[700],
+                                        if (entry.place?.address != null)
+                                          Text(
+                                            entry.place!.address!,
+                                            style: TextStyle(
+                                              color: Colors.red[700]!
+                                                  .withValues(alpha: 0.8),
+                                              fontSize: 12,
+                                            ),
+                                            overflow: TextOverflow.ellipsis,
+                                            maxLines: 2,
+                                          ),
+                                      ],
                                     ),
                                   ),
-                              ],
-                            ),
-                            // GPS coordinates
-                            if ((entry.place?.lat != null &&
-                                    entry.place?.lng != null) ||
-                                entry.gpsCoordinates != null) ...[
-                              const SizedBox(height: 8),
-                              Row(
-                                children: [
-                                  Icon(
-                                    Icons.gps_fixed,
-                                    size: 12,
-                                    color: Colors.red[700]!.withValues(
-                                      alpha: 0.7,
-                                    ),
-                                  ),
-                                  const SizedBox(width: 4),
-                                  Text(
-                                    entry.place != null
-                                        ? '${entry.place!.lat.toStringAsFixed(4)}, ${entry.place!.lng.toStringAsFixed(4)}'
-                                        : '${entry.gpsCoordinates!.lat.toStringAsFixed(4)}, ${entry.gpsCoordinates!.lng.toStringAsFixed(4)}',
-                                    style: TextStyle(
-                                      color: Colors.red[700]!.withValues(
-                                        alpha: 0.8,
+                                  if (entry.place != null)
+                                    IconButton(
+                                      onPressed: () {
+                                        context.push(
+                                          '/trip/${widget.tripId}/map',
+                                          extra: {
+                                            'tripTitle':
+                                                _trip?.title ?? 'Trip Map',
+                                            'initialZoomLocation': entry.place,
+                                          },
+                                        );
+                                      },
+                                      icon: const Icon(
+                                        Icons.map_outlined,
+                                        size: 20,
                                       ),
-                                      fontSize: 11,
-                                      fontFamily: 'monospace',
+                                      style: IconButton.styleFrom(
+                                        visualDensity: VisualDensity.compact,
+                                        padding: const EdgeInsets.all(8),
+                                        backgroundColor: Colors.red[100],
+                                        foregroundColor: Colors.red[700],
+                                      ),
                                     ),
-                                  ),
                                 ],
                               ),
+                              // GPS coordinates
+                              if ((entry.place?.lat != null &&
+                                      entry.place?.lng != null) ||
+                                  entry.gpsCoordinates != null) ...[
+                                const SizedBox(height: 8),
+                                Row(
+                                  children: [
+                                    Icon(
+                                      Icons.gps_fixed,
+                                      size: 12,
+                                      color: Colors.red[700]!.withValues(
+                                        alpha: 0.7,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      entry.place != null
+                                          ? '${entry.place!.lat.toStringAsFixed(4)}, ${entry.place!.lng.toStringAsFixed(4)}'
+                                          : '${entry.gpsCoordinates!.lat.toStringAsFixed(4)}, ${entry.gpsCoordinates!.lng.toStringAsFixed(4)}',
+                                      style: TextStyle(
+                                        color: Colors.red[700]!.withValues(
+                                          alpha: 0.8,
+                                        ),
+                                        fontSize: 11,
+                                        fontFamily: 'monospace',
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
                             ],
-                          ],
+                          ),
                         ),
                       ),
-                    ),
 
-                  // Media display
-                  if (entry.type == ThreadEntryType.media)
-                    _buildMediaPreview(entry),
+                    // Media display
+                    if (entry.type == ThreadEntryType.media)
+                      _buildMediaPreview(entry),
 
-                  // Tagged users
-                  if (entry.taggedUsers != null &&
-                      entry.taggedUsers!.isNotEmpty)
-                    Container(
-                      margin: const EdgeInsets.only(top: 8),
-                      child: Wrap(
-                        spacing: 4,
-                        runSpacing: 4,
-                        children: entry.taggedUsers!.map((user) {
-                          return Chip(
-                            label: Text(
-                              '@${user.username ?? user.name ?? 'User'}',
-                              style: const TextStyle(fontSize: 12),
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                            materialTapTargetSize:
-                                MaterialTapTargetSize.shrinkWrap,
-                            visualDensity: VisualDensity.compact,
-                            backgroundColor: Theme.of(context)
-                                .colorScheme
-                                .secondaryContainer
-                                .withValues(alpha: 0.3),
-                          );
-                        }).toList(),
+                    // Tagged users
+                    if (entry.taggedUsers != null &&
+                        entry.taggedUsers!.isNotEmpty)
+                      Container(
+                        margin: const EdgeInsets.only(top: 8),
+                        child: Wrap(
+                          spacing: 4,
+                          runSpacing: 4,
+                          children: entry.taggedUsers!.map((user) {
+                            return Chip(
+                              label: Text(
+                                '@${user.username ?? user.name ?? 'User'}',
+                                style: const TextStyle(fontSize: 12),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              materialTapTargetSize:
+                                  MaterialTapTargetSize.shrinkWrap,
+                              visualDensity: VisualDensity.compact,
+                              backgroundColor: Theme.of(context)
+                                  .colorScheme
+                                  .secondaryContainer
+                                  .withValues(alpha: 0.3),
+                            );
+                          }).toList(),
+                        ),
                       ),
-                    ),
-                ],
+                  ],
+                ),
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -1439,7 +1651,9 @@ class _TripThreadScreenState extends State<TripThreadScreen> {
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
           color: Theme.of(context).colorScheme.onSurface.withValues(
-            alpha: Theme.of(context).brightness == Brightness.dark ? 0.06 : 0.03,
+            alpha: Theme.of(context).brightness == Brightness.dark
+                ? 0.06
+                : 0.03,
           ),
           borderRadius: BorderRadius.circular(8),
         ),
@@ -1450,9 +1664,7 @@ class _TripThreadScreenState extends State<TripThreadScreen> {
             Expanded(
               child: Text(
                 'Media not available',
-                style: Theme.of(
-                  context,
-                ).textTheme.bodyMedium?.copyWith(
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                   color: Theme.of(context).colorScheme.onSurfaceVariant,
                 ),
               ),
@@ -1497,8 +1709,10 @@ class _TripThreadScreenState extends State<TripThreadScreen> {
                 errorBuilder: (context, error, stackTrace) {
                   return Container(
                     color: Theme.of(context).colorScheme.onSurface.withValues(
-            alpha: Theme.of(context).brightness == Brightness.dark ? 0.06 : 0.03,
-          ),
+                      alpha: Theme.of(context).brightness == Brightness.dark
+                          ? 0.06
+                          : 0.03,
+                    ),
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
@@ -1512,7 +1726,9 @@ class _TripThreadScreenState extends State<TripThreadScreen> {
                           'Failed to load media',
                           style: Theme.of(context).textTheme.bodyMedium
                               ?.copyWith(
-                                color: Theme.of(context).colorScheme.onSurfaceVariant,
+                                color: Theme.of(
+                                  context,
+                                ).colorScheme.onSurfaceVariant,
                               ),
                         ),
                       ],
@@ -1682,6 +1898,9 @@ class _TripThreadScreenState extends State<TripThreadScreen> {
         ],
       ),
       child: SafeArea(
+        top: false,
+        left: false,
+        right: false,
         child: ConstrainedBox(
           constraints: BoxConstraints(maxHeight: maxHeight),
           child: SingleChildScrollView(
@@ -1728,6 +1947,95 @@ class _TripThreadScreenState extends State<TripThreadScreen> {
 
                   const SizedBox(height: 12),
 
+                  if (_replyingToEntry != null) ...[
+                    FadeTransition(
+                      opacity: _replyBannerFadeAnimation,
+                      child: ScaleTransition(
+                        scale: _replyBannerScaleAnimation,
+                        child: Container(
+                          width: double.infinity,
+                          margin: const EdgeInsets.only(bottom: 12),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 10,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Theme.of(
+                              context,
+                            ).colorScheme.primary.withValues(alpha: 0.08),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(
+                              color: Theme.of(
+                                context,
+                              ).colorScheme.primary.withValues(alpha: 0.25),
+                            ),
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(
+                                Icons.reply,
+                                size: 16,
+                                color: Theme.of(context).colorScheme.primary,
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      'Replying to ${_replyingToEntry!.author.name ?? _replyingToEntry!.author.username ?? 'entry'}',
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .bodySmall
+                                          ?.copyWith(
+                                            fontWeight: FontWeight.w600,
+                                            color: Theme.of(
+                                              context,
+                                            ).colorScheme.primary,
+                                          ),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                    if ((_replyingToEntry!.contentText ?? '')
+                                        .isNotEmpty)
+                                      Text(
+                                        _replyingToEntry!.contentText!,
+                                        style: Theme.of(context)
+                                            .textTheme
+                                            .bodySmall
+                                            ?.copyWith(
+                                              color: Theme.of(
+                                                context,
+                                              ).colorScheme.onSurfaceVariant,
+                                            ),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                  ],
+                                ),
+                              ),
+                              IconButton(
+                                onPressed: () {
+                                  setState(() {
+                                    _replyingToEntry = null;
+                                  });
+                                  _replyBannerController.reset();
+                                },
+                                icon: const Icon(Icons.close, size: 18),
+                                visualDensity: VisualDensity.compact,
+                                padding: EdgeInsets.zero,
+                                constraints: const BoxConstraints(
+                                  minWidth: 24,
+                                  minHeight: 24,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+
                   // LOCATION SELECTOR - Made scrollable and more spacious
                   if (_selectedType == ThreadEntryType.location)
                     Column(
@@ -1760,9 +2068,14 @@ class _TripThreadScreenState extends State<TripThreadScreen> {
                             ),
                             decoration: BoxDecoration(
                               border: Border.all(
-                                color: Theme.of(context).colorScheme.onSurface.withValues(
-                                  alpha: Theme.of(context).brightness == Brightness.dark ? 0.18 : 0.10,
-                                ),
+                                color: Theme.of(context).colorScheme.onSurface
+                                    .withValues(
+                                      alpha:
+                                          Theme.of(context).brightness ==
+                                              Brightness.dark
+                                          ? 0.18
+                                          : 0.10,
+                                    ),
                               ),
                               borderRadius: BorderRadius.circular(8),
                             ),
@@ -1770,7 +2083,9 @@ class _TripThreadScreenState extends State<TripThreadScreen> {
                               children: [
                                 Icon(
                                   Icons.search,
-                                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                                  color: Theme.of(
+                                    context,
+                                  ).colorScheme.onSurfaceVariant,
                                 ),
                                 const SizedBox(width: 12),
                                 Expanded(
@@ -1792,7 +2107,9 @@ class _TripThreadScreenState extends State<TripThreadScreen> {
                                               Text(
                                                 _selectedPlace!.address!,
                                                 style: TextStyle(
-                                                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                                                  color: Theme.of(context)
+                                                      .colorScheme
+                                                      .onSurfaceVariant,
                                                   fontSize: 12,
                                                 ),
                                                 maxLines: 1,
@@ -1803,7 +2120,9 @@ class _TripThreadScreenState extends State<TripThreadScreen> {
                                       : Text(
                                           'Search for a location',
                                           style: TextStyle(
-                                            color: Theme.of(context).colorScheme.onSurfaceVariant,
+                                            color: Theme.of(
+                                              context,
+                                            ).colorScheme.onSurfaceVariant,
                                           ),
                                         ),
                                 ),
@@ -1832,9 +2151,14 @@ class _TripThreadScreenState extends State<TripThreadScreen> {
                           children: [
                             Expanded(
                               child: Divider(
-                                color: Theme.of(context).colorScheme.onSurface.withValues(
-                                  alpha: Theme.of(context).brightness == Brightness.dark ? 0.18 : 0.10,
-                                ),
+                                color: Theme.of(context).colorScheme.onSurface
+                                    .withValues(
+                                      alpha:
+                                          Theme.of(context).brightness ==
+                                              Brightness.dark
+                                          ? 0.18
+                                          : 0.10,
+                                    ),
                               ),
                             ),
                             Padding(
@@ -1844,16 +2168,23 @@ class _TripThreadScreenState extends State<TripThreadScreen> {
                               child: Text(
                                 'OR',
                                 style: TextStyle(
-                                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                                  color: Theme.of(
+                                    context,
+                                  ).colorScheme.onSurfaceVariant,
                                   fontWeight: FontWeight.w500,
                                 ),
                               ),
                             ),
                             Expanded(
                               child: Divider(
-                                color: Theme.of(context).colorScheme.onSurface.withValues(
-                                  alpha: Theme.of(context).brightness == Brightness.dark ? 0.18 : 0.10,
-                                ),
+                                color: Theme.of(context).colorScheme.onSurface
+                                    .withValues(
+                                      alpha:
+                                          Theme.of(context).brightness ==
+                                              Brightness.dark
+                                          ? 0.18
+                                          : 0.10,
+                                    ),
                               ),
                             ),
                           ],
@@ -1908,10 +2239,9 @@ class _TripThreadScreenState extends State<TripThreadScreen> {
                               color: Theme.of(context).colorScheme.surface,
                               borderRadius: BorderRadius.circular(12),
                               border: Border.all(
-                                color: Theme.of(context)
-                                    .colorScheme
-                                    .onSurface
-                                    .withValues(alpha: 0.15),
+                                color: Theme.of(
+                                  context,
+                                ).colorScheme.onSurface.withValues(alpha: 0.15),
                               ),
                               boxShadow: [
                                 BoxShadow(
@@ -1991,9 +2321,9 @@ class _TripThreadScreenState extends State<TripThreadScreen> {
                                             .colorScheme
                                             .onSurface
                                             .withValues(alpha: 0.12),
-                                        foregroundColor: Theme.of(context)
-                                            .colorScheme
-                                            .onSurface,
+                                        foregroundColor: Theme.of(
+                                          context,
+                                        ).colorScheme.onSurface,
                                         visualDensity: VisualDensity.compact,
                                         padding: const EdgeInsets.all(8),
                                       ),
@@ -2045,9 +2375,14 @@ class _TripThreadScreenState extends State<TripThreadScreen> {
                             margin: const EdgeInsets.only(bottom: 12),
                             decoration: BoxDecoration(
                               border: Border.all(
-                                color: Theme.of(context).colorScheme.onSurface.withValues(
-                                  alpha: Theme.of(context).brightness == Brightness.dark ? 0.18 : 0.10,
-                                ),
+                                color: Theme.of(context).colorScheme.onSurface
+                                    .withValues(
+                                      alpha:
+                                          Theme.of(context).brightness ==
+                                              Brightness.dark
+                                          ? 0.18
+                                          : 0.10,
+                                    ),
                               ),
                               borderRadius: BorderRadius.circular(8),
                             ),
@@ -2197,6 +2532,7 @@ class _TripThreadScreenState extends State<TripThreadScreen> {
                         child: TextField(
                           key: _textFieldKey,
                           controller: _textController,
+                          focusNode: _entryInputFocusNode,
                           decoration: InputDecoration(
                             hintText: _getInputHint(),
                             border: OutlineInputBorder(
@@ -2370,7 +2706,9 @@ class _TripThreadScreenState extends State<TripThreadScreen> {
               fit: BoxFit.cover,
               errorBuilder: (context, error, stackTrace) => Container(
                 color: Theme.of(context).colorScheme.onSurface.withValues(
-                  alpha: Theme.of(context).brightness == Brightness.dark ? 0.18 : 0.10,
+                  alpha: Theme.of(context).brightness == Brightness.dark
+                      ? 0.18
+                      : 0.10,
                 ),
                 child: const Icon(Icons.broken_image, color: Colors.grey),
               ),
@@ -2380,7 +2718,9 @@ class _TripThreadScreenState extends State<TripThreadScreen> {
               fit: BoxFit.cover,
               errorBuilder: (context, error, stackTrace) => Container(
                 color: Theme.of(context).colorScheme.onSurface.withValues(
-                  alpha: Theme.of(context).brightness == Brightness.dark ? 0.18 : 0.10,
+                  alpha: Theme.of(context).brightness == Brightness.dark
+                      ? 0.18
+                      : 0.10,
                 ),
                 child: const Icon(Icons.broken_image, color: Colors.grey),
               ),

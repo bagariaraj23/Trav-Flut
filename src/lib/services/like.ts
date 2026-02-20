@@ -9,7 +9,7 @@ import {
   USER_FULL_SELECT,
   ENGAGEMENT_CONSTANTS,
 } from "./engagement-utils";
-import { getEntityOwner, getPostFromComment } from "../entity-owner";
+import { getEntityOwner, getPostFromComment, getTripIdFromEntry } from "../entity-owner";
 import { createNotification } from "./notification";
 
 export async function createLike(
@@ -22,6 +22,7 @@ export async function createLike(
     throw new Error("Entity not found");
   }
 
+  let isNewLike = false;
   const like = await prisma.$transaction(async (tx) => {
     const existing = await tx.like.findFirst({
       where: { userId, entityType, entityId },
@@ -33,6 +34,7 @@ export async function createLike(
     const newLike = await tx.like.create({
       data: { userId, entityType, entityId },
     });
+    isNewLike = true;
 
     await incrementEntityCount(entityType, entityId, "likeCount", tx);
 
@@ -40,6 +42,10 @@ export async function createLike(
 
     return newLike;
   });
+
+  if (!isNewLike) {
+    return like;
+  }
 
   // Fire-and-forget: create notification without blocking response
   void (async () => {
@@ -62,6 +68,10 @@ export async function createLike(
               ? comment.contentText.slice(0, 60) + "..."
               : comment.contentText
             : undefined;
+        const tripId =
+          post.entityType === "TRIP_THREAD_ENTRY"
+            ? await getTripIdFromEntry(post.entityId)
+            : null;
         await createNotification({
           type: "LIKE",
           actorId: userId,
@@ -72,6 +82,23 @@ export async function createLike(
             postEntityType: post.entityType,
             postEntityId: post.entityId,
             ...(contentPreview && { contentPreview }),
+            ...(tripId && { tripId }),
+            ...(post.entityType === "TRIP_THREAD_ENTRY" && {
+              threadEntryId: post.entityId,
+            }),
+          },
+        });
+      } else if (entityType === "TRIP_THREAD_ENTRY") {
+        const tripId = await getTripIdFromEntry(entityId);
+        await createNotification({
+          type: "LIKE",
+          actorId: userId,
+          recipientId,
+          entityType,
+          entityId,
+          metadata: {
+            ...(tripId && { tripId }),
+            threadEntryId: entityId,
           },
         });
       } else {
