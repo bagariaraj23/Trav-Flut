@@ -3,6 +3,7 @@ import 'package:tripthread/models/user.dart';
 import 'package:tripthread/services/api_service.dart';
 import 'package:tripthread/services/google_sign_in_service.dart';
 import 'package:tripthread/services/storage_service.dart';
+import 'package:tripthread/utils/auth_error_messages.dart';
 
 /// Result of Google sign-in: success (logged in) or failure.
 sealed class GoogleSignInResult {}
@@ -198,7 +199,9 @@ class AuthProvider extends ChangeNotifier {
         _setLoadingState(false);
         return true;
       } else {
-        _setError(response.error ?? 'Signup failed. Please try again.');
+        _setError(
+          AuthErrorMessages.toSignupFriendly(response.error),
+        );
         debugPrint('[AuthProvider] signup error set: $_error');
         _setLoadingState(false);
         return false;
@@ -248,9 +251,7 @@ class AuthProvider extends ChangeNotifier {
         _setLoadingState(false);
         return true;
       } else {
-        _setError(
-          response.error ?? 'Login failed. Please check your credentials.',
-        );
+        _setError(AuthErrorMessages.toLoginFriendly(response.error));
         debugPrint('[AuthProvider] login error set: $_error');
         _setLoadingState(false);
         return false;
@@ -300,7 +301,9 @@ class AuthProvider extends ChangeNotifier {
           return true;
         }
       }
-      _setError(response.error ?? 'Failed to complete profile.');
+      _setError(
+        AuthErrorMessages.toCompleteProfileFriendly(response.error),
+      );
       _setLoadingState(false);
       return false;
     } catch (e) {
@@ -374,7 +377,7 @@ class AuthProvider extends ChangeNotifier {
         return true;
       } else {
         _setError(
-          response.error ?? 'Failed to send reset email. Please try again.',
+          AuthErrorMessages.toForgotPasswordFriendly(response.error),
         );
         debugPrint('[AuthProvider] forgotPassword error set: $_error');
         _setLoadingState(false);
@@ -418,7 +421,7 @@ class AuthProvider extends ChangeNotifier {
         return true;
       } else {
         _setError(
-          response.error ?? 'Failed to reset password. Please try again.',
+          AuthErrorMessages.toResetPasswordFriendly(response.error),
         );
         debugPrint('[AuthProvider] resetPassword error set: $_error');
         _setLoadingState(false);
