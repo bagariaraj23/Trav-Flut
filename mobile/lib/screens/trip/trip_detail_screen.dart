@@ -668,14 +668,15 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
                   },
                 ),
               ],
-            ] else if (_trip!.status == TripStatus.ended &&
-                _trip!.finalPost != null) ...[
+            ] else if (_trip!.status == TripStatus.ended) ...[
               ElevatedButton.icon(
                 onPressed: () {
                   context.go('/trip/${widget.tripId}/final-post');
                 },
                 icon: const Icon(Icons.auto_awesome),
-                label: const Text('View Final Post'),
+                label: Text(_trip!.finalPost != null
+                    ? 'View My Final Post'
+                    : 'Generate My Final Post'),
               ),
             ],
           ],

@@ -83,6 +83,7 @@ describe("Engagement API - Likes", () => {
     finalPost = await prisma.tripFinalPost.create({
       data: {
         tripId: trip.id,
+        userId: trip.userId,
         summaryText: "Test trip summary",
         curatedMedia: [],
       },
@@ -481,6 +482,7 @@ describe("Engagement API - Comments", () => {
     finalPost = await prisma.tripFinalPost.create({
       data: {
         tripId: trip.id,
+        userId: trip.userId,
         summaryText: "Test trip summary",
         curatedMedia: [],
       },
@@ -881,6 +883,7 @@ describe("Engagement API - Shares", () => {
     finalPost = await prisma.tripFinalPost.create({
       data: {
         tripId: trip.id,
+        userId: trip.userId,
         summaryText: "Test trip summary",
         curatedMedia: [],
       },

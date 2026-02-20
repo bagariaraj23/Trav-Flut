@@ -1,13 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { ApiResponse, TripFinalPostResponse, TripResponse } from "@/types/api";
-import { TripFinalizerService } from "@/lib/services/tripFinalizer";
+import { ApiResponse, TripResponse } from "@/types/api";
 import {
   withAuth,
   withRateLimit,
   withLogging,
   handleApiError,
-  AuthenticatedRequest,
 } from "@/lib/middleware";
 import { PerformanceMonitor, ErrorTracker } from "@/lib/monitoring";
 import { NotFoundError, ConflictError, ValidationError } from "@/lib/errors";
@@ -51,78 +49,50 @@ export async function POST(
             throw new ConflictError("Trip is not ongoing");
           }
 
-          // Update trip status and generate final post atomically in a transaction
-          const [updatedTrip, finalPost] = await prisma.$transaction(
-            async (tx) => {
-              // Update trip status
-              const updated = await tx.trip.update({
-                where: { id: tripId },
-                data: {
-                  status: TripStatus.ENDED,
-                  endDate: new Date(),
-                  updatedAt: new Date(),
+          // Update trip status only. Personalized final posts are generated per participant on demand.
+          const updatedTrip = await prisma.trip.update({
+            where: { id: tripId },
+            data: {
+              status: TripStatus.ENDED,
+              endDate: new Date(),
+              updatedAt: new Date(),
+            },
+            include: {
+              user: {
+                select: {
+                  id: true,
+                  email: true,
+                  username: true,
+                  name: true,
+                  avatarUrl: true,
+                  bio: true,
+                  isPrivate: true,
+                  createdAt: true,
+                  updatedAt: true,
                 },
+              },
+              _count: {
+                select: {
+                  threadEntries: true,
+                  media: true,
+                  participants: true,
+                },
+              },
+              participants: {
                 include: {
-                  user: {
-                    select: {
-                      id: true,
-                      email: true,
-                      username: true,
-                      name: true,
-                      avatarUrl: true,
-                      bio: true,
-                      isPrivate: true,
-                      createdAt: true,
-                      updatedAt: true,
-                    },
-                  },
-                  _count: {
-                    select: {
-                      threadEntries: true,
-                      media: true,
-                      participants: true,
-                    },
-                  },
-                  participants: {
-                    include: {
-                      user: true,
-                    },
-                  },
-                  threadEntries: {
-                    include: {
-                      media: true,
-                      taggedUsers: true,
-                      author: true,
-                    },
-                    orderBy: { createdAt: "asc" },
-                  },
+                  user: true,
                 },
-              });
-
-              // Generate final post inside the same transaction
-              // This ensures atomicity and prevents race conditions
-              const generatedFinalPost =
-                await TripFinalizerService.generateFinalPost(
-                  tripId,
-                  userId,
-                  tx
-                );
-
-              return [updated, generatedFinalPost];
-            }
-          );
-
-          const finalPostResponse: TripFinalPostResponse = {
-            ...finalPost,
-            caption: finalPost.caption ?? undefined,
-            coverMediaUrl: finalPost.coverMediaUrl ?? undefined,
-            generationStatus: finalPost.generationStatus,
-            publishedAt: finalPost.publishedAt
-              ? finalPost.publishedAt.toISOString()
-              : undefined,
-            createdAt: finalPost.createdAt.toISOString(),
-            updatedAt: finalPost.updatedAt.toISOString(),
-          };
+              },
+              threadEntries: {
+                include: {
+                  media: true,
+                  taggedUsers: true,
+                  author: true,
+                },
+                orderBy: { createdAt: "asc" },
+              },
+            },
+          });
 
           const tripResponse: TripResponse = {
             ...updatedTrip,
@@ -141,7 +111,6 @@ export async function POST(
                   updatedAt: updatedTrip.user.updatedAt.toISOString(),
                 }
               : undefined,
-            finalPost: finalPostResponse,
             description: updatedTrip.description ?? undefined,
             mood: updatedTrip.mood ?? undefined,
             type: updatedTrip.type ?? undefined,
@@ -192,7 +161,7 @@ export async function POST(
           return NextResponse.json<ApiResponse<TripResponse>>({
             success: true,
             data: tripResponse,
-            message: "Trip ended successfully and final post generated",
+            message: "Trip ended successfully",
           });
         } catch (error) {
           endTimer();

@@ -62,6 +62,7 @@ describe("Engagement API - Feed Integration", () => {
     finalPost1 = await prisma.tripFinalPost.create({
       data: {
         tripId: trip1.id,
+        userId: trip1.userId,
         summaryText: "Post 1",
         curatedMedia: [],
         isPublished: true,
@@ -71,6 +72,7 @@ describe("Engagement API - Feed Integration", () => {
     finalPost2 = await prisma.tripFinalPost.create({
       data: {
         tripId: trip2.id,
+        userId: trip2.userId,
         summaryText: "Post 2",
         curatedMedia: [],
         isPublished: true,

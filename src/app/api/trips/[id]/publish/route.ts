@@ -8,7 +8,7 @@ import {
   withLogging,
   handleApiError,
 } from "@/lib/middleware";
-import { NotFoundError, ConflictError } from "@/lib/errors";
+import { AuthorizationError, NotFoundError } from "@/lib/errors";
 
 function toResponse(
   finalPost: Awaited<ReturnType<typeof TripFinalizerService.publishFinalPost>>
@@ -26,6 +26,32 @@ function toResponse(
   };
 }
 
+async function ensureParticipantOrOwner(tripId: string, userId: string) {
+  const trip = await prisma.trip.findUnique({
+    where: { id: tripId },
+    select: {
+      id: true,
+      userId: true,
+      participants: {
+        where: { userId },
+        select: { id: true },
+        take: 1,
+      },
+    },
+  });
+
+  if (!trip) {
+    throw new NotFoundError("Trip not found");
+  }
+
+  const isOwner = trip.userId === userId;
+  const isParticipant = trip.participants.length > 0;
+
+  if (!isOwner && !isParticipant) {
+    throw new AuthorizationError("Only trip participants can publish final post");
+  }
+}
+
 // Publish final post
 export async function POST(
   request: NextRequest,
@@ -39,29 +65,7 @@ export async function POST(
           const tripId = id;
           const userId = authenticatedReq.user!.userId;
 
-          // Check if trip exists and user is owner
-          const trip = await prisma.trip.findUnique({
-            where: { id: tripId },
-            include: {
-              finalPost: true,
-            },
-          });
-
-          if (!trip) {
-            throw new NotFoundError("Trip not found");
-          }
-
-          if (trip.userId !== userId) {
-            throw new ConflictError("Only trip owner can publish final post");
-          }
-
-          if (!trip.finalPost) {
-            throw new NotFoundError("Final post not found");
-          }
-
-          if (trip.finalPost.isPublished) {
-            throw new ConflictError("Final post is already published");
-          }
+          await ensureParticipantOrOwner(tripId, userId);
 
           const published = await TripFinalizerService.publishFinalPost(
             tripId,
