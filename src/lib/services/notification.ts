@@ -2,7 +2,7 @@ import type { EntityType, NotificationType, Prisma } from '@prisma/client'
 import { prisma } from '../prisma'
 
 export type CreateNotificationParams = {
-  type: 'LIKE' | 'COMMENT' | 'COMMENT_REPLY' | 'TAG'
+  type: 'LIKE' | 'COMMENT_LIKE' | 'COMMENT' | 'COMMENT_REPLY' | 'TAG'
   actorId: string
   recipientId: string
   entityType?: EntityType
@@ -11,7 +11,7 @@ export type CreateNotificationParams = {
 }
 
 export type UnifiedNotificationItem = {
-  type: 'FOLLOW_REQUEST' | 'LIKE' | 'COMMENT' | 'COMMENT_REPLY' | 'TAG'
+  type: 'FOLLOW_REQUEST' | 'LIKE' | 'COMMENT_LIKE' | 'COMMENT' | 'COMMENT_REPLY' | 'TAG'
   id: string
   createdAt: string
   readAt?: string | null
@@ -181,26 +181,26 @@ export async function getMergedNotifications(
     : limit + 1
   const followWhere = beforeDate
     ? {
-        followeeId: recipientId,
-        status: 'PENDING' as const,
-        follower: { deletedAt: null },
-        createdAt: { [useStrictCursor ? 'lte' : 'lt']: beforeDate }
-      }
+      followeeId: recipientId,
+      status: 'PENDING' as const,
+      follower: { deletedAt: null },
+      createdAt: { [useStrictCursor ? 'lte' : 'lt']: beforeDate }
+    }
     : {
-        followeeId: recipientId,
-        status: 'PENDING' as const,
-        follower: { deletedAt: null }
-      }
+      followeeId: recipientId,
+      status: 'PENDING' as const,
+      follower: { deletedAt: null }
+    }
   const notifWhere = beforeDate
     ? {
-        recipientId,
-        actor: { deletedAt: null },
-        createdAt: { [useStrictCursor ? 'lte' : 'lt']: beforeDate }
-      }
+      recipientId,
+      actor: { deletedAt: null },
+      createdAt: { [useStrictCursor ? 'lte' : 'lt']: beforeDate }
+    }
     : {
-        recipientId,
-        actor: { deletedAt: null }
-      }
+      recipientId,
+      actor: { deletedAt: null }
+    }
 
   const [followRequests, engagementNotifications] = await Promise.all([
     prisma.followRequest.findMany({

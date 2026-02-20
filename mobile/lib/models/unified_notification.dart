@@ -1,7 +1,7 @@
 /// Unified notification item: follow request, like, comment, or tag.
 /// Matches backend GET /users/me/notifications response shape.
 class UnifiedNotificationItem {
-  final String type; // 'FOLLOW_REQUEST' | 'LIKE' | 'COMMENT' | 'TAG'
+  final String type; // 'FOLLOW_REQUEST' | 'LIKE' | 'COMMENT_LIKE' | 'COMMENT' | 'TAG'
   final String id;
   final String createdAt;
   final String? readAt;
@@ -67,8 +67,68 @@ class UnifiedNotificationItem {
     );
   }
 
+  /// Creates a copy of this notification with the given fields replaced.
+  UnifiedNotificationItem copyWith({
+    String? type,
+    String? id,
+    String? createdAt,
+    String? readAt,
+    bool clearReadAt = false,
+    UnifiedNotificationActor? actor,
+    String? followRequestId,
+    String? entityType,
+    String? entityId,
+    String? contentPreview,
+    String? postEntityType,
+    String? postEntityId,
+    String? commentId,
+    String? parentCommentId,
+    String? tripId,
+    String? threadEntryId,
+  }) {
+    return UnifiedNotificationItem(
+      type: type ?? this.type,
+      id: id ?? this.id,
+      createdAt: createdAt ?? this.createdAt,
+      readAt: clearReadAt ? null : (readAt ?? this.readAt),
+      actor: actor ?? this.actor,
+      followRequestId: followRequestId ?? this.followRequestId,
+      entityType: entityType ?? this.entityType,
+      entityId: entityId ?? this.entityId,
+      contentPreview: contentPreview ?? this.contentPreview,
+      postEntityType: postEntityType ?? this.postEntityType,
+      postEntityId: postEntityId ?? this.postEntityId,
+      commentId: commentId ?? this.commentId,
+      parentCommentId: parentCommentId ?? this.parentCommentId,
+      tripId: tripId ?? this.tripId,
+      threadEntryId: threadEntryId ?? this.threadEntryId,
+    );
+  }
+
+  /// Serializes this notification to a JSON map.
+  Map<String, dynamic> toJson() {
+    return {
+      'type': type,
+      'id': id,
+      'createdAt': createdAt,
+      if (readAt != null) 'readAt': readAt,
+      'actor': actor.toJson(),
+      if (followRequestId != null) 'followRequestId': followRequestId,
+      if (entityType != null) 'entityType': entityType,
+      if (entityId != null) 'entityId': entityId,
+      if (contentPreview != null) 'contentPreview': contentPreview,
+      if (postEntityType != null) 'postEntityType': postEntityType,
+      if (postEntityId != null) 'postEntityId': postEntityId,
+      if (commentId != null) 'commentId': commentId,
+      if (parentCommentId != null) 'parentCommentId': parentCommentId,
+      if (tripId != null) 'tripId': tripId,
+      if (threadEntryId != null) 'threadEntryId': threadEntryId,
+    };
+  }
+
   bool get isFollowRequest => type == 'FOLLOW_REQUEST';
-  bool get isLike => type == 'LIKE';
+  bool get isLike => type == 'LIKE' || type == 'COMMENT_LIKE';
+  bool get isCommentLike => type == 'COMMENT_LIKE';
   bool get isComment => type == 'COMMENT';
   bool get isCommentReply => type == 'COMMENT_REPLY';
   bool get isTag => type == 'TAG';
@@ -81,7 +141,7 @@ class UnifiedNotificationItem {
 
   /// For deep link: comment id to scroll to (for post-comment and comment-like)
   String? get scrollToCommentId =>
-      commentId ?? (isLike && entityType == 'COMMENT' ? entityId : null);
+      commentId ?? (isCommentLike && entityType == 'COMMENT' ? entityId : null);
 
   /// For deep link: thread entry id when notification originates from thread entries
   String? get highlightThreadEntryId =>
@@ -109,6 +169,16 @@ class UnifiedNotificationActor {
       name: json['name'] as String?,
       avatarUrl: json['avatarUrl'] as String?,
     );
+  }
+
+  /// Serializes this actor to a JSON map.
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      if (username != null) 'username': username,
+      if (name != null) 'name': name,
+      if (avatarUrl != null) 'avatarUrl': avatarUrl,
+    };
   }
 
   String get displayName => (name ?? username ?? 'Someone').trim();

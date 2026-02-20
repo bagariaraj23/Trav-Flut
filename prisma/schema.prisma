@@ -47,6 +47,7 @@ model User {
 
 enum NotificationType {
   LIKE
+  COMMENT_LIKE
   COMMENT
   COMMENT_REPLY
   TAG

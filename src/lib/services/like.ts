@@ -81,7 +81,7 @@ export async function createLike(
             ? await getTripIdFromEntry(post.entityId)
             : null;
         await createNotification({
-          type: "LIKE",
+          type: "COMMENT_LIKE",
           actorId: userId,
           recipientId,
           entityType: "COMMENT",
@@ -105,17 +105,25 @@ export async function createLike(
           entityType,
           entityId,
           metadata: {
+            postEntityType: entityType,
+            postEntityId: entityId,
             ...(tripId && { tripId }),
             threadEntryId: entityId,
           },
         });
       } else {
+        // TRIP_FINAL_POST like — include postEntityType/postEntityId for
+        // consistent deep-link metadata across all notification types.
         await createNotification({
           type: "LIKE",
           actorId: userId,
           recipientId,
           entityType,
           entityId,
+          metadata: {
+            postEntityType: entityType,
+            postEntityId: entityId,
+          },
         });
       }
     } catch (err) {

@@ -3,7 +3,6 @@ import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
 import 'package:tripthread/models/trip.dart';
 import 'package:tripthread/providers/engagement_provider.dart';
-import 'package:tripthread/providers/feed_provider.dart';
 import 'package:tripthread/services/api_service.dart';
 import 'package:tripthread/utils/cloudinary_utils.dart';
 import 'package:tripthread/widgets/engagement/engagement_action_bar.dart';
@@ -40,6 +39,16 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
 
   Future<void> _loadPost() async {
     if (!mounted) return;
+
+    // Guard: TRIP_THREAD_ENTRY is not a standalone post — redirect user
+    if (widget.entityType == 'TRIP_THREAD_ENTRY') {
+      setState(() {
+        _error = 'Thread entries must be viewed from the trip thread.';
+        _isLoading = false;
+      });
+      return;
+    }
+
     setState(() {
       _isLoading = true;
       _error = null;
@@ -63,13 +72,19 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
             if (mounted) _openCommentSheet(widget.scrollToCommentId!);
           });
         }
-      } catch (e) {
+      } catch (e, stackTrace) {
+        debugPrint('[PostDetailScreen] Failed to parse post response: $e');
+        debugPrint('[PostDetailScreen] Stack trace: $stackTrace');
         setState(() {
-          _error = 'Failed to load post';
+          _error = 'Failed to load post: ${e.toString().split('\n').first}';
           _isLoading = false;
         });
       }
     } else {
+      debugPrint(
+        '[PostDetailScreen] API returned error: ${response.error} '
+        '(entityType=${widget.entityType}, entityId=${widget.entityId})',
+      );
       setState(() {
         _error = response.error ?? 'Failed to load post';
         _isLoading = false;

@@ -632,22 +632,8 @@ class UserProvider extends ChangeNotifier {
     final wasUnread = n.readAt == null || n.readAt!.isEmpty;
     if (!wasUnread) return false;
 
-    _unifiedNotifications[index] = UnifiedNotificationItem(
-      type: n.type,
-      id: n.id,
-      createdAt: n.createdAt,
+    _unifiedNotifications[index] = n.copyWith(
       readAt: DateTime.now().toIso8601String(),
-      actor: n.actor,
-      followRequestId: n.followRequestId,
-      entityType: n.entityType,
-      entityId: n.entityId,
-      contentPreview: n.contentPreview,
-      postEntityType: n.postEntityType,
-      postEntityId: n.postEntityId,
-      commentId: n.commentId,
-      parentCommentId: n.parentCommentId,
-      tripId: n.tripId,
-      threadEntryId: n.threadEntryId,
     );
     _unreadNotificationCount = (_unreadNotificationCount - 1).clamp(0, 999999);
     notifyListeners();

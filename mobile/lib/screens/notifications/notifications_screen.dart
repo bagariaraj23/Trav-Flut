@@ -21,6 +21,13 @@ class NotificationsScreen extends StatefulWidget {
 }
 
 class _NotificationsScreenState extends State<NotificationsScreen> {
+  /// Tracks notification IDs that are currently being marked as read
+  /// to prevent duplicate API calls from rapid tapping.
+  final Set<String> _markingAsReadIds = {};
+
+  /// Whether a bulk mark-all-as-read call is in flight.
+  bool _isBulkMarkingRead = false;
+
   @override
   void initState() {
     super.initState();
@@ -30,7 +37,43 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       await userProvider.loadUnifiedNotifications();
       if (!mounted) return;
       await userProvider.loadUnreadNotificationCount();
+
+      // Auto-mark all notifications as read after a short delay.
+      // The delay lets users briefly see unread indicators before they clear.
+      if (!mounted) return;
+      if (userProvider.unreadNotificationCount > 0) {
+        Future.delayed(const Duration(milliseconds: 1500), () {
+          if (!mounted) return;
+          _autoMarkAllAsRead(userProvider);
+        });
+      }
     });
+  }
+
+  /// Marks all engagement notifications as read (fire-and-forget on screen open).
+  Future<void> _autoMarkAllAsRead(UserProvider userProvider) async {
+    // Optimistically mark all notification items as read locally
+    final unreadIds = userProvider.unifiedNotifications
+        .where((n) =>
+            !n.isFollowRequest &&
+            (n.readAt == null || n.readAt!.isEmpty))
+        .map((n) => n.id)
+        .toList();
+
+    for (final id in unreadIds) {
+      userProvider.markNotificationReadLocal(id);
+    }
+
+    // Fire bulk API call
+    try {
+      final apiService = context.read<ApiService>();
+      await apiService.markAllNotificationsRead();
+      if (mounted) {
+        await userProvider.loadUnreadNotificationCount();
+      }
+    } catch (_) {
+      // Optimistic update already applied — reconcile on next screen load
+    }
   }
 
   List<UnifiedNotificationItem> _followRequests(
@@ -46,14 +89,30 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   NotificationTimeGroup _timeGroup(String createdAt) {
     final dt = DateTime.tryParse(createdAt);
     if (dt == null) return NotificationTimeGroup.older;
+    // Convert both to local time for consistent comparison across timezones
     final now = DateTime.now();
+    final localDt = dt.toLocal();
     final today = DateTime(now.year, now.month, now.day);
-    final notifDate = DateTime(dt.year, dt.month, dt.day);
+    final notifDate = DateTime(localDt.year, localDt.month, localDt.day);
     final diff = today.difference(notifDate).inDays;
     if (diff == 0) return NotificationTimeGroup.today;
     if (diff == 1) return NotificationTimeGroup.yesterday;
     if (diff <= 7) return NotificationTimeGroup.thisWeek;
     return NotificationTimeGroup.older;
+  }
+
+  /// Formats a createdAt ISO string to a relative time label (e.g., "2h ago").
+  String _formatTimeAgo(String createdAt) {
+    final dt = DateTime.tryParse(createdAt);
+    if (dt == null) return '';
+    final now = DateTime.now();
+    final diff = now.difference(dt.toLocal());
+    if (diff.inDays > 365) return '${diff.inDays ~/ 365}y ago';
+    if (diff.inDays > 30) return '${diff.inDays ~/ 30}mo ago';
+    if (diff.inDays > 0) return '${diff.inDays}d ago';
+    if (diff.inHours > 0) return '${diff.inHours}h ago';
+    if (diff.inMinutes > 0) return '${diff.inMinutes}m ago';
+    return 'Just now';
   }
 
   Map<NotificationTimeGroup, List<UnifiedNotificationItem>> _groupByTime(
@@ -115,26 +174,43 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     UserProvider userProvider,
   ) async {
     if (notifications.isEmpty) return;
-    final apiService = context.read<ApiService>();
-    var shouldReconcileUnreadCount = false;
+    // Filter out follow requests (they don't have Notification table IDs)
+    // and skip any already in-flight or already read
+    final engagementOnly = notifications.where((n) {
+      if (n.isFollowRequest) return false;
+      if (_markingAsReadIds.contains(n.id)) return false;
+      if (n.readAt != null && n.readAt!.isNotEmpty) return false;
+      return true;
+    }).toList();
 
-    for (final notification in notifications) {
-      try {
-        final response = await apiService.markNotificationRead(notification.id);
-        if (response.success) {
-          shouldReconcileUnreadCount = true;
-          final changed = userProvider.markNotificationReadLocal(
-            notification.id,
-          );
-          if (changed) {
-            shouldReconcileUnreadCount = true;
-          }
-        }
-      } catch (_) {}
+    if (engagementOnly.isEmpty) return;
+
+    // Optimistically mark all as read locally first for instant UI feedback
+    for (final n in engagementOnly) {
+      _markingAsReadIds.add(n.id);
+      userProvider.markNotificationReadLocal(n.id);
     }
 
-    if (shouldReconcileUnreadCount) {
-      await userProvider.loadUnreadNotificationCount();
+    // Use bulk mark-all-as-read API instead of O(n) sequential calls
+    if (!_isBulkMarkingRead) {
+      _isBulkMarkingRead = true;
+      try {
+        final apiService = context.read<ApiService>();
+        await apiService.markAllNotificationsRead();
+        if (mounted) {
+          await userProvider.loadUnreadNotificationCount();
+        }
+      } catch (_) {
+        // Optimistic update already applied — reconcile on next screen load
+      } finally {
+        _isBulkMarkingRead = false;
+        _markingAsReadIds.removeAll(engagementOnly.map((n) => n.id));
+      }
+    } else {
+      // Another bulk call is already in flight; just release the IDs after a delay
+      Future.delayed(const Duration(seconds: 2), () {
+        _markingAsReadIds.removeAll(engagementOnly.map((n) => n.id));
+      });
     }
   }
 
@@ -682,18 +758,16 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
 
     String label;
     String subtitle;
-    if (first.isLike) {
-      if (first.entityType == 'COMMENT') {
-        label = others == 0
-            ? '$firstName liked your comment'
-            : '$firstName +$others liked your comment';
-        subtitle = 'Likes';
-      } else {
-        label = others == 0
-            ? '$firstName liked your post'
-            : '$firstName +$others liked your post';
-        subtitle = 'Likes';
-      }
+    if (first.isCommentLike) {
+      label = others == 0
+          ? '$firstName liked your comment'
+          : '$firstName +$others liked your comment';
+      subtitle = 'Likes';
+    } else if (first.isLike) {
+      label = others == 0
+          ? '$firstName liked your post'
+          : '$firstName +$others liked your post';
+      subtitle = 'Likes';
     } else if (first.isCommentReply) {
       label = others == 0
           ? '$firstName replied to your comment'
@@ -878,16 +952,15 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       title = '$actorName requested to follow you';
       subtitle = null;
       icon = Icons.person_add;
+    } else if (n.isCommentLike) {
+      title = '$actorName liked your comment';
+      subtitle = n.contentPreview != null && n.contentPreview!.isNotEmpty
+          ? '"${n.contentPreview!.length > 60 ? '${n.contentPreview!.substring(0, 60)}...' : n.contentPreview}"'
+          : null;
+      icon = Icons.favorite;
     } else if (n.isLike) {
-      if (n.entityType == 'COMMENT') {
-        title = '$actorName liked your comment';
-        subtitle = n.contentPreview != null && n.contentPreview!.isNotEmpty
-            ? '"${n.contentPreview!.length > 60 ? '${n.contentPreview!.substring(0, 60)}...' : n.contentPreview}"'
-            : null;
-      } else {
-        title = '$actorName liked your post';
-        subtitle = null;
-      }
+      title = '$actorName liked your post';
+      subtitle = null;
       icon = Icons.favorite;
     } else if (n.isCommentReply) {
       title = '$actorName replied to your comment';
@@ -909,6 +982,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       icon = Icons.comment;
     }
 
+    final timeAgo = _formatTimeAgo(n.createdAt);
     final isUnread =
         n.isFollowRequest ||
         ((n.isLike || n.isComment || n.isCommentReply || n.isTag) &&
@@ -980,6 +1054,21 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                                   ?.copyWith(fontWeight: FontWeight.w500),
                             ),
                           ),
+                          if (timeAgo.isNotEmpty)
+                            Padding(
+                              padding: const EdgeInsets.only(left: 8),
+                              child: Text(
+                                timeAgo,
+                                style: Theme.of(context).textTheme.bodySmall
+                                    ?.copyWith(
+                                      color: Theme.of(context)
+                                          .colorScheme
+                                          .onSurfaceVariant
+                                          .withValues(alpha: 0.6),
+                                      fontSize: 11,
+                                    ),
+                              ),
+                            ),
                         ],
                       ),
                       if (subtitle != null) ...[
