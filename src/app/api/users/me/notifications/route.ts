@@ -21,7 +21,7 @@ export async function GET(request: NextRequest) {
           );
           const cursor = searchParams.get("cursor") || undefined;
 
-          const { items, hasMore } = await getMergedNotifications(
+          const { items, hasMore, nextCursor } = await getMergedNotifications(
             userId,
             limit,
             cursor
@@ -30,7 +30,7 @@ export async function GET(request: NextRequest) {
           return NextResponse.json<ApiResponse>(
             {
               success: true,
-              data: { items, hasMore },
+              data: { items, hasMore, nextCursor },
             },
             { status: 200 }
           );

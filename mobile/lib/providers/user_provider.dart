@@ -112,6 +112,7 @@ class UserProvider extends ChangeNotifier {
   bool _isNotificationsLoading = false;
   bool _notificationsLoadMore = false;
   bool _hasMoreNotifications = true;
+  String? _notificationsCursor;
   String? _unifiedNotificationsError;
   int _unreadNotificationCount = 0;
 
@@ -544,6 +545,7 @@ class UserProvider extends ChangeNotifier {
     _detailedFollowStatusCache.clear();
     _pendingFollowRequests.clear();
     _unifiedNotifications.clear();
+    _notificationsCursor = null;
     _unreadNotificationCount = 0;
     notifyListeners();
   }
@@ -552,12 +554,14 @@ class UserProvider extends ChangeNotifier {
     _isNotificationsLoading = true;
     _unifiedNotificationsError = null;
     _hasMoreNotifications = true;
+    _notificationsCursor = null;
     notifyListeners();
     try {
       final response = await _apiService.getUnifiedNotifications(limit: 30);
       if (response.success && response.data != null) {
         _unifiedNotifications = response.data!.items;
         _hasMoreNotifications = response.data!.hasMore;
+        _notificationsCursor = response.data!.nextCursor;
         _unifiedNotificationsError = null;
       } else {
         _unifiedNotificationsError =
@@ -575,18 +579,13 @@ class UserProvider extends ChangeNotifier {
 
   Future<void> loadMoreUnifiedNotifications() async {
     if (_notificationsLoadMore || !_hasMoreNotifications) return;
-    if (_unifiedNotifications.isEmpty) return;
-    final oldest = _unifiedNotifications
-        .map((n) => DateTime.tryParse(n.createdAt))
-        .whereType<DateTime>()
-        .reduce((a, b) => a.isBefore(b) ? a : b);
-    final cursor = oldest.toIso8601String();
+    if (_notificationsCursor == null || _notificationsCursor!.isEmpty) return;
     _notificationsLoadMore = true;
     notifyListeners();
     try {
       final response = await _apiService.getUnifiedNotifications(
         limit: 30,
-        cursor: cursor,
+        cursor: _notificationsCursor,
       );
       if (response.success && response.data != null) {
         final newItems = response.data!.items;
@@ -598,6 +597,7 @@ class UserProvider extends ChangeNotifier {
           }
         }
         _hasMoreNotifications = response.data!.hasMore;
+        _notificationsCursor = response.data!.nextCursor;
       }
     } catch (e) {
       debugPrint('Load more notifications error: $e');

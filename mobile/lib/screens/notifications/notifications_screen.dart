@@ -116,21 +116,24 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   ) async {
     if (notifications.isEmpty) return;
     final apiService = context.read<ApiService>();
-    var markedAny = false;
+    var shouldReconcileUnreadCount = false;
 
     for (final notification in notifications) {
       try {
         final response = await apiService.markNotificationRead(notification.id);
         if (response.success) {
+          shouldReconcileUnreadCount = true;
           final changed = userProvider.markNotificationReadLocal(
             notification.id,
           );
-          markedAny = markedAny || changed;
+          if (changed) {
+            shouldReconcileUnreadCount = true;
+          }
         }
       } catch (_) {}
     }
 
-    if (markedAny) {
+    if (shouldReconcileUnreadCount) {
       await userProvider.loadUnreadNotificationCount();
     }
   }

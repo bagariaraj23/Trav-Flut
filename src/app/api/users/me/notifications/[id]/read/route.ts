@@ -23,15 +23,18 @@ export async function PUT(
               { status: 400 }
             );
           }
-          const updated = await markNotificationRead(id, userId);
-          if (!updated) {
+          const status = await markNotificationRead(id, userId);
+          if (status === "not_found") {
             return NextResponse.json<ApiResponse>(
-              { success: false, error: "Notification not found or already read" },
+              { success: false, error: "Notification not found" },
               { status: 404 }
             );
           }
           return NextResponse.json<ApiResponse>(
-            { success: true, data: { marked: true } },
+            {
+              success: true,
+              data: { marked: status === "marked", alreadyRead: status === "already_read" },
+            },
             { status: 200 }
           );
         } catch (error: unknown) {

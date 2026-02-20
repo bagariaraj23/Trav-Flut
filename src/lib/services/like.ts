@@ -11,6 +11,7 @@ import {
 } from "./engagement-utils";
 import { getEntityOwner, getPostFromComment, getTripIdFromEntry } from "../entity-owner";
 import { createNotification } from "./notification";
+import { NotFoundError, DatabaseError } from "../errors";
 
 export async function createLike(
   userId: string,
@@ -19,29 +20,36 @@ export async function createLike(
 ) {
   const exists = await validateEntityExists(entityType, entityId);
   if (!exists) {
-    throw new Error("Entity not found");
+    throw new NotFoundError("Entity not found");
   }
 
-  let isNewLike = false;
-  const like = await prisma.$transaction(async (tx) => {
-    const existing = await tx.like.findFirst({
-      where: { userId, entityType, entityId },
+  let isNewLike = true;
+  let like: Awaited<ReturnType<typeof prisma.like.create>>;
+  try {
+    like = await prisma.$transaction(async (tx) => {
+      const newLike = await tx.like.create({
+        data: { userId, entityType, entityId },
+      });
+      await incrementEntityCount(entityType, entityId, "likeCount", tx);
+      await invalidateEngagementCache("like", entityType, entityId);
+      return newLike;
     });
-    if (existing) {
-      return existing;
+  } catch (error: any) {
+    if (error?.code === "P2002") {
+      // Idempotent like behavior under race: another request created the same like.
+      const existingLike = await prisma.like.findFirst({
+        where: { userId, entityType, entityId },
+      });
+      if (existingLike) {
+        isNewLike = false;
+        like = existingLike;
+      } else {
+        throw new DatabaseError("Failed to create like");
+      }
+    } else {
+      throw error;
     }
-
-    const newLike = await tx.like.create({
-      data: { userId, entityType, entityId },
-    });
-    isNewLike = true;
-
-    await incrementEntityCount(entityType, entityId, "likeCount", tx);
-
-    await invalidateEngagementCache("like", entityType, entityId);
-
-    return newLike;
-  });
+  }
 
   if (!isNewLike) {
     return like;

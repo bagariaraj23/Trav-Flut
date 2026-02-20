@@ -12,6 +12,7 @@ import { serializePlace } from "@/lib/place";
 import { checkLikeStatus } from "@/lib/services/like";
 import { createNotification } from "@/lib/services/notification";
 import { EntityType } from "@prisma/client";
+import { canViewEntity } from "@/lib/auth/permissions";
 
 // Create a new thread entry
 export async function POST(
@@ -286,6 +287,14 @@ export async function POST(
             : undefined;
         for (const taggedUserId of recipientsToNotify) {
           try {
+            const canRecipientView = await canViewEntity(
+              taggedUserId,
+              EntityType.TRIP_THREAD_ENTRY,
+              createdEntry.id
+            );
+            if (!canRecipientView) {
+              continue;
+            }
             await createNotification({
               type: "TAG",
               actorId: userId,

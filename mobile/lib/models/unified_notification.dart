@@ -117,6 +117,11 @@ class UnifiedNotificationActor {
 class NotificationsPayload {
   final List<UnifiedNotificationItem> items;
   final bool hasMore;
+  final String? nextCursor;
 
-  const NotificationsPayload({required this.items, required this.hasMore});
+  const NotificationsPayload({
+    required this.items,
+    required this.hasMore,
+    this.nextCursor,
+  });
 }
