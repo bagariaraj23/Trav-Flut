@@ -209,6 +209,7 @@ class TripThreadEntry {
 class TripFinalPost {
   final String id;
   final String tripId;
+  final String? userId;
   final String summaryText;
   final List<String> curatedMedia;
   final String? caption;
@@ -231,6 +232,7 @@ class TripFinalPost {
   const TripFinalPost({
     required this.id,
     required this.tripId,
+    this.userId,
     required this.summaryText,
     required this.curatedMedia,
     this.caption,
@@ -254,6 +256,7 @@ class TripFinalPost {
   TripFinalPost copyWith({
     String? id,
     String? tripId,
+    String? userId,
     String? summaryText,
     List<String>? curatedMedia,
     String? caption,
@@ -272,6 +275,7 @@ class TripFinalPost {
     return TripFinalPost(
       id: id ?? this.id,
       tripId: tripId ?? this.tripId,
+      userId: userId ?? this.userId,
       summaryText: summaryText ?? this.summaryText,
       curatedMedia: curatedMedia ?? this.curatedMedia,
       caption: caption ?? this.caption,

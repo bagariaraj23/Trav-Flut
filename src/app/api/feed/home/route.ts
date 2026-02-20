@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { AuthService } from "@/lib/auth";
 import { paginationSchema } from "@/lib/validation";
 import {
   ApiResponse,
@@ -11,7 +10,6 @@ import {
   withAuth,
   withRateLimit,
   withLogging,
-  handleApiError,
 } from "@/lib/middleware";
 import { PerformanceMonitor, ErrorTracker } from "@/lib/monitoring";
 import { checkLikeStatus } from "@/lib/services/like";
@@ -64,26 +62,20 @@ export async function GET(request: NextRequest) {
             OR: [
               // Posts from current user (always show own posts)
               {
-                trip: {
-                  userId: currentUserId,
-                },
+                userId: currentUserId,
               },
               // Posts from followed users
               ...(followedUserIds.length > 0
                 ? [
                     {
-                      trip: {
-                        userId: { in: followedUserIds },
-                      },
+                      userId: { in: followedUserIds },
                     },
                   ]
                 : []),
               // Posts from public users (not private)
               {
-                trip: {
-                  user: {
-                    isPrivate: false,
-                  },
+                user: {
+                  isPrivate: false,
                 },
               },
             ],
@@ -108,21 +100,21 @@ export async function GET(request: NextRequest) {
           const finalPosts = await prisma.tripFinalPost.findMany({
             where: whereClause,
             include: {
+              user: {
+                select: {
+                  id: true,
+                  email: true,
+                  username: true,
+                  name: true,
+                  avatarUrl: true,
+                  bio: true,
+                  isPrivate: true,
+                  createdAt: true,
+                  updatedAt: true,
+                },
+              },
               trip: {
                 include: {
-                  user: {
-                    select: {
-                      id: true,
-                      email: true,
-                      username: true,
-                      name: true,
-                      avatarUrl: true,
-                      bio: true,
-                      isPrivate: true,
-                      createdAt: true,
-                      updatedAt: true,
-                    },
-                  },
                   _count: {
                     select: {
                       threadEntries: true,
@@ -159,6 +151,7 @@ export async function GET(request: NextRequest) {
           })[] = finalPosts.map((post) => ({
             id: post.id,
             tripId: post.tripId,
+            userId: post.userId,
             summaryText: post.summaryText,
             curatedMedia: post.curatedMedia,
             caption: post.caption ?? undefined,
@@ -184,15 +177,15 @@ export async function GET(request: NextRequest) {
               coverMediaId: post.trip.coverMediaId ?? undefined,
               createdAt: post.trip.createdAt.toISOString(),
               updatedAt: post.trip.updatedAt.toISOString(),
-              user: post.trip.user
+              user: post.user
                 ? {
-                    ...post.trip.user,
-                    username: post.trip.user.username ?? undefined,
-                    name: post.trip.user.name ?? undefined,
-                    avatarUrl: post.trip.user.avatarUrl ?? undefined,
-                    bio: post.trip.user.bio ?? undefined,
-                    createdAt: post.trip.user.createdAt.toISOString(),
-                    updatedAt: post.trip.user.updatedAt.toISOString(),
+                    ...post.user,
+                    username: post.user.username ?? undefined,
+                    name: post.user.name ?? undefined,
+                    avatarUrl: post.user.avatarUrl ?? undefined,
+                    bio: post.user.bio ?? undefined,
+                    createdAt: post.user.createdAt.toISOString(),
+                    updatedAt: post.user.updatedAt.toISOString(),
                   }
                 : undefined,
             },

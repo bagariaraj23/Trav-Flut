@@ -110,7 +110,10 @@ export async function GET(
           },
           orderBy: { createdAt: "asc" },
         },
-        finalPost: true,
+        finalPosts: {
+          where: { userId: currentUserId },
+          take: 1,
+        },
         _count: {
           select: {
             threadEntries: true,
@@ -234,13 +237,13 @@ export async function GET(
             }
           : undefined,
       })),
-      finalPost: trip.finalPost
+      finalPost: trip.finalPosts[0]
         ? {
-            ...trip.finalPost,
-            createdAt: trip.finalPost.createdAt.toISOString(),
-            updatedAt: trip.finalPost.updatedAt.toISOString(),
-            publishedAt: trip.finalPost.publishedAt?.toISOString() ?? undefined,
-            coverMediaUrl: trip.finalPost.coverMediaUrl ?? undefined,
+            ...trip.finalPosts[0],
+            createdAt: trip.finalPosts[0].createdAt.toISOString(),
+            updatedAt: trip.finalPosts[0].updatedAt.toISOString(),
+            publishedAt: trip.finalPosts[0].publishedAt?.toISOString() ?? undefined,
+            coverMediaUrl: trip.finalPosts[0].coverMediaUrl ?? undefined,
           }
         : undefined,
     };

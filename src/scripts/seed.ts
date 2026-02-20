@@ -131,6 +131,7 @@ async function main() {
   const finalPost1 = await prisma.tripFinalPost.create({
     data: {
       tripId: trip1.id,
+      userId: trip1.userId,
       summaryText:
         "An incredible week exploring Tokyo's vibrant culture, incredible food, and modern marvels. From the organized chaos of Shibuya Crossing to the peaceful serenity of Senso-ji Temple, every moment was filled with wonder.",
       curatedMedia: [
@@ -146,6 +147,7 @@ async function main() {
   const finalPost2 = await prisma.tripFinalPost.create({
     data: {
       tripId: trip2.id,
+      userId: trip2.userId,
       summaryText:
         "A week of pure bliss in Bali. From the spiritual temples of Ubud to the pristine beaches of Nusa Penida, this island paradise exceeded all expectations. The sunsets were absolutely magical.",
       curatedMedia: [

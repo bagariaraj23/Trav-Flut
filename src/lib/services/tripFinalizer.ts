@@ -4,7 +4,6 @@ import {
   MediaProcessingStatus,
   MediaType,
   Trip,
-  TripFinalPost,
   PrismaClient,
 } from "@prisma/client";
 import {
@@ -35,7 +34,7 @@ export class TripFinalizerService {
    */
   static async generateFinalPost(
     tripId: string,
-    userId?: string,
+    userId: string,
     tx?: Omit<
       PrismaClient,
       | "$connect"
@@ -48,12 +47,20 @@ export class TripFinalizerService {
   ) {
     const db = tx || prisma;
 
+    await this.ensureParticipant(db, tripId, userId);
+
     // Check if final post already exists (inside transaction if provided)
     const existing = await db.tripFinalPost.findUnique({
-      where: { tripId },
+      where: {
+        tripId_userId: {
+          tripId,
+          userId,
+        },
+      },
       select: {
         id: true,
         tripId: true,
+        userId: true,
         summaryText: true,
         curatedMedia: true,
         caption: true,
@@ -77,6 +84,7 @@ export class TripFinalizerService {
           include: {
             media: true,
             place: true,
+            taggedUsers: true,
           },
           orderBy: { createdAt: "asc" },
         },
@@ -88,23 +96,19 @@ export class TripFinalizerService {
       throw new NotFoundError("Trip not found");
     }
 
-    // Only check authorization if userId is provided (skip for scheduler)
-    if (userId && trip.userId !== userId) {
-      throw new AuthorizationError("Only the trip owner can finalize the trip");
-    }
-
     const typedTrip = trip as TripForFinalizer;
 
-    const summaryText = buildSummary(typedTrip);
-    const curatedMedia = selectCuratedMedia(typedTrip);
+    const summaryText = buildSummary(typedTrip, userId);
+    const curatedMedia = selectCuratedMedia(typedTrip, userId);
     const coverMediaUrl =
       curatedMedia[0] ?? typedTrip.media.find((m) => !!m.url)?.url ?? null;
-    const caption = generateDefaultCaption(typedTrip);
+    const caption = generateDefaultCaption(typedTrip, userId);
 
     // Create final post (inside transaction if provided)
     return db.tripFinalPost.create({
       data: {
         tripId,
+        userId,
         summaryText,
         curatedMedia,
         caption,
@@ -114,6 +118,7 @@ export class TripFinalizerService {
       select: {
         id: true,
         tripId: true,
+        userId: true,
         summaryText: true,
         curatedMedia: true,
         caption: true,
@@ -127,12 +132,20 @@ export class TripFinalizerService {
     });
   }
 
-  static async getFinalPost(tripId: string) {
+  static async getFinalPost(tripId: string, userId: string) {
+    await this.ensureParticipant(prisma, tripId, userId);
+
     const finalPost = await prisma.tripFinalPost.findUnique({
-      where: { tripId },
+      where: {
+        tripId_userId: {
+          tripId,
+          userId,
+        },
+      },
       select: {
         id: true,
         tripId: true,
+        userId: true,
         summaryText: true,
         curatedMedia: true,
         caption: true,
@@ -152,12 +165,23 @@ export class TripFinalizerService {
     return finalPost;
   }
 
-  static async updateFinalPost(tripId: string, updates: FinalPostUpdates) {
+  static async updateFinalPost(
+    tripId: string,
+    userId: string,
+    updates: FinalPostUpdates
+  ) {
     // Wrap in transaction to prevent race conditions
     return await prisma.$transaction(async (tx) => {
+      await this.ensureParticipant(tx, tripId, userId);
+
       // Check if final post exists and is not published (inside transaction)
       const finalPost = await tx.tripFinalPost.findUnique({
-        where: { tripId },
+        where: {
+          tripId_userId: {
+            tripId,
+            userId,
+          },
+        },
         select: {
           id: true,
           isPublished: true,
@@ -203,7 +227,12 @@ export class TripFinalizerService {
 
       // Update final post (inside transaction)
       return tx.tripFinalPost.update({
-        where: { tripId },
+        where: {
+          tripId_userId: {
+            tripId,
+            userId,
+          },
+        },
         data: {
           ...data,
           generationStatus: GenerationStatus.READY,
@@ -212,6 +241,7 @@ export class TripFinalizerService {
         select: {
           id: true,
           tripId: true,
+          userId: true,
           summaryText: true,
           curatedMedia: true,
           caption: true,
@@ -229,54 +259,46 @@ export class TripFinalizerService {
   static async publishFinalPost(tripId: string, userId: string) {
     // Wrap in transaction to prevent race conditions
     return await prisma.$transaction(async (tx) => {
-      // Fetch trip and final post (inside transaction)
-      const trip = await tx.trip.findUnique({
-        where: { id: tripId },
+      await this.ensureParticipant(tx, tripId, userId);
+
+      const finalPost = await tx.tripFinalPost.findUnique({
+        where: {
+          tripId_userId: {
+            tripId,
+            userId,
+          },
+        },
         select: {
           id: true,
-          userId: true,
-          finalPost: {
-            select: {
-              id: true,
-              isPublished: true,
-              summaryText: true,
-              curatedMedia: true,
-              coverMediaUrl: true,
-            },
-          },
+          isPublished: true,
+          summaryText: true,
+          curatedMedia: true,
+          coverMediaUrl: true,
         },
       });
 
-      if (!trip) {
-        throw new NotFoundError("Trip not found");
-      }
-
-      if (trip.userId !== userId) {
-        throw new AuthorizationError("Only the trip owner can publish");
-      }
-
-      if (!trip.finalPost) {
+      if (!finalPost) {
         throw new NotFoundError("Final post not found");
       }
 
-      if (trip.finalPost.isPublished) {
+      if (finalPost.isPublished) {
         throw new ConflictError("Final post has already been published");
       }
 
-      if (!trip.finalPost.summaryText?.trim()) {
+      if (!finalPost.summaryText?.trim()) {
         throw new ValidationError("Summary text is required to publish");
       }
 
-      if (trip.finalPost.summaryText.trim().length < MIN_SUMMARY_LENGTH) {
+      if (finalPost.summaryText.trim().length < MIN_SUMMARY_LENGTH) {
         throw new ValidationError(
           `Summary must be at least ${MIN_SUMMARY_LENGTH} characters`
         );
       }
 
       if (
-        (!trip.finalPost.curatedMedia ||
-          trip.finalPost.curatedMedia.length < MIN_MEDIA_COUNT) &&
-        !trip.finalPost.coverMediaUrl
+        (!finalPost.curatedMedia ||
+          finalPost.curatedMedia.length < MIN_MEDIA_COUNT) &&
+        !finalPost.coverMediaUrl
       ) {
         throw new ValidationError(
           `Select at least ${MIN_MEDIA_COUNT} media item before publishing`
@@ -285,7 +307,12 @@ export class TripFinalizerService {
 
       // Update final post (inside transaction)
       return tx.tripFinalPost.update({
-        where: { tripId },
+        where: {
+          tripId_userId: {
+            tripId,
+            userId,
+          },
+        },
         data: {
           isPublished: true,
           publishedAt: new Date(),
@@ -295,6 +322,7 @@ export class TripFinalizerService {
         select: {
           id: true,
           tripId: true,
+          userId: true,
           summaryText: true,
           curatedMedia: true,
           caption: true,
@@ -308,9 +336,50 @@ export class TripFinalizerService {
       });
     });
   }
+
+  private static async ensureParticipant(
+    db: Omit<
+      PrismaClient,
+      | "$connect"
+      | "$disconnect"
+      | "$on"
+      | "$transaction"
+      | "$use"
+      | "$extends"
+    >,
+    tripId: string,
+    userId: string
+  ) {
+    const trip = await db.trip.findUnique({
+      where: { id: tripId },
+      select: { id: true, userId: true },
+    });
+
+    if (!trip) {
+      throw new NotFoundError("Trip not found");
+    }
+
+    if (trip.userId === userId) {
+      return;
+    }
+
+    const participant = await db.tripParticipant.findUnique({
+      where: {
+        tripId_userId: {
+          tripId,
+          userId,
+        },
+      },
+      select: { id: true },
+    });
+
+    if (!participant) {
+      throw new AuthorizationError("Only trip participants can access final post");
+    }
+  }
 }
 
-function buildSummary(trip: TripForFinalizer) {
+function buildSummary(trip: TripForFinalizer, userId: string) {
   const durationDays = Math.max(
     1,
     Math.round(
@@ -320,7 +389,9 @@ function buildSummary(trip: TripForFinalizer) {
   const destinations = trip.destinations ?? [];
   const locationSet = new Set<string>();
 
-  trip.threadEntries.forEach((entry) => {
+  const prioritizedEntries = rankEntriesForUser(trip.threadEntries, userId);
+
+  prioritizedEntries.forEach((entry) => {
     if (entry.place?.name) {
       locationSet.add(entry.place.name);
     } else if (entry.locationName) {
@@ -329,7 +400,7 @@ function buildSummary(trip: TripForFinalizer) {
   });
 
   const highlightedLocations = Array.from(locationSet).slice(0, 3);
-  const textEntries = trip.threadEntries
+  const textEntries = prioritizedEntries
     .filter((entry) => entry.contentText)
     .sort(
       (a, b) =>
@@ -357,8 +428,8 @@ function buildSummary(trip: TripForFinalizer) {
   return summaryParts.join(" ").trim();
 }
 
-function selectCuratedMedia(trip: TripForFinalizer) {
-  const mediaEntries = trip.threadEntries
+function selectCuratedMedia(trip: TripForFinalizer, userId: string) {
+  const mediaEntries = rankEntriesForUser(trip.threadEntries, userId)
     .filter(
       (entry) =>
         entry.media &&
@@ -405,7 +476,7 @@ function selectCuratedMedia(trip: TripForFinalizer) {
   return selected;
 }
 
-function generateDefaultCaption(trip: TripForFinalizer) {
+function generateDefaultCaption(trip: TripForFinalizer, _userId: string) {
   const primaryDestination = trip.destinations[0] ?? trip.title;
   const mood = trip.mood ? `#${trip.mood.toLowerCase()}` : "";
   return [`#${sanitizeTag(primaryDestination)}`, mood]
@@ -442,10 +513,14 @@ type TripForFinalizer = Trip & {
 
 type ThreadEntryWithExtras = {
   id: string;
+  authorId: string;
   contentText: string | null;
   createdAt: Date;
   mediaId: string | null;
   locationName: string | null;
+  taggedUsers?: {
+    taggedUserId: string;
+  }[];
   media: {
     url: string | null;
     type: MediaType;
@@ -456,3 +531,18 @@ type ThreadEntryWithExtras = {
   } | null;
 };
 
+function rankEntriesForUser(entries: ThreadEntryWithExtras[], userId: string) {
+  const ownEntries = entries.filter((entry) => entry.authorId === userId);
+  const taggedEntries = entries.filter(
+    (entry) =>
+      entry.authorId !== userId &&
+      (entry.taggedUsers || []).some((tag) => tag.taggedUserId === userId)
+  );
+  const remainingEntries = entries.filter(
+    (entry) =>
+      entry.authorId !== userId &&
+      !(entry.taggedUsers || []).some((tag) => tag.taggedUserId === userId)
+  );
+
+  return [...ownEntries, ...taggedEntries, ...remainingEntries];
+}

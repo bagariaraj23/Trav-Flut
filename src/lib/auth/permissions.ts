@@ -18,14 +18,10 @@ export async function canViewEntity(
       where: { id: entityId },
       select: {
         id: true,
-        trip: {
+        userId: true,
+        user: {
           select: {
-            userId: true,
-            user: {
-              select: {
-                isPrivate: true,
-              },
-            },
+            isPrivate: true,
           },
         },
       },
@@ -33,18 +29,18 @@ export async function canViewEntity(
 
     if (!post) return false;
 
-    const owner = post.trip.user;
+    const owner = post.user;
     if (!owner.isPrivate) return true;
 
     if (!userId) return false;
 
-    if (userId === post.trip.userId) return true;
+    if (userId === post.userId) return true;
 
     const follow = await prisma.follow.findUnique({
       where: {
         followerId_followeeId: {
           followerId: userId,
-          followeeId: post.trip.userId,
+          followeeId: post.userId,
         },
       },
     });
@@ -160,15 +156,11 @@ export async function canDeleteComment(userId: string, commentId: string): Promi
     const post = await prisma.tripFinalPost.findUnique({
       where: { id: comment.entityId },
       select: {
-        trip: {
-          select: {
-            userId: true,
-          },
-        },
+        userId: true,
       },
     });
 
-    return post?.trip.userId === userId;
+    return post?.userId === userId;
   }
 
   if (comment.entityType === 'TRIP_THREAD_ENTRY') {

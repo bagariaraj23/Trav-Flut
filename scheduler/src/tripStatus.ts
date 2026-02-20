@@ -24,6 +24,7 @@ export async function updateTripStatuses(
     },
     select: {
       id: true,
+      userId: true,
       destinations: true,
     },
   });
@@ -33,8 +34,8 @@ export async function updateTripStatuses(
     try {
       await prisma.$transaction(async (tx) => {
         // Check if final post already exists (inside transaction)
-        const existingFinalPost = await tx.tripFinalPost.findUnique({
-          where: { tripId: trip.id },
+        const existingFinalPost = await tx.tripFinalPost.findFirst({
+          where: { tripId: trip.id, userId: trip.userId },
         });
 
         if (!existingFinalPost) {
@@ -81,6 +82,7 @@ export async function updateTripStatuses(
           await tx.tripFinalPost.create({
             data: {
               tripId: trip.id,
+              userId: trip.userId,
               summaryText,
               curatedMedia,
               caption: `My trip to ${trip.destinations.join(

@@ -39,6 +39,7 @@ model User {
   likes                    Like[]            @relation("UserLikes")
   comments                 Comment[]         @relation("UserComments")
   shares                   Share[]           @relation("UserShares")
+  finalPosts               TripFinalPost[]
 
   @@map("users")
 }
@@ -152,7 +153,7 @@ model Trip {
   createdAt        DateTime          @default(now())
   updatedAt        DateTime          @default(now()) @updatedAt
   media            Media[]
-  finalPost        TripFinalPost?
+  finalPosts       TripFinalPost[]
   joinRequests     TripJoinRequest[]
   participants     TripParticipant[]
   threadEntries    TripThreadEntry[]
@@ -307,7 +308,8 @@ model TripThreadTag {
 
 model TripFinalPost {
   id               String           @id @default(uuid())
-  tripId           String           @unique
+  tripId           String
+  userId           String
   summaryText      String
   curatedMedia     String[]
   caption          String?
@@ -318,10 +320,14 @@ model TripFinalPost {
   createdAt        DateTime         @default(now())
   updatedAt        DateTime         @default(now()) @updatedAt
   trip             Trip             @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  user             User             @relation(fields: [userId], references: [id], onDelete: Cascade)
   likeCount        Int              @default(0)
   commentCount     Int              @default(0)
   shareCount       Int              @default(0)
 
+  @@unique([tripId, userId])
+  @@index([tripId])
+  @@index([userId, isPublished, publishedAt])
   @@map("trip_final_posts")
 }
 

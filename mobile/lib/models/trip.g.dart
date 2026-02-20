@@ -206,6 +206,7 @@ TripFinalPost _$TripFinalPostFromJson(Map<String, dynamic> json) =>
     TripFinalPost(
       id: json['id'] as String,
       tripId: json['tripId'] as String,
+      userId: json['userId'] as String?,
       summaryText: json['summaryText'] as String,
       curatedMedia: (json['curatedMedia'] as List<dynamic>)
           .map((e) => e as String)
@@ -237,6 +238,7 @@ Map<String, dynamic> _$TripFinalPostToJson(TripFinalPost instance) =>
     <String, dynamic>{
       'id': instance.id,
       'tripId': instance.tripId,
+      'userId': instance.userId,
       'summaryText': instance.summaryText,
       'curatedMedia': instance.curatedMedia,
       'caption': instance.caption,

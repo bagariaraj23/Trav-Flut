@@ -155,6 +155,7 @@ export interface PlaceResponse {
 export interface TripFinalPostResponse {
   id: string;
   tripId: string;
+  userId: string;
   summaryText: string;
   curatedMedia: string[];
   caption?: string | null;
