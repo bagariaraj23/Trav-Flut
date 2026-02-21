@@ -240,7 +240,7 @@ describe("Engagement API - Edge Cases & Gaps", () => {
         {
           entityType: "TRIP_FINAL_POST",
           entityId: finalPost.id,
-          contentText: "a".repeat(5001), // Assuming 5000 is max
+          contentText: "a".repeat(251), // Max is 250 characters
         },
         token1
       );
