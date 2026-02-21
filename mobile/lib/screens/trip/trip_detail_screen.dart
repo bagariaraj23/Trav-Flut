@@ -94,10 +94,10 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
     }
 
     return PopScope(
-      canPop: false,
+      canPop: GoRouter.of(context).canPop(),
       onPopInvokedWithResult: (didPop, result) {
         if (!didPop) {
-          // Intercept back gesture and navigate to home instead of exiting app.
+          // No route to pop to — navigate to home instead of exiting app.
           context.go('/home', extra: {'explicitHome': true});
         }
       },
@@ -426,26 +426,10 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
     required String label,
     required VoidCallback onTap,
   }) {
-    final theme = Theme.of(context);
-    return InkWell(
+    return ListTile(
+      leading: Icon(icon),
+      title: Text(label),
       onTap: onTap,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-        child: Row(
-          children: [
-            Icon(icon, color: theme.colorScheme.onSurface),
-            const SizedBox(width: 16),
-            Expanded(
-              child: Text(
-                label,
-                style: theme.textTheme.bodyLarge?.copyWith(
-                  color: theme.colorScheme.onSurface,
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
     );
   }
 

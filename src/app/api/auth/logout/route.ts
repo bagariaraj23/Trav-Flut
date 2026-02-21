@@ -11,7 +11,7 @@ async function handler(request: AuthenticatedRequest) {
     const userId = request.user!.userId;
     const body = await request.json().catch(() => ({}));
     const { refreshToken, logoutAll } = body;
-    
+
     if (logoutAll === true) {
       // Security feature: Logout from all devices
       // Use case: Security breach, lost device, user wants to reset all sessions
@@ -21,16 +21,19 @@ async function handler(request: AuthenticatedRequest) {
       // This allows user to stay logged in on other devices (better UX)
       await AuthService.revokeRefreshToken(refreshToken);
     } else {
-      // If no refresh token provided, still revoke all tokens for security
-      // (fallback - should not happen in normal flow, but protects against edge cases)
-      await revokeAllRefreshTokens(userId);
+      // No refresh token provided — likely malformed body or client bug.
+      // Do NOT revoke all tokens; that would silently log out other devices.
+      // Client-side token clearing is sufficient for this device.
+      console.warn(
+        `[Logout] No refreshToken provided for user ${userId}, skipping server-side revoke`
+      );
     }
-    
+
     endTimer();
     return NextResponse.json<ApiResponse>({
       success: true,
-      message: logoutAll 
-        ? "Successfully logged out from all devices" 
+      message: logoutAll
+        ? "Successfully logged out from all devices"
         : "Successfully logged out",
     });
   } catch (error: any) {

@@ -49,7 +49,10 @@ class ApiService {
     _onUnauthorized = callback;
   }
 
-  /// Wraps a network request with retry logic using RetryHandler
+  /// Wraps a network request with retry logic using RetryHandler.
+  /// IMPORTANT: Only retries idempotent methods (GET, HEAD) to prevent
+  /// duplicate mutations. POST/PUT/DELETE may have already committed
+  /// their changes before the error response was sent.
   Future<T> _retryRequest<T>(
     Future<T> Function() request, {
     bool Function(dynamic error)? shouldRetry,
@@ -57,10 +60,18 @@ class ApiService {
     return RetryHandler.retry<T>(
       request,
       maxRetries: 3,
-      delay: const Duration(seconds: 1),
+      delay: const Duration(milliseconds: 500),
       retryIf: (error) {
-        // Don't retry auth endpoints
         if (error is DioException) {
+          // Only retry safe, idempotent methods to prevent data duplication.
+          // POST/PUT/DELETE may have already committed on the server before
+          // the error response was sent back to the client.
+          final method = error.requestOptions.method.toUpperCase();
+          if (method != 'GET' && method != 'HEAD') {
+            return false;
+          }
+
+          // Don't retry auth endpoints
           final path = error.requestOptions.path;
           if (path.contains('/auth/login') ||
               path.contains('/auth/signup') ||

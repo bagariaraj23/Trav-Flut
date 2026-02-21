@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
 import 'package:tripthread/providers/auth_provider.dart';
 import 'package:tripthread/services/google_sign_in_service.dart';
+import 'package:tripthread/widgets/logout_dialog.dart';
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
@@ -286,54 +287,7 @@ class SettingsScreen extends StatelessWidget {
                   context: context,
                   icon: Icons.logout,
                   title: 'Logout',
-                  onTap: () {
-                    showDialog(
-                      context: context,
-                      builder: (BuildContext dialogContext) {
-                        return AlertDialog(
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(16),
-                          ),
-                          title: const Text('Logout'),
-                          content: const Text('Choose how you want to logout:'),
-                          actions: [
-                            TextButton(
-                              onPressed: () =>
-                                  Navigator.of(dialogContext).pop(),
-                              child: const Text('Cancel'),
-                            ),
-                            TextButton(
-                              onPressed: () async {
-                                Navigator.of(dialogContext).pop();
-                                final authProvider = context
-                                    .read<AuthProvider>();
-                                await authProvider.logout(logoutAll: false);
-                                if (context.mounted) {
-                                  context.go('/login');
-                                }
-                              },
-                              child: const Text('Logout'),
-                            ),
-                            TextButton(
-                              onPressed: () async {
-                                Navigator.of(dialogContext).pop();
-                                final authProvider = context
-                                    .read<AuthProvider>();
-                                await authProvider.logout(logoutAll: true);
-                                if (context.mounted) {
-                                  context.go('/login');
-                                }
-                              },
-                              style: TextButton.styleFrom(
-                                foregroundColor: Colors.red,
-                              ),
-                              child: const Text('Logout from all devices'),
-                            ),
-                          ],
-                        );
-                      },
-                    );
-                  },
+                  onTap: () => showLogoutDialog(context),
                 ),
                 const Divider(),
                 _buildSettingsTile(

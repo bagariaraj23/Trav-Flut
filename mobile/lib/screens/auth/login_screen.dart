@@ -33,10 +33,11 @@ class _LoginScreenState extends State<LoginScreen> {
 
     final authProvider = context.read<AuthProvider>();
     final input = _emailController.text.trim();
-    // Normalize username if it's not an email
+    // Only normalize email on client side.
+    // Username normalization is handled server-side to keep implementations in sync.
     final emailOrUsername = input.contains('@')
         ? Validators.normalizeEmail(input)
-        : Validators.normalizeUsernameToAscii(input).toLowerCase();
+        : input;
 
     final success = await authProvider.login(
       email: emailOrUsername,

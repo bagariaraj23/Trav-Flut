@@ -283,13 +283,11 @@ export async function GET(request: NextRequest) {
       hasNext,
     };
 
-    endTimer();
     return NextResponse.json<ApiResponse<PaginatedResponse<DiscoverUserDto>>>({
       success: true,
       data: response,
     });
   } catch (error: any) {
-    endTimer();
     console.error("Discover users error:", error);
 
     return NextResponse.json<ApiResponse>(
@@ -299,5 +297,7 @@ export async function GET(request: NextRequest) {
       },
       { status: 500 }
     );
+  } finally {
+    endTimer();
   }
 }

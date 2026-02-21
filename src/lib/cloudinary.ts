@@ -285,8 +285,8 @@ export class CloudinaryService {
             // Retry on network errors and 5xx server errors
             if (error instanceof Error) {
               return error.message.includes('Cloudinary fetch error') ||
-                     error.message.includes('fetch') ||
-                     error.message.includes('network');
+                error.message.includes('fetch') ||
+                error.message.includes('network');
             }
             return false;
           },
@@ -362,26 +362,38 @@ export class CloudinaryService {
 
   static async deleteMedia(publicId: string): Promise<void> {
     ensureConfigured();
-    // Retry Cloudinary delete with exponential backoff
-    await retry(
-      async () => {
-        await cloudinary.uploader.destroy(publicId);
-      },
-      {
-        maxRetries: 2,
-        initialDelayMs: 500,
-        retryIf: (error) => {
-          // Retry on network errors and 5xx server errors
-          if (error instanceof Error) {
-            return error.message.includes('network') || 
-                   error.message.includes('timeout') ||
-                   error.message.includes('ECONNRESET');
-          }
-          return false;
-        },
-      }
-    );
+    // Delete DB record FIRST, then Cloudinary. This prevents orphaned DB records
+    // pointing to deleted Cloudinary assets. If Cloudinary delete fails, the DB
+    // record is already gone — no broken image references. Cloudinary destroy is
+    // idempotent, so a retry or manual cleanup is safe.
     await prisma.media.deleteMany({ where: { publicId } });
+
+    try {
+      await retry(
+        async () => {
+          await cloudinary.uploader.destroy(publicId);
+        },
+        {
+          maxRetries: 2,
+          initialDelayMs: 500,
+          retryIf: (error) => {
+            if (error instanceof Error) {
+              return error.message.includes('network') ||
+                error.message.includes('timeout') ||
+                error.message.includes('ECONNRESET');
+            }
+            return false;
+          },
+        }
+      );
+    } catch (error) {
+      // Cloudinary delete failed but DB record is already removed.
+      // Log for manual cleanup — the orphaned Cloudinary asset doesn't affect users.
+      console.error(
+        `[Cloudinary] Failed to delete asset ${publicId} from Cloudinary after DB record removed:`,
+        error
+      );
+    }
   }
 
   static async cleanupOrphanedMedia(userId: string): Promise<void> {

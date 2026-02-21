@@ -73,22 +73,22 @@ export async function GET(request: NextRequest) {
             hasGoogleLinked,
           };
 
-          endTimer();
           return NextResponse.json<ApiResponse<UserProfile>>({
             success: true,
             data: userResponse,
           });
         } catch (error: any) {
-          endTimer();
           return handleApiError(error, {
             endpoint: "GET /users/me",
             userId: authenticatedReq.user?.userId,
           });
+        } finally {
+          endTimer();
         }
       });
     });
   });
-  
+
   return await loggedHandler(request);
 }
 
@@ -115,7 +115,7 @@ export async function PUT(request: NextRequest) {
               { status: 400 }
             );
           }
-          
+
           // Validate all profile data using schema (handles name, username, bio, avatarUrl, isPrivate)
           let validatedData;
           try {
@@ -132,7 +132,7 @@ export async function PUT(request: NextRequest) {
             }
             throw error;
           }
-          
+
           // Additional validation: name is mandatory when provided in body
           if ("name" in body && (!validatedData.name || validatedData.name.length < 1)) {
             return NextResponse.json<ApiResponse>(
@@ -140,12 +140,12 @@ export async function PUT(request: NextRequest) {
               { status: 400 }
             );
           }
-          
+
           const { name, username, bio, avatarUrl, isPrivate } = validatedData;
           // When updating profile details (name, username, or bio), username is required
           const hasProfileDetailUpdate =
             "name" in body || "username" in body || "bio" in body;
-          
+
           // Use transaction to prevent race condition and ensure username requirement check is atomic
           let updatedUser;
           try {
@@ -162,7 +162,7 @@ export async function PUT(request: NextRequest) {
                   throw new Error("Username is required to update profile details.");
                 }
               }
-              
+
               // Perform update inside transaction
               return await tx.user.update({
                 where: { id: currentUserId },
@@ -198,7 +198,7 @@ export async function PUT(request: NextRequest) {
                 { status: 400 }
               );
             }
-            
+
             // Handle unique constraint violations
             const message = handlePrismaUniqueError(error, { username: "Username" });
             if (message) {
@@ -221,13 +221,11 @@ export async function PUT(request: NextRequest) {
             createdAt: updatedUser.createdAt.toISOString(),
             updatedAt: updatedUser.updatedAt.toISOString(),
           };
-          endTimer();
           return NextResponse.json<ApiResponse<UserProfile>>({
             success: true,
             data: userResponse,
           });
         } catch (error: any) {
-          endTimer();
           // Handle username requirement error
           if (error.message === "Username is required to update profile details.") {
             return NextResponse.json<ApiResponse>(
@@ -238,7 +236,7 @@ export async function PUT(request: NextRequest) {
               { status: 400 }
             );
           }
-          
+
           // Handle unique constraint violations
           const message = handlePrismaUniqueError(error, { username: "Username" });
           if (message) {
@@ -250,11 +248,13 @@ export async function PUT(request: NextRequest) {
               { status: 400 }
             );
           }
-          
+
           return handleApiError(error, {
             endpoint: "PUT /users/me",
             userId: authenticatedReq.user?.userId,
           });
+        } finally {
+          endTimer();
         }
       });
     });
@@ -387,17 +387,17 @@ export async function DELETE(request: NextRequest) {
             `[API] DELETE /users/me - Account deleted successfully: ${currentUserId}`
           );
 
-          endTimer();
           return NextResponse.json<ApiResponse>({
             success: true,
             message: "Account deleted successfully",
           });
         } catch (error: any) {
-          endTimer();
           return handleApiError(error, {
             endpoint: "DELETE /users/me",
             userId: authenticatedReq.user?.userId,
           });
+        } finally {
+          endTimer();
         }
       });
     });

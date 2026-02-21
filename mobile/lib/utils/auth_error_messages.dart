@@ -60,7 +60,13 @@ class AuthErrorMessages {
     if (lower.contains('invalid') && (lower.contains('email') || lower.contains('password'))) {
       return loginCredentialsInvalid;
     }
-    return loginCredentialsInvalid;
+    // Pass through messages that might be user-friendly already
+    // (e.g., rate limiting, validation, specific error messages from backend)
+    if (_isUserFriendlyValidation(lower) || _isRateLimitMessage(lower)) {
+      return message;
+    }
+    // Unknown pattern — pass through as-is rather than masking useful info
+    return message;
   }
 
   /// Returns a user-friendly message for signup errors.
@@ -76,7 +82,11 @@ class AuthErrorMessages {
         _genericAuthPhrases.any((p) => lower.contains(p))) {
       return signupFailed;
     }
-    return signupFailed;
+    if (_isRateLimitMessage(lower)) {
+      return message;
+    }
+    // Unknown pattern — pass through as-is
+    return message;
   }
 
   /// Returns a user-friendly message for forgot-password errors.
@@ -131,5 +141,15 @@ class AuthErrorMessages {
       'invalid email',
     ];
     return keepPatterns.any((p) => lower.contains(p));
+  }
+
+  static bool _isRateLimitMessage(String lower) {
+    const rateLimitPatterns = [
+      'too many',
+      'rate limit',
+      'try again later',
+      'please wait',
+    ];
+    return rateLimitPatterns.any((p) => lower.contains(p));
   }
 }

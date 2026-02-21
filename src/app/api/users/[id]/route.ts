@@ -43,7 +43,6 @@ export async function GET(
     });
 
     if (!user) {
-      endTimer();
       return NextResponse.json<ApiResponse>(
         {
           success: false,
@@ -80,7 +79,6 @@ export async function GET(
             updatedAt: user.updatedAt.toISOString(),
           };
 
-          endTimer();
           return NextResponse.json<
             ApiResponse<UserProfile & { message?: string }>
           >({
@@ -92,7 +90,6 @@ export async function GET(
           });
         }
       } else {
-        endTimer();
         return NextResponse.json<ApiResponse>(
           {
             success: false,
@@ -113,13 +110,11 @@ export async function GET(
       updatedAt: user.updatedAt.toISOString(),
     };
 
-    endTimer();
     return NextResponse.json<ApiResponse<UserProfile>>({
       success: true,
       data: userProfile,
     });
   } catch (error: any) {
-    endTimer();
     console.error("Get user error:", error);
 
     return NextResponse.json<ApiResponse>(
@@ -129,6 +124,8 @@ export async function GET(
       },
       { status: 500 }
     );
+  } finally {
+    endTimer();
   }
 }
 
@@ -204,13 +201,11 @@ export async function PUT(
       createdAt: updatedUser.createdAt.toISOString(),
       updatedAt: updatedUser.updatedAt.toISOString(),
     };
-    endTimer();
     return NextResponse.json<ApiResponse<UserProfile>>({
       success: true,
       data: userProfile,
     });
   } catch (error: any) {
-    endTimer();
     if (error.name === "ZodError") {
       return NextResponse.json<ApiResponse>(
         {
@@ -227,5 +222,7 @@ export async function PUT(
       },
       { status: 500 }
     );
+  } finally {
+    endTimer();
   }
 }

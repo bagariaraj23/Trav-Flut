@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:tripthread/models/trip.dart';
 import 'package:tripthread/models/trip_join_request.dart';
 import 'package:tripthread/services/trip_service.dart';
+import 'package:tripthread/widgets/floating_trip_nav_button.dart';
 
 class TripProvider extends ChangeNotifier {
   final TripService _tripService;
@@ -602,6 +603,8 @@ class TripProvider extends ChangeNotifier {
     _error = null;
     _tripInvitesError = null;
     _hasCompletedInitialOngoingTripRedirect = false;
+    // Reset floating bubble position so it doesn't persist across user sessions
+    FloatingTripNavButton.resetPosition();
     notifyListeners();
   }
 }
