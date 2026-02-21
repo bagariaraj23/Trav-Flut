@@ -5,6 +5,7 @@ import 'package:form_field_validator/form_field_validator.dart';
 import 'package:tripthread/providers/auth_provider.dart';
 import 'package:tripthread/widgets/custom_text_field.dart';
 import 'package:tripthread/widgets/loading_button.dart';
+import 'package:tripthread/widgets/tripthread_logo.dart';
 
 class ForgotPasswordScreen extends StatefulWidget {
   const ForgotPasswordScreen({super.key});
@@ -71,19 +72,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                 // Logo and Title
                 Column(
                   children: [
-                    Container(
-                      width: 64,
-                      height: 64,
-                      decoration: BoxDecoration(
-                        color: Theme.of(context).colorScheme.primary,
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                      child: const Icon(
-                        Icons.lock_reset,
-                        size: 32,
-                        color: Colors.white,
-                      ),
-                    ),
+                    const TripThreadLogo(size: 64),
                     const SizedBox(height: 24),
                     Text(
                       'Reset your password',

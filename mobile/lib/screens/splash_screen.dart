@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_spinkit/flutter_spinkit.dart';
+import 'package:tripthread/widgets/tripthread_logo.dart';
 
 class SplashScreen extends StatelessWidget {
   const SplashScreen({super.key});
@@ -13,19 +14,7 @@ class SplashScreen extends StatelessWidget {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             // App Logo
-            Container(
-              width: 80,
-              height: 80,
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: const Icon(
-                Icons.travel_explore,
-                size: 40,
-                color: Color(0xFF6366F1),
-              ),
-            ),
+            const TripThreadLogo(size: 80, useDarkVariant: true),
 
             const SizedBox(height: 24),
 
@@ -42,7 +31,7 @@ class SplashScreen extends StatelessWidget {
 
             // Tagline
             Text(
-              'Document your journey',
+              'Capture journeys. Share stories.',
               style: Theme.of(context).textTheme.bodyLarge?.copyWith(
                 color: Colors.white.withValues(alpha: 0.8),
               ),
