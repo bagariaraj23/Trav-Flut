@@ -245,7 +245,7 @@ export async function getMergedNotifications(
     (n: Notif) => {
       const meta = n.metadata && typeof n.metadata === 'object' ? (n.metadata as Record<string, unknown>) : null
       return {
-        type: n.type as 'LIKE' | 'COMMENT' | 'COMMENT_REPLY' | 'TAG',
+        type: n.type as 'LIKE' | 'COMMENT_LIKE' | 'COMMENT' | 'COMMENT_REPLY' | 'TAG',
         id: n.id,
         createdAt: n.createdAt.toISOString(),
         readAt: n.readAt?.toISOString() ?? null,
