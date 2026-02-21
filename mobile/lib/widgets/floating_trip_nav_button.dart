@@ -12,6 +12,11 @@ Offset? _savedBubblePosition;
 class FloatingTripNavButton extends StatefulWidget {
   const FloatingTripNavButton({super.key});
 
+  /// Resets the persisted bubble position (call on logout/clear data).
+  static void resetPosition() {
+    _savedBubblePosition = null;
+  }
+
   @override
   State<FloatingTripNavButton> createState() => _FloatingTripNavButtonState();
 }
@@ -23,10 +28,10 @@ class _FloatingTripNavButtonState extends State<FloatingTripNavButton>
   late Animation<double> _scaleAnimation;
 
   Offset? _position;
-  Offset? _dragStart;
+  Offset? _currentDragPosition;
 
   static const double _buttonSize = 48.0;
-  static const double _dragSpeedMultiplier = 1.2;
+  static const double _dragSpeedMultiplier = 1.0;
 
   @override
   void initState() {
@@ -111,20 +116,20 @@ class _FloatingTripNavButtonState extends State<FloatingTripNavButton>
               alignment: Alignment(alignX.clamp(-1.0, 1.0), alignY.clamp(-1.0, 1.0)),
               child: GestureDetector(
                 onPanStart: (_) {
-                  _dragStart = clampedPos;
+                  _currentDragPosition = clampedPos;
                   _position = clampedPos;
                 },
                 onPanUpdate: (details) {
-                  if (_dragStart != null) {
+                  if (_currentDragPosition != null) {
                     setState(() {
                       final d = _dragSpeedMultiplier;
                       _position = Offset(
-                        (_dragStart!.dx + details.delta.dx * d)
+                        (_currentDragPosition!.dx + details.delta.dx * d)
                             .clamp(0.0, maxLeft),
-                        (_dragStart!.dy + details.delta.dy * d)
+                        (_currentDragPosition!.dy + details.delta.dy * d)
                             .clamp(topSpacing, maxTop),
                       );
-                      _dragStart = _position;
+                      _currentDragPosition = _position;
                     });
                   }
                 },
