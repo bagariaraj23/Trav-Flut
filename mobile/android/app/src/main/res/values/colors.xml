@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- TripThread primary/indigo color matching Flutter's AppTheme.primaryColor (0xFF6366F1) -->
+    <color name="splash_background">#FF6366F1</color>
+</resources>
