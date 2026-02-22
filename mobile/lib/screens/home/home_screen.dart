@@ -74,6 +74,10 @@ class _HomeScreenState extends State<HomeScreen> {
 
       // Load pending follow requests and unread notification count to update notification badge
       if (!mounted) return;
+      context.read<UserProvider>().loadPendingFollowRequests();
+      debugPrint(
+        '[HomeScreen] Loading pending follow requests for notifications',
+      );
       final userProvider = context.read<UserProvider>();
       userProvider.loadPendingFollowRequests();
       userProvider.loadUnreadNotificationCount();

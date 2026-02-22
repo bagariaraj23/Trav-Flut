@@ -989,17 +989,17 @@ class _TripThreadScreenState extends State<TripThreadScreen>
         // Always handle navigation ourselves
         if (context.canPop()) {
           context.pop();
-          } else {
-            final extra = GoRouterState.of(context).extra;
-            final from = (extra is Map && extra['from'] != null)
-                ? extra['from'] as String
-                : '/trip/${widget.tripId}';
-            context.go(
-              from,
-              extra: from == '/home' ? {'explicitHome': true} : null,
-            );
-          }
-        },
+        } else {
+          final extra = GoRouterState.of(context).extra;
+          final from = (extra is Map && extra['from'] != null)
+              ? extra['from'] as String
+              : '/trip/${widget.tripId}';
+          context.go(
+            from,
+            extra: from == '/home' ? {'explicitHome': true} : null,
+          );
+        }
+      },
       child: Scaffold(
         resizeToAvoidBottomInset: true,
         appBar: AppBar(
@@ -1025,22 +1025,6 @@ class _TripThreadScreenState extends State<TripThreadScreen>
             },
           ),
         ),
-<<<<<<< HEAD
-        body: Stack(
-          key: _stackKey,
-          children: [
-            Column(
-              children: [
-                // Thread entries - extra bottom padding so last items are above add-entry bar
-                Expanded(
-                  child: Consumer<TripProvider>(
-                    builder: (context, tripProvider, child) {
-                      // Only show entries if they belong to the current trip
-                      final allEntries = tripProvider.currentTripEntries;
-                      final entries = allEntries
-                          .where((entry) => entry.tripId == widget.tripId)
-                          .toList();
-=======
         body: GestureDetector(
           behavior: HitTestBehavior.translucent,
           onTap: () => FocusScope.of(context).unfocus(),
@@ -1058,7 +1042,6 @@ class _TripThreadScreenState extends State<TripThreadScreen>
                         final entries = allEntries
                             .where((entry) => entry.tripId == widget.tripId)
                             .toList();
->>>>>>> origin/main
 
                         // Show loading indicator while entries are being loaded
                         if (_isLoadingEntries && entries.isEmpty) {
@@ -1187,42 +1170,6 @@ class _TripThreadScreenState extends State<TripThreadScreen>
                             return _buildThreadEntry(entries[index]);
                           },
                         );
-<<<<<<< HEAD
-                      }
-
-                      return ListView.builder(
-                        controller: _scrollController,
-                        padding: EdgeInsets.only(
-                          left: 16,
-                          right: 16,
-                          top: 16,
-                          bottom: 16 + (canAddEntries ? 180 : 0),
-                        ),
-                        itemCount: entries.length,
-                        itemBuilder: (context, index) {
-                          return _buildThreadEntry(entries[index]);
-                        },
-                      );
-                    },
-                  ),
-                ),
-              ],
-            ),
-            // Add entry section - pinned to bottom so no gap
-            if (canAddEntries)
-              Positioned(
-                left: 0,
-                right: 0,
-                bottom: 0,
-                child: _buildAddEntrySection(),
-              ),
-            // Mention autocomplete menu - positioned relative to text field
-            if (_mentionQuery != null)
-              Builder(builder: (context) => _buildMentionMenu(context)),
-            // Floating navigation button for ongoing trips
-            const FloatingTripNavButton(),
-          ],
-=======
                       },
                     ),
                   ),
@@ -1234,9 +1181,10 @@ class _TripThreadScreenState extends State<TripThreadScreen>
               // Mention autocomplete menu - positioned relative to text field
               if (_mentionQuery != null)
                 Builder(builder: (context) => _buildMentionMenu(context)),
+              // Floating navigation button for ongoing trips
+              const FloatingTripNavButton(),
             ],
           ),
->>>>>>> origin/main
         ),
       ),
     );
@@ -1472,30 +1420,11 @@ class _TripThreadScreenState extends State<TripThreadScreen>
 
             const SizedBox(width: 12),
 
-<<<<<<< HEAD
-          // Entry content
-          Expanded(
-            child: Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: isCurrentUser
-                    ? Theme.of(
-                        context,
-                      ).colorScheme.primary.withValues(alpha: 0.12)
-                    : (Theme.of(context).brightness == Brightness.dark
-                          ? Theme.of(
-                              context,
-                            ).colorScheme.onSurface.withValues(alpha: 0.06)
-                          : const Color(0xFFFAF9F6)),
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(
-=======
             // Entry content
             Expanded(
               child: Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
->>>>>>> origin/main
                   color: isCurrentUser
                       ? Theme.of(
                           context,
@@ -1503,27 +1432,10 @@ class _TripThreadScreenState extends State<TripThreadScreen>
                       : (Theme.of(context).brightness == Brightness.dark
                             ? Theme.of(
                                 context,
-<<<<<<< HEAD
-                              ).colorScheme.onSurface.withValues(alpha: 0.18)
-                            : Theme.of(
-                                context,
-                              ).colorScheme.onSurface.withValues(
-                                alpha:
-                                    Theme.of(context).brightness ==
-                                        Brightness.dark
-                                    ? 0.18
-                                    : 0.10,
-                              )),
-                  width: 1.5,
-                ),
-                boxShadow: [
-                  BoxShadow(
-=======
                               ).colorScheme.onSurface.withValues(alpha: 0.06)
                             : const Color(0xFFFAF9F6)),
                   borderRadius: BorderRadius.circular(16),
                   border: Border.all(
->>>>>>> origin/main
                     color: isCurrentUser
                         ? Theme.of(
                             context,
@@ -1543,66 +1455,6 @@ class _TripThreadScreenState extends State<TripThreadScreen>
                                 )),
                     width: 1.5,
                   ),
-<<<<<<< HEAD
-                ],
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Header
-                  Row(
-                    children: [
-                      Flexible(
-                        child: Text(
-                          entry.author.name ?? 'User',
-                          style: Theme.of(context).textTheme.titleSmall
-                              ?.copyWith(
-                                fontWeight: FontWeight.w600,
-                                color: isCurrentUser
-                                    ? Theme.of(context).colorScheme.primary
-                                    : Theme.of(context).colorScheme.onSurface,
-                              ),
-                          overflow: TextOverflow.ellipsis,
-                          maxLines: 1,
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      _buildEntryTypeIcon(entry.type),
-                      const SizedBox(width: 8),
-                      Flexible(
-                        child: Text(
-                          _formatDateTime(entry.createdAt),
-                          style: Theme.of(context).textTheme.bodySmall
-                              ?.copyWith(
-                                color: isCurrentUser
-                                    ? Theme.of(context).colorScheme.primary
-                                          .withValues(alpha: 0.8)
-                                    : Theme.of(
-                                        context,
-                                      ).colorScheme.onSurfaceVariant,
-                                fontWeight: FontWeight.w500,
-                              ),
-                          overflow: TextOverflow.ellipsis,
-                          maxLines: 1,
-                        ),
-                      ),
-                    ],
-                  ),
-
-                  const SizedBox(height: 8),
-
-                  // Content - limit lines to prevent overflow, allow expansion via tap if needed
-                  if (entry.contentText != null) ...[
-                    Text(
-                      entry.contentText!,
-                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: Theme.of(context).colorScheme.onSurface,
-                        height: 1.5,
-                      ),
-                      maxLines: 20,
-                      overflow: TextOverflow.ellipsis,
-=======
                   boxShadow: [
                     BoxShadow(
                       color: isCurrentUser
@@ -1612,7 +1464,6 @@ class _TripThreadScreenState extends State<TripThreadScreen>
                           : Colors.black.withValues(alpha: 0.04),
                       blurRadius: 6,
                       offset: const Offset(0, 2),
->>>>>>> origin/main
                     ),
                   ],
                 ),
@@ -1633,56 +1484,15 @@ class _TripThreadScreenState extends State<TripThreadScreen>
                                     fontWeight: FontWeight.w600,
                                     color: isCurrentUser
                                         ? Theme.of(context).colorScheme.primary
-                                        : Theme.of(context).colorScheme.onSurface,
+                                        : Theme.of(
+                                            context,
+                                          ).colorScheme.onSurface,
                                   ),
                               overflow: TextOverflow.ellipsis,
                               maxLines: 1,
                             ),
                           ),
                         ),
-<<<<<<< HEAD
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            // Place name and icon
-                            Row(
-                              children: [
-                                Container(
-                                  padding: const EdgeInsets.all(8),
-                                  decoration: BoxDecoration(
-                                    color: Colors.red[100],
-                                    borderRadius: BorderRadius.circular(8),
-                                  ),
-                                  child: Icon(
-                                    entry.type == ThreadEntryType.checkin
-                                        ? Icons.check_circle
-                                        : Icons.location_on,
-                                    size: 18,
-                                    color: Colors.red[700],
-                                  ),
-                                ),
-                                const SizedBox(width: 8),
-                                Expanded(
-                                  child: Column(
-                                    mainAxisSize: MainAxisSize.min,
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        entry.place?.name ??
-                                            entry.locationName ??
-                                            'Location',
-                                        style: TextStyle(
-                                          color: Colors.red[900],
-                                          fontWeight: FontWeight.w600,
-                                          fontSize: 14,
-                                        ),
-                                        overflow: TextOverflow.ellipsis,
-                                        maxLines: 2,
-                                      ),
-                                      if (entry.place?.address != null)
-=======
                         const SizedBox(width: 8),
                         _buildEntryTypeIcon(entry.type),
                         const SizedBox(width: 8),
@@ -1723,7 +1533,9 @@ class _TripThreadScreenState extends State<TripThreadScreen>
                           color: Theme.of(context).colorScheme.onSurface,
                           height: 1.5,
                         ),
-                        usernameToUserId: _usernameToUserIdFromTagged(entry.taggedUsers),
+                        usernameToUserId: _usernameToUserIdFromTagged(
+                          entry.taggedUsers,
+                        ),
                       ),
                       const SizedBox(height: 8),
                     ],
@@ -1782,7 +1594,6 @@ class _TripThreadScreenState extends State<TripThreadScreen>
                                       crossAxisAlignment:
                                           CrossAxisAlignment.start,
                                       children: [
->>>>>>> origin/main
                                         Text(
                                           entry.place?.name ??
                                               entry.locationName ??
@@ -2125,21 +1936,6 @@ class _TripThreadScreenState extends State<TripThreadScreen>
       maxHeight = availableHeight * 0.5;
     }
 
-<<<<<<< HEAD
-    final padding = EdgeInsets.fromLTRB(
-      16,
-      16,
-      16,
-      8 + mediaQuery.padding.bottom,
-    );
-    final content = Padding(
-      padding: padding,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-                  // Entry type selector
-=======
     return Container(
       decoration: BoxDecoration(
         color: Theme.of(context).colorScheme.surface,
@@ -2165,7 +1961,6 @@ class _TripThreadScreenState extends State<TripThreadScreen>
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   // Entry type selector - Horizontally scrollable
->>>>>>> origin/main
                   SingleChildScrollView(
                     scrollDirection: Axis.horizontal,
                     child: Row(
@@ -2787,11 +2582,8 @@ class _TripThreadScreenState extends State<TripThreadScreen>
                         child: TextField(
                           key: _textFieldKey,
                           controller: _textController,
-<<<<<<< HEAD
-                          autofocus: true,
-=======
                           focusNode: _entryInputFocusNode,
->>>>>>> origin/main
+                          autofocus: true,
                           decoration: InputDecoration(
                             hintText: _getInputHint(),
                             border: OutlineInputBorder(
@@ -2875,28 +2667,9 @@ class _TripThreadScreenState extends State<TripThreadScreen>
                   ),
                 ],
               ),
-            );
-
-    return Container(
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surface,
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
-            blurRadius: 8,
-            offset: const Offset(0, -2),
+            ),
           ),
-        ],
-      ),
-      child: SafeArea(
-        top: false,
-        bottom: false,
-        child: keyboardInset > 0
-            ? ConstrainedBox(
-                constraints: BoxConstraints(maxHeight: maxHeight),
-                child: SingleChildScrollView(child: content),
-              )
-            : content,
+        ),
       ),
     );
   }
