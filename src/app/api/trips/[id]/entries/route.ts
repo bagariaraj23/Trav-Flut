@@ -10,7 +10,9 @@ import {
 } from "@/types/api";
 import { serializePlace } from "@/lib/place";
 import { checkLikeStatus } from "@/lib/services/like";
+import { createNotification } from "@/lib/services/notification";
 import { EntityType } from "@prisma/client";
+import { canViewEntity } from "@/lib/auth/permissions";
 
 // Create a new thread entry
 export async function POST(
@@ -271,6 +273,49 @@ export async function POST(
       }
       return entry;
     });
+
+    // Fire-and-forget: create TAG notifications for each tagged user (exclude self)
+    const recipientsToNotify = taggedUserIds.filter((id) => id !== userId);
+    if (recipientsToNotify.length > 0) {
+      void (async () => {
+        const contentPreview =
+          createdEntry.contentText &&
+          createdEntry.contentText.length > 0
+            ? createdEntry.contentText.length > 60
+              ? createdEntry.contentText.slice(0, 60) + "..."
+              : createdEntry.contentText
+            : undefined;
+        for (const taggedUserId of recipientsToNotify) {
+          try {
+            const canRecipientView = await canViewEntity(
+              taggedUserId,
+              EntityType.TRIP_THREAD_ENTRY,
+              createdEntry.id
+            );
+            if (!canRecipientView) {
+              continue;
+            }
+            await createNotification({
+              type: "TAG",
+              actorId: userId,
+              recipientId: taggedUserId,
+              entityType: "TRIP_THREAD_ENTRY",
+              entityId: createdEntry.id,
+              metadata: {
+                tripId,
+                threadEntryId: createdEntry.id,
+                ...(contentPreview && { contentPreview }),
+              },
+            });
+          } catch (err) {
+            console.error(
+              "[Notification] Failed to create TAG notification:",
+              { tripId, threadEntryId: createdEntry.id, actorId: userId, taggedUserId, error: err }
+            );
+          }
+        }
+      })();
+    }
 
     // Fetch the complete entry with tags and place
     const completeEntry = await prisma.tripThreadEntry.findUnique({

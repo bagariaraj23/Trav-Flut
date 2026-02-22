@@ -114,7 +114,7 @@ export async function PUT(request: NextRequest) {
               { status: 400 }
             );
           }
-          
+
           // Validate all profile data using schema (handles name, username, bio, avatarUrl, isPrivate)
           let validatedData;
           try {
@@ -131,7 +131,7 @@ export async function PUT(request: NextRequest) {
             }
             throw error;
           }
-          
+
           // Additional validation: name is mandatory when provided in body
           if ("name" in body && (!validatedData.name || validatedData.name.length < 1)) {
             return NextResponse.json<ApiResponse>(
@@ -139,12 +139,12 @@ export async function PUT(request: NextRequest) {
               { status: 400 }
             );
           }
-          
+
           const { name, username, bio, avatarUrl, isPrivate } = validatedData;
           // When updating profile details (name, username, or bio), username is required
           const hasProfileDetailUpdate =
             "name" in body || "username" in body || "bio" in body;
-          
+
           // Use transaction to prevent race condition and ensure username requirement check is atomic
           let updatedUser;
           try {
@@ -161,7 +161,7 @@ export async function PUT(request: NextRequest) {
                   throw new Error("Username is required to update profile details.");
                 }
               }
-              
+
               // Perform update inside transaction
               return await tx.user.update({
                 where: { id: currentUserId },
@@ -197,7 +197,7 @@ export async function PUT(request: NextRequest) {
                 { status: 400 }
               );
             }
-            
+
             // Handle unique constraint violations
             const message = handlePrismaUniqueError(error, { username: "Username" });
             if (message) {

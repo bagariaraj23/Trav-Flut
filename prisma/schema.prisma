@@ -39,8 +39,36 @@ model User {
   likes                    Like[]            @relation("UserLikes")
   comments                 Comment[]         @relation("UserComments")
   shares                   Share[]           @relation("UserShares")
+  sentNotifications        Notification[]    @relation("NotificationActor")
+  receivedNotifications    Notification[]    @relation("NotificationRecipient")
 
   @@map("users")
+}
+
+enum NotificationType {
+  LIKE
+  COMMENT_LIKE
+  COMMENT
+  COMMENT_REPLY
+  TAG
+}
+
+model Notification {
+  id          String           @id @default(uuid())
+  type        NotificationType
+  actorId     String
+  recipientId String
+  readAt      DateTime?
+  entityType  EntityType?
+  entityId    String?
+  metadata    Json?
+  createdAt   DateTime         @default(now())
+  actor       User             @relation("NotificationActor", fields: [actorId], references: [id], onDelete: Cascade)
+  recipient   User             @relation("NotificationRecipient", fields: [recipientId], references: [id], onDelete: Cascade)
+
+  @@index([recipientId, createdAt])
+  @@index([recipientId, readAt])
+  @@map("notifications")
 }
 
 model PasswordReset {
