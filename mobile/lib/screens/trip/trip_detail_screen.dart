@@ -4,8 +4,10 @@ import 'package:go_router/go_router.dart';
 import 'package:tripthread/providers/trip_provider.dart';
 import 'package:tripthread/providers/auth_provider.dart';
 import 'package:tripthread/models/trip.dart';
+import 'package:tripthread/models/user.dart';
 import 'package:tripthread/utils/cloudinary_utils.dart';
 import 'package:tripthread/widgets/loading_button.dart';
+import 'package:tripthread/widgets/mention_text.dart';
 import 'package:tripthread/services/media_service.dart';
 
 class TripDetailScreen extends StatefulWidget {
@@ -774,6 +776,17 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
     );
   }
 
+  Map<String, String> _usernameToUserIdFromTagged(List<User>? tagged) {
+    if (tagged == null || tagged.isEmpty) return {};
+    final map = <String, String>{};
+    for (final u in tagged) {
+      if (u.username != null && u.username!.isNotEmpty) {
+        map[u.username!] = u.id;
+      }
+    }
+    return map;
+  }
+
   Widget _buildThreadEntryPreview(TripThreadEntry entry) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
@@ -827,8 +840,8 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
               children: [
                 if (entry.contentText != null &&
                     entry.contentText!.trim().isNotEmpty)
-                  Text(
-                    entry.contentText!,
+                  MentionText(
+                    text: entry.contentText!,
                     style: theme.textTheme.bodyMedium?.copyWith(
                       color: primaryTextColor,
                       fontWeight: FontWeight.w500,
@@ -836,6 +849,7 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
                     ),
                     maxLines: 3,
                     overflow: TextOverflow.ellipsis,
+                    usernameToUserId: _usernameToUserIdFromTagged(entry.taggedUsers),
                   ),
                 if (entry.locationName != null)
                   Padding(

@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:tripthread/models/follow_status.dart';
+import 'package:tripthread/models/unified_notification.dart';
 import 'package:tripthread/models/user.dart';
 import 'package:tripthread/services/api_service.dart';
 
@@ -61,13 +62,13 @@ class DetailedFollowStatus {
   }
 
   Map<String, dynamic> toJson() => {
-        'isFollowing': isFollowing,
-        'isFollowedBy': isFollowedBy,
-        'isRequestPending': isRequestPending,
-        'isPrivate': isPrivate,
-        'requestId': requestId,
-        'requestStatus': requestStatus,
-      };
+    'isFollowing': isFollowing,
+    'isFollowedBy': isFollowedBy,
+    'isRequestPending': isRequestPending,
+    'isPrivate': isPrivate,
+    'requestId': requestId,
+    'requestStatus': requestStatus,
+  };
 }
 
 class UserProvider extends ChangeNotifier {
@@ -107,6 +108,14 @@ class UserProvider extends ChangeNotifier {
   int _discoverPage = 1;
   bool _hasMoreUsers = true;
 
+  List<UnifiedNotificationItem> _unifiedNotifications = [];
+  bool _isNotificationsLoading = false;
+  bool _notificationsLoadMore = false;
+  bool _hasMoreNotifications = true;
+  String? _notificationsCursor;
+  String? _unifiedNotificationsError;
+  int _unreadNotificationCount = 0;
+
   // --- GETTERS ---
   bool get isLoading => _isLoading;
   bool get isDiscoverLoading => _isDiscoverLoading;
@@ -117,6 +126,13 @@ class UserProvider extends ChangeNotifier {
   bool get hasMoreUsers => _hasMoreUsers;
   List<FollowRequestDto> get pendingFollowRequests => _pendingFollowRequests;
   String? get followRequestsError => _followRequestsError;
+  List<UnifiedNotificationItem> get unifiedNotifications =>
+      _unifiedNotifications;
+  bool get isNotificationsLoading => _isNotificationsLoading;
+  bool get notificationsLoadMore => _notificationsLoadMore;
+  bool get hasMoreNotifications => _hasMoreNotifications;
+  String? get unifiedNotificationsError => _unifiedNotificationsError;
+  int get unreadNotificationCount => _unreadNotificationCount;
 
   User? getUser(String userId) => _userCache[userId];
   UserStats? getUserStats(String userId) => _statsCache[userId];
@@ -293,7 +309,10 @@ class UserProvider extends ChangeNotifier {
     }
   }
 
-  Future<bool> cancelFollowRequest(String userId, {String? currentUserId}) async {
+  Future<bool> cancelFollowRequest(
+    String userId, {
+    String? currentUserId,
+  }) async {
     try {
       _isLoading = true;
       _error = null;
@@ -326,7 +345,7 @@ class UserProvider extends ChangeNotifier {
       _isFollowRequestsLoading = true;
       isProcessingRequestId = requestId;
       notifyListeners();
-      
+
       // Get the request to find followerId before accepting
       final request = _pendingFollowRequests.firstWhere(
         (r) => r.id == requestId,
@@ -334,18 +353,19 @@ class UserProvider extends ChangeNotifier {
       );
       final followerId = request.followerId;
       final followeeId = request.followeeId;
-      
+
       final response = await _apiService.acceptFollowRequest(requestId);
       if (response.success) {
-        _pendingFollowRequests
-            .removeWhere((request) => request.id == requestId);
-        
+        _pendingFollowRequests.removeWhere(
+          (request) => request.id == requestId,
+        );
+
         // Update stats for both users after accepting
         // Current user (followee) gets a new follower
         await fetchUserStats(followeeId);
         // Follower gets a new following
         await fetchUserStats(followerId);
-        
+
         notifyListeners();
         return true;
       }
@@ -367,7 +387,7 @@ class UserProvider extends ChangeNotifier {
       _isFollowRequestsLoading = true;
       isProcessingRequestId = requestId;
       notifyListeners();
-      
+
       // Get the request to find followerId before rejecting
       // Note: Rejecting doesn't change stats, but we keep this for consistency
       final request = _pendingFollowRequests.firstWhere(
@@ -375,15 +395,16 @@ class UserProvider extends ChangeNotifier {
         orElse: () => throw Exception('Request not found'),
       );
       final followeeId = request.followeeId;
-      
+
       final response = await _apiService.rejectFollowRequest(requestId);
       if (response.success) {
-        _pendingFollowRequests
-            .removeWhere((request) => request.id == requestId);
-        
+        _pendingFollowRequests.removeWhere(
+          (request) => request.id == requestId,
+        );
+
         // Stats don't change on reject, but refresh to ensure consistency
         await fetchUserStats(followeeId);
-        
+
         notifyListeners();
         return true;
       }
@@ -401,10 +422,11 @@ class UserProvider extends ChangeNotifier {
   }
 
   // --- Discover Functions ---
-  Future<void> searchUsers(
-      {String? search,
-      bool refresh = false,
-      bool prioritizeFollowed = false}) async {
+  Future<void> searchUsers({
+    String? search,
+    bool refresh = false,
+    bool prioritizeFollowed = false,
+  }) async {
     if (refresh) {
       _discoverPage = 1;
       _discoverUsers.clear();
@@ -449,13 +471,14 @@ class UserProvider extends ChangeNotifier {
     }
   }
 
-  Future<bool> updateProfile(
-      {required String userId,
-      String? name,
-      String? username,
-      String? bio,
-      String? avatarUrl,
-      bool? isPrivate}) async {
+  Future<bool> updateProfile({
+    required String userId,
+    String? name,
+    String? username,
+    String? bio,
+    String? avatarUrl,
+    bool? isPrivate,
+  }) async {
     try {
       _isLoading = true;
       _error = null;
@@ -521,6 +544,99 @@ class UserProvider extends ChangeNotifier {
     _statsCache.clear();
     _detailedFollowStatusCache.clear();
     _pendingFollowRequests.clear();
+    _unifiedNotifications.clear();
+    _notificationsCursor = null;
+    _unreadNotificationCount = 0;
     notifyListeners();
+  }
+
+  Future<void> loadUnifiedNotifications() async {
+    _isNotificationsLoading = true;
+    _unifiedNotificationsError = null;
+    _hasMoreNotifications = true;
+    // Reset cursor to null for fresh load (first page doesn't need cursor)
+    // Server will return nextCursor in response for subsequent pagination
+    _notificationsCursor = null;
+    notifyListeners();
+    try {
+      final response = await _apiService.getUnifiedNotifications(limit: 30);
+      if (response.success && response.data != null) {
+        _unifiedNotifications = response.data!.items;
+        _hasMoreNotifications = response.data!.hasMore;
+        // Store cursor from server for loadMore pagination
+        _notificationsCursor = response.data!.nextCursor;
+        _unifiedNotificationsError = null;
+      } else {
+        _unifiedNotificationsError =
+            response.error ?? 'Failed to load notifications';
+      }
+    } catch (e) {
+      _unifiedNotificationsError =
+          'An unexpected error occurred while loading notifications';
+      debugPrint('Load unified notifications error: $e');
+    } finally {
+      _isNotificationsLoading = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> loadMoreUnifiedNotifications() async {
+    if (_notificationsLoadMore || !_hasMoreNotifications) return;
+    if (_notificationsCursor == null || _notificationsCursor!.isEmpty) return;
+    _notificationsLoadMore = true;
+    notifyListeners();
+    try {
+      final response = await _apiService.getUnifiedNotifications(
+        limit: 30,
+        cursor: _notificationsCursor,
+      );
+      if (response.success && response.data != null) {
+        final newItems = response.data!.items;
+        final seen = _unifiedNotifications.map((n) => n.id).toSet();
+        for (final n in newItems) {
+          if (!seen.contains(n.id)) {
+            seen.add(n.id);
+            _unifiedNotifications.add(n);
+          }
+        }
+        _hasMoreNotifications = response.data!.hasMore;
+        _notificationsCursor = response.data!.nextCursor;
+      }
+    } catch (e) {
+      debugPrint('Load more notifications error: $e');
+    } finally {
+      _notificationsLoadMore = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> loadUnreadNotificationCount() async {
+    try {
+      final response = await _apiService.getUnreadNotificationCount();
+      if (response.success && response.data != null) {
+        _unreadNotificationCount = response.data!;
+        notifyListeners();
+      }
+    } catch (e) {
+      debugPrint('Load unread notification count error: $e');
+    }
+  }
+
+  bool markNotificationReadLocal(String notificationId) {
+    final index = _unifiedNotifications.indexWhere(
+      (n) => n.id == notificationId,
+    );
+    if (index < 0) return false;
+
+    final n = _unifiedNotifications[index];
+    final wasUnread = n.readAt == null || n.readAt!.isEmpty;
+    if (!wasUnread) return false;
+
+    _unifiedNotifications[index] = n.copyWith(
+      readAt: DateTime.now().toIso8601String(),
+    );
+    _unreadNotificationCount = (_unreadNotificationCount - 1).clamp(0, 999999);
+    notifyListeners();
+    return true;
   }
 }

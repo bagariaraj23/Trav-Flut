@@ -44,6 +44,8 @@ import 'package:tripthread/screens/profile/follow_requests_screen.dart';
 import 'package:tripthread/screens/profile/trip_invitations_screen.dart';
 import 'package:tripthread/screens/settings/settings_screen.dart';
 import 'package:tripthread/screens/engagement/liked_by_screen.dart';
+import 'package:tripthread/screens/notifications/notifications_screen.dart';
+import 'package:tripthread/screens/post/post_detail_screen.dart';
 import 'package:tripthread/utils/app_theme.dart';
 import 'package:tripthread/utils/error_handler.dart';
 import 'package:tripthread/widgets/auth_gate.dart';
@@ -532,7 +534,12 @@ class _TripThreadAppRouterState extends State<TripThreadAppRouter> {
             path: '/trip/:tripId/thread',
             builder: (context, state) {
               final tripId = state.pathParameters['tripId']!;
-              return TripThreadScreen(tripId: tripId);
+              final extra = state.extra as Map<String, dynamic>?;
+              final highlightEntryId = extra?['highlightEntryId'] as String?;
+              return TripThreadScreen(
+                tripId: tripId,
+                highlightEntryId: highlightEntryId,
+              );
             },
           ),
           GoRoute(
@@ -570,6 +577,26 @@ class _TripThreadAppRouterState extends State<TripThreadAppRouter> {
                   return provider;
                 },
                 child: FinalPostEditScreen(tripId: tripId),
+              );
+            },
+          ),
+          GoRoute(
+            path: '/notifications',
+            builder: (context, state) {
+              return const NotificationsScreen();
+            },
+          ),
+          GoRoute(
+            path: '/post/:entityType/:entityId',
+            builder: (context, state) {
+              final entityType = state.pathParameters['entityType']!;
+              final entityId = state.pathParameters['entityId']!;
+              final extra = state.extra as Map<String, dynamic>?;
+              final scrollToCommentId = extra?['scrollToCommentId'] as String?;
+              return PostDetailScreen(
+                entityType: entityType,
+                entityId: entityId,
+                scrollToCommentId: scrollToCommentId,
               );
             },
           ),

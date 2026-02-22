@@ -7,6 +7,7 @@ import 'package:tripthread/models/trip.dart';
 import 'package:tripthread/models/pagination.dart';
 import 'package:tripthread/models/trip_join_request.dart';
 import 'package:tripthread/models/place.dart';
+import 'package:tripthread/models/unified_notification.dart';
 import 'package:tripthread/services/storage_service.dart';
 import 'package:tripthread/services/token_refresh_manager.dart';
 import 'package:tripthread/config/app_config.dart';
@@ -2128,6 +2129,206 @@ class ApiService {
     } catch (e) {
       debugPrint('[ApiService] Cancel follow request unexpected error: $e');
       return ApiResponse<void>(
+        success: false,
+        error: 'An unexpected error occurred',
+      );
+    }
+  }
+
+  Future<ApiResponse<NotificationsPayload>> getUnifiedNotifications({
+    int limit = 30,
+    String? cursor,
+  }) async {
+    try {
+      debugPrint(
+        '[ApiService] Getting unified notifications: limit=$limit cursor=$cursor',
+      );
+      final queryParams = <String, dynamic>{'limit': limit.toString()};
+      if (cursor != null && cursor.isNotEmpty) {
+        queryParams['cursor'] = cursor;
+      }
+      final response = await _dio.get(
+        '/users/me/notifications',
+        queryParameters: queryParams,
+      );
+      debugPrint(
+        '[ApiService] Get unified notifications response: ${response.statusCode}',
+      );
+      if (response.data['success'] && response.data['data'] != null) {
+        final data = response.data['data'] as Map<String, dynamic>;
+        final items =
+            (data['items'] as List<dynamic>?)
+                ?.map(
+                  (e) => UnifiedNotificationItem.fromJson(
+                    (e as Map<String, dynamic>?) ?? {},
+                  ),
+                )
+                .toList() ??
+            [];
+        return ApiResponse<NotificationsPayload>(
+          success: true,
+          data: NotificationsPayload(
+            items: items,
+            hasMore: data['hasMore'] as bool? ?? false,
+            nextCursor: data['nextCursor'] as String?,
+          ),
+        );
+      }
+      return ApiResponse<NotificationsPayload>(
+        success: false,
+        error: response.data['error'] ?? 'Failed to load notifications',
+      );
+    } on DioException catch (e) {
+      debugPrint(
+        '[ApiService] Get unified notifications DioException: ${e.message}',
+      );
+      return ApiResponse<NotificationsPayload>(
+        success: false,
+        error: e.response?.data['error'] ?? 'Network error occurred',
+      );
+    } catch (e) {
+      debugPrint('[ApiService] Get unified notifications unexpected error: $e');
+      return ApiResponse<NotificationsPayload>(
+        success: false,
+        error: 'An unexpected error occurred',
+      );
+    }
+  }
+
+  Future<ApiResponse<int>> getUnreadNotificationCount() async {
+    try {
+      debugPrint('[ApiService] Getting unread notification count');
+      final response = await _dio.get('/users/me/notifications/unread-count');
+      debugPrint(
+        '[ApiService] Get unread count response: ${response.statusCode}',
+      );
+      if (response.data['success'] && response.data['data'] != null) {
+        final count = (response.data['data']['count'] as num?)?.toInt() ?? 0;
+        return ApiResponse<int>(success: true, data: count);
+      }
+      return ApiResponse<int>(
+        success: false,
+        error: response.data['error'] ?? 'Failed to fetch count',
+      );
+    } on DioException catch (e) {
+      debugPrint('[ApiService] Get unread count DioException: ${e.message}');
+      return ApiResponse<int>(
+        success: false,
+        error: e.response?.data['error'] ?? 'Network error occurred',
+      );
+    } catch (e) {
+      debugPrint('[ApiService] Get unread count unexpected error: $e');
+      return ApiResponse<int>(
+        success: false,
+        error: 'An unexpected error occurred',
+      );
+    }
+  }
+
+  Future<ApiResponse<void>> markAllNotificationsRead() async {
+    try {
+      debugPrint('[ApiService] Marking all notifications as read');
+      final response = await _dio.put('/users/me/notifications/read');
+      debugPrint('[ApiService] Mark all read response: ${response.statusCode}');
+      return ApiResponse<void>(
+        success: response.data['success'] == true,
+        error: response.data['error'],
+      );
+    } on DioException catch (e) {
+      debugPrint('[ApiService] Mark all read DioException: ${e.message}');
+      return ApiResponse<void>(
+        success: false,
+        error: e.response?.data['error'] ?? 'Network error occurred',
+      );
+    } catch (e) {
+      debugPrint('[ApiService] Mark all read unexpected error: $e');
+      return ApiResponse<void>(
+        success: false,
+        error: 'An unexpected error occurred',
+      );
+    }
+  }
+
+  Future<ApiResponse<void>> markNotificationRead(String notificationId) async {
+    try {
+      debugPrint('[ApiService] Marking notification as read: $notificationId');
+      final response = await _dio.put(
+        '/users/me/notifications/$notificationId/read',
+      );
+      debugPrint(
+        '[ApiService] Mark notification read response: ${response.statusCode}',
+      );
+      if (response.statusCode == 200 && response.data['success'] == true) {
+        return ApiResponse<void>(success: true);
+      }
+      return ApiResponse<void>(
+        success: false,
+        error: response.data['error'] ?? 'Failed to mark as read',
+      );
+    } on DioException catch (e) {
+      debugPrint(
+        '[ApiService] Mark notification read DioException: ${e.message}',
+      );
+      if (e.response?.statusCode == 404) {
+        return ApiResponse<void>(
+          success: false,
+          error: 'Notification not found or already read',
+        );
+      }
+      return ApiResponse<void>(
+        success: false,
+        error: e.response?.data['error'] ?? 'Network error occurred',
+      );
+    } catch (e) {
+      debugPrint('[ApiService] Mark notification read unexpected error: $e');
+      return ApiResponse<void>(
+        success: false,
+        error: 'An unexpected error occurred',
+      );
+    }
+  }
+
+  Future<ApiResponse<Map<String, dynamic>>> getPost(
+    String entityType,
+    String entityId,
+  ) async {
+    try {
+      debugPrint(
+        '[ApiService] Getting post: entityType=$entityType, entityId=$entityId',
+      );
+      final response = await _dio.get('/posts/$entityType/$entityId');
+      debugPrint('[ApiService] Get post response: ${response.statusCode}');
+      if (response.data['success'] && response.data['data'] != null) {
+        return ApiResponse<Map<String, dynamic>>(
+          success: true,
+          data: response.data['data'] as Map<String, dynamic>,
+        );
+      }
+      return ApiResponse<Map<String, dynamic>>(
+        success: false,
+        error: response.data['error'] ?? 'Failed to load post',
+      );
+    } on DioException catch (e) {
+      debugPrint('[ApiService] Get post DioException: ${e.message}');
+      if (e.response?.statusCode == 404) {
+        return ApiResponse<Map<String, dynamic>>(
+          success: false,
+          error: 'Post not found',
+        );
+      }
+      if (e.response?.statusCode == 403) {
+        return ApiResponse<Map<String, dynamic>>(
+          success: false,
+          error: "You don't have access to this post",
+        );
+      }
+      return ApiResponse<Map<String, dynamic>>(
+        success: false,
+        error: e.response?.data['error'] ?? 'Network error occurred',
+      );
+    } catch (e) {
+      debugPrint('[ApiService] Get post unexpected error: $e');
+      return ApiResponse<Map<String, dynamic>>(
         success: false,
         error: 'An unexpected error occurred',
       );

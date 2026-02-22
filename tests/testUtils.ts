@@ -59,6 +59,7 @@ function assertTestDatabase() {
 export async function cleanDb() {
   assertTestDatabase();
   await prisma.$transaction([
+    prisma.notification.deleteMany(),
     prisma.comment.deleteMany(),
     prisma.like.deleteMany(),
     prisma.share.deleteMany(),

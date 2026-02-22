@@ -11,6 +11,25 @@ import {
   USER_MINIMAL_SELECT,
   ENGAGEMENT_CONSTANTS,
 } from "./engagement-utils";
+import { getEntityOwner, getPostFromComment, getTripIdFromEntry, getTripTitle } from "../entity-owner";
+import { canViewEntity } from "../auth/permissions";
+import { createNotification } from "./notification";
+
+/** Extract @username mentions from text (case-insensitive, unique). */
+function extractMentions(text: string): string[] {
+  const regex = /@([a-zA-Z0-9_.]+)/g;
+  const seen = new Set<string>();
+  const result: string[] = [];
+  let m: RegExpExecArray | null;
+  while ((m = regex.exec(text)) !== null) {
+    const username = m[1].toLowerCase();
+    if (!seen.has(username)) {
+      seen.add(username);
+      result.push(m[1]);
+    }
+  }
+  return result;
+}
 
 async function validateParentComment(
   commentId: string
@@ -31,27 +50,6 @@ async function validateParentComment(
     throw new Error("Nesting limited to one level only");
   }
   return { entityType: parent.entityType, entityId: parent.entityId };
-}
-
-async function getEntityOwner(
-  entityType: EntityType,
-  entityId: string
-): Promise<string | null> {
-  if (entityType === "TRIP_FINAL_POST") {
-    const post = await prisma.tripFinalPost.findUnique({
-      where: { id: entityId },
-      select: { trip: { select: { userId: true } } },
-    });
-    return post?.trip?.userId || null;
-  }
-  if (entityType === "TRIP_THREAD_ENTRY") {
-    const entry = await prisma.tripThreadEntry.findUnique({
-      where: { id: entityId },
-      select: { authorId: true },
-    });
-    return entry?.authorId || null;
-  }
-  return null;
 }
 
 export async function createComment(
@@ -92,8 +90,8 @@ export async function createComment(
     }
   }
 
-  return await prisma.$transaction(async (tx) => {
-    const comment = await tx.comment.create({
+  const comment = await prisma.$transaction(async (tx) => {
+    const newComment = await tx.comment.create({
       data: {
         userId,
         entityType: finalEntityType,
@@ -122,8 +120,135 @@ export async function createComment(
       );
     }
 
-    return comment;
+    return newComment;
   });
+
+  // Fire-and-forget: create notifications without blocking response
+  void (async () => {
+    const contentPreview =
+      sanitizedText.length > 60 ? sanitizedText.slice(0, 60) + "..." : sanitizedText;
+    const threadTripId =
+      finalEntityType === "TRIP_THREAD_ENTRY"
+        ? await getTripIdFromEntry(finalEntityId)
+        : null;
+    const tripName =
+      threadTripId != null ? await getTripTitle(threadTripId) : null;
+
+    // 1. Comment / Reply notification
+    try {
+      let recipientId: string | null;
+      let notifType: "COMMENT" | "COMMENT_REPLY";
+
+      if (parentCommentId) {
+        const parent = await prisma.comment.findUnique({
+          where: { id: parentCommentId },
+          select: { userId: true },
+        });
+        recipientId = parent?.userId ?? null;
+        notifType = "COMMENT_REPLY";
+      } else {
+        recipientId = await getEntityOwner(finalEntityType, finalEntityId);
+        notifType = "COMMENT";
+      }
+
+      if (recipientId) {
+        await createNotification({
+          type: notifType,
+          actorId: userId,
+          recipientId,
+          entityType: finalEntityType,
+          entityId: finalEntityId,
+          metadata: {
+            contentPreview,
+            commentId: comment.id,
+            ...(parentCommentId && { parentCommentId }),
+            ...(threadTripId && { tripId: threadTripId }),
+            ...(tripName && { tripName }),
+            ...(finalEntityType === "TRIP_THREAD_ENTRY" && {
+              threadEntryId: finalEntityId,
+            }),
+          },
+        });
+      }
+    } catch (err) {
+      console.error(
+        "[Notification] Failed to create COMMENT/REPLY notification:",
+        {
+          entityType: finalEntityType,
+          entityId: finalEntityId,
+          actorId: userId,
+          error: err,
+        }
+      );
+    }
+
+    // 2. @Mention TAG notifications
+    const mentionUsernames = extractMentions(sanitizedText);
+    if (mentionUsernames.length > 0) {
+      try {
+        const postInfo = await getPostFromComment(comment.id);
+        if (!postInfo) return;
+
+        const users = await prisma.user.findMany({
+          where: {
+            deletedAt: null,
+            OR: mentionUsernames.map((u) => ({
+              username: { equals: u, mode: "insensitive" as const },
+            })),
+          },
+          select: { id: true },
+        });
+
+        const contentPreviewShort =
+          sanitizedText.length > 60 ? sanitizedText.slice(0, 60) + "..." : sanitizedText;
+        let tripId: string | null = null;
+        if (postInfo.entityType === "TRIP_THREAD_ENTRY") {
+          tripId = await getTripIdFromEntry(postInfo.entityId);
+        }
+
+        for (const u of users) {
+          if (u.id === userId) continue;
+          const canRecipientView = await canViewEntity(
+            u.id,
+            postInfo.entityType,
+            postInfo.entityId
+          );
+          if (!canRecipientView) continue;
+          try {
+            await createNotification({
+              type: "TAG",
+              actorId: userId,
+              recipientId: u.id,
+              entityType: "COMMENT",
+              entityId: comment.id,
+              metadata: {
+                contentPreview: contentPreviewShort,
+                postEntityType: postInfo.entityType,
+                postEntityId: postInfo.entityId,
+                commentId: comment.id,
+                ...(tripId && { tripId }),
+                ...(postInfo.entityType === "TRIP_THREAD_ENTRY" && {
+                  threadEntryId: postInfo.entityId,
+                }),
+              },
+            });
+          } catch (tagErr) {
+            console.error(
+              "[Notification] Failed to create TAG notification for mention:",
+              { commentId: comment.id, mentionedUserId: u.id, error: tagErr }
+            );
+          }
+        }
+      } catch (err) {
+        console.error(
+          "[Notification] Failed to process @mentions:",
+          { commentId: comment.id, error: err }
+        );
+      }
+    }
+  })();
+
+  return comment;
 }
 
 export async function updateComment(
