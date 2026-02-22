@@ -245,7 +245,7 @@ export async function GET(request: NextRequest) {
 
 // Delete/cancel a follow request
 export async function DELETE(request: NextRequest) {
-  return withLogging(async (req) => {
+  const handler = withLogging(async (req) => {
     return withRateLimit(req, async (rateLimitedReq) => {
       return withAuth(rateLimitedReq, async (authenticatedReq) => {
         try {
@@ -296,4 +296,5 @@ export async function DELETE(request: NextRequest) {
       });
     });
   });
+  return handler(request);
 }
