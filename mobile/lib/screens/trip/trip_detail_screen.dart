@@ -96,14 +96,11 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
     }
 
     return PopScope(
-      canPop: true,
+      canPop: GoRouter.of(context).canPop(),
       onPopInvokedWithResult: (didPop, result) {
         if (!didPop) {
-          if (context.canPop()) {
-            context.pop();
-          } else {
-            context.go('/home');
-          }
+          // No route to pop to — navigate to home instead of exiting app.
+          context.go('/home', extra: {'explicitHome': true});
         }
       },
       child: Scaffold(
@@ -118,11 +115,8 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
               leading: IconButton(
                 icon: const Icon(Icons.arrow_back, color: Colors.white),
                 onPressed: () {
-                  if (context.canPop()) {
-                    context.pop();
-                  } else {
-                    context.go('/home');
-                  }
+                  // Always go to home with explicitHome to avoid redirect loop back to thread.
+                  context.go('/home', extra: {'explicitHome': true});
                 },
               ),
               flexibleSpace: FlexibleSpaceBar(
@@ -222,10 +216,12 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
                                     : null,
                                 child: _trip!.user!.avatarUrl == null
                                     ? Text(
-                                        _trip!.user!.name
-                                                ?.substring(0, 1)
-                                                .toUpperCase() ??
-                                            'U',
+                                        (_trip!.user!.name != null &&
+                                                _trip!.user!.name!.isNotEmpty
+                                            ? _trip!.user!.name!
+                                                .substring(0, 1)
+                                                .toUpperCase()
+                                            : 'U'),
                                         style: const TextStyle(
                                           fontSize: 11,
                                           fontWeight: FontWeight.w600,
@@ -243,6 +239,7 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
                         child: Container(
                           color: Colors.black45,
                           child: Column(
+                            mainAxisSize: MainAxisSize.min,
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
                               SizedBox(
@@ -346,6 +343,7 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
                 child: Padding(
                   padding: const EdgeInsets.all(16),
                   child: Column(
+                    mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       _buildTripInfoCard(),
@@ -391,30 +389,49 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
     showModalBottomSheet<void>(
       context: context,
       builder: (context) {
-        return SafeArea(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              ListTile(
-                leading: const Icon(Icons.photo_library_outlined),
-                title: const Text('Choose from gallery'),
-                onTap: () {
-                  Navigator.of(context).pop();
-                  _changeCover(fromCamera: false);
-                },
-              ),
-              ListTile(
-                leading: const Icon(Icons.photo_camera_outlined),
-                title: const Text('Take a photo'),
-                onTap: () {
-                  Navigator.of(context).pop();
-                  _changeCover(fromCamera: true);
-                },
-              ),
-            ],
+        final theme = Theme.of(context);
+        return Material(
+          color: theme.colorScheme.surface,
+          child: SafeArea(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _buildCoverOptionTile(
+                  context: context,
+                  icon: Icons.photo_library_outlined,
+                  label: 'Choose from gallery',
+                  onTap: () {
+                    Navigator.of(context).pop();
+                    _changeCover(fromCamera: false);
+                  },
+                ),
+                _buildCoverOptionTile(
+                  context: context,
+                  icon: Icons.photo_camera_outlined,
+                  label: 'Take a photo',
+                  onTap: () {
+                    Navigator.of(context).pop();
+                    _changeCover(fromCamera: true);
+                  },
+                ),
+              ],
+            ),
           ),
         );
       },
+    );
+  }
+
+  Widget _buildCoverOptionTile({
+    required BuildContext context,
+    required IconData icon,
+    required String label,
+    required VoidCallback onTap,
+  }) {
+    return ListTile(
+      leading: Icon(icon),
+      title: Text(label),
+      onTap: onTap,
     );
   }
 
@@ -491,6 +508,7 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
+          mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // Status Badge
@@ -515,7 +533,7 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    _trip!.destinations.join(', '),
+                    (_trip!.destinations).join(', '),
                     style: Theme.of(context).textTheme.bodyLarge?.copyWith(
                       fontWeight: FontWeight.w500,
                     ),
@@ -693,6 +711,7 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
+          mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
@@ -720,6 +739,7 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
             if (entries.isEmpty)
               Center(
                 child: Column(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
                     Icon(
                       Icons.timeline,

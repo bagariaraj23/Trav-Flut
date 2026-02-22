@@ -190,10 +190,11 @@ class RetryHandler {
   static Future<T> retry<T>(
     Future<T> Function() operation, {
     int maxRetries = 3,
-    Duration delay = const Duration(seconds: 1),
+    Duration delay = const Duration(milliseconds: 500),
     bool Function(dynamic error)? retryIf,
   }) async {
     int attempts = 0;
+    Duration currentDelay = delay;
 
     while (attempts < maxRetries) {
       try {
@@ -205,7 +206,8 @@ class RetryHandler {
           rethrow;
         }
 
-        await Future.delayed(delay * attempts); // Exponential backoff
+        await Future.delayed(currentDelay);
+        currentDelay *= 2;
       }
     }
 

@@ -97,8 +97,57 @@ export const signupSchema = z.object({
 export const loginSchema = z.object({
   email: z
     .string()
-    .email("Please enter a valid email address")
-    .transform((email) => normalizeEmailForLookup(email)),
+    .min(1, "Email or username is required")
+    .transform((input) => {
+      const trimmed = input.trim();
+      // Check if input contains '@' to determine if it's an email
+      if (trimmed.includes("@")) {
+        // Validate and normalize as email
+        const emailSchema = z.string().email("Please enter a valid email address");
+        const validatedEmail = emailSchema.parse(trimmed);
+        return normalizeEmailForLookup(validatedEmail);
+      } else {
+        // Validate and normalize as username
+        const normalized = normalizeUsernameToAscii(trimmed);
+        if (normalized.length < 3) {
+          throw new z.ZodError([
+            {
+              code: "too_small",
+              minimum: 3,
+              type: "string",
+              inclusive: true,
+              exact: false,
+              message: "Username must be at least 3 characters",
+              path: ["email"],
+            },
+          ]);
+        }
+        if (normalized.length > 30) {
+          throw new z.ZodError([
+            {
+              code: "too_big",
+              maximum: 30,
+              type: "string",
+              inclusive: true,
+              exact: false,
+              message: "Username must be less than 30 characters",
+              path: ["email"],
+            },
+          ]);
+        }
+        if (!/^[a-zA-Z0-9_]+$/.test(normalized)) {
+          throw new z.ZodError([
+            {
+              code: "invalid_string",
+              validation: "regex",
+              message: "Username can only contain letters, numbers, and underscores",
+              path: ["email"],
+            },
+          ]);
+        }
+        return normalized.toLowerCase();
+      }
+    }),
   password: z
     .string()
     .min(1, "Password is required")

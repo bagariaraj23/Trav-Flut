@@ -1,5 +1,6 @@
 import { ENV } from "@/env";
 import { NormalizedPlace, PlacesProviderAdapter } from "./adapter";
+import { retry } from "@/lib/retry";
 
 // Mapping Mapbox feature types to our place types
 function mapFeatureType(featureType: string | undefined): string {
@@ -49,7 +50,31 @@ export class MapboxPlacesAdapter implements PlacesProviderAdapter {
     const url = `https://api.mapbox.com/search/geocode/v6/forward?q=${encodeURIComponent(
       q
     )}${proximity}&limit=${limit}&access_token=${ENV.MAPBOX_ACCESS_TOKEN}`;
-    const res = await fetch(url, { cache: "no-store" as any });
+    
+    // Retry Mapbox API calls with exponential backoff
+    const res = await retry(
+      async () => {
+        const response = await fetch(url, { cache: "no-store" as any });
+        if (!response.ok && response.status >= 500) {
+          throw new Error(`Mapbox API error: ${response.status} ${response.statusText}`);
+        }
+        return response;
+      },
+      {
+        maxRetries: 3,
+        initialDelayMs: 500,
+        retryIf: (error) => {
+          // Retry on network errors and 5xx server errors
+          if (error instanceof Error) {
+            return error.message.includes('Mapbox API error') || 
+                   error.message.includes('fetch') ||
+                   error.message.includes('network');
+          }
+          return false;
+        },
+      }
+    );
+    
     if (!res.ok) return [];
     const data = await res.json();
     const features: any[] = data?.features ?? [];

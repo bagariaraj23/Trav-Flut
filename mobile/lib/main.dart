@@ -147,8 +147,14 @@ void main() async {
           ChangeNotifierProvider<TripProvider>(
             create: (context) {
               debugPrint('[main] Creating TripProvider');
+              final authProvider = context.read<AuthProvider>();
               final provider = TripProvider(tripService: tripService);
               tripService.setStorageService(storageService);
+              authProvider.addListener(() {
+                if (!authProvider.isAuthenticated) {
+                  provider.clearData();
+                }
+              });
               return provider;
             },
           ),
@@ -414,6 +420,7 @@ class _TripThreadAppRouterState extends State<TripThreadAppRouter> {
           }
 
           // On complete-profile but profile now complete: go home
+          // (HomeScreen will handle ongoing trip redirect after tripProvider.initialize())
           if (isLoggedIn &&
               !requiresProfileCompletion &&
               location == '/complete-profile') {
@@ -422,6 +429,7 @@ class _TripThreadAppRouterState extends State<TripThreadAppRouter> {
           }
 
           // Redirect to home (or complete-profile) if authenticated and on auth pages
+          // (HomeScreen will handle ongoing trip redirect after tripProvider.initialize())
           if (isLoggedIn &&
               (location == '/login' ||
                   location == '/signup' ||
@@ -430,6 +438,7 @@ class _TripThreadAppRouterState extends State<TripThreadAppRouter> {
             if (requiresProfileCompletion) {
               return '/complete-profile';
             }
+
             debugPrint('[GoRouter] Already logged in, redirecting to /home');
             return '/home';
           }

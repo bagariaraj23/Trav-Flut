@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
 import 'package:tripthread/providers/auth_provider.dart';
 import 'package:tripthread/services/google_sign_in_service.dart';
+import 'package:tripthread/widgets/logout_dialog.dart';
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
@@ -167,7 +168,8 @@ class SettingsScreen extends StatelessWidget {
                         ),
                       );
                     } else {
-                      final errorText = authProvider.error ??
+                      final errorText =
+                          authProvider.error ??
                           'Failed to link Google account.';
                       ScaffoldMessenger.of(context).showSnackBar(
                         SnackBar(
@@ -176,7 +178,9 @@ class SettingsScreen extends StatelessWidget {
                         ),
                       );
                       // So next tap shows account picker instead of reusing the same account
-                      if (errorText.toLowerCase().contains('already linked to another account')) {
+                      if (errorText.toLowerCase().contains(
+                        'already linked to another account',
+                      )) {
                         await googleSignIn.signOut();
                       }
                     }
@@ -283,13 +287,7 @@ class SettingsScreen extends StatelessWidget {
                   context: context,
                   icon: Icons.logout,
                   title: 'Logout',
-                  onTap: () async {
-                    final authProvider = context.read<AuthProvider>();
-                    await authProvider.logout();
-                    if (context.mounted) {
-                      context.go('/login');
-                    }
-                  },
+                  onTap: () => showLogoutDialog(context),
                 ),
                 const Divider(),
                 _buildSettingsTile(

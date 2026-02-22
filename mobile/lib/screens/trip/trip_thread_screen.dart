@@ -13,6 +13,7 @@ import 'package:tripthread/widgets/sheets/place_search_sheet.dart';
 import 'package:tripthread/services/media_service.dart';
 import 'package:tripthread/services/api_service.dart';
 import 'package:tripthread/utils/cloudinary_utils.dart';
+import 'package:tripthread/widgets/floating_trip_nav_button.dart';
 import 'dart:io';
 import 'package:go_router/go_router.dart';
 import 'package:video_player/video_player.dart';
@@ -87,6 +88,9 @@ class _TripThreadScreenState extends State<TripThreadScreen>
   final GlobalKey _textFieldKey = GlobalKey();
   final GlobalKey _stackKey = GlobalKey();
 
+  bool _wasOngoingTrip = false;
+  TripProvider? _tripProvider;
+
   @override
   void initState() {
     super.initState();
@@ -104,13 +108,20 @@ class _TripThreadScreenState extends State<TripThreadScreen>
         curve: Curves.easeOutBack,
       ),
     );
-    // Defer to avoid notifyListeners() during build (TripProvider.clearCurrentTripEntries)
+    _textController.addListener(_onTextChanged);
+
+    // Defer _loadTrip and _loadTripParticipants - they call clearCurrentTripEntries
+    // and setState which trigger notifyListeners during build if run in initState
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       _loadTrip();
       _loadTripParticipants();
+
+      final tripProvider = context.read<TripProvider>();
+      _tripProvider = tripProvider;
+      _wasOngoingTrip = tripProvider.hasOngoingTrip;
+      tripProvider.addListener(_onTripProviderChanged);
     });
-    _textController.addListener(_onTextChanged);
   }
 
   @override
@@ -119,8 +130,35 @@ class _TripThreadScreenState extends State<TripThreadScreen>
     _mediaService ??= context.read<MediaService>();
   }
 
+  void _onTripProviderChanged() {
+    if (!mounted) return;
+
+    final tripProvider = context.read<TripProvider>();
+    final isOngoingNow = tripProvider.hasOngoingTrip;
+
+    // If trip was ongoing but is no longer ongoing, redirect to home
+    if (_wasOngoingTrip && !isOngoingNow) {
+      debugPrint('[TripThreadScreen] Trip ended, redirecting to home');
+      _wasOngoingTrip = false;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          context.go('/home');
+        }
+      });
+    } else {
+      _wasOngoingTrip = isOngoingNow;
+    }
+  }
+
   @override
   void dispose() {
+    // Remove listener - use stored reference to avoid context.read on deactivated widget
+    try {
+      _tripProvider?.removeListener(_onTripProviderChanged);
+    } catch (e) {
+      debugPrint('[TripThreadScreen] Error removing listener: $e');
+    }
+
     _textController.removeListener(_onTextChanged);
     _textController.dispose();
     _entryInputFocusNode.dispose();
@@ -200,8 +238,12 @@ class _TripThreadScreenState extends State<TripThreadScreen>
       final apiService = context.read<ApiService>();
       final participants = await apiService.getTripParticipants(widget.tripId);
       if (mounted) {
-        setState(() {
-          _tripParticipants = participants;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) {
+            setState(() {
+              _tripParticipants = participants;
+            });
+          }
         });
       }
     } catch (e) {
@@ -909,7 +951,7 @@ class _TripThreadScreenState extends State<TripThreadScreen>
           if (context.canPop()) {
             context.pop();
           } else {
-            context.go('/home');
+            context.go('/home', extra: {'explicitHome': true});
           }
         },
         child: const Scaffold(body: Center(child: CircularProgressIndicator())),
@@ -924,7 +966,7 @@ class _TripThreadScreenState extends State<TripThreadScreen>
           if (context.canPop()) {
             context.pop();
           } else {
-            context.go('/home');
+            context.go('/home', extra: {'explicitHome': true});
           }
         },
         child: Scaffold(
@@ -952,7 +994,10 @@ class _TripThreadScreenState extends State<TripThreadScreen>
           final from = (extra is Map && extra['from'] != null)
               ? extra['from'] as String
               : '/trip/${widget.tripId}';
-          context.go(from);
+          context.go(
+            from,
+            extra: from == '/home' ? {'explicitHome': true} : null,
+          );
         }
       },
       child: Scaffold(
@@ -972,7 +1017,10 @@ class _TripThreadScreenState extends State<TripThreadScreen>
                 final from = (extra is Map && extra['from'] != null)
                     ? extra['from'] as String
                     : '/trip/${widget.tripId}';
-                context.go(from);
+                context.go(
+                  from,
+                  extra: from == '/home' ? {'explicitHome': true} : null,
+                );
               }
             },
           ),
@@ -1133,6 +1181,8 @@ class _TripThreadScreenState extends State<TripThreadScreen>
               // Mention autocomplete menu - positioned relative to text field
               if (_mentionQuery != null)
                 Builder(builder: (context) => _buildMentionMenu(context)),
+              // Floating navigation button for ongoing trips
+              const FloatingTripNavButton(),
             ],
           ),
         ),
@@ -1434,7 +1484,9 @@ class _TripThreadScreenState extends State<TripThreadScreen>
                                     fontWeight: FontWeight.w600,
                                     color: isCurrentUser
                                         ? Theme.of(context).colorScheme.primary
-                                        : Theme.of(context).colorScheme.onSurface,
+                                        : Theme.of(
+                                            context,
+                                          ).colorScheme.onSurface,
                                   ),
                               overflow: TextOverflow.ellipsis,
                               maxLines: 1,
@@ -1481,7 +1533,9 @@ class _TripThreadScreenState extends State<TripThreadScreen>
                           color: Theme.of(context).colorScheme.onSurface,
                           height: 1.5,
                         ),
-                        usernameToUserId: _usernameToUserIdFromTagged(entry.taggedUsers),
+                        usernameToUserId: _usernameToUserIdFromTagged(
+                          entry.taggedUsers,
+                        ),
                       ),
                       const SizedBox(height: 8),
                     ],
@@ -2529,6 +2583,7 @@ class _TripThreadScreenState extends State<TripThreadScreen>
                           key: _textFieldKey,
                           controller: _textController,
                           focusNode: _entryInputFocusNode,
+                          autofocus: true,
                           decoration: InputDecoration(
                             hintText: _getInputHint(),
                             border: OutlineInputBorder(

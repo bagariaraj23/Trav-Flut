@@ -11,6 +11,7 @@ import 'package:tripthread/models/unified_notification.dart';
 import 'package:tripthread/services/storage_service.dart';
 import 'package:tripthread/services/token_refresh_manager.dart';
 import 'package:tripthread/config/app_config.dart';
+import 'package:tripthread/utils/error_handler.dart';
 import 'package:flutter/foundation.dart';
 
 class ApiService {
@@ -47,6 +48,65 @@ class ApiService {
   void setUnauthorizedCallback(VoidCallback callback) {
     debugPrint('[ApiService] Setting unauthorized callback');
     _onUnauthorized = callback;
+  }
+
+  /// Wraps a network request with retry logic using RetryHandler.
+  /// IMPORTANT: Only retries idempotent methods (GET, HEAD) to prevent
+  /// duplicate mutations. POST/PUT/DELETE may have already committed
+  /// their changes before the error response was sent.
+  Future<T> _retryRequest<T>(
+    Future<T> Function() request, {
+    bool Function(dynamic error)? shouldRetry,
+  }) async {
+    return RetryHandler.retry<T>(
+      request,
+      maxRetries: 3,
+      delay: const Duration(milliseconds: 500),
+      retryIf: (error) {
+        if (error is DioException) {
+          // Only retry safe, idempotent methods to prevent data duplication.
+          // POST/PUT/DELETE may have already committed on the server before
+          // the error response was sent back to the client.
+          final method = error.requestOptions.method.toUpperCase();
+          if (method != 'GET' && method != 'HEAD') {
+            return false;
+          }
+
+          // Don't retry auth endpoints
+          final path = error.requestOptions.path;
+          if (path.contains('/auth/login') ||
+              path.contains('/auth/signup') ||
+              path.contains('/auth/refresh-token') ||
+              path.contains('/auth/forgot-password') ||
+              path.contains('/auth/reset-password')) {
+            return false;
+          }
+
+          // Retry on network errors and 5xx server errors
+          if (error.type == DioExceptionType.connectionTimeout ||
+              error.type == DioExceptionType.sendTimeout ||
+              error.type == DioExceptionType.receiveTimeout ||
+              error.type == DioExceptionType.connectionError) {
+            return true;
+          }
+
+          // Retry on 5xx server errors (but not 401 which is handled separately)
+          if (error.response?.statusCode != null) {
+            final statusCode = error.response!.statusCode!;
+            if (statusCode >= 500 && statusCode < 600 && statusCode != 401) {
+              return true;
+            }
+          }
+        }
+
+        // Use custom retry logic if provided
+        if (shouldRetry != null) {
+          return shouldRetry(error);
+        }
+
+        return false;
+      },
+    );
   }
 
   // Helper method to sanitize sensitive data from logs
@@ -260,11 +320,12 @@ class ApiService {
   }
 
   Future<ApiResponse<AuthResponse>> login({
-    required String email,
+    required String email, // Can be email or username
     required String password,
   }) async {
     try {
-      debugPrint('[ApiService] Login called with email: $email');
+      debugPrint('[ApiService] Login called with email/username: $email');
+      // Auth endpoints don't use retry (handled by interceptor)
       final response = await _dio.post(
         '/auth/login',
         data: {'email': email, 'password': password},
@@ -277,9 +338,10 @@ class ApiService {
       );
     } on DioException catch (e) {
       debugPrint('[ApiService] Login DioException: ${e.message}');
+      final appException = ErrorHandler.handleError(e);
       return ApiResponse<AuthResponse>(
         success: false,
-        error: e.response?.data['error'] ?? 'Network error occurred',
+        error: appException.message,
       );
     } catch (e) {
       debugPrint('[ApiService] Login unexpected error: $e');
@@ -401,10 +463,21 @@ class ApiService {
     }
   }
 
-  Future<ApiResponse<void>> logout() async {
+  Future<ApiResponse<void>> logout({bool logoutAll = false}) async {
     try {
-      debugPrint('[ApiService] Logout called');
-      final response = await _dio.post('/auth/logout');
+      debugPrint('[ApiService] Logout called (logoutAll: $logoutAll)');
+
+      // Get refresh token from storage to revoke only the current session
+      final refreshToken = _storageService?.getRefreshToken();
+      final token = refreshToken != null ? await refreshToken : null;
+
+      final response = await _dio.post(
+        '/auth/logout',
+        data: {
+          if (token != null) 'refreshToken': token,
+          if (logoutAll) 'logoutAll': true,
+        },
+      );
       debugPrint('[ApiService] Logout response: ${response.statusCode}');
       return ApiResponse<void>(success: response.data['success']);
     } on DioException catch (e) {
@@ -1055,15 +1128,18 @@ class ApiService {
       debugPrint(
         '[ApiService] Searching places: query=$query, lat=$lat, lng=$lng, limit=$limit',
       );
-      final response = await _dio.get(
-        '/places/search',
-        queryParameters: {
-          'q': query,
-          if (lat != null) 'lat': lat,
-          if (lng != null) 'lng': lng,
-          if (placeType != null) 'placeType': placeType,
-          'limit': limit,
-        },
+      // Use retry for place search (external Mapbox API)
+      final response = await _retryRequest(
+        () => _dio.get(
+          '/places/search',
+          queryParameters: {
+            'q': query,
+            if (lat != null) 'lat': lat,
+            if (lng != null) 'lng': lng,
+            if (placeType != null) 'placeType': placeType,
+            'limit': limit,
+          },
+        ),
       );
 
       if (response.data['success'] && response.data['data'] != null) {
@@ -1398,14 +1474,17 @@ class ApiService {
       debugPrint(
         '[ApiService] Getting Cloudinary signature for file: $filename, contentType: $contentType, tripId: $tripId, usage: $usage',
       );
-      final response = await _dio.post(
-        '/media/cloudinary-signature',
-        data: {
-          'filename': filename,
-          'contentType': contentType,
-          if (tripId != null) 'tripId': tripId,
-          'usage': usage,
-        },
+      // Use retry for Cloudinary signature (important for media uploads)
+      final response = await _retryRequest(
+        () => _dio.post(
+          '/media/cloudinary-signature',
+          data: {
+            'filename': filename,
+            'contentType': contentType,
+            if (tripId != null) 'tripId': tripId,
+            'usage': usage,
+          },
+        ),
       );
       debugPrint(
         '[ApiService] Get Cloudinary signature response: ${response.statusCode}',
@@ -1447,22 +1526,25 @@ class ApiService {
   }) async {
     try {
       debugPrint('[ApiService] Confirming media upload: $publicId');
-      final response = await _dio.post(
-        '/media/confirm',
-        data: {
-          'url': url,
-          'secure_url': secureUrl,
-          'public_id': publicId,
-          'format': format,
-          'resource_type': resourceType,
-          'bytes': bytes,
-          'original_filename': originalFilename,
-          if (width != null) 'width': width,
-          if (height != null) 'height': height,
-          if (duration != null) 'duration': duration,
-          if (tripId != null) 'tripId': tripId,
-          'usage': usage,
-        },
+      // Use retry for media confirmation (important for uploads)
+      final response = await _retryRequest(
+        () => _dio.post(
+          '/media/confirm',
+          data: {
+            'url': url,
+            'secure_url': secureUrl,
+            'public_id': publicId,
+            'format': format,
+            'resource_type': resourceType,
+            'bytes': bytes,
+            'original_filename': originalFilename,
+            if (width != null) 'width': width,
+            if (height != null) 'height': height,
+            if (duration != null) 'duration': duration,
+            if (tripId != null) 'tripId': tripId,
+            'usage': usage,
+          },
+        ),
       );
       debugPrint(
         '[ApiService] Confirm media upload response: ${response.statusCode}',
@@ -1491,7 +1573,10 @@ class ApiService {
   Future<void> deleteMediaAsset(String publicId) async {
     try {
       debugPrint('[ApiService] Deleting media asset: $publicId');
-      await _dio.post('/media/delete', data: {'publicId': publicId});
+      // Use retry for media deletion (Cloudinary operation)
+      await _retryRequest(
+        () => _dio.post('/media/delete', data: {'publicId': publicId}),
+      );
     } on DioException catch (e) {
       debugPrint('[ApiService] Delete media asset DioException: ${e.message}');
     } catch (e) {

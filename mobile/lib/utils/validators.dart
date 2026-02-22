@@ -28,6 +28,38 @@ class Validators {
     return null;
   }
 
+  // Email or username validation for login
+  // NOTE: Username normalization (e.g., Cyrillic → ASCII) is handled server-side only.
+  // The mobile only does basic length/format validation and sends the raw input.
+  static String? validateEmailOrUsername(String? value) {
+    if (value == null || value.isEmpty) {
+      return 'Email or username is required';
+    }
+
+    final trimmed = value.trim();
+
+    // Check if it's an email (contains '@')
+    if (trimmed.contains('@')) {
+      // Validate as email
+      return validateEmail(value);
+    } else {
+      // Validate as username (basic checks — server does normalization)
+      if (trimmed.isEmpty) {
+        return 'Username is required';
+      }
+
+      if (trimmed.length < 3) {
+        return 'Username must be at least 3 characters';
+      }
+
+      if (trimmed.length > 30) {
+        return 'Username must be less than 30 characters';
+      }
+
+      return null;
+    }
+  }
+
   // Password validation
   static String? validatePassword(String? value) {
     if (value == null || value.isEmpty) {

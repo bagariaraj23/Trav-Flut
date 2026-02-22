@@ -4,12 +4,14 @@ import { AuthService } from "@/lib/auth";
 import { updateProfileSchema } from "@/lib/validation";
 import { ApiResponse, UserProfile, UserStats } from "@/types/api";
 import { handlePrismaUniqueError } from "@/lib/prismaErrors";
+import { PerformanceMonitor } from "@/lib/monitoring";
 
 // Get user profile
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const endTimer = PerformanceMonitor.getInstance().startTimer("get_user_by_id");
   try {
     const { id } = await params;
     const userId = id;
@@ -122,6 +124,8 @@ export async function GET(
       },
       { status: 500 }
     );
+  } finally {
+    endTimer();
   }
 }
 
@@ -130,6 +134,7 @@ export async function PUT(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const endTimer = PerformanceMonitor.getInstance().startTimer("update_user_by_id");
   try {
     const { id } = await params;
     const userId = id;
@@ -217,5 +222,7 @@ export async function PUT(
       },
       { status: 500 }
     );
+  } finally {
+    endTimer();
   }
 }
