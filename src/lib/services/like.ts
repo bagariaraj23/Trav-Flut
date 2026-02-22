@@ -9,7 +9,7 @@ import {
   USER_FULL_SELECT,
   ENGAGEMENT_CONSTANTS,
 } from "./engagement-utils";
-import { getEntityOwner, getPostFromComment, getTripIdFromEntry } from "../entity-owner";
+import { getEntityOwner, getPostFromComment, getTripIdFromEntry, getTripTitle } from "../entity-owner";
 import { createNotification } from "./notification";
 import { NotFoundError, DatabaseError } from "../errors";
 
@@ -98,6 +98,7 @@ export async function createLike(
         });
       } else if (entityType === "TRIP_THREAD_ENTRY") {
         const tripId = await getTripIdFromEntry(entityId);
+        const tripName = tripId ? await getTripTitle(tripId) : null;
         await createNotification({
           type: "LIKE",
           actorId: userId,
@@ -108,6 +109,7 @@ export async function createLike(
             postEntityType: entityType,
             postEntityId: entityId,
             ...(tripId && { tripId }),
+            ...(tripName && { tripName }),
             threadEntryId: entityId,
           },
         });

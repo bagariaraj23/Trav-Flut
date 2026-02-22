@@ -314,32 +314,44 @@ class _HomeFeedScreenState extends State<HomeFeedScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Header with user info
+          // Header with user info (avatar and name tappable → profile)
           Padding(
             padding: const EdgeInsets.all(16),
             child: Row(
               children: [
-                CircleAvatar(
-                  radius: 20,
-                  backgroundColor: Theme.of(context).colorScheme.primary,
-                  backgroundImage: post.trip?.user?.avatarUrl != null
-                      ? NetworkImage(post.trip!.user!.avatarUrl!)
-                      : null,
-                  child: post.trip?.user?.avatarUrl == null
-                      ? Icon(Icons.person, color: Colors.white, size: 20)
-                      : null,
+                GestureDetector(
+                  onTap: () {
+                    final userId = post.trip?.userId ?? post.trip?.user?.id;
+                    if (userId != null) context.push('/profile/$userId');
+                  },
+                  child: CircleAvatar(
+                    radius: 20,
+                    backgroundColor: Theme.of(context).colorScheme.primary,
+                    backgroundImage: post.trip?.user?.avatarUrl != null
+                        ? NetworkImage(post.trip!.user!.avatarUrl!)
+                        : null,
+                    child: post.trip?.user?.avatarUrl == null
+                        ? Icon(Icons.person, color: Colors.white, size: 20)
+                        : null,
+                  ),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        post.trip?.user?.name ??
-                            post.trip?.user?.username ??
-                            'Travel Story',
-                        style: Theme.of(context).textTheme.titleMedium
-                            ?.copyWith(fontWeight: FontWeight.w600),
+                      GestureDetector(
+                        onTap: () {
+                          final userId = post.trip?.userId ?? post.trip?.user?.id;
+                          if (userId != null) context.push('/profile/$userId');
+                        },
+                        child: Text(
+                          post.trip?.user?.name ??
+                              post.trip?.user?.username ??
+                              'Travel Story',
+                          style: Theme.of(context).textTheme.titleMedium
+                              ?.copyWith(fontWeight: FontWeight.w600),
+                        ),
                       ),
                       Text(
                         _formatDateTime(post.createdAt),

@@ -24,6 +24,9 @@ class UnifiedNotificationItem {
   /// For TAG: trip id to navigate to /trip/:tripId/thread
   final String? tripId;
 
+  /// Trip title for copy when notification is about a trip thread entry (e.g. "liked your entry in [tripName]")
+  final String? tripName;
+
   /// Optional thread entry target for in-thread highlight
   final String? threadEntryId;
 
@@ -42,6 +45,7 @@ class UnifiedNotificationItem {
     this.commentId,
     this.parentCommentId,
     this.tripId,
+    this.tripName,
     this.threadEntryId,
   });
 
@@ -63,6 +67,7 @@ class UnifiedNotificationItem {
       commentId: json['commentId'] as String?,
       parentCommentId: json['parentCommentId'] as String?,
       tripId: json['tripId'] as String?,
+      tripName: json['tripName'] as String?,
       threadEntryId: json['threadEntryId'] as String?,
     );
   }
@@ -84,6 +89,7 @@ class UnifiedNotificationItem {
     String? commentId,
     String? parentCommentId,
     String? tripId,
+    String? tripName,
     String? threadEntryId,
   }) {
     return UnifiedNotificationItem(
@@ -101,6 +107,7 @@ class UnifiedNotificationItem {
       commentId: commentId ?? this.commentId,
       parentCommentId: parentCommentId ?? this.parentCommentId,
       tripId: tripId ?? this.tripId,
+      tripName: tripName ?? this.tripName,
       threadEntryId: threadEntryId ?? this.threadEntryId,
     );
   }
@@ -122,6 +129,7 @@ class UnifiedNotificationItem {
       if (commentId != null) 'commentId': commentId,
       if (parentCommentId != null) 'parentCommentId': parentCommentId,
       if (tripId != null) 'tripId': tripId,
+      if (tripName != null) 'tripName': tripName,
       if (threadEntryId != null) 'threadEntryId': threadEntryId,
     };
   }
@@ -147,6 +155,11 @@ class UnifiedNotificationItem {
   String? get highlightThreadEntryId =>
       threadEntryId ??
       (navEntityType == 'TRIP_THREAD_ENTRY' ? navEntityId : null);
+
+  /// True when this notification is about a trip thread entry (like/comment on entry).
+  bool get isTripThreadEntry =>
+      entityType == 'TRIP_THREAD_ENTRY' ||
+      postEntityType == 'TRIP_THREAD_ENTRY';
 }
 
 class UnifiedNotificationActor {

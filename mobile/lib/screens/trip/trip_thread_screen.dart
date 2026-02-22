@@ -5,7 +5,9 @@ import 'package:tripthread/providers/trip_provider.dart';
 import 'package:tripthread/providers/auth_provider.dart';
 import 'package:tripthread/providers/engagement_provider.dart';
 import 'package:tripthread/models/trip.dart';
+import 'package:tripthread/models/user.dart';
 import 'package:tripthread/models/place.dart';
+import 'package:tripthread/widgets/mention_text.dart';
 import 'package:tripthread/widgets/sheets/map_picker_sheet.dart';
 import 'package:tripthread/widgets/sheets/place_search_sheet.dart';
 import 'package:tripthread/services/media_service.dart';
@@ -102,8 +104,12 @@ class _TripThreadScreenState extends State<TripThreadScreen>
         curve: Curves.easeOutBack,
       ),
     );
-    _loadTrip();
-    _loadTripParticipants();
+    // Defer to avoid notifyListeners() during build (TripProvider.clearCurrentTripEntries)
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _loadTrip();
+      _loadTripParticipants();
+    });
     _textController.addListener(_onTextChanged);
   }
 
@@ -1288,6 +1294,17 @@ class _TripThreadScreenState extends State<TripThreadScreen>
     );
   }
 
+  Map<String, String> _usernameToUserIdFromTagged(List<User>? tagged) {
+    if (tagged == null || tagged.isEmpty) return {};
+    final map = <String, String>{};
+    for (final u in tagged) {
+      if (u.username != null && u.username!.isNotEmpty) {
+        map[u.username!] = u.id;
+      }
+    }
+    return map;
+  }
+
   Widget _buildThreadEntry(TripThreadEntry entry) {
     final isCurrentUser =
         context.read<AuthProvider>().currentUser?.id == entry.authorId;
@@ -1316,36 +1333,39 @@ class _TripThreadScreenState extends State<TripThreadScreen>
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Avatar
-            Builder(
-              builder: (context) {
-                final currentUserId = context
-                    .read<AuthProvider>()
-                    .currentUser
-                    ?.id;
-                final avatarColor = _getAvatarColor(
-                  entry.authorId,
-                  currentUserId ?? '',
-                );
-                return CircleAvatar(
-                  radius: 18,
-                  backgroundColor: avatarColor,
-                  backgroundImage: entry.author.avatarUrl != null
-                      ? NetworkImage(entry.author.avatarUrl!)
-                      : null,
-                  child: entry.author.avatarUrl == null
-                      ? Text(
-                          entry.author.name?.substring(0, 1).toUpperCase() ??
-                              'U',
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 14,
-                          ),
-                        )
-                      : null,
-                );
-              },
+            // Avatar (tappable → profile)
+            GestureDetector(
+              onTap: () => context.push('/profile/${entry.authorId}'),
+              child: Builder(
+                builder: (context) {
+                  final currentUserId = context
+                      .read<AuthProvider>()
+                      .currentUser
+                      ?.id;
+                  final avatarColor = _getAvatarColor(
+                    entry.authorId,
+                    currentUserId ?? '',
+                  );
+                  return CircleAvatar(
+                    radius: 18,
+                    backgroundColor: avatarColor,
+                    backgroundImage: entry.author.avatarUrl != null
+                        ? NetworkImage(entry.author.avatarUrl!)
+                        : null,
+                    child: entry.author.avatarUrl == null
+                        ? Text(
+                            entry.author.name?.substring(0, 1).toUpperCase() ??
+                                'U',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 14,
+                            ),
+                          )
+                        : null,
+                  );
+                },
+              ),
             ),
 
             const SizedBox(width: 12),
@@ -1400,21 +1420,25 @@ class _TripThreadScreenState extends State<TripThreadScreen>
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Header
+                    // Header (author name tappable → profile)
                     Row(
                       children: [
                         Flexible(
-                          child: Text(
-                            entry.author.name ?? 'User',
-                            style: Theme.of(context).textTheme.titleSmall
-                                ?.copyWith(
-                                  fontWeight: FontWeight.w600,
-                                  color: isCurrentUser
-                                      ? Theme.of(context).colorScheme.primary
-                                      : Theme.of(context).colorScheme.onSurface,
-                                ),
-                            overflow: TextOverflow.ellipsis,
-                            maxLines: 1,
+                          child: GestureDetector(
+                            onTap: () =>
+                                context.push('/profile/${entry.authorId}'),
+                            child: Text(
+                              entry.author.name ?? 'User',
+                              style: Theme.of(context).textTheme.titleSmall
+                                  ?.copyWith(
+                                    fontWeight: FontWeight.w600,
+                                    color: isCurrentUser
+                                        ? Theme.of(context).colorScheme.primary
+                                        : Theme.of(context).colorScheme.onSurface,
+                                  ),
+                              overflow: TextOverflow.ellipsis,
+                              maxLines: 1,
+                            ),
                           ),
                         ),
                         const SizedBox(width: 8),
@@ -1449,16 +1473,15 @@ class _TripThreadScreenState extends State<TripThreadScreen>
 
                     const SizedBox(height: 8),
 
-                    // Content
+                    // Content (with tappable @mentions; no separate chips to avoid duplicate)
                     if (entry.contentText != null) ...[
-                      Text(
-                        entry.contentText!,
+                      MentionText(
+                        text: entry.contentText!,
                         style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                           color: Theme.of(context).colorScheme.onSurface,
                           height: 1.5,
                         ),
-                        overflow: TextOverflow.visible,
-                        maxLines: null,
+                        usernameToUserId: _usernameToUserIdFromTagged(entry.taggedUsers),
                       ),
                       const SizedBox(height: 8),
                     ],
@@ -1606,33 +1629,6 @@ class _TripThreadScreenState extends State<TripThreadScreen>
                     // Media display
                     if (entry.type == ThreadEntryType.media)
                       _buildMediaPreview(entry),
-
-                    // Tagged users
-                    if (entry.taggedUsers != null &&
-                        entry.taggedUsers!.isNotEmpty)
-                      Container(
-                        margin: const EdgeInsets.only(top: 8),
-                        child: Wrap(
-                          spacing: 4,
-                          runSpacing: 4,
-                          children: entry.taggedUsers!.map((user) {
-                            return Chip(
-                              label: Text(
-                                '@${user.username ?? user.name ?? 'User'}',
-                                style: const TextStyle(fontSize: 12),
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                              materialTapTargetSize:
-                                  MaterialTapTargetSize.shrinkWrap,
-                              visualDensity: VisualDensity.compact,
-                              backgroundColor: Theme.of(context)
-                                  .colorScheme
-                                  .secondaryContainer
-                                  .withValues(alpha: 0.3),
-                            );
-                          }).toList(),
-                        ),
-                      ),
                   ],
                 ),
               ),

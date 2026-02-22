@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
+import 'package:go_router/go_router.dart';
 import 'package:tripthread/models/comment.dart';
 import 'package:tripthread/providers/comment_provider.dart';
 import 'package:tripthread/providers/auth_provider.dart';
 import 'package:tripthread/providers/engagement_provider.dart';
+import 'package:tripthread/widgets/mention_text.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 
 class CommentListItem extends StatefulWidget {
@@ -71,27 +73,32 @@ class _CommentListItemState extends State<CommentListItem> {
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            CircleAvatar(
-              radius: 18,
-              backgroundImage:
-                  widget.comment.user?.avatarUrl != null &&
-                      widget.comment.user!.avatarUrl!.isNotEmpty
-                  ? CachedNetworkImageProvider(widget.comment.user!.avatarUrl!)
-                  : null,
-              child:
-                  (widget.comment.user?.avatarUrl == null ||
-                      widget.comment.user!.avatarUrl!.isEmpty)
-                  ? Text(
-                      (widget.comment.user?.name?.isNotEmpty == true
-                              ? widget.comment.user!.name!.substring(0, 1)
-                              : widget.comment.user?.username?.isNotEmpty ==
-                                    true
-                              ? widget.comment.user!.username!.substring(0, 1)
-                              : 'U')
-                          .toUpperCase(),
-                      style: const TextStyle(fontSize: 14),
-                    )
-                  : null,
+            GestureDetector(
+              onTap: () {
+                context.push('/profile/${widget.comment.userId}');
+              },
+              child: CircleAvatar(
+                radius: 18,
+                backgroundImage:
+                    widget.comment.user?.avatarUrl != null &&
+                        widget.comment.user!.avatarUrl!.isNotEmpty
+                    ? CachedNetworkImageProvider(widget.comment.user!.avatarUrl!)
+                    : null,
+                child:
+                    (widget.comment.user?.avatarUrl == null ||
+                        widget.comment.user!.avatarUrl!.isEmpty)
+                    ? Text(
+                        (widget.comment.user?.name?.isNotEmpty == true
+                                ? widget.comment.user!.name!.substring(0, 1)
+                                : widget.comment.user?.username?.isNotEmpty ==
+                                      true
+                                ? widget.comment.user!.username!.substring(0, 1)
+                                : 'U')
+                            .toUpperCase(),
+                        style: const TextStyle(fontSize: 14),
+                      )
+                    : null,
+              ),
             ),
             const SizedBox(width: 12),
             Expanded(
@@ -100,12 +107,17 @@ class _CommentListItemState extends State<CommentListItem> {
                 children: [
                   Row(
                     children: [
-                      Text(
-                        widget.comment.user?.name ??
-                            widget.comment.user?.username ??
-                            'Unknown',
-                        style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                          fontWeight: FontWeight.w600,
+                      GestureDetector(
+                        onTap: () {
+                          context.push('/profile/${widget.comment.userId}');
+                        },
+                        child: Text(
+                          widget.comment.user?.name ??
+                              widget.comment.user?.username ??
+                              'Unknown',
+                          style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                            fontWeight: FontWeight.w600,
+                          ),
                         ),
                       ),
                       const SizedBox(width: 8),
@@ -122,8 +134,8 @@ class _CommentListItemState extends State<CommentListItem> {
                     onTap: shouldTruncate
                         ? () => setState(() => _showFullText = !_showFullText)
                         : null,
-                    child: Text(
-                      _showFullText || !shouldTruncate
+                    child: MentionText(
+                      text: _showFullText || !shouldTruncate
                           ? text
                           : '${text.substring(0, 150)}...',
                       style: Theme.of(context).textTheme.bodyMedium,

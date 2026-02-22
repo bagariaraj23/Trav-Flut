@@ -265,6 +265,7 @@ export async function getMergedNotifications(
           parentCommentId: String(meta.parentCommentId),
         }),
         ...(meta?.tripId != null && { tripId: String(meta.tripId) }),
+        ...(meta?.tripName != null && { tripName: String(meta.tripName) }),
         ...(meta?.threadEntryId != null && {
           threadEntryId: String(meta.threadEntryId),
         }),

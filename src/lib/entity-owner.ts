@@ -60,3 +60,16 @@ export async function getTripIdFromEntry(
   })
   return entry?.tripId ?? null
 }
+
+/**
+ * Resolves trip title for a trip id. Used for notification copy (e.g. "liked your entry in [title]").
+ */
+export async function getTripTitle(
+  tripId: string
+): Promise<string | null> {
+  const trip = await prisma.trip.findUnique({
+    where: { id: tripId },
+    select: { title: true }
+  })
+  return trip?.title ?? null
+}

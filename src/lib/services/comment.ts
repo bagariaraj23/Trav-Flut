@@ -11,7 +11,7 @@ import {
   USER_MINIMAL_SELECT,
   ENGAGEMENT_CONSTANTS,
 } from "./engagement-utils";
-import { getEntityOwner, getPostFromComment, getTripIdFromEntry } from "../entity-owner";
+import { getEntityOwner, getPostFromComment, getTripIdFromEntry, getTripTitle } from "../entity-owner";
 import { canViewEntity } from "../auth/permissions";
 import { createNotification } from "./notification";
 
@@ -131,6 +131,8 @@ export async function createComment(
       finalEntityType === "TRIP_THREAD_ENTRY"
         ? await getTripIdFromEntry(finalEntityId)
         : null;
+    const tripName =
+      threadTripId != null ? await getTripTitle(threadTripId) : null;
 
     // 1. Comment / Reply notification
     try {
@@ -161,6 +163,7 @@ export async function createComment(
             commentId: comment.id,
             ...(parentCommentId && { parentCommentId }),
             ...(threadTripId && { tripId: threadTripId }),
+            ...(tripName && { tripName }),
             ...(finalEntityType === "TRIP_THREAD_ENTRY" && {
               threadEntryId: finalEntityId,
             }),

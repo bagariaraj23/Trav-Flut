@@ -6,6 +6,7 @@ import 'package:tripthread/providers/engagement_provider.dart';
 import 'package:tripthread/services/api_service.dart';
 import 'package:tripthread/utils/cloudinary_utils.dart';
 import 'package:tripthread/widgets/engagement/engagement_action_bar.dart';
+import 'package:tripthread/widgets/mention_text.dart';
 import 'package:tripthread/widgets/sheets/comment_bottom_sheet.dart';
 import 'package:tripthread/widgets/sheets/share_bottom_sheet.dart';
 
@@ -281,14 +282,14 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  post.summaryText,
+                MentionText(
+                  text: post.summaryText,
                   style: Theme.of(context).textTheme.bodyLarge,
                 ),
                 if (post.caption != null) ...[
                   const SizedBox(height: 8),
-                  Text(
-                    post.caption!,
+                  MentionText(
+                    text: post.caption!,
                     style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                       color: Theme.of(context)
                           .colorScheme

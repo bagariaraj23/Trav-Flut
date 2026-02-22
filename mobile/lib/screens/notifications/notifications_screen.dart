@@ -764,9 +764,18 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
           : '$firstName +$others liked your comment';
       subtitle = 'Likes';
     } else if (first.isLike) {
-      label = others == 0
-          ? '$firstName liked your post'
-          : '$firstName +$others liked your post';
+      if (first.isTripThreadEntry) {
+        final tripName = first.tripName?.isNotEmpty == true
+            ? first.tripName!
+            : 'this trip';
+        label = others == 0
+            ? '$firstName liked your entry in $tripName'
+            : '$firstName +$others liked your entry in $tripName';
+      } else {
+        label = others == 0
+            ? '$firstName liked your post'
+            : '$firstName +$others liked your post';
+      }
       subtitle = 'Likes';
     } else if (first.isCommentReply) {
       label = others == 0
@@ -779,9 +788,18 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
           : '$firstName +$others tagged you in a post';
       subtitle = 'Tags';
     } else {
-      label = others == 0
-          ? '$firstName commented on your post'
-          : '$firstName +$others commented on your post';
+      if (first.isTripThreadEntry) {
+        final tripName = first.tripName?.isNotEmpty == true
+            ? first.tripName!
+            : 'this trip';
+        label = others == 0
+            ? '$firstName commented on your entry in $tripName'
+            : '$firstName +$others commented on your entry in $tripName';
+      } else {
+        label = others == 0
+            ? '$firstName commented on your post'
+            : '$firstName +$others commented on your post';
+      }
       subtitle = 'Comments';
     }
 
@@ -959,7 +977,13 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
           : null;
       icon = Icons.favorite;
     } else if (n.isLike) {
-      title = '$actorName liked your post';
+      if (n.isTripThreadEntry) {
+        final tripName =
+            n.tripName?.isNotEmpty == true ? n.tripName! : 'this trip';
+        title = '$actorName liked your entry in $tripName';
+      } else {
+        title = '$actorName liked your post';
+      }
       subtitle = null;
       icon = Icons.favorite;
     } else if (n.isCommentReply) {
@@ -975,7 +999,13 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
           : null;
       icon = Icons.tag;
     } else {
-      title = '$actorName commented on your post';
+      if (n.isTripThreadEntry) {
+        final tripName =
+            n.tripName?.isNotEmpty == true ? n.tripName! : 'this trip';
+        title = '$actorName commented on your entry in $tripName';
+      } else {
+        title = '$actorName commented on your post';
+      }
       subtitle = n.contentPreview != null && n.contentPreview!.isNotEmpty
           ? '"${n.contentPreview!.length > 60 ? '${n.contentPreview!.substring(0, 60)}...' : n.contentPreview}"'
           : null;
