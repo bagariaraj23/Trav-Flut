@@ -4,8 +4,10 @@ import 'package:go_router/go_router.dart';
 import 'package:form_field_validator/form_field_validator.dart';
 import 'package:tripthread/providers/auth_provider.dart';
 import 'package:tripthread/services/google_sign_in_service.dart';
+import 'package:tripthread/utils/validators.dart';
 import 'package:tripthread/widgets/custom_text_field.dart';
 import 'package:tripthread/widgets/loading_button.dart';
+import 'package:tripthread/widgets/tripthread_logo.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -31,8 +33,15 @@ class _LoginScreenState extends State<LoginScreen> {
     if (!_formKey.currentState!.validate()) return;
 
     final authProvider = context.read<AuthProvider>();
+    final input = _emailController.text.trim();
+    // Only normalize email on client side.
+    // Username normalization is handled server-side to keep implementations in sync.
+    final emailOrUsername = input.contains('@')
+        ? Validators.normalizeEmail(input)
+        : input;
+
     final success = await authProvider.login(
-      email: _emailController.text.trim(),
+      email: emailOrUsername,
       password: _passwordController.text,
     );
     debugPrint(
@@ -62,19 +71,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 // Logo and Title
                 Column(
                   children: [
-                    Container(
-                      width: 64,
-                      height: 64,
-                      decoration: BoxDecoration(
-                        color: Theme.of(context).colorScheme.primary,
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                      child: const Icon(
-                        Icons.travel_explore,
-                        size: 32,
-                        color: Colors.white,
-                      ),
-                    ),
+                    const TripThreadLogo(size: 64),
                     const SizedBox(height: 24),
                     Text(
                       'Welcome back',
@@ -92,16 +89,13 @@ class _LoginScreenState extends State<LoginScreen> {
 
                 const SizedBox(height: 48),
 
-                // Email Field
+                // Email or Username Field
                 CustomTextField(
                   controller: _emailController,
-                  label: 'Email',
-                  keyboardType: TextInputType.emailAddress,
-                  prefixIcon: Icons.email_outlined,
-                  validator: MultiValidator([
-                    RequiredValidator(errorText: 'Email is required'),
-                    EmailValidator(errorText: 'Please enter a valid email'),
-                  ]).call,
+                  label: 'Email or Username',
+                  keyboardType: TextInputType.text,
+                  prefixIcon: Icons.person_outlined,
+                  validator: Validators.validateEmailOrUsername,
                   onChanged: (_) {
                     // Clear error when user starts typing after an error
                     final authProvider = context.read<AuthProvider>();

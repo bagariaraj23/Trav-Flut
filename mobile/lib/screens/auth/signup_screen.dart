@@ -7,6 +7,7 @@ import 'package:tripthread/services/google_sign_in_service.dart';
 import 'package:tripthread/utils/validators.dart';
 import 'package:tripthread/widgets/custom_text_field.dart';
 import 'package:tripthread/widgets/loading_button.dart';
+import 'package:tripthread/widgets/tripthread_logo.dart';
 import 'package:flutter/services.dart';
 
 class SignupScreen extends StatefulWidget {
@@ -78,19 +79,7 @@ class _SignupScreenState extends State<SignupScreen> {
                   // Logo and Title
                   Column(
                     children: [
-                      Container(
-                        width: 64,
-                        height: 64,
-                        decoration: BoxDecoration(
-                          color: Theme.of(context).colorScheme.primary,
-                          borderRadius: BorderRadius.circular(16),
-                        ),
-                        child: const Icon(
-                          Icons.travel_explore,
-                          size: 32,
-                          color: Colors.white,
-                        ),
-                      ),
+                      const TripThreadLogo(size: 64),
                       const SizedBox(height: 24),
                       Text(
                         'Create account',

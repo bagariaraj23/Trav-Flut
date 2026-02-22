@@ -7,6 +7,7 @@ import type { ApiResponse } from "@/types/api";
 import { Place } from "@prisma/client";
 import { getAuthSession } from "@/lib/auth";
 import { withRateLimit, withLogging, handleApiError } from "@/lib/middleware";
+import { validateSqlInput } from "@/lib/security";
 
 export async function GET(request: NextRequest) {
   const loggedHandler = withLogging(async (req) => {
@@ -21,6 +22,17 @@ export async function GET(request: NextRequest) {
         const lat = searchParams.get("lat");
         const lng = searchParams.get("lng");
         const limit = searchParams.get("limit");
+
+        // Validate SQL injection patterns in search query
+        if (q && !validateSqlInput(q)) {
+          return NextResponse.json<ApiResponse>(
+            {
+              success: false,
+              error: "Invalid search query",
+            },
+            { status: 400 }
+          );
+        }
 
         // Early return for empty queries
         if (q.length < 2) {

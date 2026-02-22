@@ -443,22 +443,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ),
           ],
 
-          // Bio (full-width, justified; height adapts to length)
+          // Bio (centered; height adapts to length)
           if (hasBio) ...[
             SizedBox(height: hasUsername ? 8 : 6),
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(
-                  child: Text(
-                    bioText,
-                    style: subtitleStyle.copyWith(height: 1.4),
-                    textAlign: TextAlign.justify,
-                    maxLines: bioMaxLines,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-              ],
+            Center(
+              child: Text(
+                bioText,
+                style: subtitleStyle.copyWith(height: 1.4),
+                textAlign: TextAlign.center,
+                maxLines: bioMaxLines,
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
           ],
 

@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>TripThread Logo Suite Preview</title>
+  <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@700;800&display=swap" rel="stylesheet">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: 'Nunito', sans-serif; background: #F8FAFC; }
+    .section { padding: 48px; display: flex; flex-direction: column; align-items: center; gap: 24px; }
+    .section h2 { font-size: 14px; text-transform: uppercase; letter-spacing: 2px; color: #94A3B8; }
+    .light-bg { background: #FFFFFF; }
+    .dark-bg { background: #0F172A; }
+    .dark-bg h2 { color: #64748B; }
+    .grid { display: flex; gap: 48px; align-items: center; flex-wrap: wrap; justify-content: center; }
+    .card { padding: 32px; border-radius: 16px; display: flex; align-items: center; justify-content: center; }
+    .card-light { background: #F1F5F9; }
+    .card-dark { background: #1E293B; border-radius: 16px; }
+    .label { font-size: 11px; color: #94A3B8; text-transform: uppercase; letter-spacing: 1.5px; margin-top: 8px; text-align: center; }
+  </style>
+</head>
+<body>
+
+  <!-- Light Mode Full Logo -->
+  <div class="section light-bg">
+    <h2>Full Logo — Light Mode</h2>
+    <div class="card card-light">
+      <img src="tripthread-logo.svg" alt="TripThread Logo Light" height="48">
+    </div>
+  </div>
+
+  <!-- Dark Mode Full Logo -->
+  <div class="section dark-bg">
+    <h2>Full Logo — Dark Mode</h2>
+    <div class="card card-dark">
+      <img src="tripthread-logo-dark.svg" alt="TripThread Logo Dark" height="48">
+    </div>
+  </div>
+
+  <!-- App Icons -->
+  <div class="section light-bg">
+    <h2>App Icon Variants</h2>
+    <div class="grid">
+      <div>
+        <div class="card card-light">
+          <img src="tripthread-icon.svg" alt="App Icon" width="80" height="80">
+        </div>
+        <p class="label">Color App Icon</p>
+      </div>
+      <div>
+        <div class="card card-light">
+          <img src="tripthread-icon.svg" alt="App Icon Small" width="48" height="48">
+        </div>
+        <p class="label">Small (48px)</p>
+      </div>
+      <div>
+        <div class="card card-light">
+          <img src="tripthread-icon-mono.svg" alt="Mono Icon" width="48" height="48">
+        </div>
+        <p class="label">Monochrome</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- App Icon on Dark -->
+  <div class="section dark-bg">
+    <h2>App Icon on Dark</h2>
+    <div class="grid">
+      <div>
+        <div class="card card-dark">
+          <img src="tripthread-icon.svg" alt="App Icon Dark" width="80" height="80">
+        </div>
+        <p class="label">Color App Icon</p>
+      </div>
+    </div>
+  </div>
+
+</body>
+</html>

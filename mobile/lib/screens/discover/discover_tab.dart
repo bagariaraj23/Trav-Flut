@@ -189,7 +189,11 @@ class _DiscoverTabState extends State<DiscoverTab> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Discover'), elevation: 0),
+      appBar: AppBar(
+        centerTitle: false,
+        title: const Text('Discover'),
+        elevation: 0,
+      ),
       body: SafeArea(
         child: Column(
           children: [

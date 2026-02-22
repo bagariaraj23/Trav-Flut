@@ -66,7 +66,7 @@ export async function POST(request: NextRequest) {
 }
 
 export async function DELETE(request: NextRequest) {
-  return withLogging(async (req) => {
+  const handler = withLogging(async (req) => {
     return withEngagementRateLimit(req, async (rateLimitedReq) => {
       return withAuth(rateLimitedReq, async (authenticatedReq) => {
         try {
@@ -143,5 +143,6 @@ export async function DELETE(request: NextRequest) {
       });
     }, 'like');
   });
+  return handler(request);
 }
 

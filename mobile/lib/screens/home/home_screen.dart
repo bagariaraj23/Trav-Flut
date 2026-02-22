@@ -12,6 +12,8 @@ import 'package:tripthread/utils/cloudinary_utils.dart';
 import 'package:tripthread/widgets/engagement/engagement_action_bar.dart';
 import 'package:tripthread/widgets/sheets/comment_bottom_sheet.dart';
 import 'package:tripthread/widgets/sheets/share_bottom_sheet.dart';
+import 'package:tripthread/widgets/floating_trip_nav_button.dart';
+import 'package:tripthread/widgets/logout_dialog.dart';
 
 class HomeScreen extends StatefulWidget {
   final int initialTab;
@@ -33,13 +35,53 @@ class _HomeScreenState extends State<HomeScreen> {
     );
     _currentIndex = widget.initialTab;
     // Initialize trip provider and load pending follow requests for notifications
-    WidgetsBinding.instance.addPostFrameCallback((_) {
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
       debugPrint('[HomeScreen] Initializing providers');
-      context.read<TripProvider>().initialize();
+      final tripProvider = context.read<TripProvider>();
+      await tripProvider.initialize();
       debugPrint('[HomeScreen] TripProvider initialized');
-      // Load pending follow requests to update notification badge
+
+      // Check if widget is still mounted before using context
+      if (!mounted) return;
+
+      // Redirect to thread only once on initial app load when there's an ongoing trip.
+      // After that, user can freely navigate back to home/trips without redirect loop.
+      final router = GoRouter.of(context);
+      final routeExtra = GoRouterState.of(context).extra;
+      final isExplicitHome =
+          routeExtra is Map && routeExtra['explicitHome'] == true;
+      final hasCompletedInitial =
+          tripProvider.hasCompletedInitialOngoingTripRedirect;
+
+      if (!isExplicitHome &&
+          !hasCompletedInitial &&
+          tripProvider.hasOngoingTrip &&
+          tripProvider.currentTrip != null) {
+        final currentLocation = router.routerDelegate.currentConfiguration.uri
+            .toString();
+
+        // Only redirect if we're on /home (not /trips or other tabs)
+        if (currentLocation == '/home' || currentLocation == '/') {
+          final tripId = tripProvider.currentTrip!.id;
+          debugPrint(
+            '[HomeScreen] Initial load with ongoing trip, redirecting to /trip/$tripId/thread',
+          );
+          tripProvider.markInitialOngoingTripRedirectComplete();
+          router.go('/trip/$tripId/thread');
+          return;
+        }
+      }
+
+      // Load pending follow requests and unread notification count to update notification badge
+      if (!mounted) return;
       context.read<UserProvider>().loadPendingFollowRequests();
-      debugPrint('[HomeScreen] Loading pending follow requests for notifications');
+      debugPrint(
+        '[HomeScreen] Loading pending follow requests for notifications',
+      );
+      final userProvider = context.read<UserProvider>();
+      userProvider.loadPendingFollowRequests();
+      userProvider.loadUnreadNotificationCount();
+      debugPrint('[HomeScreen] Loading notifications for badge');
     });
   }
 
@@ -53,7 +95,13 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: _screens[_currentIndex],
+      body: Stack(
+        children: [
+          _screens[_currentIndex],
+          // Floating navigation button for ongoing trips
+          const FloatingTripNavButton(),
+        ],
+      ),
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _currentIndex,
         onTap: (index) {
@@ -152,6 +200,7 @@ class _HomeFeedScreenState extends State<HomeFeedScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
+        centerTitle: false,
         title: const Text('TripThread'),
         actions: [
           IconButton(
@@ -165,26 +214,15 @@ class _HomeFeedScreenState extends State<HomeFeedScreen> {
             builder: (context, userProvider, tripProvider, child) {
               final totalPending =
                   userProvider.pendingFollowRequests.length +
-                  tripProvider.pendingTripInvitations.length;
+                  tripProvider.pendingTripInvitations.length +
+                  userProvider.unreadNotificationCount;
               return Stack(
                 alignment: Alignment.center,
                 children: [
                   IconButton(
                     icon: const Icon(Icons.notifications_outlined),
                     onPressed: () {
-                      // Navigate to a consolidated notifications screen or a menu
-                      if (userProvider.pendingFollowRequests.isNotEmpty) {
-                        context.push('/follow-requests');
-                      } else if (tripProvider
-                          .pendingTripInvitations
-                          .isNotEmpty) {
-                        context.push('/trip-invites');
-                      } else {
-                        // Show a message or navigate to an empty notifications screen
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('No new notifications')),
-                        );
-                      }
+                      context.push('/notifications');
                     },
                   ),
                   if (totalPending > 0)
@@ -324,32 +362,45 @@ class _HomeFeedScreenState extends State<HomeFeedScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Header with user info
+          // Header with user info (avatar and name tappable → profile)
           Padding(
             padding: const EdgeInsets.all(16),
             child: Row(
               children: [
-                CircleAvatar(
-                  radius: 20,
-                  backgroundColor: Theme.of(context).colorScheme.primary,
-                  backgroundImage: post.trip?.user?.avatarUrl != null
-                      ? NetworkImage(post.trip!.user!.avatarUrl!)
-                      : null,
-                  child: post.trip?.user?.avatarUrl == null
-                      ? Icon(Icons.person, color: Colors.white, size: 20)
-                      : null,
+                GestureDetector(
+                  onTap: () {
+                    final userId = post.trip?.userId ?? post.trip?.user?.id;
+                    if (userId != null) context.push('/profile/$userId');
+                  },
+                  child: CircleAvatar(
+                    radius: 20,
+                    backgroundColor: Theme.of(context).colorScheme.primary,
+                    backgroundImage: post.trip?.user?.avatarUrl != null
+                        ? NetworkImage(post.trip!.user!.avatarUrl!)
+                        : null,
+                    child: post.trip?.user?.avatarUrl == null
+                        ? Icon(Icons.person, color: Colors.white, size: 20)
+                        : null,
+                  ),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        post.trip?.user?.name ??
-                            post.trip?.user?.username ??
-                            'Travel Story',
-                        style: Theme.of(context).textTheme.titleMedium
-                            ?.copyWith(fontWeight: FontWeight.w600),
+                      GestureDetector(
+                        onTap: () {
+                          final userId =
+                              post.trip?.userId ?? post.trip?.user?.id;
+                          if (userId != null) context.push('/profile/$userId');
+                        },
+                        child: Text(
+                          post.trip?.user?.name ??
+                              post.trip?.user?.username ??
+                              'Travel Story',
+                          style: Theme.of(context).textTheme.titleMedium
+                              ?.copyWith(fontWeight: FontWeight.w600),
+                        ),
                       ),
                       Text(
                         _formatDateTime(post.createdAt),
@@ -381,7 +432,9 @@ class _HomeFeedScreenState extends State<HomeFeedScreen> {
                     margin: const EdgeInsets.symmetric(horizontal: 4),
                     decoration: BoxDecoration(
                       color: Theme.of(context).colorScheme.onSurface.withValues(
-                        alpha: Theme.of(context).brightness == Brightness.dark ? 0.06 : 0.03,
+                        alpha: Theme.of(context).brightness == Brightness.dark
+                            ? 0.06
+                            : 0.03,
                       ),
                       borderRadius: BorderRadius.circular(12),
                     ),
@@ -395,9 +448,14 @@ class _HomeFeedScreenState extends State<HomeFeedScreen> {
                         fit: BoxFit.cover,
                         errorBuilder: (context, error, stackTrace) {
                           return Container(
-                            color: Theme.of(context).colorScheme.onSurface.withValues(
-                        alpha: Theme.of(context).brightness == Brightness.dark ? 0.06 : 0.03,
-                      ),
+                            color: Theme.of(context).colorScheme.onSurface
+                                .withValues(
+                                  alpha:
+                                      Theme.of(context).brightness ==
+                                          Brightness.dark
+                                      ? 0.06
+                                      : 0.03,
+                                ),
                             child: const Center(
                               child: Icon(
                                 Icons.image_not_supported,
@@ -431,10 +489,10 @@ class _HomeFeedScreenState extends State<HomeFeedScreen> {
                   const SizedBox(height: 8),
                   Text(
                     post.caption!,
-                    style: Theme.of(
-                      context,
-                    ).textTheme.bodyMedium?.copyWith(
-                      color: Theme.of(context).colorScheme.onSurfaceVariant.withValues(alpha: 0.9),
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: Theme.of(
+                        context,
+                      ).colorScheme.onSurfaceVariant.withValues(alpha: 0.9),
                     ),
                   ),
                 ],
@@ -477,12 +535,13 @@ class _HomeFeedScreenState extends State<HomeFeedScreen> {
                           },
                           onLikeChanged: () {
                             // Update the post in FeedProvider with new like count
-                            final engagementProvider =
-                                context.read<EngagementProvider>();
-                            final newLikeCount =
-                                engagementProvider.getLikeCount(post.id);
-                            final newHasLiked =
-                                engagementProvider.isLiked(post.id);
+                            final engagementProvider = context
+                                .read<EngagementProvider>();
+                            final newLikeCount = engagementProvider
+                                .getLikeCount(post.id);
+                            final newHasLiked = engagementProvider.isLiked(
+                              post.id,
+                            );
 
                             // Update the post in the feed
                             final feedProvider = context.read<FeedProvider>();
@@ -490,8 +549,9 @@ class _HomeFeedScreenState extends State<HomeFeedScreen> {
                               likeCount: newLikeCount,
                               hasLiked: newHasLiked,
                             );
-                            final index = feedProvider.homeFeedPosts
-                                .indexWhere((p) => p.id == post.id);
+                            final index = feedProvider.homeFeedPosts.indexWhere(
+                              (p) => p.id == post.id,
+                            );
                             if (index >= 0) {
                               feedProvider.updatePost(index, updatedPost);
                             }
@@ -819,6 +879,7 @@ class _TripsTabState extends State<TripsTab> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
+        centerTitle: false,
         title: const Text('My Trips'),
         actions: [
           Consumer<TripProvider>(
@@ -882,9 +943,7 @@ class _TripsTabState extends State<TripsTab> {
               const SizedBox(height: 16),
               Text(
                 'No Trips Yet',
-                style: Theme.of(
-                  context,
-                ).textTheme.headlineSmall?.copyWith(
+                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                   color: Theme.of(context).colorScheme.onSurfaceVariant,
                 ),
               ),
@@ -892,10 +951,10 @@ class _TripsTabState extends State<TripsTab> {
               Text(
                 'Start documenting your travel adventures',
                 textAlign: TextAlign.center,
-                style: Theme.of(
-                  context,
-                ).textTheme.bodyMedium?.copyWith(
-                  color: Theme.of(context).colorScheme.onSurfaceVariant.withValues(alpha: 0.6),
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  color: Theme.of(
+                    context,
+                  ).colorScheme.onSurfaceVariant.withValues(alpha: 0.6),
                 ),
               ),
               const SizedBox(height: 24),
@@ -1066,7 +1125,9 @@ class _TripsTabState extends State<TripsTab> {
                   top: Radius.circular(12),
                 ),
                 color: Theme.of(context).colorScheme.onSurface.withValues(
-                  alpha: Theme.of(context).brightness == Brightness.dark ? 0.06 : 0.03,
+                  alpha: Theme.of(context).brightness == Brightness.dark
+                      ? 0.06
+                      : 0.03,
                 ),
               ),
               child: () {
@@ -1124,7 +1185,9 @@ class _TripsTabState extends State<TripsTab> {
                           trip.destinations.join(', '),
                           style: Theme.of(context).textTheme.bodyMedium
                               ?.copyWith(
-                                color: Theme.of(context).colorScheme.onSurfaceVariant,
+                                color: Theme.of(
+                                  context,
+                                ).colorScheme.onSurfaceVariant,
                               ),
                           overflow: TextOverflow.ellipsis,
                           maxLines: 1,
@@ -1263,10 +1326,7 @@ class _TripsTabState extends State<TripsTab> {
           const SizedBox(width: 4),
           Text(
             text,
-            style: TextStyle(
-              color: colorScheme.onSurfaceVariant,
-              fontSize: 12,
-            ),
+            style: TextStyle(color: colorScheme.onSurfaceVariant, fontSize: 12),
           ),
         ],
       ),
@@ -1306,6 +1366,7 @@ class ProfileTab extends StatelessWidget {
 
         return Scaffold(
           appBar: AppBar(
+            centerTitle: false,
             title: const Text('Profile'),
             actions: [
               IconButton(
@@ -1326,12 +1387,7 @@ class ProfileTab extends StatelessWidget {
               ),
               IconButton(
                 icon: const Icon(Icons.logout),
-                onPressed: () async {
-                  await authProvider.logout();
-                  if (context.mounted) {
-                    context.go('/login');
-                  }
-                },
+                onPressed: () => showLogoutDialog(context),
               ),
             ],
           ),
@@ -1589,7 +1645,9 @@ class ProfileTab extends StatelessWidget {
                                     builder: (context) => Text(
                                       'Start documenting your adventures!',
                                       style: TextStyle(
-                                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                                        color: Theme.of(
+                                          context,
+                                        ).colorScheme.onSurfaceVariant,
                                       ),
                                     ),
                                   ),

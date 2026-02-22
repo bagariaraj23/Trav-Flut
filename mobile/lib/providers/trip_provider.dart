@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:tripthread/models/trip.dart';
 import 'package:tripthread/models/trip_join_request.dart';
 import 'package:tripthread/services/trip_service.dart';
+import 'package:tripthread/widgets/floating_trip_nav_button.dart';
 
 class TripProvider extends ChangeNotifier {
   final TripService _tripService;
@@ -18,6 +19,7 @@ class TripProvider extends ChangeNotifier {
   bool _isTripInvitesLoading = false;
   String? _error;
   String? _tripInvitesError;
+  bool _hasCompletedInitialOngoingTripRedirect = false;
 
   // Getters
   Trip? get currentTrip => _currentTrip;
@@ -583,6 +585,14 @@ class TripProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  void markInitialOngoingTripRedirectComplete() {
+    _hasCompletedInitialOngoingTripRedirect = true;
+    notifyListeners();
+  }
+
+  bool get hasCompletedInitialOngoingTripRedirect =>
+      _hasCompletedInitialOngoingTripRedirect;
+
   // Clear current trip (for logout)
   void clearData() {
     _currentTrip = null;
@@ -592,6 +602,9 @@ class TripProvider extends ChangeNotifier {
     _sentTripInvitations = [];
     _error = null;
     _tripInvitesError = null;
+    _hasCompletedInitialOngoingTripRedirect = false;
+    // Reset floating bubble position so it doesn't persist across user sessions
+    FloatingTripNavButton.resetPosition();
     notifyListeners();
   }
 }

@@ -84,7 +84,7 @@ class MockAuthProvider extends ChangeNotifier implements AuthProvider {
       false;
 
   @override
-  Future<void> logout() async {}
+  Future<void> logout({bool logoutAll = false}) async {}
 
   @override
   Future<bool> deleteAccount() async => false;

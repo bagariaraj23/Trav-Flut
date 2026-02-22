@@ -9,6 +9,9 @@ import {
   USER_FULL_SELECT,
   ENGAGEMENT_CONSTANTS,
 } from "./engagement-utils";
+import { getEntityOwner, getPostFromComment, getTripIdFromEntry, getTripTitle } from "../entity-owner";
+import { createNotification } from "./notification";
+import { NotFoundError, DatabaseError } from "../errors";
 
 export async function createLike(
   userId: string,
@@ -17,27 +20,123 @@ export async function createLike(
 ) {
   const exists = await validateEntityExists(entityType, entityId);
   if (!exists) {
-    throw new Error("Entity not found");
+    throw new NotFoundError("Entity not found");
   }
 
-  return await prisma.$transaction(async (tx) => {
-    const existing = await tx.like.findFirst({
-      where: { userId, entityType, entityId },
+  let isNewLike = true;
+  let like: Awaited<ReturnType<typeof prisma.like.create>>;
+  try {
+    like = await prisma.$transaction(async (tx) => {
+      const newLike = await tx.like.create({
+        data: { userId, entityType, entityId },
+      });
+      await incrementEntityCount(entityType, entityId, "likeCount", tx);
+      await invalidateEngagementCache("like", entityType, entityId);
+      return newLike;
     });
-    if (existing) {
-      return existing;
+  } catch (error: any) {
+    if (error?.code === "P2002") {
+      // Idempotent like behavior under race: another request created the same like.
+      const existingLike = await prisma.like.findFirst({
+        where: { userId, entityType, entityId },
+      });
+      if (existingLike) {
+        isNewLike = false;
+        like = existingLike;
+      } else {
+        throw new DatabaseError("Failed to create like");
+      }
+    } else {
+      throw error;
     }
+  }
 
-    const like = await tx.like.create({
-      data: { userId, entityType, entityId },
-    });
-
-    await incrementEntityCount(entityType, entityId, "likeCount", tx);
-
-    await invalidateEngagementCache("like", entityType, entityId);
-
+  if (!isNewLike) {
     return like;
-  });
+  }
+
+  // Fire-and-forget: create notification without blocking response
+  void (async () => {
+    try {
+      const recipientId = await getEntityOwner(entityType, entityId);
+      if (!recipientId) return;
+
+      if (entityType === "COMMENT") {
+        const [post, comment] = await Promise.all([
+          getPostFromComment(entityId),
+          prisma.comment.findUnique({
+            where: { id: entityId },
+            select: { contentText: true },
+          }),
+        ]);
+        if (!post) return;
+        const contentPreview =
+          comment?.contentText != null
+            ? comment.contentText.length > 60
+              ? comment.contentText.slice(0, 60) + "..."
+              : comment.contentText
+            : undefined;
+        const tripId =
+          post.entityType === "TRIP_THREAD_ENTRY"
+            ? await getTripIdFromEntry(post.entityId)
+            : null;
+        await createNotification({
+          type: "COMMENT_LIKE",
+          actorId: userId,
+          recipientId,
+          entityType: "COMMENT",
+          entityId,
+          metadata: {
+            postEntityType: post.entityType,
+            postEntityId: post.entityId,
+            ...(contentPreview && { contentPreview }),
+            ...(tripId && { tripId }),
+            ...(post.entityType === "TRIP_THREAD_ENTRY" && {
+              threadEntryId: post.entityId,
+            }),
+          },
+        });
+      } else if (entityType === "TRIP_THREAD_ENTRY") {
+        const tripId = await getTripIdFromEntry(entityId);
+        const tripName = tripId ? await getTripTitle(tripId) : null;
+        await createNotification({
+          type: "LIKE",
+          actorId: userId,
+          recipientId,
+          entityType,
+          entityId,
+          metadata: {
+            postEntityType: entityType,
+            postEntityId: entityId,
+            ...(tripId && { tripId }),
+            ...(tripName && { tripName }),
+            threadEntryId: entityId,
+          },
+        });
+      } else {
+        // TRIP_FINAL_POST like — include postEntityType/postEntityId for
+        // consistent deep-link metadata across all notification types.
+        await createNotification({
+          type: "LIKE",
+          actorId: userId,
+          recipientId,
+          entityType,
+          entityId,
+          metadata: {
+            postEntityType: entityType,
+            postEntityId: entityId,
+          },
+        });
+      }
+    } catch (err) {
+      console.error(
+        "[Notification] Failed to create LIKE notification:",
+        { entityType, entityId, actorId: userId, error: err }
+      );
+    }
+  })();
+
+  return like;
 }
 
 export async function deleteLike(
