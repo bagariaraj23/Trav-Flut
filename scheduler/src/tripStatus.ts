@@ -11,11 +11,24 @@ export enum TripStatus {
 // The inline implementation below matches the logic from TripFinalizerService
 // to ensure consistency. If the service logic changes, this should be updated accordingly.
 
-// Encapsulate the transition logic for easier unit testing
+/** Result of a run for logging */
+export type UpdateTripStatusesResult = {
+  nowIso: string;
+  endedCount: number;
+  ongoingCount: number;
+};
+
+/**
+ * Trip start/end dates are stored and compared in UTC (see app trip creation).
+ * The scheduler should run at or after 00:00 UTC on the trip's start date for
+ * UPCOMING → ONGOING. Cron "0 * * * *" runs at minute 0 each hour (UTC on Railway).
+ */
 export async function updateTripStatuses(
   prisma: PrismaClient,
   now: Date
-): Promise<void> {
+): Promise<UpdateTripStatusesResult> {
+  const nowIso = now.toISOString();
+
   // Find trips that will be ended
   const tripsToEnd = await prisma.trip.findMany({
     where: {
@@ -67,7 +80,11 @@ export async function updateTripStatuses(
           const locationEntries = allThreadEntries.filter(
             (entry) => entry.type === "LOCATION" && entry.locationName
           );
-          let summaryText = `Amazing trip to ${trip.destinations.join(", ")}! `;
+          const destLabel =
+            trip.destinations?.length > 0
+              ? trip.destinations.join(", ")
+              : "your trip";
+          let summaryText = `Amazing trip to ${destLabel}! `;
           if (locationEntries.length > 0)
             summaryText += `Visited ${locationEntries.length} amazing places. `;
           if (textEntries.length > 0)
@@ -83,9 +100,7 @@ export async function updateTripStatuses(
               tripId: trip.id,
               summaryText,
               curatedMedia,
-              caption: `My trip to ${trip.destinations.join(
-                ", "
-              )} was incredible! 🌟`,
+              caption: `My trip to ${destLabel} was incredible! 🌟`,
             },
           });
         }
@@ -103,9 +118,10 @@ export async function updateTripStatuses(
       );
     }
   }
+
   // Atomically update ongoing trips in one go (safe, read to write, not used for ending)
-  await prisma.$transaction(async (tx) => {
-    await tx.trip.updateMany({
+  const ongoingResult = await prisma.$transaction(async (tx) => {
+    return tx.trip.updateMany({
       where: {
         startDate: { lte: now },
         endDate: { gt: now },
@@ -114,4 +130,10 @@ export async function updateTripStatuses(
       data: { status: TripStatus.ONGOING },
     });
   });
+
+  return {
+    nowIso,
+    endedCount: tripsToEnd.length,
+    ongoingCount: ongoingResult.count,
+  };
 }

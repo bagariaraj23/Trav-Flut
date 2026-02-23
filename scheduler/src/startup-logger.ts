@@ -201,6 +201,7 @@ export async function logSchedulerStartupInfo(
   console.log('No Redis dependency - runs independently');
   console.log('Retry Logic: 3 attempts with exponential backoff');
   console.log('Recommended Schedule: Every hour (0 * * * *)');
+  console.log('Trip dates: Compared in UTC; UPCOMING→ONGOING at 00:00 UTC on start date');
 
   // Environment Variable Summary
   console.log('\n\nENVIRONMENT VARIABLE SUMMARY');

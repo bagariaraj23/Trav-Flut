@@ -78,9 +78,9 @@ async function runTripStatusUpdate(): Promise<void> {
     await prisma.$connect();
     logger.info("Database connection verified");
 
-    // Execute the update with retry logic
+    // Execute the update with retry logic (now in UTC for consistent comparison with DB)
     const now = new Date();
-    await retryWithBackoff(
+    const result = await retryWithBackoff(
       () => updateTripStatuses(prisma, now),
       3, // 3 attempts
       1000 // Start with 1 second delay
@@ -89,7 +89,9 @@ async function runTripStatusUpdate(): Promise<void> {
     const duration = Date.now() - startTime;
     logger.info("Trip status update completed successfully", {
       durationMs: duration,
-      timestamp: now.toISOString(),
+      nowUtc: result.nowIso,
+      endedCount: result.endedCount,
+      ongoingCount: result.ongoingCount,
     });
   } catch (error) {
     const duration = Date.now() - startTime;
