@@ -49,23 +49,38 @@ function maskUrl(url: string | undefined): string {
 }
 
 /**
- * Tests database connection
+ * Tests database connection with retries (for transient network/Neon cold start).
  */
 async function testDatabaseConnection(prisma: PrismaClient): Promise<ServiceStatus> {
-  try {
-    await prisma.$queryRaw`SELECT 1`;
-    return {
-      name: 'PostgreSQL Database',
-      status: 'connected',
-      details: 'Connection successful',
-    };
-  } catch (error) {
-    return {
-      name: 'PostgreSQL Database',
-      status: 'error',
-      error: error instanceof Error ? error.message : String(error),
-    };
+  const maxAttempts = 3;
+  const delayMs = 2000;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      await prisma.$queryRaw`SELECT 1`;
+      return {
+        name: 'PostgreSQL Database',
+        status: 'connected',
+        details: 'Connection successful',
+      };
+    } catch (error) {
+      const errMsg = error instanceof Error ? error.message : String(error);
+      if (attempt === maxAttempts) {
+        return {
+          name: 'PostgreSQL Database',
+          status: 'error',
+          error: errMsg,
+        };
+      }
+      await new Promise((r) => setTimeout(r, delayMs * attempt));
+    }
   }
+
+  return {
+    name: 'PostgreSQL Database',
+    status: 'error',
+    error: 'Connection failed after retries',
+  };
 }
 
 

@@ -8,6 +8,7 @@ pnpm-debug.log*
 lerna-debug.log*
 
 node_modules
+coverage
 dist
 dist-ssr
 *.local
@@ -25,4 +26,7 @@ dist-ssr
 *.sw?
 .env
 .env.test
+.env.docker
 mobile/android/app/google-services.json
+.VSCodeCounter
+.cursor
