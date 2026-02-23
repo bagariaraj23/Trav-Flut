@@ -48,11 +48,11 @@ async function handler(
       );
     }
 
-    if (trip.status !== "ONGOING") {
+    if (trip.status !== "ONGOING" && trip.status !== "ENDED") {
       return NextResponse.json<ApiResponse>(
         {
           success: false,
-          error: "Trip cover can only be updated while the trip is ongoing",
+          error: "Trip cover can only be updated for ongoing or ended trips",
         },
         { status: 400 }
       );

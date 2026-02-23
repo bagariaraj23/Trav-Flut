@@ -198,6 +198,70 @@ class SettingsScreen extends StatelessWidget {
                     ),
                   ),
                 ),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  child: Row(
+                    children: [
+                      Icon(Icons.lock_outline, color: colorScheme.onSurface),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Private account',
+                              style: TextStyle(
+                                fontSize: 16,
+                                color: colorScheme.onSurface,
+                              ),
+                            ),
+                            Text(
+                              authProvider.currentUser?.isPrivate == true
+                                  ? 'Only approved followers can see your trips'
+                                  : 'Anyone can see your profile and follow you',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: colorScheme.onSurfaceVariant,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Switch(
+                        value: authProvider.currentUser?.isPrivate ?? false,
+                        onChanged: (bool value) async {
+                          final auth = context.read<AuthProvider>();
+                          final previous = auth.currentUser?.isPrivate ?? false;
+                          if (previous == value) return;
+                          final success = await auth.togglePrivacy();
+                          if (!context.mounted) return;
+                          if (success) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text(
+                                  value
+                                      ? 'Account is now private'
+                                      : 'Account is now public',
+                                ),
+                                backgroundColor: Colors.green,
+                              ),
+                            );
+                          } else {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text(
+                                  auth.error ?? 'Failed to update privacy',
+                                ),
+                                backgroundColor: Colors.red,
+                              ),
+                            );
+                          }
+                        },
+                      ),
+                    ],
+                  ),
+                ),
+                const Divider(),
                 _buildSettingsTile(
                   context: context,
                   icon: Icons.lock_outline,

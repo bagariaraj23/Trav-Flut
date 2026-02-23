@@ -381,7 +381,8 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
 
   bool get _canEditCover =>
       _trip != null &&
-      _trip!.status == TripStatus.ongoing &&
+      (_trip!.status == TripStatus.ongoing ||
+          _trip!.status == TripStatus.ended) &&
       _isOwnerOrParticipant();
 
   void _showCoverOptions() {

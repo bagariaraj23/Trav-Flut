@@ -536,6 +536,22 @@ class AuthProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Toggle account public/private. Returns true on success, false otherwise.
+  /// Updates [currentUser] on success.
+  Future<bool> togglePrivacy() async {
+    final user = _currentUser;
+    if (user == null) return false;
+    final response = await _apiService.togglePrivacy(user.id);
+    if (response.success && response.data != null) {
+      _currentUser = response.data;
+      notifyListeners();
+      return true;
+    }
+    _error = response.error;
+    notifyListeners();
+    return false;
+  }
+
   // Called by ApiService when refresh fails or user is unauthorized
   Future<void> forceLogout({String? message}) async {
     debugPrint('[AuthProvider] forceLogout called with message: $message');

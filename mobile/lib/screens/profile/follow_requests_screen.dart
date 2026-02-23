@@ -113,8 +113,7 @@ class _FollowRequestsScreenState extends State<FollowRequestsScreen> {
       child: Scaffold(
         appBar: AppBar(
           title: const Text('Follow Requests'),
-          leading: IconButton(
-            icon: const Icon(Icons.arrow_back),
+          leading: BackButton(
             onPressed: () {
               if (context.canPop()) {
                 context.pop();
