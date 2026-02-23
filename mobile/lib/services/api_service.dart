@@ -708,7 +708,7 @@ class ApiService {
   Future<ApiResponse<User>> togglePrivacy(String userId) async {
     try {
       debugPrint('[ApiService] Toggling privacy for user: $userId');
-      final response = await _dio.post('/users/$userId/privacy');
+      final response = await _dio.patch('/users/$userId/privacy');
       debugPrint(
         '[ApiService] Toggle privacy response: ${response.statusCode}',
       );
