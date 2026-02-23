@@ -1,3 +1,4 @@
+import "dotenv/config";
 import { PrismaClient } from "@prisma/client";
 import { updateTripStatuses } from "./tripStatus";
 import { createLogger, format, transports } from "winston";
