@@ -19,6 +19,7 @@ import 'package:tripthread/services/share_service.dart';
 import 'package:tripthread/screens/trip/trip_map_screen.dart';
 import 'package:tripthread/services/api_service.dart';
 import 'package:tripthread/services/storage_service.dart';
+import 'package:tripthread/services/metadata_cache_service.dart';
 import 'package:tripthread/services/trip_service.dart';
 import 'package:tripthread/services/connectivity_service.dart';
 import 'package:tripthread/services/media_service.dart';
@@ -84,6 +85,16 @@ void main() async {
       rethrow;
     }
 
+    debugPrint('[main] Creating MetadataCacheService');
+    final metadataCacheService = MetadataCacheService();
+    try {
+      await metadataCacheService.init();
+      debugPrint('[main] MetadataCacheService initialized');
+    } catch (e) {
+      debugPrint('[main] MetadataCacheService initialization failed: $e');
+      rethrow;
+    }
+
     debugPrint('[main] Creating core services');
     final apiService = ApiService();
     final tripService = TripService();
@@ -99,6 +110,7 @@ void main() async {
       MultiProvider(
         providers: [
           Provider<StorageService>.value(value: storageService),
+          Provider<MetadataCacheService>.value(value: metadataCacheService),
           Provider<ApiService>.value(value: apiService),
           Provider<TripService>.value(value: tripService),
           Provider<MediaService>.value(value: mediaService),
@@ -133,11 +145,21 @@ void main() async {
           ChangeNotifierProvider<UserProvider>(
             create: (context) {
               debugPrint('[main] Creating UserProvider');
+              final apiService = context.read<ApiService>();
+              final metadataCache = context.read<MetadataCacheService>();
               final authProvider = context.read<AuthProvider>();
-              final userProvider = UserProvider(apiService: apiService);
-              // Listen to auth changes and clear UserProvider cache on logout
+              final userProvider = UserProvider(
+                apiService: apiService,
+                metadataCache: metadataCache,
+              );
               authProvider.addListener(() {
-                if (!authProvider.isAuthenticated) {
+                if (authProvider.isAuthenticated &&
+                    authProvider.currentUser != null) {
+                  userProvider.warmMetadataCacheIfNeeded(
+                    authProvider.currentUser!.id,
+                    currentUser: authProvider.currentUser,
+                  );
+                } else if (!authProvider.isAuthenticated) {
                   userProvider.clearCache();
                 }
               });

@@ -2,7 +2,7 @@ name: tripthread
 description: "TripThread - Travel Social Media Platform"
 publish_to: "none"
 
-version: 1.0.0+1
+version: 1.0.0+4
 
 environment:
   sdk: ">=3.8.0 <4.0.0"
@@ -20,6 +20,9 @@ dependencies:
 
   # Secure Storage
   flutter_secure_storage: ^10.0.0
+
+  # Local cache for user metadata (non-sensitive)
+  shared_preferences: ^2.2.2
 
   # Navigation
   go_router: ^17.0.1

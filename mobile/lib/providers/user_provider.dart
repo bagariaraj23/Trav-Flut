@@ -1,8 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:tripthread/models/follow_status.dart';
 import 'package:tripthread/models/unified_notification.dart';
 import 'package:tripthread/models/user.dart';
 import 'package:tripthread/services/api_service.dart';
+import 'package:tripthread/services/metadata_cache_service.dart';
 
 class FollowStatus {
   final bool isFollowing;
@@ -73,10 +76,15 @@ class DetailedFollowStatus {
 
 class UserProvider extends ChangeNotifier {
   final ApiService _apiService;
+  final MetadataCacheService? _metadataCache;
   String? _followRequestsError;
   String? isProcessingRequestId;
 
-  UserProvider({required ApiService apiService}) : _apiService = apiService;
+  UserProvider({
+    required ApiService apiService,
+    MetadataCacheService? metadataCache,
+  })  : _apiService = apiService,
+        _metadataCache = metadataCache;
 
   Future<User?> getCurrentUser() async {
     try {
@@ -98,6 +106,9 @@ class UserProvider extends ChangeNotifier {
   final Map<String, UserStats?> _statsCache = {};
   final Map<String, DetailedFollowStatus?> _detailedFollowStatusCache = {};
   final List<FollowRequestDto> _pendingFollowRequests = [];
+
+  /// Tracks which user's metadata we've already warmed this session (to avoid duplicate load+refresh).
+  String? _lastMetadataWarmedUserId;
 
   final List<Map<String, dynamic>> _discoverUsers = [];
   bool _isLoading = false;
@@ -139,10 +150,105 @@ class UserProvider extends ChangeNotifier {
   DetailedFollowStatus? getDetailedFollowStatus(String userId) =>
       _detailedFollowStatusCache[userId];
 
+  /// Removes cached profile data for [userId]. Call after follow/unfollow so the
+  /// next loadProfileData fetches fresh data (e.g. avatar, full profile).
+  void invalidateUserCache(String userId) {
+    _userCache.remove(userId);
+    _statsCache.remove(userId);
+    _detailedFollowStatusCache.remove(userId);
+    notifyListeners();
+  }
+
   // --- METHODS ---
   void clearError() {
     _error = null;
     notifyListeners();
+  }
+
+  /// Call once when app becomes authenticated (e.g. from auth listener).
+  /// Loads cache from disk then refreshes in background. Idempotent per [userId] per session.
+  /// Pass [currentUser] to seed in-memory cache so persisted metadata includes the user.
+  void warmMetadataCacheIfNeeded(String userId, {User? currentUser}) {
+    if (_lastMetadataWarmedUserId == userId) return;
+    _lastMetadataWarmedUserId = userId;
+    if (currentUser != null) {
+      _userCache[userId] = currentUser;
+    }
+    unawaited(_warmMetadataCacheIfNeededAsync(userId));
+  }
+
+  Future<void> _warmMetadataCacheIfNeededAsync(String userId) async {
+    await loadFromCache(userId);
+    await refreshMetadataInBackground(userId);
+  }
+
+  /// Loads cached metadata for [userId] from local storage and applies to state.
+  /// Use after login so profile/stats/requests show immediately; then call
+  /// [refreshMetadataInBackground] to fetch fresh data.
+  Future<void> loadFromCache(String userId) async {
+    final cache = _metadataCache;
+    if (cache == null) return;
+    try {
+      final data = await cache.loadUserMetadata(userId);
+      if (data.isEmpty) return;
+
+      final userJson = data['user'] as Map<String, dynamic>?;
+      if (userJson != null) {
+        try {
+          _userCache[userId] = User.fromJson(userJson);
+        } catch (_) {}
+      }
+      final statsJson = data['stats'] as Map<String, dynamic>?;
+      if (statsJson != null) {
+        try {
+          _statsCache[userId] = UserStats.fromJson(statsJson);
+        } catch (_) {}
+      }
+      final requestsList = data['pendingFollowRequests'];
+      if (requestsList is List && requestsList.isNotEmpty) {
+        try {
+          _pendingFollowRequests.clear();
+          for (final e in requestsList) {
+            if (e is Map<String, dynamic>) {
+              _pendingFollowRequests.add(FollowRequestDto.fromJson(e));
+            }
+          }
+        } catch (_) {}
+      }
+      notifyListeners();
+    } catch (e, st) {
+      debugPrint('[UserProvider] loadFromCache error: $e\n$st');
+    }
+  }
+
+  /// Fetches fresh stats and follow requests from API for [userId] (current user),
+  /// updates state and persists to cache. Call in background after [loadFromCache].
+  Future<void> refreshMetadataInBackground(String userId) async {
+    try {
+      final stats = await fetchUserStats(userId);
+      await loadPendingFollowRequests();
+      await _persistCurrentUserMetadata(userId);
+      if (stats != null) notifyListeners();
+    } catch (e, st) {
+      debugPrint('[UserProvider] refreshMetadataInBackground error: $e\n$st');
+    }
+  }
+
+  Future<void> _persistCurrentUserMetadata(String currentUserId) async {
+    final cache = _metadataCache;
+    if (cache == null) return;
+    try {
+      final user = _userCache[currentUserId];
+      final stats = _statsCache[currentUserId];
+      await cache.saveUserMetadata(
+        userId: currentUserId,
+        user: user,
+        stats: stats,
+        pendingFollowRequests: _pendingFollowRequests.isEmpty ? null : _pendingFollowRequests,
+      );
+    } catch (e, st) {
+      debugPrint('[UserProvider] _persistCurrentUserMetadata error: $e\n$st');
+    }
   }
 
   Future<void> loadProfileData(String userId, String currentUserId) async {
@@ -155,6 +261,9 @@ class UserProvider extends ChangeNotifier {
         fetchDetailedFollowStatus(userId),
         if (userId == currentUserId) loadPendingFollowRequests(),
       ]);
+      if (userId == currentUserId) {
+        await _persistCurrentUserMetadata(currentUserId);
+      }
     } catch (e) {
       _error =
           "Failed to load profile data:  [31m]"; // short for demo, replace as needed
@@ -254,12 +363,16 @@ class UserProvider extends ChangeNotifier {
           final status = getDetailedFollowStatus(userId);
           if (status?.isFollowing == true) {
             await fetchUserStats(currentUserId);
+            await fetchUserStats(userId);
           }
         }
         // Refresh pending follow requests to update notification count
         // This ensures the notification icon shows the new request
         await loadPendingFollowRequests();
         notifyListeners();
+        if (currentUserId != null) {
+          unawaited(_persistCurrentUserMetadata(currentUserId));
+        }
         return true;
       } else {
         _followRequestsError =
@@ -294,6 +407,9 @@ class UserProvider extends ChangeNotifier {
         }
         await fetchUserStats(userId);
         notifyListeners();
+        if (currentUserId != null) {
+          unawaited(_persistCurrentUserMetadata(currentUserId));
+        }
         return true;
       }
       _error = response.error ?? 'Failed to unfollow user';
@@ -325,6 +441,9 @@ class UserProvider extends ChangeNotifier {
           await fetchUserStats(currentUserId);
         }
         notifyListeners();
+        if (currentUserId != null) {
+          unawaited(_persistCurrentUserMetadata(currentUserId));
+        }
         return true;
       }
       _error = response.error ?? 'Failed to cancel request';
@@ -367,6 +486,7 @@ class UserProvider extends ChangeNotifier {
         await fetchUserStats(followerId);
 
         notifyListeners();
+        unawaited(_persistCurrentUserMetadata(followeeId));
         return true;
       }
       _followRequestsError =
@@ -406,6 +526,7 @@ class UserProvider extends ChangeNotifier {
         await fetchUserStats(followeeId);
 
         notifyListeners();
+        unawaited(_persistCurrentUserMetadata(followeeId));
         return true;
       }
       _followRequestsError =
@@ -547,6 +668,8 @@ class UserProvider extends ChangeNotifier {
     _unifiedNotifications.clear();
     _notificationsCursor = null;
     _unreadNotificationCount = 0;
+    _lastMetadataWarmedUserId = null;
+    unawaited(_metadataCache?.clearAll());
     notifyListeners();
   }
 

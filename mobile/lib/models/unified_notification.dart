@@ -135,6 +135,7 @@ class UnifiedNotificationItem {
   }
 
   bool get isFollowRequest => type == 'FOLLOW_REQUEST';
+  bool get isFollow => type == 'FOLLOW';
   bool get isLike => type == 'LIKE' || type == 'COMMENT_LIKE';
   bool get isCommentLike => type == 'COMMENT_LIKE';
   bool get isComment => type == 'COMMENT';
