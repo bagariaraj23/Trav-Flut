@@ -51,6 +51,7 @@ enum NotificationType {
   COMMENT
   COMMENT_REPLY
   TAG
+  FOLLOW
 }
 
 model Notification {

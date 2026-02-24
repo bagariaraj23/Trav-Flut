@@ -2,7 +2,7 @@ import type { EntityType, NotificationType, Prisma } from '@prisma/client'
 import { prisma } from '../prisma'
 
 export type CreateNotificationParams = {
-  type: 'LIKE' | 'COMMENT_LIKE' | 'COMMENT' | 'COMMENT_REPLY' | 'TAG'
+  type: 'LIKE' | 'COMMENT_LIKE' | 'COMMENT' | 'COMMENT_REPLY' | 'TAG' | 'FOLLOW'
   actorId: string
   recipientId: string
   entityType?: EntityType
@@ -11,7 +11,7 @@ export type CreateNotificationParams = {
 }
 
 export type UnifiedNotificationItem = {
-  type: 'FOLLOW_REQUEST' | 'LIKE' | 'COMMENT_LIKE' | 'COMMENT' | 'COMMENT_REPLY' | 'TAG'
+  type: 'FOLLOW_REQUEST' | 'FOLLOW' | 'LIKE' | 'COMMENT_LIKE' | 'COMMENT' | 'COMMENT_REPLY' | 'TAG'
   id: string
   createdAt: string
   readAt?: string | null
@@ -245,7 +245,7 @@ export async function getMergedNotifications(
     (n: Notif) => {
       const meta = n.metadata && typeof n.metadata === 'object' ? (n.metadata as Record<string, unknown>) : null
       return {
-        type: n.type as 'LIKE' | 'COMMENT_LIKE' | 'COMMENT' | 'COMMENT_REPLY' | 'TAG',
+        type: n.type as 'LIKE' | 'COMMENT_LIKE' | 'COMMENT' | 'COMMENT_REPLY' | 'TAG' | 'FOLLOW',
         id: n.id,
         createdAt: n.createdAt.toISOString(),
         readAt: n.readAt?.toISOString() ?? null,
