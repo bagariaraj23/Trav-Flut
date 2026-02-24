@@ -130,8 +130,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
       ),
     );
 
-    // Force refresh of profile data to ensure UI is in sync
+    // Force refresh of profile data to ensure UI is in sync (avatar, stats, trips section)
     if (success) {
+      userProvider.invalidateUserCache(widget.userId);
       await userProvider.loadProfileData(
         widget.userId,
         authProvider.currentUser!.id,
@@ -250,40 +251,42 @@ class _ProfileScreenState extends State<ProfileScreen> {
     List<dynamic> pendingRequests,
     List<dynamic> pendingTripInvitations,
   ) {
+    // Show actions only on own profile (mail = trip invites, follow requests, settings).
     if (!isOwnProfile) {
       return [];
     }
 
-    return [
-      // Trip Invitations Button
-      Stack(
-        alignment: Alignment.center,
-        children: [
-          IconButton(
-            icon: const Icon(Icons.mail_outline),
-            tooltip: 'Trip Invitations',
-            onPressed: () => context.push('/trip-invites'),
-          ),
-          if (pendingTripInvitations.isNotEmpty)
-            Positioned(
-              top: 8,
-              right: 8,
-              child: Container(
-                padding: const EdgeInsets.all(2),
-                decoration: BoxDecoration(
-                  color: Colors.red,
-                  borderRadius: BorderRadius.circular(6),
-                ),
-                constraints: const BoxConstraints(minWidth: 14, minHeight: 14),
-                child: Text(
-                  '${pendingTripInvitations.length}',
-                  style: const TextStyle(color: Colors.white, fontSize: 8),
-                  textAlign: TextAlign.center,
-                ),
+    final tripInvitesAction = Stack(
+      alignment: Alignment.center,
+      children: [
+        IconButton(
+          icon: const Icon(Icons.mail_outline),
+          tooltip: 'Trip Invitations',
+          onPressed: () => context.push('/trip-invites'),
+        ),
+        if (pendingTripInvitations.isNotEmpty)
+          Positioned(
+            top: 8,
+            right: 8,
+            child: Container(
+              padding: const EdgeInsets.all(2),
+              decoration: BoxDecoration(
+                color: Colors.red,
+                borderRadius: BorderRadius.circular(6),
+              ),
+              constraints: const BoxConstraints(minWidth: 14, minHeight: 14),
+              child: Text(
+                '${pendingTripInvitations.length}',
+                style: const TextStyle(color: Colors.white, fontSize: 8),
+                textAlign: TextAlign.center,
               ),
             ),
-        ],
-      ),
+          ),
+      ],
+    );
+
+    return [
+      tripInvitesAction,
       Stack(
         alignment: Alignment.center,
         children: [

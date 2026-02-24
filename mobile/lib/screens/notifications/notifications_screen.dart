@@ -5,8 +5,10 @@ import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:tripthread/models/unified_notification.dart';
+import 'package:tripthread/models/trip_join_request.dart';
 import 'package:tripthread/providers/user_provider.dart';
 import 'package:tripthread/providers/auth_provider.dart';
+import 'package:tripthread/providers/trip_provider.dart';
 import 'package:tripthread/services/api_service.dart';
 
 /// Time grouping for notifications
@@ -34,7 +36,10 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted) return;
       final userProvider = context.read<UserProvider>();
+      final tripProvider = context.read<TripProvider>();
       await userProvider.loadUnifiedNotifications();
+      if (!mounted) return;
+      await tripProvider.loadPendingTripInvitations();
       if (!mounted) return;
       await userProvider.loadUnreadNotificationCount();
 
@@ -42,7 +47,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       // The delay lets users briefly see unread indicators before they clear.
       if (!mounted) return;
       if (userProvider.unreadNotificationCount > 0) {
-        Future.delayed(const Duration(milliseconds: 1500), () {
+        Future.delayed(const Duration(milliseconds: 3000), () {
           if (!mounted) return;
           _autoMarkAllAsRead(userProvider);
         });
@@ -83,7 +88,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   List<UnifiedNotificationItem> _engagementNotifications(
     List<UnifiedNotificationItem> all,
   ) => all
-      .where((n) => n.isLike || n.isComment || n.isCommentReply || n.isTag)
+      .where((n) => n.isLike || n.isComment || n.isCommentReply || n.isTag || n.isFollow)
       .toList();
 
   NotificationTimeGroup _timeGroup(String createdAt) {
@@ -345,6 +350,12 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       return;
     }
 
+    if (n.isFollow) {
+      context.push('/profile/${n.actor.id}');
+      unawaited(_markNotificationsAsRead([n], userProvider));
+      return;
+    }
+
     final navEntityType = n.navEntityType;
     final navEntityId = n.navEntityId;
     final threadEntryId = n.highlightThreadEntryId;
@@ -428,15 +439,27 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
             },
           ),
         ),
-        body: Consumer<UserProvider>(
-          builder: (context, userProvider, child) {
-            if (userProvider.isNotificationsLoading &&
-                userProvider.unifiedNotifications.isEmpty) {
+        body: Consumer2<UserProvider, TripProvider>(
+          builder: (context, userProvider, tripProvider, child) {
+            final followReqs = _followRequests(
+              userProvider.unifiedNotifications,
+            );
+            final engagement = _engagementNotifications(
+              userProvider.unifiedNotifications,
+            );
+            final tripInvites = tripProvider.pendingTripInvitations;
+
+            final hasAnyContent =
+                followReqs.isNotEmpty || engagement.isNotEmpty || tripInvites.isNotEmpty;
+            final stillLoading = userProvider.isNotificationsLoading ||
+                tripProvider.isTripInvitesLoading;
+            if (!hasAnyContent && stillLoading) {
               return const Center(child: CircularProgressIndicator());
             }
 
             if (userProvider.unifiedNotificationsError != null &&
-                userProvider.unifiedNotifications.isEmpty) {
+                userProvider.unifiedNotifications.isEmpty &&
+                tripInvites.isEmpty) {
               return Center(
                 child: Padding(
                   padding: const EdgeInsets.all(24),
@@ -466,14 +489,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
               );
             }
 
-            final followReqs = _followRequests(
-              userProvider.unifiedNotifications,
-            );
-            final engagement = _engagementNotifications(
-              userProvider.unifiedNotifications,
-            );
-
-            if (followReqs.isEmpty && engagement.isEmpty) {
+            if (followReqs.isEmpty && engagement.isEmpty && tripInvites.isEmpty) {
               return Center(
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
@@ -492,7 +508,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      'Likes, comments and follow requests\nwill appear here',
+                      'Likes, comments, follow requests and trip invites\nwill appear here',
                       textAlign: TextAlign.center,
                       style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                         color: Theme.of(
@@ -508,11 +524,16 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
             return RefreshIndicator(
               onRefresh: () async {
                 await userProvider.loadUnifiedNotifications();
+                await tripProvider.loadPendingTripInvitations();
                 await userProvider.loadUnreadNotificationCount();
               },
               child: ListView(
                 padding: const EdgeInsets.only(bottom: 24),
                 children: [
+                  if (tripInvites.isNotEmpty) ...[
+                    _buildTripInvitesSummaryTile(context, tripInvites),
+                    const SizedBox(height: 16),
+                  ],
                   if (followReqs.isNotEmpty) ...[
                     _buildFollowRequestsSummaryTile(context, followReqs),
                     const SizedBox(height: 16),
@@ -552,6 +573,106 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
               ),
             );
           },
+        ),
+      ),
+    );
+  }
+
+  /// Trip invitations summary: "X invited you to trip Y" or "N trip invitations", taps to /trip-invites.
+  Widget _buildTripInvitesSummaryTile(
+    BuildContext context,
+    List<TripJoinRequest> tripInvites,
+  ) {
+    final count = tripInvites.length;
+    final first = tripInvites.first;
+    final senderName = first.sender?.name ?? first.sender?.username ?? 'Someone';
+    final tripTitle = first.trip?.title ?? 'a trip';
+    String label;
+    if (count == 1) {
+      label = '$senderName invited you to $tripTitle';
+    } else {
+      label = '$count trip invitations';
+    }
+
+    final avatarSize = 40.0;
+    final avatarUrl = first.sender?.avatarUrl;
+
+    return Material(
+      color: Theme.of(context).colorScheme.secondaryContainer.withValues(alpha: 0.3),
+      child: InkWell(
+        onTap: () => context.push('/trip-invites'),
+        child: Container(
+          decoration: BoxDecoration(
+            border: Border(
+              left: BorderSide(
+                color: Theme.of(context).colorScheme.secondary,
+                width: 4,
+              ),
+            ),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            child: Row(
+              children: [
+                CircleAvatar(
+                  radius: avatarSize / 2,
+                  backgroundColor: Theme.of(context).colorScheme.secondaryContainer,
+                  backgroundImage: avatarUrl != null && avatarUrl.isNotEmpty
+                      ? CachedNetworkImageProvider(avatarUrl)
+                      : null,
+                  child: avatarUrl == null || avatarUrl.isEmpty
+                      ? Text(
+                          senderName.isNotEmpty ? senderName.substring(0, 1).toUpperCase() : '?',
+                          style: TextStyle(
+                            color: Theme.of(context).colorScheme.onSecondaryContainer,
+                            fontSize: 18,
+                          ),
+                        )
+                      : null,
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.card_travel,
+                            size: 18,
+                            color: Theme.of(context).colorScheme.secondary,
+                          ),
+                          const SizedBox(width: 6),
+                          Flexible(
+                            child: Text(
+                              label,
+                              style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                                fontWeight: FontWeight.w500,
+                              ),
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        'Tap to accept or reject',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Icon(
+                  Icons.chevron_right,
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+              ],
+            ),
+          ),
         ),
       ),
     );
@@ -970,6 +1091,10 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       title = '$actorName requested to follow you';
       subtitle = null;
       icon = Icons.person_add;
+    } else if (n.isFollow) {
+      title = '$actorName started following you';
+      subtitle = null;
+      icon = Icons.person_add;
     } else if (n.isCommentLike) {
       title = '$actorName liked your comment';
       subtitle = n.contentPreview != null && n.contentPreview!.isNotEmpty
@@ -1015,6 +1140,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     final timeAgo = _formatTimeAgo(n.createdAt);
     final isUnread =
         n.isFollowRequest ||
+        n.isFollow ||
         ((n.isLike || n.isComment || n.isCommentReply || n.isTag) &&
             (n.readAt == null || (n.readAt?.isEmpty ?? true)));
     final backgroundColor = isUnread

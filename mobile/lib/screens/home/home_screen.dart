@@ -1345,8 +1345,8 @@ class ProfileTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Consumer<AuthProvider>(
-      builder: (context, authProvider, child) {
+    return Consumer2<AuthProvider, TripProvider>(
+      builder: (context, authProvider, tripProvider, child) {
         final user = authProvider.currentUser;
 
         if (user == null) {
@@ -1364,13 +1364,51 @@ class ProfileTab extends StatelessWidget {
           });
         }
 
+        final pendingTripInvitations = tripProvider.pendingTripInvitations;
+
         return Scaffold(
           appBar: AppBar(
             centerTitle: false,
             title: const Text('Profile'),
             actions: [
+              // Trip Invitations (own profile tab)
+              Stack(
+                alignment: Alignment.center,
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.mail_outline),
+                    tooltip: 'Trip Invitations',
+                    onPressed: () => context.push('/trip-invites'),
+                  ),
+                  if (pendingTripInvitations.isNotEmpty)
+                    Positioned(
+                      top: 8,
+                      right: 8,
+                      child: Container(
+                        padding: const EdgeInsets.all(2),
+                        decoration: BoxDecoration(
+                          color: Colors.red,
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        constraints: const BoxConstraints(
+                          minWidth: 14,
+                          minHeight: 14,
+                        ),
+                        child: Text(
+                          '${pendingTripInvitations.length}',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 8,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
               IconButton(
-                icon: const Icon(Icons.person),
+                icon: const Icon(Icons.person_add_outlined),
+                tooltip: 'Follow Requests',
                 onPressed: () async {
                   final currentUser = await userProvider.getCurrentUser();
                   if (currentUser != null) {
