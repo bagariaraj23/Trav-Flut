@@ -1,11 +1,10 @@
-import { prisma } from "@/lib/prisma";
+import { prisma, type PrismaTransactionClient } from "@/lib/prisma";
 import {
   GenerationStatus,
   MediaProcessingStatus,
   MediaType,
   Trip,
   TripFinalPost,
-  PrismaClient,
 } from "@prisma/client";
 import {
   AuthorizationError,
@@ -31,20 +30,12 @@ export class TripFinalizerService {
    * Generate final post for a trip. Can work with or without a transaction client.
    * @param tripId - The trip ID
    * @param userId - The user ID (optional for scheduler/system operations)
-   * @param tx - Optional transaction client for atomic operations
+   * @param tx - Optional transaction client for atomic operations (same type as prisma for extended client compatibility)
    */
   static async generateFinalPost(
     tripId: string,
     userId?: string,
-    tx?: Omit<
-      PrismaClient,
-      | "$connect"
-      | "$disconnect"
-      | "$on"
-      | "$transaction"
-      | "$use"
-      | "$extends"
-    >
+    tx?: PrismaTransactionClient | typeof prisma
   ) {
     const db = tx || prisma;
 

@@ -66,3 +66,8 @@ prismaBase
   });
 
 export const prisma = prismaClient;
+
+/** Type of the client passed to prisma.$transaction(async (tx) => ...) — use for services that accept an optional tx. */
+export type PrismaTransactionClient = Parameters<
+  Parameters<typeof prismaClient.$transaction>[0]
+>[0];
