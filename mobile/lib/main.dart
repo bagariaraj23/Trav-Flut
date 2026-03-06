@@ -47,6 +47,10 @@ import 'package:tripthread/screens/settings/settings_screen.dart';
 import 'package:tripthread/screens/engagement/liked_by_screen.dart';
 import 'package:tripthread/screens/notifications/notifications_screen.dart';
 import 'package:tripthread/screens/post/post_detail_screen.dart';
+import 'package:tripthread/screens/chat/conversation_list_screen.dart';
+import 'package:tripthread/screens/chat/chat_screen.dart';
+import 'package:tripthread/screens/chat/new_conversation_screen.dart';
+import 'package:tripthread/providers/chat_provider.dart';
 import 'package:tripthread/utils/app_theme.dart';
 import 'package:tripthread/utils/error_handler.dart';
 import 'package:tripthread/widgets/auth_gate.dart';
@@ -238,6 +242,15 @@ void main() async {
               );
               shareService.setStorageService(storageService);
               return provider;
+            },
+          ),
+          ChangeNotifierProvider<ChatProvider>(
+            create: (context) {
+              debugPrint('[main] Creating ChatProvider');
+              return ChatProvider(
+                apiService: apiService,
+                storageService: storageService,
+              );
             },
           ),
         ],
@@ -606,6 +619,24 @@ class _TripThreadAppRouterState extends State<TripThreadAppRouter> {
             path: '/notifications',
             builder: (context, state) {
               return const NotificationsScreen();
+            },
+          ),
+          GoRoute(
+            path: '/chat',
+            builder: (context, state) {
+              final tripId = state.uri.queryParameters['tripId'];
+              return ConversationListScreen(tripId: tripId);
+            },
+          ),
+          GoRoute(
+            path: '/chat/new',
+            builder: (context, state) => const NewConversationScreen(),
+          ),
+          GoRoute(
+            path: '/chat/:conversationId',
+            builder: (context, state) {
+              final conversationId = state.pathParameters['conversationId']!;
+              return ChatScreen(conversationId: conversationId);
             },
           ),
           GoRoute(

@@ -209,6 +209,10 @@ class _HomeFeedScreenState extends State<HomeFeedScreen> {
               // TODO: Implement search
             },
           ),
+          IconButton(
+            icon: const Icon(Icons.chat_bubble_outline),
+            onPressed: () => context.push('/chat'),
+          ),
           // Combined Notification Icon
           Consumer2<UserProvider, TripProvider>(
             builder: (context, userProvider, tripProvider, child) {

@@ -8,6 +8,8 @@ import 'package:tripthread/models/pagination.dart';
 import 'package:tripthread/models/trip_join_request.dart';
 import 'package:tripthread/models/place.dart';
 import 'package:tripthread/models/unified_notification.dart';
+import 'package:tripthread/models/chat_conversation.dart';
+import 'package:tripthread/models/chat_message.dart';
 import 'package:tripthread/services/storage_service.dart';
 import 'package:tripthread/services/token_refresh_manager.dart';
 import 'package:tripthread/config/app_config.dart';
@@ -2640,6 +2642,154 @@ class ApiService {
         success: false,
         error: 'An unexpected error occurred',
       );
+    }
+  }
+
+  // --- Chat ---
+  Future<ApiResponse<List<ChatConversationSummary>>> getChatConversations({
+    String? tripId,
+  }) async {
+    try {
+      final response = await _dio.get(
+        '/chat/conversations',
+        queryParameters: tripId != null ? {'tripId': tripId} : null,
+      );
+      if (response.data['success'] == true && response.data['data'] != null) {
+        final data = response.data['data'];
+        final list = (data['conversations'] as List<dynamic>?)
+                ?.map((e) => ChatConversationSummary.fromJson(e as Map<String, dynamic>))
+                .toList() ??
+            [];
+        return ApiResponse(success: true, data: list);
+      }
+      return ApiResponse(success: false, error: response.data['error'] ?? 'Failed to load conversations');
+    } on DioException catch (e) {
+      return ApiResponse(
+        success: false,
+        error: e.response?.data['error'] ?? 'Network error',
+      );
+    } catch (e) {
+      return ApiResponse(success: false, error: 'An unexpected error occurred');
+    }
+  }
+
+  Future<ApiResponse<ChatConversationSummary>> getChatConversation(String id) async {
+    try {
+      final response = await _dio.get('/chat/conversations/$id');
+      if (response.data['success'] == true && response.data['data'] != null) {
+        final c = ChatConversationSummary.fromJson(response.data['data'] as Map<String, dynamic>);
+        return ApiResponse(success: true, data: c);
+      }
+      return ApiResponse(success: false, error: response.data['error'] ?? 'Not found');
+    } on DioException catch (e) {
+      return ApiResponse(
+        success: false,
+        error: e.response?.data['error'] ?? 'Network error',
+      );
+    } catch (e) {
+      return ApiResponse(success: false, error: 'An unexpected error occurred');
+    }
+  }
+
+  Future<ApiResponse<PaginatedChatMessages>> getChatMessages(
+    String conversationId, {
+    int? limit,
+    String? before,
+  }) async {
+    try {
+      final query = <String, dynamic>{};
+      if (limit != null) query['limit'] = limit;
+      if (before != null) query['before'] = before;
+      final response = await _dio.get(
+        '/chat/conversations/$conversationId/messages',
+        queryParameters: query.isEmpty ? null : query,
+      );
+      if (response.data['success'] == true && response.data['data'] != null) {
+        final p = PaginatedChatMessages.fromJson(response.data['data'] as Map<String, dynamic>);
+        return ApiResponse(success: true, data: p);
+      }
+      return ApiResponse(success: false, error: response.data['error'] ?? 'Failed to load messages');
+    } on DioException catch (e) {
+      return ApiResponse(
+        success: false,
+        error: e.response?.data['error'] ?? 'Network error',
+      );
+    } catch (e) {
+      return ApiResponse(success: false, error: 'An unexpected error occurred');
+    }
+  }
+
+  Future<ApiResponse<ChatMessageModel>> sendChatMessage(
+    String conversationId, {
+    required String content,
+    String? replyToMessageId,
+    List<String>? attachmentMediaIds,
+  }) async {
+    try {
+      final body = <String, dynamic>{
+        'content': content,
+        if (replyToMessageId != null) 'replyToMessageId': replyToMessageId,
+        if (attachmentMediaIds != null && attachmentMediaIds.isNotEmpty) 'attachmentMediaIds': attachmentMediaIds,
+      };
+      final response = await _dio.post(
+        '/chat/conversations/$conversationId/messages',
+        data: body,
+      );
+      if (response.data['success'] == true && response.data['data'] != null) {
+        final m = ChatMessageModel.fromJson(response.data['data'] as Map<String, dynamic>);
+        return ApiResponse(success: true, data: m);
+      }
+      return ApiResponse(success: false, error: response.data['error'] ?? 'Failed to send');
+    } on DioException catch (e) {
+      return ApiResponse(
+        success: false,
+        error: e.response?.data['error'] ?? 'Network error',
+      );
+    } catch (e) {
+      return ApiResponse(success: false, error: 'An unexpected error occurred');
+    }
+  }
+
+  Future<ApiResponse<void>> markChatConversationRead(String conversationId) async {
+    try {
+      await _dio.patch('/chat/conversations/$conversationId/read');
+      return const ApiResponse(success: true);
+    } on DioException catch (e) {
+      return ApiResponse(
+        success: false,
+        error: e.response?.data['error'] ?? 'Network error',
+      );
+    } catch (e) {
+      return ApiResponse(success: false, error: 'An unexpected error occurred');
+    }
+  }
+
+  Future<ApiResponse<ChatConversationSummary>> createChatConversation({
+    required String type,
+    required List<String> participantIds,
+    String? name,
+    String? tripId,
+  }) async {
+    try {
+      final body = <String, dynamic>{
+        'type': type,
+        'participantIds': participantIds,
+        if (name != null) 'name': name,
+        if (tripId != null) 'tripId': tripId,
+      };
+      final response = await _dio.post('/chat/conversations', data: body);
+      if (response.data['success'] == true && response.data['data'] != null) {
+        final c = ChatConversationSummary.fromJson(response.data['data'] as Map<String, dynamic>);
+        return ApiResponse(success: true, data: c);
+      }
+      return ApiResponse(success: false, error: response.data['error'] ?? 'Failed to create');
+    } on DioException catch (e) {
+      return ApiResponse(
+        success: false,
+        error: e.response?.data['error'] ?? 'Network error',
+      );
+    } catch (e) {
+      return ApiResponse(success: false, error: 'An unexpected error occurred');
     }
   }
 }

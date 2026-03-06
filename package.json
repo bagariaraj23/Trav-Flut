@@ -4,9 +4,11 @@
   "description": "TripThread Backend - NextJS + TypeScript + PostgreSQL",
   "type": "module",
   "scripts": {
-    "dev": "next dev",
+    "dev": "node scripts/build-server.mjs && node server.cjs",
+    "next:dev": "next dev -H 0.0.0.0",
     "build": "next build",
-    "start": "next start",
+    "start": "node scripts/build-server.mjs && NODE_ENV=production node server.cjs",
+    "start:next": "next start",
     "lint": "next lint",
     "test": "dotenv -e .env.test -- vitest",
     "test:run": "dotenv -e .env.test -- vitest run",
@@ -41,6 +43,7 @@
     "react-dom": "^18.2.0",
     "uuid": "^9.0.1",
     "winston": "^3.17.0",
+    "ws": "^8.18.0",
     "zod": "^3.22.4"
   },
   "devDependencies": {
@@ -56,10 +59,12 @@
     "@types/react-dom": "^18.2.0",
     "@types/supertest": "^6.0.3",
     "@types/uuid": "^9.0.7",
+    "@types/ws": "^8.5.13",
     "@vitest/coverage-v8": "^4.0.15",
     "@vitest/ui": "^4.0.15",
     "autoprefixer": "^10.4.21",
     "dotenv-cli": "^5.0.0",
+    "esbuild": "^0.24.2",
     "eslint": "^9.0.0",
     "eslint-config-next": "^15.1.3",
     "postcss": "^8.5.6",
@@ -67,6 +72,7 @@
     "prisma": "^5.22.0",
     "supertest": "^7.1.4",
     "tailwindcss": "^3.4.18",
+    "tsx": "^4.19.2",
     "typescript": "5.9.2",
     "vitest": "^4.0.15"
   }

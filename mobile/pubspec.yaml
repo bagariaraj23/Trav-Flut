@@ -58,6 +58,7 @@ dependencies:
   # Connectivity
   connectivity_plus: ^7.0.0
   jwt_decoder: ^2.0.1
+  web_socket_channel: ^3.0.1
 
   # Deep Links
   app_links: ^7.0.0
