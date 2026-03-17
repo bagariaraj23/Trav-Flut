@@ -24,6 +24,7 @@ export type ChatMessagePayload = {
   updatedAt: string
   attachments?: Array<{ id: string; url: string; type: string; publicId: string }>
   sender?: { id: string; username: string | null; name: string | null; avatarUrl: string | null }
+  replyTo?: { id: string; content: string; senderId: string; createdAt: string } | null
 }
 
 type Listener = (payload: ChatEventPayload) => void

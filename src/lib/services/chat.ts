@@ -495,6 +495,14 @@ export async function sendMessage(
       name: messageForPayload.sender.name,
       avatarUrl: messageForPayload.sender.avatarUrl,
     },
+    replyTo: messageForPayload.replyTo
+      ? {
+          id: messageForPayload.replyTo.id,
+          content: messageForPayload.replyTo.content,
+          senderId: messageForPayload.replyTo.senderId,
+          createdAt: toISODate(messageForPayload.replyTo.createdAt),
+        }
+      : null,
   }
   const participants = await prisma.conversationParticipant.findMany({
     where: { conversationId, leftAt: null },
