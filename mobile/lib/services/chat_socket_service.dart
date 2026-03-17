@@ -42,12 +42,29 @@ class ChatSocketService {
       final port = uri.hasPort ? ':${uri.port}' : '';
       final wsUrl = '$scheme://${uri.host}$port/chat?token=${Uri.encodeComponent('Bearer $token')}';
       debugPrint('[ChatSocket] Connecting to $wsUrl');
-      _channel = WebSocketChannel.connect(Uri.parse(wsUrl));
+      final channel = WebSocketChannel.connect(Uri.parse(wsUrl));
+      // Await the ready future so connection errors are caught here
+      // instead of becoming unhandled exceptions.
+      try {
+        await channel.ready;
+      } catch (e) {
+        debugPrint('[ChatSocket] WebSocket handshake failed: $e');
+        onError?.call(e.toString());
+        _scheduleReconnect();
+        return;
+      }
+      if (_closed) {
+        channel.sink.close();
+        return;
+      }
+      _channel = channel;
       _subscription = _channel!.stream.listen(
         _onData,
         onError: (e) {
-          debugPrint('[ChatSocket] Error: $e');
+          debugPrint('[ChatSocket] Stream error: $e');
           onError?.call(e.toString());
+          _channel = null;
+          _subscription = null;
           _scheduleReconnect();
         },
         onDone: () {
@@ -58,6 +75,7 @@ class ChatSocketService {
         },
         cancelOnError: false,
       );
+      debugPrint('[ChatSocket] Connected successfully');
     } catch (e) {
       debugPrint('[ChatSocket] Connect error: $e');
       onError?.call(e.toString());
