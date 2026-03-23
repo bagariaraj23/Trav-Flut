@@ -1,9 +1,11 @@
+import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:intl/intl.dart';
+import 'package:tripthread/models/chat_conversation.dart';
 import 'package:tripthread/models/chat_message.dart';
 import 'package:tripthread/providers/chat_provider.dart';
 import 'package:tripthread/providers/auth_provider.dart';
@@ -27,6 +29,11 @@ class _ChatScreenState extends State<ChatScreen> {
   List<File> _selectedMedia = [];
   bool _uploadingMedia = false;
   ChatMessageModel? _editingMessage;
+  final Map<String, GlobalKey> _messageKeys = {};
+  String? _highlightedMessageId;
+  Timer? _highlightTimer;
+  List<ChatParticipant> _mentionSuggestions = [];
+  String? _activeMentionQuery;
 
   Future<void> _handleMessageActions(ChatMessageModel message) async {
     try {
@@ -98,7 +105,12 @@ class _ChatScreenState extends State<ChatScreen> {
     setState(() {
       _editingMessage = message;
       _textController.text = message.content;
+      _textController.selection = TextSelection.collapsed(
+        offset: _textController.text.length,
+      );
       _replyingTo = null;
+      _mentionSuggestions = [];
+      _activeMentionQuery = null;
     });
   }
 
@@ -106,6 +118,8 @@ class _ChatScreenState extends State<ChatScreen> {
     setState(() {
       _editingMessage = null;
       _textController.clear();
+      _mentionSuggestions = [];
+      _activeMentionQuery = null;
     });
   }
 
@@ -130,6 +144,8 @@ class _ChatScreenState extends State<ChatScreen> {
       setState(() {
         _editingMessage = null;
         _textController.clear();
+        _mentionSuggestions = [];
+        _activeMentionQuery = null;
       });
       return;
     }
@@ -164,6 +180,7 @@ class _ChatScreenState extends State<ChatScreen> {
 
   @override
   void dispose() {
+    _highlightTimer?.cancel();
     _scrollController.removeListener(_onScroll);
     _scrollController.dispose();
     _textController.dispose();
@@ -179,6 +196,148 @@ class _ChatScreenState extends State<ChatScreen> {
   void _startReply(ChatMessageModel msg) {
     setState(() {
       _replyingTo = msg;
+    });
+  }
+
+  GlobalKey _messageKey(String id) {
+    return _messageKeys.putIfAbsent(id, () => GlobalKey());
+  }
+
+  ChatConversationSummary? _currentConversation(ChatProvider chat) {
+    for (final c in chat.conversations) {
+      if (c.id == widget.conversationId) return c;
+    }
+    return null;
+  }
+
+  bool _isGroupConversation(ChatProvider chat) {
+    return _currentConversation(chat)?.type == 'GROUP';
+  }
+
+  void _updateMentionSuggestions({
+    required String text,
+    required ChatProvider chat,
+    required String currentUserId,
+  }) {
+    if (!_isGroupConversation(chat)) {
+      if (_mentionSuggestions.isNotEmpty || _activeMentionQuery != null) {
+        setState(() {
+          _mentionSuggestions = [];
+          _activeMentionQuery = null;
+        });
+      }
+      return;
+    }
+
+    final cursor = _textController.selection.baseOffset >= 0
+        ? _textController.selection.baseOffset
+        : text.length;
+    final safeCursor = cursor.clamp(0, text.length);
+    final before = text.substring(0, safeCursor);
+    final at = before.lastIndexOf('@');
+    if (at < 0) {
+      if (_mentionSuggestions.isNotEmpty || _activeMentionQuery != null) {
+        setState(() {
+          _mentionSuggestions = [];
+          _activeMentionQuery = null;
+        });
+      }
+      return;
+    }
+
+    final query = before.substring(at + 1);
+    if (query.contains(RegExp(r'\s'))) {
+      if (_mentionSuggestions.isNotEmpty || _activeMentionQuery != null) {
+        setState(() {
+          _mentionSuggestions = [];
+          _activeMentionQuery = null;
+        });
+      }
+      return;
+    }
+
+    final participants = _currentConversation(chat)?.participants ?? const <ChatParticipant>[];
+    final q = query.toLowerCase();
+    final filtered = participants.where((p) {
+      if (p.userId == currentUserId) return false;
+      final u = (p.username ?? '').trim().toLowerCase();
+      if (u.isEmpty) return false;
+      return q.isEmpty || u.startsWith(q);
+    }).toList()
+      ..sort((a, b) => (a.username ?? '').compareTo(b.username ?? ''));
+
+    setState(() {
+      _activeMentionQuery = query;
+      _mentionSuggestions = filtered;
+    });
+  }
+
+  void _insertMention(ChatParticipant participant) {
+    final username = participant.username;
+    if (username == null || username.trim().isEmpty) return;
+    final text = _textController.text;
+    final cursor = _textController.selection.baseOffset >= 0
+        ? _textController.selection.baseOffset
+        : text.length;
+    final safeCursor = cursor.clamp(0, text.length);
+    final before = text.substring(0, safeCursor);
+    final after = text.substring(safeCursor);
+    final at = before.lastIndexOf('@');
+    if (at < 0) return;
+
+    final prefix = before.substring(0, at);
+    final replacement = '@${username.trim()} ';
+    final newText = '$prefix$replacement$after';
+    _textController.value = TextEditingValue(
+      text: newText,
+      selection: TextSelection.collapsed(offset: (prefix + replacement).length),
+    );
+    setState(() {
+      _mentionSuggestions = [];
+      _activeMentionQuery = null;
+    });
+  }
+
+  Future<void> _jumpToMessage(String messageId) async {
+    final chat = context.read<ChatProvider>();
+    bool found = chat.getMessages(widget.conversationId).any((m) => m.id == messageId);
+
+    while (!found && chat.hasMoreMessages(widget.conversationId)) {
+      final ok = await chat.loadMessages(widget.conversationId, loadMore: true);
+      if (!ok) break;
+      found = chat.getMessages(widget.conversationId).any((m) => m.id == messageId);
+    }
+
+    if (!found || !mounted) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Original message not found in history')),
+        );
+      }
+      return;
+    }
+
+    setState(() {
+      _highlightedMessageId = messageId;
+    });
+    _highlightTimer?.cancel();
+    _highlightTimer = Timer(const Duration(seconds: 2), () {
+      if (mounted) {
+        setState(() => _highlightedMessageId = null);
+      }
+    });
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final key = _messageKeys[messageId];
+      final ctx = key?.currentContext;
+      if (ctx != null) {
+        Scrollable.ensureVisible(
+          ctx,
+          duration: const Duration(milliseconds: 280),
+          curve: Curves.easeOutCubic,
+          alignment: 0.5,
+        );
+      }
     });
   }
 
@@ -276,6 +435,8 @@ class _ChatScreenState extends State<ChatScreen> {
         _editingMessage = null;
         _selectedMedia.clear();
         _uploadingMedia = false;
+        _mentionSuggestions = [];
+        _activeMentionQuery = null;
       });
     } catch (e) {
       setState(() {
@@ -363,8 +524,13 @@ class _ChatScreenState extends State<ChatScreen> {
                               ),
                             ),
                             child: _MessageBubble(
+                              bubbleKey: _messageKey(msg.id),
                               message: msg,
                               isMe: msg.senderId == currentUserId,
+                              isHighlighted: _highlightedMessageId == msg.id,
+                              onReplyTap: msg.replyTo != null
+                                  ? () => _jumpToMessage(msg.replyTo!.id)
+                                  : null,
                               onLongPressAction: msg.senderId == currentUserId
                                   ? () => _handleMessageActions(msg)
                                   : null,
@@ -519,6 +685,71 @@ class _ChatScreenState extends State<ChatScreen> {
                 },
               ),
             ),
+          if (context.watch<ChatProvider>().conversations.isNotEmpty &&
+              _mentionSuggestions.isNotEmpty &&
+              _editingMessage == null)
+            Container(
+              constraints: const BoxConstraints(maxHeight: 180),
+              margin: const EdgeInsets.fromLTRB(8, 0, 8, 6),
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(
+                  color: Theme.of(context).dividerColor,
+                ),
+              ),
+              child: ListView.builder(
+                shrinkWrap: true,
+                itemCount: _mentionSuggestions.length,
+                itemBuilder: (context, index) {
+                  final user = _mentionSuggestions[index];
+                  final label = user.name ?? user.username ?? 'Unknown';
+                  final initials = AvatarUtils.initialsFromName(
+                    user.name ?? user.username ?? '',
+                  );
+                  final color = AvatarUtils.colorForKey(user.userId);
+                  return InkWell(
+                    onTap: () => _insertMention(user),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                      child: Row(
+                        children: [
+                          CircleAvatar(
+                            radius: 14,
+                            backgroundColor: color,
+                            backgroundImage: user.avatarUrl != null
+                                ? CachedNetworkImageProvider(user.avatarUrl!)
+                                : null,
+                            child: user.avatarUrl == null
+                                ? Text(
+                                    initials,
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  )
+                                : null,
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              '@${user.username}',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          Text(
+                            label,
+                            style: Theme.of(context).textTheme.bodySmall,
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
           // Input area
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
@@ -540,8 +771,15 @@ class _ChatScreenState extends State<ChatScreen> {
                     ),
                     maxLines: 3,
                     minLines: 1,
-                    onChanged: (_) =>
-                        context.read<ChatProvider>().sendTyping(widget.conversationId),
+                    onChanged: (value) {
+                      final provider = context.read<ChatProvider>();
+                      provider.sendTyping(widget.conversationId);
+                      _updateMentionSuggestions(
+                        text: value,
+                        chat: provider,
+                        currentUserId: currentUserId,
+                      );
+                    },
                     onSubmitted: (_) => _send(),
                   ),
                 ),
@@ -619,13 +857,19 @@ class _MessageActionRow extends StatelessWidget {
 }
 
 class _MessageBubble extends StatelessWidget {
+  final Key? bubbleKey;
   final ChatMessageModel message;
   final bool isMe;
+  final bool isHighlighted;
+  final VoidCallback? onReplyTap;
   final VoidCallback? onLongPressAction;
 
   const _MessageBubble({
+    this.bubbleKey,
     required this.message,
     required this.isMe,
+    this.isHighlighted = false,
+    this.onReplyTap,
     this.onLongPressAction,
   });
 
@@ -640,6 +884,7 @@ class _MessageBubble extends StatelessWidget {
     final bubble = GestureDetector(
       onLongPress: onLongPressAction == null || isDeleted ? null : onLongPressAction,
       child: Container(
+        key: bubbleKey,
         margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
         constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.68),
@@ -648,6 +893,12 @@ class _MessageBubble extends StatelessWidget {
               ? Theme.of(context).colorScheme.primaryContainer
               : Theme.of(context).colorScheme.surfaceContainerHighest,
           borderRadius: BorderRadius.circular(16),
+          border: isHighlighted
+              ? Border.all(
+                  color: Theme.of(context).colorScheme.primary,
+                  width: 2,
+                )
+              : null,
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -655,40 +906,44 @@ class _MessageBubble extends StatelessWidget {
           children: [
               // Reply preview
               if (message.replyTo != null && !isDeleted)
-                Container(
-                  padding: const EdgeInsets.all(8),
-                  margin: const EdgeInsets.only(bottom: 8),
-                  decoration: BoxDecoration(
-                    color: Theme.of(context).colorScheme.surface.withOpacity(0.5),
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border(
-                      left: BorderSide(
-                        color: Theme.of(context).colorScheme.primary,
-                        width: 3,
+                InkWell(
+                  onTap: onReplyTap,
+                  borderRadius: BorderRadius.circular(8),
+                  child: Container(
+                    padding: const EdgeInsets.all(8),
+                    margin: const EdgeInsets.only(bottom: 8),
+                    decoration: BoxDecoration(
+                      color: Theme.of(context).colorScheme.surface.withOpacity(0.5),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border(
+                        left: BorderSide(
+                          color: Theme.of(context).colorScheme.primary,
+                          width: 3,
+                        ),
                       ),
                     ),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        'Replying to ${message.replyTo!.senderId == message.senderId ? "yourself" : "message"}',
-                        style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 11,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          'Replying to ${message.replyTo!.senderId == message.senderId ? "yourself" : "message"}',
+                          style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 11,
+                              ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          message.replyTo!.content,
+                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                fontSize: 12,
+                              ),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
                             ),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        message.replyTo!.content,
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                              fontSize: 12,
-                            ),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
               if (isDeleted)
