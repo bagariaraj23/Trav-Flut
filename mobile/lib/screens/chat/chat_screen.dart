@@ -8,6 +8,7 @@ import 'package:tripthread/models/chat_message.dart';
 import 'package:tripthread/providers/chat_provider.dart';
 import 'package:tripthread/providers/auth_provider.dart';
 import 'package:tripthread/services/media_service.dart';
+import 'package:tripthread/utils/avatar_utils.dart';
 
 class ChatScreen extends StatefulWidget {
   final String conversationId;
@@ -632,24 +633,26 @@ class _MessageBubble extends StatelessWidget {
   Widget build(BuildContext context) {
     final time = _formatTime(message.createdAt);
     final isDeleted = message.deletedAt != null;
-    return Align(
-      alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
-      child: GestureDetector(
-        onLongPress: onLongPressAction == null || isDeleted ? null : onLongPressAction,
-        child: Container(
-          margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-          constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.75),
-          decoration: BoxDecoration(
-            color: isMe
-                ? Theme.of(context).colorScheme.primaryContainer
-                : Theme.of(context).colorScheme.surfaceContainerHighest,
-            borderRadius: BorderRadius.circular(16),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
+    final avatarInitial = AvatarUtils.initialsFromName(
+      message.sender.name ?? message.sender.username ?? '',
+    );
+    final avatarColor = AvatarUtils.colorForKey(message.sender.id);
+    final bubble = GestureDetector(
+      onLongPress: onLongPressAction == null || isDeleted ? null : onLongPressAction,
+      child: Container(
+        margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.68),
+        decoration: BoxDecoration(
+          color: isMe
+              ? Theme.of(context).colorScheme.primaryContainer
+              : Theme.of(context).colorScheme.surfaceContainerHighest,
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
               // Reply preview
               if (message.replyTo != null && !isDeleted)
                 Container(
@@ -751,8 +754,44 @@ class _MessageBubble extends StatelessWidget {
                 time,
                 style: Theme.of(context).textTheme.bodySmall,
               ),
-            ],
-          ),
+          ],
+        ),
+      ),
+    );
+
+    final avatar = CircleAvatar(
+      radius: 16,
+      backgroundColor: avatarColor,
+      backgroundImage: message.sender.avatarUrl != null
+          ? CachedNetworkImageProvider(message.sender.avatarUrl!)
+          : null,
+      child: message.sender.avatarUrl == null
+          ? Text(
+              avatarInitial,
+              style: const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.w700,
+              ),
+            )
+          : null,
+    );
+
+    return Align(
+      alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 8),
+        child: Row(
+          mainAxisAlignment: isMe ? MainAxisAlignment.end : MainAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: isMe
+              ? [
+                  Flexible(child: bubble),
+                  avatar,
+                ]
+              : [
+                  avatar,
+                  Flexible(child: bubble),
+                ],
         ),
       ),
     );

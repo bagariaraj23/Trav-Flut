@@ -6,6 +6,7 @@ import 'package:tripthread/models/user.dart';
 import 'package:tripthread/providers/chat_provider.dart';
 import 'package:tripthread/providers/auth_provider.dart';
 import 'package:tripthread/services/api_service.dart';
+import 'package:tripthread/utils/avatar_utils.dart';
 
 /// Screen to start a new DM: pick a user (from following), create conversation, then open chat.
 class NewConversationScreen extends StatefulWidget {
@@ -203,20 +204,25 @@ class _NewConversationScreenState extends State<NewConversationScreen> {
                               final user = _users[index];
                               final displayName =
                                   user.name ?? user.username ?? user.email;
+                              final avatarInitial = AvatarUtils.initialsFromName(
+                                user.name ?? user.username ?? '',
+                              );
+                              final avatarColor = AvatarUtils.colorForKey(user.id);
                               final creating = _creatingForUserId == user.id;
                               final selected = _selectedUserIds.contains(user.id);
                               return ListTile(
                                 leading: CircleAvatar(
-                                  backgroundColor: Colors.grey[300],
+                                  backgroundColor: avatarColor,
                                   backgroundImage: user.avatarUrl != null
                                       ? CachedNetworkImageProvider(user.avatarUrl!)
                                       : null,
                                   child: user.avatarUrl == null
                                       ? Text(
-                                          (displayName.isNotEmpty
-                                                  ? displayName[0]
-                                                  : '?')
-                                              .toUpperCase(),
+                                          avatarInitial,
+                                          style: const TextStyle(
+                                            color: Colors.white,
+                                            fontWeight: FontWeight.w700,
+                                          ),
                                         )
                                       : null,
                                 ),

@@ -6,6 +6,7 @@ import 'package:intl/intl.dart';
 import 'package:tripthread/models/chat_conversation.dart';
 import 'package:tripthread/providers/chat_provider.dart';
 import 'package:tripthread/providers/auth_provider.dart';
+import 'package:tripthread/utils/avatar_utils.dart';
 
 class ConversationListScreen extends StatefulWidget {
   final String? tripId;
@@ -117,10 +118,22 @@ class _ConversationTile extends StatelessWidget {
     final unread = conversation.unreadCount > 0;
     final isGroup = conversation.type == 'GROUP';
     final isTrip = conversation.type == 'TRIP';
+    final otherDisplayName = other.isNotEmpty
+        ? (other.first.name ?? other.first.username ?? '')
+        : '';
+    final avatarLabel = isGroup
+        ? (conversation.name ?? 'Group')
+        : isTrip
+            ? 'Trip'
+            : otherDisplayName;
+    final avatarInitial = AvatarUtils.initialsFromName(avatarLabel);
+    final avatarColor = AvatarUtils.colorForKey(
+      isGroup || isTrip ? conversation.id : (other.isNotEmpty ? other.first.userId : ''),
+    );
 
     return ListTile(
       leading: CircleAvatar(
-        backgroundColor: Colors.grey[300],
+        backgroundColor: avatarColor,
         backgroundImage: !isGroup &&
                 !isTrip &&
                 other.isNotEmpty &&
@@ -128,11 +141,23 @@ class _ConversationTile extends StatelessWidget {
             ? CachedNetworkImageProvider(other.first.avatarUrl!)
             : null,
         child: isGroup
-            ? const Icon(Icons.groups)
+            ? Text(
+                avatarInitial,
+                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
+              )
             : isTrip
-                ? const Icon(Icons.luggage)
+                ? Text(
+                    avatarInitial,
+                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
+                  )
                 : (other.isEmpty || other.first.avatarUrl == null
-                    ? Text((title.isNotEmpty ? title[0] : '?').toUpperCase())
+                    ? Text(
+                        avatarInitial,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      )
                     : null),
       ),
       title: Row(
