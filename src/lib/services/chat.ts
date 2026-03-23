@@ -6,6 +6,7 @@ import { publishChatEvent, type ChatMessagePayload } from '@/lib/chat-events'
 const DEFAULT_PAGE_SIZE = 30
 const MAX_PAGE_SIZE = 100
 const MAX_CONTENT_LENGTH = 64 * 1024 // 64KB for future E2E payload
+const MESSAGE_EDIT_DELETE_WINDOW_MS = 15 * 60 * 1000
 
 export type CreateConversationParams = {
   type: 'DM' | 'GROUP' | 'TRIP'
@@ -425,6 +426,13 @@ export type SendMessageParams = {
   attachmentMediaIds?: string[]
 }
 
+function ensureWithinEditDeleteWindow(createdAt: Date): void {
+  const ageMs = Date.now() - createdAt.getTime()
+  if (ageMs > MESSAGE_EDIT_DELETE_WINDOW_MS) {
+    throw new ValidationError('Messages can only be edited or deleted within 15 minutes')
+  }
+}
+
 export async function sendMessage(
   conversationId: string,
   userId: string,
@@ -576,6 +584,10 @@ export async function deleteMessage(
   if (existing.senderId !== userId) {
     throw new AuthorizationError('You can only delete your own messages')
   }
+  if (existing.deletedAt != null) {
+    throw new ValidationError('Message is already deleted')
+  }
+  ensureWithinEditDeleteWindow(existing.createdAt)
 
   const deleted =
     existing.deletedAt != null
@@ -633,6 +645,133 @@ export async function deleteMessage(
           content: deleted.replyTo.content,
           senderId: deleted.replyTo.senderId,
           createdAt: toISODate(deleted.replyTo.createdAt),
+        }
+      : undefined,
+  }
+}
+
+export async function editMessage(
+  conversationId: string,
+  messageId: string,
+  userId: string,
+  content: string
+): Promise<MessageWithMeta> {
+  const participant = await prisma.conversationParticipant.findUnique({
+    where: {
+      conversationId_userId: { conversationId, userId },
+    },
+  })
+  if (!participant || participant.leftAt) throw new AuthorizationError('Not a participant')
+
+  const existing = await prisma.chatMessage.findUnique({
+    where: { id: messageId },
+    include: messageInclude,
+  })
+  if (!existing || existing.conversationId !== conversationId) {
+    throw new NotFoundError('Message not found')
+  }
+  if (existing.senderId !== userId) {
+    throw new AuthorizationError('You can only edit your own messages')
+  }
+  if (existing.deletedAt != null) {
+    throw new ValidationError('Deleted messages cannot be edited')
+  }
+  ensureWithinEditDeleteWindow(existing.createdAt)
+
+  const trimmed = content.trim()
+  if (!trimmed) {
+    throw new ValidationError('Message content cannot be empty')
+  }
+  if (trimmed.length > MAX_CONTENT_LENGTH) {
+    throw new ValidationError('Message content too long')
+  }
+
+  const updated = await prisma.chatMessage.update({
+    where: { id: messageId },
+    data: { content: trimmed },
+    include: messageInclude,
+  })
+
+  const participants = await prisma.conversationParticipant.findMany({
+    where: { conversationId, leftAt: null },
+    select: { userId: true },
+  })
+  const recipientUserIds = participants.map((p) => p.userId)
+
+  const payload: ChatMessagePayload = {
+    id: updated.id,
+    conversationId: updated.conversationId,
+    senderId: updated.senderId,
+    content: updated.content,
+    replyToMessageId: updated.replyToMessageId,
+    createdAt: toISODate(updated.createdAt),
+    updatedAt: toISODate(updated.updatedAt),
+    attachments: updated.attachments.map((a) => ({
+      id: a.id,
+      url: a.url,
+      type: a.type,
+      publicId: a.publicId,
+    })),
+    sender: {
+      id: updated.sender.id,
+      username: updated.sender.username,
+      name: updated.sender.name,
+      avatarUrl: updated.sender.avatarUrl,
+    },
+    replyTo: updated.replyTo
+      ? {
+          id: updated.replyTo.id,
+          content: updated.replyTo.content,
+          senderId: updated.replyTo.senderId,
+          createdAt: toISODate(updated.replyTo.createdAt),
+        }
+      : null,
+  }
+
+  publishChatEvent({
+    event: 'message.updated',
+    conversationId,
+    message: payload,
+    recipientUserIds,
+  })
+  // Backward compatibility for clients that only handle message.new.
+  publishChatEvent({
+    event: 'message.new',
+    conversationId,
+    message: payload,
+    recipientUserIds,
+  })
+
+  return {
+    id: updated.id,
+    conversationId: updated.conversationId,
+    senderId: updated.senderId,
+    content: updated.content,
+    replyToMessageId: updated.replyToMessageId,
+    deletedAt: updated.deletedAt ? toISODate(updated.deletedAt) : null,
+    createdAt: toISODate(updated.createdAt),
+    updatedAt: toISODate(updated.updatedAt),
+    sender: {
+      id: updated.sender.id,
+      username: updated.sender.username,
+      name: updated.sender.name,
+      avatarUrl: updated.sender.avatarUrl,
+    },
+    attachments: updated.attachments.map((a) => ({
+      id: a.id,
+      url: a.url,
+      type: a.type,
+      publicId: a.publicId,
+      width: a.width,
+      height: a.height,
+      duration: a.duration,
+    })),
+    replyTo: updated.replyTo
+      ? {
+          id: updated.replyTo.id,
+          content: updated.replyTo.content,
+          senderId: updated.replyTo.senderId,
+          createdAt: toISODate(updated.replyTo.createdAt),
         }
       : undefined,
   }

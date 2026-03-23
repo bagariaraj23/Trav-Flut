@@ -26,16 +26,20 @@ class ChatMessageModel {
   });
 
   factory ChatMessageModel.fromJson(Map<String, dynamic> json) {
+    final senderId = (json['senderId'] as String?) ?? '';
+    final senderJson = json['sender'] as Map<String, dynamic>?;
     return ChatMessageModel(
       id: json['id'] as String,
       conversationId: json['conversationId'] as String,
-      senderId: json['senderId'] as String,
-      content: json['content'] as String,
+      senderId: senderId,
+      content: (json['content'] as String?) ?? '',
       replyToMessageId: json['replyToMessageId'] as String?,
       deletedAt: json['deletedAt'] as String?,
       createdAt: json['createdAt'] as String,
       updatedAt: json['updatedAt'] as String,
-      sender: ChatMessageSender.fromJson(json['sender'] as Map<String, dynamic>),
+      sender: senderJson != null
+          ? ChatMessageSender.fromJson(senderJson)
+          : ChatMessageSender(id: senderId),
       attachments: (json['attachments'] as List<dynamic>?)
               ?.map((e) => ChatMessageAttachment.fromJson(e as Map<String, dynamic>))
               .toList() ??

@@ -38,6 +38,7 @@ class ChatProvider with ChangeNotifier {
       getAccessToken: () => _storageService.getAccessToken(),
     );
     _socketService.onMessageNew = _onMessageNew;
+    _socketService.onMessageUpdated = _onMessageUpdated;
     _socketService.onMessageDeleted = _onMessageDeleted;
     _socketService.onTyping = _onTyping;
     _socketService.onConnected = (_) => notifyListeners();
@@ -62,8 +63,16 @@ class ChatProvider with ChangeNotifier {
 
   void _onMessageNew(String conversationId, ChatMessageModel message) {
     final list = _messagesByConversation[conversationId] ?? [];
-    if (list.any((m) => m.id == message.id)) return;
-    _messagesByConversation[conversationId] = [message, ...list];
+    final existingIndex = list.indexWhere((m) => m.id == message.id);
+    if (existingIndex >= 0) {
+      // If a message with same id arrives again (e.g. edit back-compat event),
+      // replace it so content stays in sync across clients.
+      final updated = [...list];
+      updated[existingIndex] = message;
+      _messagesByConversation[conversationId] = updated;
+    } else {
+      _messagesByConversation[conversationId] = [message, ...list];
+    }
     if (defaultTargetPlatform == TargetPlatform.iOS || defaultTargetPlatform == TargetPlatform.android) {
       HapticFeedback.lightImpact();
     }
@@ -84,6 +93,14 @@ class ChatProvider with ChangeNotifier {
     } catch (_) {
       // ignore parse errors
     }
+  }
+
+  void _onMessageUpdated(String conversationId, ChatMessageModel updated) {
+    final list = _messagesByConversation[conversationId];
+    if (list == null || list.isEmpty) return;
+    _messagesByConversation[conversationId] =
+        list.map((m) => m.id == updated.id ? updated : m).toList();
+    notifyListeners();
   }
 
   void _onMessageDeleted(String conversationId, String messageId, String deletedAt) {
@@ -214,6 +231,25 @@ class ChatProvider with ChangeNotifier {
         deleted.id,
         deleted.deletedAt ?? DateTime.now().toUtc().toIso8601String(),
       );
+      return true;
+    }
+    _error = res.error;
+    notifyListeners();
+    return false;
+  }
+
+  Future<bool> editMessage(
+    String conversationId,
+    String messageId, {
+    required String content,
+  }) async {
+    final res = await _apiService.editChatMessage(
+      conversationId,
+      messageId,
+      content: content,
+    );
+    if (res.success && res.data != null) {
+      _onMessageUpdated(conversationId, res.data!);
       return true;
     }
     _error = res.error;

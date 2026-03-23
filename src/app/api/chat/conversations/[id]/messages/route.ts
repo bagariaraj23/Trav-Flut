@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { withAuth, withLogging, handleApiError } from "@/lib/middleware";
-import { deleteMessage, getMessages, sendMessage } from "@/lib/services/chat";
+import { deleteMessage, editMessage, getMessages, sendMessage } from "@/lib/services/chat";
 import { ApiResponse } from "@/types/api";
 import { z } from "zod";
 
@@ -85,6 +85,37 @@ export async function DELETE(
         const deleted = await deleteMessage(id, messageId, userId);
         return NextResponse.json<ApiResponse>(
           { success: true, data: deleted },
+          { status: 200 }
+        );
+      } catch (error) {
+        return handleApiError(error);
+      }
+    });
+  })(request);
+}
+
+export async function PATCH(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  return withLogging(async (req) => {
+    return withAuth(req, async (authReq) => {
+      try {
+        const { id } = await params;
+        const userId = authReq.user!.userId;
+        const { searchParams } = new URL(authReq.url);
+        const messageId = searchParams.get("messageId");
+        if (!messageId) {
+          return NextResponse.json<ApiResponse>(
+            { success: false, error: "messageId is required" },
+            { status: 400 }
+          );
+        }
+        const body = await authReq.json();
+        const content = typeof body?.content === "string" ? body.content : "";
+        const updated = await editMessage(id, messageId, userId, content);
+        return NextResponse.json<ApiResponse>(
+          { success: true, data: updated },
           { status: 200 }
         );
       } catch (error) {

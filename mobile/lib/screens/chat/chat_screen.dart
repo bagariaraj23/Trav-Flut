@@ -25,34 +25,116 @@ class _ChatScreenState extends State<ChatScreen> {
   ChatMessageModel? _replyingTo;
   List<File> _selectedMedia = [];
   bool _uploadingMedia = false;
+  ChatMessageModel? _editingMessage;
 
-  Future<void> _confirmDelete(ChatMessageModel message) async {
-    if (message.deletedAt != null) return;
-    final chat = context.read<ChatProvider>();
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Delete message'),
-        content: const Text('This message will be replaced with "This message was deleted".'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancel'),
+  Future<void> _handleMessageActions(ChatMessageModel message) async {
+    try {
+      if (message.deletedAt != null || !mounted) return;
+      final action = await showModalBottomSheet<String>(
+        context: context,
+        builder: (context) => SafeArea(
+          child: Material(
+            color: Theme.of(context).colorScheme.surface,
+            child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _MessageActionRow(
+                icon: Icons.edit_outlined,
+                label: 'Edit',
+                onTap: () => Navigator.of(context).pop('edit'),
+              ),
+              _MessageActionRow(
+                icon: Icons.delete_outline,
+                label: 'Delete',
+                onTap: () => Navigator.of(context).pop('delete'),
+              ),
+            ],
           ),
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Delete'),
           ),
-        ],
-      ),
-    );
-    if (confirm != true || !mounted) return;
-    final ok = await chat.deleteMessage(widget.conversationId, message.id);
-    if (!ok && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(chat.error ?? 'Failed to delete message')),
+        ),
       );
+      if (!mounted || action == null) return;
+      if (action == 'edit') {
+        _startEditing(message);
+        return;
+      }
+      if (action != 'delete') return;
+      final chat = context.read<ChatProvider>();
+      final confirm = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Delete message'),
+          content: const Text('This message will be replaced with "This message was deleted".'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: const Text('Delete'),
+            ),
+          ],
+        ),
+      );
+      if (confirm != true || !mounted) return;
+      final ok = await chat.deleteMessage(widget.conversationId, message.id);
+      if (!ok && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(chat.error ?? 'Failed to delete message')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not open message actions')),
+        );
+      }
     }
+  }
+
+  void _startEditing(ChatMessageModel message) {
+    setState(() {
+      _editingMessage = message;
+      _textController.text = message.content;
+      _replyingTo = null;
+    });
+  }
+
+  void _cancelEditing() {
+    setState(() {
+      _editingMessage = null;
+      _textController.clear();
+    });
+  }
+
+  Future<void> _submitEdit() async {
+    final editing = _editingMessage;
+    if (editing == null) return;
+    final content = _textController.text.trim();
+    if (content.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Message content cannot be empty')),
+      );
+      return;
+    }
+    final chat = context.read<ChatProvider>();
+    final ok = await chat.editMessage(
+      widget.conversationId,
+      editing.id,
+      content: content,
+    );
+    if (!mounted) return;
+    if (ok) {
+      setState(() {
+        _editingMessage = null;
+        _textController.clear();
+      });
+      return;
+    }
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(chat.error ?? 'Failed to edit message')),
+    );
   }
 
   @override
@@ -124,6 +206,10 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   Future<void> _send() async {
+    if (_editingMessage != null) {
+      await _submitEdit();
+      return;
+    }
     final text = _textController.text.trim();
     if (text.isEmpty && _selectedMedia.isEmpty) return;
 
@@ -186,6 +272,7 @@ class _ChatScreenState extends State<ChatScreen> {
       _textController.clear();
       setState(() {
         _replyingTo = null;
+        _editingMessage = null;
         _selectedMedia.clear();
         _uploadingMedia = false;
       });
@@ -277,8 +364,8 @@ class _ChatScreenState extends State<ChatScreen> {
                             child: _MessageBubble(
                               message: msg,
                               isMe: msg.senderId == currentUserId,
-                              onDelete: msg.senderId == currentUserId
-                                  ? () => _confirmDelete(msg)
+                              onLongPressAction: msg.senderId == currentUserId
+                                  ? () => _handleMessageActions(msg)
                                   : null,
                             ),
                           );
@@ -292,7 +379,7 @@ class _ChatScreenState extends State<ChatScreen> {
             ),
           ),
           // Reply preview bar
-          if (_replyingTo != null)
+          if (_replyingTo != null && _editingMessage == null)
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
               decoration: BoxDecoration(
@@ -344,6 +431,36 @@ class _ChatScreenState extends State<ChatScreen> {
                     icon: const Icon(Icons.close, size: 20),
                     onPressed: _cancelReply,
                     tooltip: 'Cancel reply',
+                  ),
+                ],
+              ),
+            ),
+          if (_editingMessage != null)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                border: Border(
+                  top: BorderSide(
+                    color: Theme.of(context).dividerColor,
+                    width: 1,
+                  ),
+                ),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.edit_outlined, size: 18),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Editing message',
+                      style: Theme.of(context).textTheme.bodyMedium,
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close, size: 20),
+                    onPressed: _cancelEditing,
+                    tooltip: 'Cancel edit',
                   ),
                 ],
               ),
@@ -408,7 +525,7 @@ class _ChatScreenState extends State<ChatScreen> {
               children: [
                 IconButton(
                   icon: const Icon(Icons.attach_file),
-                  onPressed: _uploadingMedia ? null : _pickMedia,
+                  onPressed: (_uploadingMedia || _editingMessage != null) ? null : _pickMedia,
                   tooltip: 'Attach media',
                 ),
                 Expanded(
@@ -440,7 +557,7 @@ class _ChatScreenState extends State<ChatScreen> {
                 else
                   IconButton.filled(
                     onPressed: _send,
-                    icon: const Icon(Icons.send),
+                    icon: Icon(_editingMessage != null ? Icons.check : Icons.send),
                   ),
               ],
             ),
@@ -471,15 +588,44 @@ class _TypingIndicator extends StatelessWidget {
   }
 }
 
+class _MessageActionRow extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+
+  const _MessageActionRow({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        child: Row(
+          children: [
+            Icon(icon),
+            const SizedBox(width: 12),
+            Text(label, style: Theme.of(context).textTheme.bodyLarge),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _MessageBubble extends StatelessWidget {
   final ChatMessageModel message;
   final bool isMe;
-  final VoidCallback? onDelete;
+  final VoidCallback? onLongPressAction;
 
   const _MessageBubble({
     required this.message,
     required this.isMe,
-    this.onDelete,
+    this.onLongPressAction,
   });
 
   @override
@@ -489,7 +635,7 @@ class _MessageBubble extends StatelessWidget {
     return Align(
       alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
       child: GestureDetector(
-        onLongPress: onDelete == null || isDeleted ? null : onDelete,
+        onLongPress: onLongPressAction == null || isDeleted ? null : onLongPressAction,
         child: Container(
           margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),

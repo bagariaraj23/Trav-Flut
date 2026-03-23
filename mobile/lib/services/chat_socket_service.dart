@@ -6,6 +6,7 @@ import 'package:tripthread/config/app_config.dart';
 import 'package:tripthread/models/chat_message.dart';
 
 typedef OnChatMessageNew = void Function(String conversationId, ChatMessageModel message);
+typedef OnChatMessageUpdated = void Function(String conversationId, ChatMessageModel message);
 typedef OnChatMessageDeleted = void Function(String conversationId, String messageId, String deletedAt);
 typedef OnTyping = void Function(String conversationId, String userId, String untilIso);
 typedef OnConnected = void Function(String userId);
@@ -16,6 +17,7 @@ class ChatSocketService {
   StreamSubscription? _subscription;
   String? _userId;
   OnChatMessageNew? onMessageNew;
+  OnChatMessageUpdated? onMessageUpdated;
   OnChatMessageDeleted? onMessageDeleted;
   OnTyping? onTyping;
   OnConnected? onConnected;
@@ -115,6 +117,15 @@ class ChatSocketService {
         if (conversationId != null && messageJson != null) {
           final message = ChatMessageModel.fromJson(messageJson);
           onMessageNew?.call(conversationId, message);
+        }
+        return;
+      }
+      if (event == 'message.updated') {
+        final conversationId = map['conversationId'] as String?;
+        final messageJson = map['message'] as Map<String, dynamic>?;
+        if (conversationId != null && messageJson != null) {
+          final message = ChatMessageModel.fromJson(messageJson);
+          onMessageUpdated?.call(conversationId, message);
         }
         return;
       }
