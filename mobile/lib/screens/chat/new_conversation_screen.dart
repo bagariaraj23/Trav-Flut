@@ -20,11 +20,21 @@ class _NewConversationScreenState extends State<NewConversationScreen> {
   bool _loading = true;
   String? _error;
   String? _creatingForUserId;
+  bool _groupMode = false;
+  bool _creatingGroup = false;
+  final Set<String> _selectedUserIds = <String>{};
+  final TextEditingController _groupNameController = TextEditingController();
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) => _loadUsers());
+  }
+
+  @override
+  void dispose() {
+    _groupNameController.dispose();
+    super.dispose();
   }
 
   Future<void> _loadUsers() async {
@@ -74,15 +84,69 @@ class _NewConversationScreenState extends State<NewConversationScreen> {
     }
   }
 
+  void _toggleGroupMode() {
+    setState(() {
+      _groupMode = !_groupMode;
+      _selectedUserIds.clear();
+      _groupNameController.clear();
+    });
+  }
+
+  void _toggleUserSelection(User user) {
+    setState(() {
+      if (_selectedUserIds.contains(user.id)) {
+        _selectedUserIds.remove(user.id);
+      } else {
+        _selectedUserIds.add(user.id);
+      }
+    });
+  }
+
+  Future<void> _createGroupConversation() async {
+    if (_selectedUserIds.length < 2) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Select at least 2 users to create a group')),
+      );
+      return;
+    }
+
+    final chat = context.read<ChatProvider>();
+    setState(() => _creatingGroup = true);
+    final conv = await chat.createConversation(
+      type: 'GROUP',
+      participantIds: _selectedUserIds.toList(),
+      name: _groupNameController.text.trim().isEmpty
+          ? null
+          : _groupNameController.text.trim(),
+    );
+    if (!mounted) return;
+    setState(() => _creatingGroup = false);
+    if (conv != null) {
+      context.pop();
+      context.push('/chat/${conv.id}');
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(chat.error ?? 'Failed to create group conversation')),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('New chat'),
+        title: Text(_groupMode ? 'New group' : 'New chat'),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
           onPressed: () => context.pop(),
         ),
+        actions: [
+          IconButton(
+            icon: Icon(_groupMode ? Icons.person : Icons.group_add),
+            tooltip: _groupMode ? 'Switch to DM' : 'Create group',
+            onPressed: _creatingGroup ? null : _toggleGroupMode,
+          ),
+        ],
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
@@ -107,42 +171,100 @@ class _NewConversationScreenState extends State<NewConversationScreen> {
                         textAlign: TextAlign.center,
                       ),
                     )
-                  : ListView.builder(
-                      itemCount: _users.length,
-                      itemBuilder: (context, index) {
-                        final user = _users[index];
-                        final displayName =
-                            user.name ?? user.username ?? user.email;
-                        final creating = _creatingForUserId == user.id;
-                        return ListTile(
-                          leading: CircleAvatar(
-                            backgroundColor: Colors.grey[300],
-                            backgroundImage: user.avatarUrl != null
-                                ? CachedNetworkImageProvider(user.avatarUrl!)
-                                : null,
-                            child: user.avatarUrl == null
-                                ? Text(
-                                    (displayName.isNotEmpty
-                                            ? displayName[0]
-                                            : '?')
-                                        .toUpperCase(),
-                                  )
-                                : null,
+                  : Column(
+                      children: [
+                        if (_groupMode)
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(12, 12, 12, 6),
+                            child: Column(
+                              children: [
+                                TextField(
+                                  controller: _groupNameController,
+                                  decoration: const InputDecoration(
+                                    labelText: 'Group name (optional)',
+                                    border: OutlineInputBorder(),
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                                Align(
+                                  alignment: Alignment.centerLeft,
+                                  child: Text(
+                                    'Selected: ${_selectedUserIds.length} (min 2)',
+                                    style: Theme.of(context).textTheme.bodySmall,
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
-                          title: Text(displayName),
-                          subtitle:
-                              user.username != null ? Text('@${user.username}') : null,
-                          trailing: creating
-                              ? const SizedBox(
-                                  width: 24,
-                                  height: 24,
-                                  child: CircularProgressIndicator(strokeWidth: 2),
-                                )
-                              : null,
-                          onTap: creating ? null : () => _startChatWith(user),
-                        );
-                      },
+                        Expanded(
+                          child: ListView.builder(
+                            itemCount: _users.length,
+                            itemBuilder: (context, index) {
+                              final user = _users[index];
+                              final displayName =
+                                  user.name ?? user.username ?? user.email;
+                              final creating = _creatingForUserId == user.id;
+                              final selected = _selectedUserIds.contains(user.id);
+                              return ListTile(
+                                leading: CircleAvatar(
+                                  backgroundColor: Colors.grey[300],
+                                  backgroundImage: user.avatarUrl != null
+                                      ? CachedNetworkImageProvider(user.avatarUrl!)
+                                      : null,
+                                  child: user.avatarUrl == null
+                                      ? Text(
+                                          (displayName.isNotEmpty
+                                                  ? displayName[0]
+                                                  : '?')
+                                              .toUpperCase(),
+                                        )
+                                      : null,
+                                ),
+                                title: Text(displayName),
+                                subtitle: user.username != null
+                                    ? Text('@${user.username}')
+                                    : null,
+                                trailing: _groupMode
+                                    ? Checkbox(
+                                        value: selected,
+                                        onChanged: _creatingGroup
+                                            ? null
+                                            : (_) => _toggleUserSelection(user),
+                                      )
+                                    : creating
+                                        ? const SizedBox(
+                                            width: 24,
+                                            height: 24,
+                                            child: CircularProgressIndicator(
+                                                strokeWidth: 2),
+                                          )
+                                        : null,
+                                onTap: _groupMode
+                                    ? (_creatingGroup
+                                        ? null
+                                        : () => _toggleUserSelection(user))
+                                    : (creating ? null : () => _startChatWith(user)),
+                              );
+                            },
+                          ),
+                        ),
+                      ],
                     ),
+      floatingActionButton: _groupMode
+          ? FloatingActionButton.extended(
+              onPressed: _creatingGroup ? null : _createGroupConversation,
+              label: _creatingGroup
+                  ? const Text('Creating...')
+                  : Text('Create group (${_selectedUserIds.length})'),
+              icon: _creatingGroup
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.group_add),
+            )
+          : null,
     );
   }
 }

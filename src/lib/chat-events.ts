@@ -12,6 +12,13 @@ export type ChatEventPayload =
       message: ChatMessagePayload
       recipientUserIds: string[]
     }
+  | {
+      event: 'message.deleted'
+      conversationId: string
+      messageId: string
+      deletedAt: string
+      recipientUserIds: string[]
+    }
   | { event: 'typing'; conversationId: string; userId: string; until: string; recipientUserIds: string[] }
 
 export type ChatMessagePayload = {

@@ -38,6 +38,7 @@ class ChatProvider with ChangeNotifier {
       getAccessToken: () => _storageService.getAccessToken(),
     );
     _socketService.onMessageNew = _onMessageNew;
+    _socketService.onMessageDeleted = _onMessageDeleted;
     _socketService.onTyping = _onTyping;
     _socketService.onConnected = (_) => notifyListeners();
     _socketService.onError = (msg) {
@@ -83,6 +84,22 @@ class ChatProvider with ChangeNotifier {
     } catch (_) {
       // ignore parse errors
     }
+  }
+
+  void _onMessageDeleted(String conversationId, String messageId, String deletedAt) {
+    final list = _messagesByConversation[conversationId];
+    if (list == null || list.isEmpty) return;
+    _messagesByConversation[conversationId] = list
+        .map((m) => m.id == messageId
+            ? m.copyWith(
+                content: '',
+                deletedAt: deletedAt,
+                attachments: const [],
+                replyTo: null,
+              )
+            : m)
+        .toList();
+    notifyListeners();
   }
 
   void _startTypingExpiryTimer() {
@@ -181,6 +198,22 @@ class ChatProvider with ChangeNotifier {
       if (defaultTargetPlatform == TargetPlatform.iOS || defaultTargetPlatform == TargetPlatform.android) {
         HapticFeedback.lightImpact();
       }
+      return true;
+    }
+    _error = res.error;
+    notifyListeners();
+    return false;
+  }
+
+  Future<bool> deleteMessage(String conversationId, String messageId) async {
+    final res = await _apiService.deleteChatMessage(conversationId, messageId);
+    if (res.success && res.data != null) {
+      final deleted = res.data!;
+      _onMessageDeleted(
+        conversationId,
+        deleted.id,
+        deleted.deletedAt ?? DateTime.now().toUtc().toIso8601String(),
+      );
       return true;
     }
     _error = res.error;

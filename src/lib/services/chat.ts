@@ -336,7 +336,8 @@ export async function getMessages(
     : undefined
 
   const messages = await prisma.chatMessage.findMany({
-    where: { conversationId, deletedAt: null },
+    // Keep deleted messages in history so clients can render "This message was deleted".
+    where: { conversationId },
     orderBy: { createdAt: 'desc' },
     take: limit + 1,
     ...(cursorCondition && { cursor: cursorCondition, skip: 1 }),
@@ -548,6 +549,90 @@ export async function sendMessage(
           content: messageForPayload.replyTo.content,
           senderId: messageForPayload.replyTo.senderId,
           createdAt: toISODate(messageForPayload.replyTo.createdAt),
+        }
+      : undefined,
+  }
+}
+
+export async function deleteMessage(
+  conversationId: string,
+  messageId: string,
+  userId: string
+): Promise<MessageWithMeta> {
+  const participant = await prisma.conversationParticipant.findUnique({
+    where: {
+      conversationId_userId: { conversationId, userId },
+    },
+  })
+  if (!participant || participant.leftAt) throw new AuthorizationError('Not a participant')
+
+  const existing = await prisma.chatMessage.findUnique({
+    where: { id: messageId },
+    include: messageInclude,
+  })
+  if (!existing || existing.conversationId !== conversationId) {
+    throw new NotFoundError('Message not found')
+  }
+  if (existing.senderId !== userId) {
+    throw new AuthorizationError('You can only delete your own messages')
+  }
+
+  const deleted =
+    existing.deletedAt != null
+      ? existing
+      : await prisma.chatMessage.update({
+          where: { id: messageId },
+          data: {
+            deletedAt: new Date(),
+            content: '',
+          },
+          include: messageInclude,
+        })
+
+  const participants = await prisma.conversationParticipant.findMany({
+    where: { conversationId, leftAt: null },
+    select: { userId: true },
+  })
+  const recipientUserIds = participants
+    .map((p) => p.userId)
+  publishChatEvent({
+    event: 'message.deleted',
+    conversationId,
+    messageId: deleted.id,
+    deletedAt: toISODate(deleted.deletedAt ?? new Date()),
+    recipientUserIds,
+  })
+
+  return {
+    id: deleted.id,
+    conversationId: deleted.conversationId,
+    senderId: deleted.senderId,
+    content: deleted.content,
+    replyToMessageId: deleted.replyToMessageId,
+    deletedAt: deleted.deletedAt ? toISODate(deleted.deletedAt) : null,
+    createdAt: toISODate(deleted.createdAt),
+    updatedAt: toISODate(deleted.updatedAt),
+    sender: {
+      id: deleted.sender.id,
+      username: deleted.sender.username,
+      name: deleted.sender.name,
+      avatarUrl: deleted.sender.avatarUrl,
+    },
+    attachments: deleted.attachments.map((a) => ({
+      id: a.id,
+      url: a.url,
+      type: a.type,
+      publicId: a.publicId,
+      width: a.width,
+      height: a.height,
+      duration: a.duration,
+    })),
+    replyTo: deleted.replyTo
+      ? {
+          id: deleted.replyTo.id,
+          content: deleted.replyTo.content,
+          senderId: deleted.replyTo.senderId,
+          createdAt: toISODate(deleted.replyTo.createdAt),
         }
       : undefined,
   }

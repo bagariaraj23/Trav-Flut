@@ -6,6 +6,7 @@ import 'package:tripthread/config/app_config.dart';
 import 'package:tripthread/models/chat_message.dart';
 
 typedef OnChatMessageNew = void Function(String conversationId, ChatMessageModel message);
+typedef OnChatMessageDeleted = void Function(String conversationId, String messageId, String deletedAt);
 typedef OnTyping = void Function(String conversationId, String userId, String untilIso);
 typedef OnConnected = void Function(String userId);
 typedef OnError = void Function(String message);
@@ -15,6 +16,7 @@ class ChatSocketService {
   StreamSubscription? _subscription;
   String? _userId;
   OnChatMessageNew? onMessageNew;
+  OnChatMessageDeleted? onMessageDeleted;
   OnTyping? onTyping;
   OnConnected? onConnected;
   OnError? onError;
@@ -122,6 +124,15 @@ class ChatSocketService {
         final until = map['until'] as String?;
         if (conversationId != null && userId != null && until != null) {
           onTyping?.call(conversationId, userId, until);
+        }
+        return;
+      }
+      if (event == 'message.deleted') {
+        final conversationId = map['conversationId'] as String?;
+        final messageId = map['messageId'] as String?;
+        final deletedAt = map['deletedAt'] as String?;
+        if (conversationId != null && messageId != null && deletedAt != null) {
+          onMessageDeleted?.call(conversationId, messageId, deletedAt);
         }
       }
     } catch (e) {

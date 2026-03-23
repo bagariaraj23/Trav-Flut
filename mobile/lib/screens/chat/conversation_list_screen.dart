@@ -115,29 +115,60 @@ class _ConversationTile extends StatelessWidget {
         ? _formatTime(conversation.lastMessage!.createdAt)
         : '';
     final unread = conversation.unreadCount > 0;
+    final isGroup = conversation.type == 'GROUP';
+    final isTrip = conversation.type == 'TRIP';
 
     return ListTile(
       leading: CircleAvatar(
         backgroundColor: Colors.grey[300],
-        backgroundImage: other.isNotEmpty && other.first.avatarUrl != null
+        backgroundImage: !isGroup &&
+                !isTrip &&
+                other.isNotEmpty &&
+                other.first.avatarUrl != null
             ? CachedNetworkImageProvider(other.first.avatarUrl!)
             : null,
-        child: other.isEmpty || other.first.avatarUrl == null
-            ? Text((title.isNotEmpty ? title[0] : '?').toUpperCase())
-            : null,
+        child: isGroup
+            ? const Icon(Icons.groups)
+            : isTrip
+                ? const Icon(Icons.luggage)
+                : (other.isEmpty || other.first.avatarUrl == null
+                    ? Text((title.isNotEmpty ? title[0] : '?').toUpperCase())
+                    : null),
       ),
-      title: Text(
-        title,
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-        style: TextStyle(
-          fontWeight: unread ? FontWeight.bold : FontWeight.normal,
-        ),
+      title: Row(
+        children: [
+          Expanded(
+            child: Text(
+              title,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontWeight: unread ? FontWeight.bold : FontWeight.normal,
+              ),
+            ),
+          ),
+          if (isGroup || isTrip)
+            Container(
+              margin: const EdgeInsets.only(left: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Text(
+                isGroup ? 'GROUP' : 'TRIP',
+                style: Theme.of(context).textTheme.labelSmall,
+              ),
+            ),
+        ],
       ),
       subtitle: Text(
         subtitle,
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
+        style: TextStyle(
+          fontWeight: unread ? FontWeight.w600 : FontWeight.normal,
+        ),
       ),
       trailing: Column(
         mainAxisAlignment: MainAxisAlignment.center,

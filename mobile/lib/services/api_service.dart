@@ -2764,6 +2764,30 @@ class ApiService {
     }
   }
 
+  Future<ApiResponse<ChatMessageModel>> deleteChatMessage(
+    String conversationId,
+    String messageId,
+  ) async {
+    try {
+      final response = await _dio.delete(
+        '/chat/conversations/$conversationId/messages',
+        queryParameters: {'messageId': messageId},
+      );
+      if (response.data['success'] == true && response.data['data'] != null) {
+        final m = ChatMessageModel.fromJson(response.data['data'] as Map<String, dynamic>);
+        return ApiResponse(success: true, data: m);
+      }
+      return ApiResponse(success: false, error: response.data['error'] ?? 'Failed to delete message');
+    } on DioException catch (e) {
+      return ApiResponse(
+        success: false,
+        error: e.response?.data['error'] ?? 'Network error',
+      );
+    } catch (e) {
+      return ApiResponse(success: false, error: 'An unexpected error occurred');
+    }
+  }
+
   Future<ApiResponse<ChatConversationSummary>> createChatConversation({
     required String type,
     required List<String> participantIds,

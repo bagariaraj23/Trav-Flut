@@ -40,6 +40,9 @@ export function attachChatWebSocket(
     if (payload.event === "message.new") {
       payload.recipientUserIds.forEach((userId) => sendToUser(userId, payload));
     }
+    if (payload.event === "message.deleted") {
+      payload.recipientUserIds.forEach((userId) => sendToUser(userId, payload));
+    }
     if (payload.event === "typing") {
       payload.recipientUserIds.forEach((userId) => sendToUser(userId, payload));
     }

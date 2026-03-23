@@ -45,6 +45,27 @@ class ChatMessageModel {
           : null,
     );
   }
+
+  ChatMessageModel copyWith({
+    String? content,
+    String? deletedAt,
+    List<ChatMessageAttachment>? attachments,
+    ChatMessagePreview? replyTo,
+  }) {
+    return ChatMessageModel(
+      id: id,
+      conversationId: conversationId,
+      senderId: senderId,
+      content: content ?? this.content,
+      replyToMessageId: replyToMessageId,
+      deletedAt: deletedAt ?? this.deletedAt,
+      createdAt: createdAt,
+      updatedAt: updatedAt,
+      sender: sender,
+      attachments: attachments ?? this.attachments,
+      replyTo: replyTo ?? this.replyTo,
+    );
+  }
 }
 
 class ChatMessageSender {

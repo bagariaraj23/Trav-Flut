@@ -195,13 +195,7 @@ class _SignupScreenState extends State<SignupScreen> {
                         });
                       },
                     ),
-                    validator: MultiValidator([
-                      RequiredValidator(errorText: 'Password is required'),
-                      MinLengthValidator(
-                        8,
-                        errorText: 'Password must be at least 8 characters',
-                      ),
-                    ]).call,
+                    validator: Validators.validatePassword,
                     onChanged: (_) {
                       final authProvider = context.read<AuthProvider>();
                       if (authProvider.error != null) {
@@ -213,7 +207,7 @@ class _SignupScreenState extends State<SignupScreen> {
                   const SizedBox(height: 8),
 
                   Text(
-                    'Must be at least 8 characters long',
+                    'Must be 8+ chars with at least 1 uppercase, 1 lowercase, and 1 number',
                     style: Theme.of(context).textTheme.bodySmall,
                   ),
 

@@ -26,6 +26,35 @@ class _ChatScreenState extends State<ChatScreen> {
   List<File> _selectedMedia = [];
   bool _uploadingMedia = false;
 
+  Future<void> _confirmDelete(ChatMessageModel message) async {
+    if (message.deletedAt != null) return;
+    final chat = context.read<ChatProvider>();
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete message'),
+        content: const Text('This message will be replaced with "This message was deleted".'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirm != true || !mounted) return;
+    final ok = await chat.deleteMessage(widget.conversationId, message.id);
+    if (!ok && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(chat.error ?? 'Failed to delete message')),
+      );
+    }
+  }
+
   @override
   void initState() {
     super.initState();
@@ -248,6 +277,9 @@ class _ChatScreenState extends State<ChatScreen> {
                             child: _MessageBubble(
                               message: msg,
                               isMe: msg.senderId == currentUserId,
+                              onDelete: msg.senderId == currentUserId
+                                  ? () => _confirmDelete(msg)
+                                  : null,
                             ),
                           );
                         },
@@ -442,18 +474,23 @@ class _TypingIndicator extends StatelessWidget {
 class _MessageBubble extends StatelessWidget {
   final ChatMessageModel message;
   final bool isMe;
+  final VoidCallback? onDelete;
 
   const _MessageBubble({
     required this.message,
     required this.isMe,
+    this.onDelete,
   });
 
   @override
   Widget build(BuildContext context) {
     final time = _formatTime(message.createdAt);
+    final isDeleted = message.deletedAt != null;
     return Align(
       alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
-      child: Container(
+      child: GestureDetector(
+        onLongPress: onDelete == null || isDeleted ? null : onDelete,
+        child: Container(
           margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
           constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.75),
@@ -468,7 +505,7 @@ class _MessageBubble extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             children: [
               // Reply preview
-              if (message.replyTo != null)
+              if (message.replyTo != null && !isDeleted)
                 Container(
                   padding: const EdgeInsets.all(8),
                   margin: const EdgeInsets.only(bottom: 8),
@@ -505,12 +542,20 @@ class _MessageBubble extends StatelessWidget {
                     ],
                   ),
                 ),
-              if (message.content.isNotEmpty)
+              if (isDeleted)
+                Text(
+                  'This message was deleted',
+                  style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                        fontStyle: FontStyle.italic,
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
+                )
+              else if (message.content.isNotEmpty)
                 Text(
                   message.content,
                   style: Theme.of(context).textTheme.bodyLarge,
                 ),
-              if (message.attachments.isNotEmpty)
+              if (message.attachments.isNotEmpty && !isDeleted)
                 ...message.attachments.map((a) {
                   if (a.type == 'IMAGE' || a.type == 'GIF') {
                     return Padding(
@@ -562,6 +607,7 @@ class _MessageBubble extends StatelessWidget {
               ),
             ],
           ),
+        ),
       ),
     );
   }
