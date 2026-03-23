@@ -891,7 +891,7 @@ class _MessageBubble extends StatelessWidget {
         decoration: BoxDecoration(
           color: isMe
               ? Theme.of(context).colorScheme.primaryContainer
-              : Theme.of(context).colorScheme.surfaceContainerHighest,
+              : const Color(0xFF6D32A8),
           borderRadius: BorderRadius.circular(16),
           border: isHighlighted
               ? Border.all(
