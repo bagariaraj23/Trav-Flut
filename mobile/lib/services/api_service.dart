@@ -1657,9 +1657,20 @@ class ApiService {
 
       if (response.data['success'] && response.data['data'] != null) {
         final data = response.data['data'];
-        final trips = (data['items'] as List<dynamic>)
-            .map((trip) => Trip.fromJson(trip))
-            .toList();
+        final List<dynamic> rawList;
+        if (data is List) {
+          rawList = data;
+        } else if (data is Map<String, dynamic> && data['items'] is List) {
+          rawList = data['items'] as List<dynamic>;
+        } else {
+          debugPrint('[ApiService] Unexpected /trips data shape: ${data.runtimeType}');
+          return ApiResponse<List<Trip>>(
+            success: false,
+            error: 'Unexpected trips response',
+          );
+        }
+        final trips =
+            rawList.map((trip) => Trip.fromJson(trip as Map<String, dynamic>)).toList();
 
         debugPrint('[ApiService] Found ${trips.length} user trips');
         return ApiResponse<List<Trip>>(success: true, data: trips);
@@ -1680,6 +1691,40 @@ class ApiService {
       );
     } catch (e) {
       debugPrint('[ApiService] Get user trips unexpected error: $e');
+      return ApiResponse<List<Trip>>(
+        success: false,
+        error: 'An unexpected error occurred',
+      );
+    }
+  }
+
+  /// Profile: trips owned by or joined by [userId] (server enforces privacy).
+  Future<ApiResponse<List<Trip>>> getTripsForUser(String userId) async {
+    try {
+      final response = await _dio.get('/users/$userId/trips');
+      if (response.data['success'] == true && response.data['data'] != null) {
+        final raw = response.data['data'];
+        final List<dynamic> rawList = raw is List
+            ? raw
+            : (raw is Map<String, dynamic> && raw['items'] is List
+                ? raw['items'] as List<dynamic>
+                : <dynamic>[]);
+        final trips = rawList
+            .map((t) => Trip.fromJson(t as Map<String, dynamic>))
+            .toList();
+        return ApiResponse<List<Trip>>(success: true, data: trips);
+      }
+      return ApiResponse<List<Trip>>(
+        success: false,
+        error: response.data['error'] ?? 'Failed to load trips',
+      );
+    } on DioException catch (e) {
+      return ApiResponse<List<Trip>>(
+        success: false,
+        error: e.response?.data['error'] ?? 'Network error occurred',
+      );
+    } catch (e) {
+      debugPrint('[ApiService] getTripsForUser error: $e');
       return ApiResponse<List<Trip>>(
         success: false,
         error: 'An unexpected error occurred',

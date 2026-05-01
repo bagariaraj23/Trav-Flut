@@ -88,7 +88,12 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   List<UnifiedNotificationItem> _engagementNotifications(
     List<UnifiedNotificationItem> all,
   ) => all
-      .where((n) => n.isLike || n.isComment || n.isCommentReply || n.isTag || n.isFollow)
+      .where((n) =>
+          n.isLike ||
+          n.isComment ||
+          n.isCommentReply ||
+          n.isTag ||
+          n.isFollow)
       .toList();
 
   NotificationTimeGroup _timeGroup(String createdAt) {
@@ -151,6 +156,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   /// Group key for engagement: same post or same comment.
   String _engagementGroupKey(UnifiedNotificationItem n) {
     final t = n.type;
+    if (t == 'FOLLOW') return 'FOLLOW_${n.id}';
     if (t == 'COMMENT_REPLY' &&
         n.parentCommentId != null &&
         n.parentCommentId!.isNotEmpty) {
@@ -256,6 +262,12 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
 
     if (first.isTag && first.tripId != null && first.tripId!.isNotEmpty) {
       _navigateToThread(first.tripId!, highlightEntryId: first.threadEntryId);
+      unawaited(_markNotificationsAsRead(group, userProvider));
+      return;
+    }
+
+    if (first.isFollow) {
+      context.push('/profile/${first.actor.id}');
       unawaited(_markNotificationsAsRead(group, userProvider));
       return;
     }
@@ -908,6 +920,11 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
           ? '$firstName tagged you in a post'
           : '$firstName +$others tagged you in a post';
       subtitle = 'Tags';
+    } else if (first.isFollow) {
+      label = others == 0
+          ? '$firstName started following you'
+          : '$firstName +$others started following you';
+      subtitle = 'Follows';
     } else {
       if (first.isTripThreadEntry) {
         final tripName = first.tripName?.isNotEmpty == true
@@ -1094,7 +1111,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     } else if (n.isFollow) {
       title = '$actorName started following you';
       subtitle = null;
-      icon = Icons.person_add;
+      icon = Icons.person_add_alt_1;
     } else if (n.isCommentLike) {
       title = '$actorName liked your comment';
       subtitle = n.contentPreview != null && n.contentPreview!.isNotEmpty
@@ -1140,8 +1157,11 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     final timeAgo = _formatTimeAgo(n.createdAt);
     final isUnread =
         n.isFollowRequest ||
-        n.isFollow ||
-        ((n.isLike || n.isComment || n.isCommentReply || n.isTag) &&
+        ((n.isLike ||
+                n.isComment ||
+                n.isCommentReply ||
+                n.isTag ||
+                n.isFollow) &&
             (n.readAt == null || (n.readAt?.isEmpty ?? true)));
     final backgroundColor = isUnread
         ? Theme.of(context).colorScheme.primary.withValues(alpha: 0.08)

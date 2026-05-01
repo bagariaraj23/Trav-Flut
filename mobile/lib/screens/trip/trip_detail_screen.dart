@@ -280,14 +280,6 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
                 ),
               ),
               actions: [
-                if (_canEditCover)
-                  IconButton(
-                    icon: const Icon(Icons.photo_camera_back_outlined),
-                    tooltip: _trip?.coverMedia == null
-                        ? 'Add Cover Photo'
-                        : 'Change Cover Photo',
-                    onPressed: _isUpdatingCover ? null : _showCoverOptions,
-                  ),
                 if (_trip != null &&
                     _trip!.status == TripStatus.ongoing &&
                     _isOwnerOrParticipant())
@@ -300,6 +292,14 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
                         extra: {'from': '/trip/${widget.tripId}'},
                       );
                     },
+                  ),
+                if (_canEditCover)
+                  IconButton(
+                    icon: const Icon(Icons.photo_camera_back_outlined),
+                    tooltip: _trip?.coverMedia == null
+                        ? 'Add Cover Photo'
+                        : 'Change Cover Photo',
+                    onPressed: _isUpdatingCover ? null : _showCoverOptions,
                   ),
               ],
             ),
@@ -662,19 +662,20 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
                 icon: const Icon(Icons.add),
                 label: const Text('Add Entry'),
               ),
-              // Owner-only actions
-              if (isOwner) ...[
-                const SizedBox(height: 8),
-                ElevatedButton.icon(
-                  onPressed: () {
-                    context.push(
-                      '/trip/${widget.tripId}/participants',
-                      extra: {'from': '/trip/${widget.tripId}'},
-                    );
-                  },
-                  icon: const Icon(Icons.people),
-                  label: const Text('Manage Participants'),
+              const SizedBox(height: 8),
+              ElevatedButton.icon(
+                onPressed: () {
+                  context.push(
+                    '/trip/${widget.tripId}/participants',
+                    extra: {'from': '/trip/${widget.tripId}'},
+                  );
+                },
+                icon: const Icon(Icons.people),
+                label: Text(
+                  isOwner ? 'Manage Participants' : 'View Participants',
                 ),
+              ),
+              if (isOwner) ...[
                 const SizedBox(height: 8),
                 Consumer<TripProvider>(
                   builder: (context, tripProvider, child) {
@@ -689,15 +690,30 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
                   },
                 ),
               ],
-            ] else if (_trip!.status == TripStatus.ended &&
-                _trip!.finalPost != null) ...[
-              ElevatedButton.icon(
-                onPressed: () {
-                  context.go('/trip/${widget.tripId}/final-post');
-                },
-                icon: const Icon(Icons.auto_awesome),
-                label: const Text('View Final Post'),
-              ),
+            ] else if (_trip!.status == TripStatus.ended) ...[
+              if (_isOwnerOrParticipant()) ...[
+                ElevatedButton.icon(
+                  onPressed: () {
+                    context.push(
+                      '/trip/${widget.tripId}/participants',
+                      extra: {'from': '/trip/${widget.tripId}'},
+                    );
+                  },
+                  icon: const Icon(Icons.people),
+                  label: Text(
+                    isOwner ? 'Manage Participants' : 'View Participants',
+                  ),
+                ),
+                const SizedBox(height: 8),
+              ],
+              if (_trip!.finalPost != null)
+                ElevatedButton.icon(
+                  onPressed: () {
+                    context.go('/trip/${widget.tripId}/final-post');
+                  },
+                  icon: const Icon(Icons.auto_awesome),
+                  label: const Text('View Final Post'),
+                ),
             ],
           ],
         ),

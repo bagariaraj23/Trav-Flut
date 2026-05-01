@@ -172,6 +172,14 @@ void main() async {
               final authProvider = context.read<AuthProvider>();
               final provider = TripProvider(tripService: tripService);
               tripService.setStorageService(storageService);
+              tripService.setUnauthorizedCallback(() {
+                debugPrint(
+                  '[main] TripService unauthorized — forcing logout',
+                );
+                authProvider.forceLogout(
+                  message: 'Session expired. Please log in again.',
+                );
+              });
               authProvider.addListener(() {
                 if (!authProvider.isAuthenticated) {
                   provider.clearData();

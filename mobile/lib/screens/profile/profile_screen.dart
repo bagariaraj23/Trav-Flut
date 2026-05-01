@@ -3,7 +3,10 @@ import 'package:provider/provider.dart';
 import 'package:tripthread/providers/auth_provider.dart';
 import 'package:tripthread/providers/user_provider.dart';
 import 'package:tripthread/providers/trip_provider.dart';
+import 'package:tripthread/providers/feed_provider.dart';
 import 'package:tripthread/models/user.dart';
+import 'package:tripthread/models/trip.dart';
+import 'package:tripthread/services/api_service.dart';
 import 'package:go_router/go_router.dart';
 
 class ProfileScreen extends StatefulWidget {
@@ -16,6 +19,10 @@ class ProfileScreen extends StatefulWidget {
 }
 
 class _ProfileScreenState extends State<ProfileScreen> {
+  List<Trip> _profileTrips = [];
+  bool _profileTripsLoading = false;
+  String? _profileTripsError;
+
   @override
   void initState() {
     super.initState();
@@ -26,14 +33,34 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   // A single, reliable method to load all necessary data for the screen.
-  void _loadInitialData() {
+  Future<void> _loadInitialData() async {
     final authProvider = context.read<AuthProvider>();
     if (authProvider.currentUser != null) {
-      context.read<UserProvider>().loadProfileData(
+      await context.read<UserProvider>().loadProfileData(
         widget.userId,
         authProvider.currentUser!.id,
       );
+      await _loadProfileTrips();
     }
+  }
+
+  Future<void> _loadProfileTrips() async {
+    if (!mounted) return;
+    setState(() {
+      _profileTripsLoading = true;
+      _profileTripsError = null;
+    });
+    final res = await context.read<ApiService>().getTripsForUser(widget.userId);
+    if (!mounted) return;
+    setState(() {
+      _profileTripsLoading = false;
+      if (res.success && res.data != null) {
+        _profileTrips = res.data!;
+      } else {
+        _profileTrips = [];
+        _profileTripsError = res.error ?? 'Could not load trips';
+      }
+    });
   }
 
   // The refresh action now uses the same centralized method.
@@ -44,6 +71,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         widget.userId,
         authProvider.currentUser!.id,
       );
+      await _loadProfileTrips();
     }
   }
 
@@ -133,11 +161,45 @@ class _ProfileScreenState extends State<ProfileScreen> {
     // Force refresh of profile data to ensure UI is in sync (avatar, stats, trips section)
     if (success) {
       userProvider.invalidateUserCache(widget.userId);
+      if (mounted) {
+        await context.read<FeedProvider>().loadDiscoverTrips(refresh: true);
+      }
       await userProvider.loadProfileData(
         widget.userId,
         authProvider.currentUser!.id,
       );
+      await _loadProfileTrips();
     }
+  }
+
+  void _openAvatarFullScreen(BuildContext context, String imageUrl) {
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => Dialog(
+        backgroundColor: Colors.black,
+        insetPadding: EdgeInsets.zero,
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            Center(
+              child: InteractiveViewer(
+                minScale: 0.5,
+                maxScale: 4,
+                child: Image.network(imageUrl, fit: BoxFit.contain),
+              ),
+            ),
+            Positioned(
+              top: MediaQuery.of(ctx).padding.top + 8,
+              right: 8,
+              child: IconButton(
+                icon: const Icon(Icons.close, color: Colors.white, size: 28),
+                onPressed: () => Navigator.pop(ctx),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   @override
@@ -379,24 +441,33 @@ class _ProfileScreenState extends State<ProfileScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // Profile photo
+          // Profile photo (tappable to enlarge when a photo exists)
           Center(
-            child: CircleAvatar(
-            radius: 48,
-            backgroundColor: Theme.of(context).colorScheme.primary,
-            backgroundImage: user.avatarUrl != null
-                ? NetworkImage(user.avatarUrl!)
-                : null,
-            child: user.avatarUrl == null
-                ? Text(
-                    _avatarInitial(user),
-                    style: TextStyle(
-                      fontSize: 28,
-                      fontWeight: FontWeight.bold,
-                      color: Theme.of(context).colorScheme.onPrimary,
-                    ),
-                  )
-                : null,
+            child: Material(
+              color: Colors.transparent,
+              child: InkWell(
+                customBorder: const CircleBorder(),
+                onTap: user.avatarUrl != null && user.avatarUrl!.isNotEmpty
+                    ? () => _openAvatarFullScreen(context, user.avatarUrl!)
+                    : null,
+                child: CircleAvatar(
+                  radius: 48,
+                  backgroundColor: Theme.of(context).colorScheme.primary,
+                  backgroundImage: user.avatarUrl != null
+                      ? NetworkImage(user.avatarUrl!)
+                      : null,
+                  child: user.avatarUrl == null
+                      ? Text(
+                          _avatarInitial(user),
+                          style: TextStyle(
+                            fontSize: 28,
+                            fontWeight: FontWeight.bold,
+                            color: Theme.of(context).colorScheme.onPrimary,
+                          ),
+                        )
+                      : null,
+                ),
+              ),
             ),
           ),
 
@@ -758,18 +829,70 @@ class _ProfileScreenState extends State<ProfileScreen> {
             style: Theme.of(context).textTheme.headlineSmall,
           ),
           const SizedBox(height: 16),
-          const Center(
-            child: Column(
-              children: [
-                Icon(Icons.map_outlined, size: 48, color: Colors.grey),
-                SizedBox(height: 12),
-                Text(
-                  'No trips yet',
-                  style: TextStyle(fontSize: 16, color: Colors.grey),
+          if (_profileTripsLoading)
+            const Center(
+              child: Padding(
+                padding: EdgeInsets.all(24),
+                child: CircularProgressIndicator(),
+              ),
+            )
+          else if (_profileTripsError != null)
+            Center(
+              child: Text(
+                _profileTripsError!,
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.error,
+                  fontSize: 14,
                 ),
-              ],
+                textAlign: TextAlign.center,
+              ),
+            )
+          else if (_profileTrips.isEmpty)
+            const Center(
+              child: Column(
+                children: [
+                  Icon(Icons.map_outlined, size: 48, color: Colors.grey),
+                  SizedBox(height: 12),
+                  Text(
+                    'No trips yet',
+                    style: TextStyle(fontSize: 16, color: Colors.grey),
+                  ),
+                ],
+              ),
+            )
+          else
+            ListView.separated(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: _profileTrips.length,
+              separatorBuilder: (_, _) => const Divider(height: 1),
+              itemBuilder: (context, index) {
+                final trip = _profileTrips[index];
+                return ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: Icon(
+                    Icons.map_outlined,
+                    color: Theme.of(context).colorScheme.primary,
+                  ),
+                  title: Text(
+                    trip.title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  subtitle: Text(
+                    trip.status.name,
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () {
+                    context.push(
+                      '/trip/${trip.id}',
+                      extra: {'from': '/profile/${widget.userId}'},
+                    );
+                  },
+                );
+              },
             ),
-          ),
         ],
       ),
     );

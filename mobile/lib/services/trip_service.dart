@@ -13,6 +13,7 @@ class TripService {
   late final Dio _dio;
   late final Dio _refreshDio;
   StorageService? _storageService;
+  VoidCallback? _onUnauthorized;
 
   TripService() {
     _dio = Dio(BaseOptions(
@@ -33,6 +34,10 @@ class TripService {
 
   void setStorageService(StorageService storageService) {
     _storageService = storageService;
+  }
+
+  void setUnauthorizedCallback(VoidCallback? callback) {
+    _onUnauthorized = callback;
   }
 
   void _setupInterceptors() {
@@ -67,9 +72,11 @@ class TripService {
             }
 
             await _storageService!.clearTokens();
+            _onUnauthorized?.call();
             return handler.next(error);
           } catch (e) {
             await _storageService!.clearTokens();
+            _onUnauthorized?.call();
             return handler.next(error);
           }
         }

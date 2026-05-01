@@ -265,9 +265,8 @@ class UserProvider extends ChangeNotifier {
         await _persistCurrentUserMetadata(currentUserId);
       }
     } catch (e) {
-      _error =
-          "Failed to load profile data:  [31m]"; // short for demo, replace as needed
-      debugPrint(_error);
+      _error = 'Failed to load profile data';
+      debugPrint('loadProfileData: $e');
     } finally {
       _isLoading = false;
       notifyListeners();
