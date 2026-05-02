@@ -527,6 +527,53 @@ class TripProvider extends ChangeNotifier {
     }
   }
 
+  /// Current user leaves as participant (not owner). Refreshes trip lists.
+  Future<bool> leaveTrip(
+    String tripId, {
+    required bool removeMyData,
+  }) async {
+    try {
+      _isLoading = true;
+      _error = null;
+      notifyListeners();
+
+      final response = await _tripService.leaveTrip(
+        tripId,
+        removeMyData: removeMyData,
+      );
+
+      if (!response.success) {
+        _error = response.error ?? 'Failed to leave trip';
+        _isLoading = false;
+        notifyListeners();
+        return false;
+      }
+
+      if (_currentTrip?.id == tripId) {
+        _currentTrip = null;
+        _currentTripEntries = [];
+        _threadEntriesOlderCursor = null;
+        _threadEntriesHasMoreOlder = false;
+      }
+      _trips.removeWhere((t) => t.id == tripId);
+
+      await Future.wait([
+        loadTrips(),
+        loadCurrentTrip(),
+      ]);
+
+      _isLoading = false;
+      notifyListeners();
+      return true;
+    } catch (e) {
+      _error = 'Failed to leave trip';
+      _isLoading = false;
+      notifyListeners();
+      debugPrint('leaveTrip error: $e');
+      return false;
+    }
+  }
+
   Future<bool> updateTripCover({
     required String tripId,
     required String coverMediaId,

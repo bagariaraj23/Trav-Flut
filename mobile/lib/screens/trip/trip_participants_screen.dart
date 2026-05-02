@@ -20,15 +20,26 @@ class TripParticipantsScreen extends StatefulWidget {
 class _TripParticipantsScreenState extends State<TripParticipantsScreen> {
   final _searchController = TextEditingController();
   Timer? _debounceTimer;
+  Trip? _trip;
   List<TripParticipant> _participants = [];
   List<Map<String, dynamic>> _searchResults = [];
   bool _isSearching = false;
+
   @override
   void initState() {
     super.initState();
-    _loadParticipants();
-    _loadSentInvitations();
     _searchController.addListener(_onSearchChanged);
+    _bootstrap();
+  }
+
+  Future<void> _bootstrap() async {
+    final tripProvider = context.read<TripProvider>();
+    final trip = await tripProvider.getTrip(widget.tripId);
+    if (mounted) {
+      setState(() => _trip = trip);
+    }
+    await _loadParticipants();
+    await _loadSentInvitations();
   }
 
   void _onSearchChanged() {
@@ -386,9 +397,84 @@ class _TripParticipantsScreenState extends State<TripParticipantsScreen> {
     );
   }
 
+  bool _canLeaveTrip() {
+    final u = context.read<AuthProvider>().currentUser;
+    if (_trip == null || u == null) return false;
+    if (_trip!.userId == u.id) return false;
+    return _participants.any((p) => p.userId == u.id);
+  }
+
+  Future<void> _leaveTrip() async {
+    final tripProvider = context.read<TripProvider>();
+    final choice = await showDialog<_LeaveTripChoice>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Leave trip?'),
+        content: const Text(
+          'You will be removed as a participant.\n\n'
+          'Keep your thread entries visible to others on this trip, '
+          'or remove all entries you posted? '
+          '(Removing entries is only allowed while the trip is ongoing.)',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, _LeaveTripChoice.cancel),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, _LeaveTripChoice.keepEntries),
+            child: const Text('Keep my entries'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: Theme.of(ctx).colorScheme.error,
+            ),
+            onPressed: () => Navigator.pop(ctx, _LeaveTripChoice.removeEntries),
+            child: const Text('Remove my entries'),
+          ),
+        ],
+      ),
+    );
+
+    if (choice == null || choice == _LeaveTripChoice.cancel) {
+      return;
+    }
+
+    final removeMyData = choice == _LeaveTripChoice.removeEntries;
+    final ok = await tripProvider.leaveTrip(
+      widget.tripId,
+      removeMyData: removeMyData,
+    );
+
+    if (!mounted) return;
+    final err = tripProvider.error;
+    if (ok) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            removeMyData
+                ? 'You left the trip; your entries were removed.'
+                : 'You left the trip.',
+          ),
+        ),
+      );
+      context.go('/trips');
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(err ?? 'Could not leave trip'),
+        ),
+      );
+    }
+  }
+
   Widget _buildParticipantTile(TripParticipant participant) {
     final currentUser = context.read<AuthProvider>().currentUser;
-    final isOwner = participant.userId == currentUser?.id;
+    final tripOwnerId = _trip?.userId;
+    final isTripOwnerRow =
+        tripOwnerId != null && participant.userId == tripOwnerId;
+    final viewerIsTripOwner =
+        tripOwnerId != null && currentUser?.id == tripOwnerId;
     final participantSecondary = userSecondaryName(
       username: participant.user?.username,
       name: participant.user?.name,
@@ -432,29 +518,36 @@ class _TripParticipantsScreenState extends State<TripParticipantsScreen> {
           ),
         ],
       ),
-      trailing: isOwner
-          ? Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              decoration: BoxDecoration(
-                color: Theme.of(
-                  context,
-                ).colorScheme.primary.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Text(
-                'Owner',
-                style: TextStyle(
-                  color: Theme.of(context).colorScheme.primary,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            )
-          : IconButton(
-              onPressed: () => _removeParticipant(participant.userId),
-              icon: const Icon(Icons.remove_circle_outline),
-              color: Theme.of(context).colorScheme.error,
-            ),
+      trailing: tripOwnerId == null
+          ? null
+          : isTripOwnerRow
+              ? Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: Theme.of(context)
+                        .colorScheme
+                        .primary
+                        .withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    'Owner',
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.primary,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                )
+              : viewerIsTripOwner
+                  ? IconButton(
+                      onPressed: () =>
+                          _removeParticipant(participant.userId),
+                      icon: const Icon(Icons.remove_circle_outline),
+                      color: Theme.of(context).colorScheme.error,
+                    )
+                  : null,
     );
   }
 
@@ -485,6 +578,13 @@ class _TripParticipantsScreenState extends State<TripParticipantsScreen> {
               }
             },
           ),
+          actions: [
+            if (_canLeaveTrip())
+              TextButton(
+                onPressed: _leaveTrip,
+                child: const Text('Leave trip'),
+              ),
+          ],
         ),
         body: SafeArea(
           child: Column(
@@ -608,3 +708,5 @@ class _TripParticipantsScreenState extends State<TripParticipantsScreen> {
     return '${dateOnly.day}/${dateOnly.month}/${dateOnly.year}';
   }
 }
+
+enum _LeaveTripChoice { cancel, keepEntries, removeEntries }

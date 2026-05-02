@@ -6,8 +6,11 @@ import { AuthService } from "@/lib/auth";
 import { patchThreadEntryTextSchema } from "@/lib/validation";
 import { ApiResponse, TripThreadEntryResponse, PlaceResponse } from "@/types/api";
 import { serializePlace } from "@/lib/place";
-import { CloudinaryService } from "@/lib/cloudinary";
 import { checkLikeStatus } from "@/lib/services/like";
+import {
+  cleanupThreadEntryMedia,
+  purgeThreadEntryWithClient,
+} from "@/lib/services/threadEntryPurge";
 
 function parseAuth(request: NextRequest): { userId: string } | NextResponse {
   const authHeader = request.headers.get("authorization");
@@ -129,7 +132,6 @@ export async function DELETE(
       where: { id: entryId },
       include: {
         trip: { include: { participants: true } },
-        media: { select: { id: true, publicId: true } },
       },
     });
 
@@ -161,104 +163,11 @@ export async function DELETE(
       );
     }
 
-    const mediaId = entry.mediaId;
-    const mediaPublicId = entry.media?.publicId ?? null;
+    const { mediaId, mediaPublicId } = await prisma.$transaction(async (tx) =>
+      purgeThreadEntryWithClient(tx, tripId, entryId)
+    );
 
-    await prisma.$transaction(async (tx) => {
-      const threadComments = await tx.comment.findMany({
-        where: {
-          entityType: EntityType.TRIP_THREAD_ENTRY,
-          entityId: entryId,
-        },
-        select: { id: true, parentCommentId: true },
-      });
-
-      const replyIds = threadComments
-        .filter((c) => c.parentCommentId != null)
-        .map((c) => c.id);
-      const topIds = threadComments
-        .filter((c) => c.parentCommentId == null)
-        .map((c) => c.id);
-      const allCommentIds = [...replyIds, ...topIds];
-
-      if (allCommentIds.length > 0) {
-        await tx.like.deleteMany({
-          where: {
-            OR: [
-              { entityType: EntityType.COMMENT, entityId: { in: allCommentIds } },
-            ],
-          },
-        });
-      }
-
-      if (replyIds.length > 0) {
-        await tx.comment.deleteMany({ where: { id: { in: replyIds } } });
-      }
-      if (topIds.length > 0) {
-        await tx.comment.deleteMany({ where: { id: { in: topIds } } });
-      }
-
-      await tx.like.deleteMany({
-        where: {
-          entityType: EntityType.TRIP_THREAD_ENTRY,
-          entityId: entryId,
-        },
-      });
-
-      await tx.share.deleteMany({
-        where: {
-          entityType: EntityType.TRIP_THREAD_ENTRY,
-          entityId: entryId,
-        },
-      });
-
-      await tx.notification.deleteMany({
-        where: {
-          entityType: EntityType.TRIP_THREAD_ENTRY,
-          entityId: entryId,
-        },
-      });
-
-      await tx.placeShare.deleteMany({
-        where: { threadEntryId: entryId },
-      });
-
-      await tx.tripThreadEntry.delete({
-        where: { id: entryId },
-      });
-
-      await tx.trip.update({
-        where: { id: tripId },
-        data: {
-          entryCount: { decrement: 1 },
-          updatedAt: new Date(),
-        },
-      });
-    });
-
-    if (mediaId && mediaPublicId) {
-      const tripsUsingCover = await prisma.trip.findMany({
-        where: { coverMediaId: mediaId },
-        select: { id: true },
-      });
-      if (tripsUsingCover.length > 0) {
-        await prisma.trip.updateMany({
-          where: { coverMediaId: mediaId },
-          data: { coverMediaId: null },
-        });
-      }
-
-      const otherRefs = await prisma.tripThreadEntry.count({
-        where: { mediaId },
-      });
-      if (otherRefs === 0) {
-        try {
-          await CloudinaryService.deleteMedia(mediaPublicId);
-        } catch (e) {
-          console.error("[ThreadEntry] Cloudinary cleanup failed:", e);
-        }
-      }
-    }
+    await cleanupThreadEntryMedia(mediaId, mediaPublicId);
 
     return NextResponse.json<ApiResponse<null>>({
       success: true,

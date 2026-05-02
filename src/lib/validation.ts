@@ -488,6 +488,11 @@ export const patchThreadEntryTextSchema = z.object({
     }),
 });
 
+/** Participant self-leave: if true, purge author's thread entries (ongoing trips only). */
+export const leaveTripSchema = z.object({
+  removeMyData: z.boolean(),
+});
+
 export const addParticipantSchema = z.object({
   userId: z.string().uuid("Invalid user ID format"),
   role: z

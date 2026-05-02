@@ -546,6 +546,37 @@ class TripService {
     }
   }
 
+  /// Participant removes themselves. [removeMyData] deletes their thread entries (ongoing trips only).
+  Future<ApiResponse<void>> leaveTrip(
+    String tripId, {
+    required bool removeMyData,
+  }) async {
+    try {
+      final response = await _dio.post(
+        '/trips/$tripId/leave',
+        data: {'removeMyData': removeMyData},
+      );
+      if (response.data['success'] == true) {
+        return ApiResponse<void>(success: true);
+      }
+      return ApiResponse<void>(
+        success: false,
+        error: response.data['error']?.toString() ?? 'Failed to leave trip',
+      );
+    } on DioException catch (e) {
+      return ApiResponse<void>(
+        success: false,
+        error: e.response?.data['error']?.toString() ??
+            'Network error occurred',
+      );
+    } catch (e) {
+      return ApiResponse<void>(
+        success: false,
+        error: 'An unexpected error occurred: $e',
+      );
+    }
+  }
+
   // Final post
   Future<ApiResponse<TripFinalPost>> getFinalPost(String tripId) async {
     try {
