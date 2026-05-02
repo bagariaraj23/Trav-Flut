@@ -7,6 +7,7 @@ import 'package:tripthread/providers/feed_provider.dart';
 import 'package:tripthread/models/user.dart';
 import 'package:tripthread/models/trip.dart';
 import 'package:tripthread/services/api_service.dart';
+import 'package:tripthread/utils/user_display_labels.dart';
 import 'package:go_router/go_router.dart';
 
 class ProfileScreen extends StatefulWidget {
@@ -375,15 +376,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
     ];
   }
 
-  /// Single character for avatar fallback (name > username > 'U').
   String _avatarInitial(User user) {
-    final name = user.name?.trim();
-    if (name != null && name.isNotEmpty) return name.substring(0, 1).toUpperCase();
-    final username = user.username?.trim();
-    if (username != null && username.isNotEmpty) {
-      return username.substring(0, 1).toUpperCase();
-    }
-    return 'U';
+    return userAvatarInitial(username: user.username, name: user.name);
   }
 
   /// Subtitle style for username and bio (smaller, muted; works in light and dark).
@@ -405,6 +399,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
   ) {
     final hasUsername =
         user.username != null && user.username!.trim().isNotEmpty;
+    final profilePrimary = userPrimaryLabel(
+      id: user.id,
+      username: user.username,
+      name: user.name,
+    );
+    final profileSecondary =
+        userSecondaryName(username: user.username, name: user.name);
     final hasBio = user.bio != null && user.bio!.trim().isNotEmpty;
     final bioText = hasBio ? user.bio!.trim() : '';
     // ~40 chars per line at bodySmall; clamp so short bios stay compact, long ones get space
@@ -463,7 +464,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
           const SizedBox(height: 20),
 
-          // Name and privacy indicator (prominent)
+          // @username (unique) first; optional display name second 
           Center(
             child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
@@ -471,9 +472,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             children: [
               Flexible(
                 child: Text(
-                  (user.name?.trim().isNotEmpty == true
-                      ? user.name!.trim()
-                      : (hasUsername ? '@${user.username!.trim()}' : 'User')),
+                  profilePrimary,
                   style: Theme.of(context).textTheme.headlineMedium?.copyWith(
                         fontWeight: FontWeight.w600,
                         color: Theme.of(context).colorScheme.onSurface,
@@ -495,11 +494,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
           ),
           ),
 
-          // Username
-          if (hasUsername) ...[
+          if (profileSecondary != null) ...[
             const SizedBox(height: 6),
             Text(
-              '@${user.username!.trim()}',
+              profileSecondary,
               style: subtitleStyle,
               overflow: TextOverflow.ellipsis,
               maxLines: 1,
@@ -815,7 +813,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            isOwnProfile ? 'Your Trips' : '${user.name}\'s Trips',
+            isOwnProfile
+                ? 'Your Trips'
+                : '${userPrimaryLabel(id: user.id, username: user.username, name: user.name)}\'s Trips',
             style: Theme.of(context).textTheme.headlineSmall,
           ),
           const SizedBox(height: 16),

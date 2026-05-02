@@ -6,6 +6,7 @@ import 'package:tripthread/models/comment.dart';
 import 'package:tripthread/providers/comment_provider.dart';
 import 'package:tripthread/providers/auth_provider.dart';
 import 'package:tripthread/providers/engagement_provider.dart';
+import 'package:tripthread/utils/user_display_labels.dart';
 import 'package:tripthread/widgets/mention_text.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 
@@ -88,13 +89,10 @@ class _CommentListItemState extends State<CommentListItem> {
                     (widget.comment.user?.avatarUrl == null ||
                         widget.comment.user!.avatarUrl!.isEmpty)
                     ? Text(
-                        (widget.comment.user?.name?.isNotEmpty == true
-                                ? widget.comment.user!.name!.substring(0, 1)
-                                : widget.comment.user?.username?.isNotEmpty ==
-                                      true
-                                ? widget.comment.user!.username!.substring(0, 1)
-                                : 'U')
-                            .toUpperCase(),
+                        userAvatarInitial(
+                          username: widget.comment.user?.username,
+                          name: widget.comment.user?.name,
+                        ),
                         style: const TextStyle(fontSize: 14),
                       )
                     : null,
@@ -106,17 +104,54 @@ class _CommentListItemState extends State<CommentListItem> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      GestureDetector(
-                        onTap: () {
-                          context.push('/profile/${widget.comment.userId}');
-                        },
-                        child: Text(
-                          widget.comment.user?.name ??
-                              widget.comment.user?.username ??
-                              'Unknown',
-                          style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                            fontWeight: FontWeight.w600,
+                      Expanded(
+                        child: GestureDetector(
+                          onTap: () {
+                            context.push('/profile/${widget.comment.userId}');
+                          },
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                widget.comment.user != null
+                                    ? userPrimaryLabel(
+                                        id: widget.comment.user!.id,
+                                        username: widget.comment.user!.username,
+                                        name: widget.comment.user!.name,
+                                      )
+                                    : userPrimaryLabel(
+                                        id: widget.comment.userId,
+                                        username: null,
+                                        name: null,
+                                      ),
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .titleSmall
+                                    ?.copyWith(fontWeight: FontWeight.w600),
+                              ),
+                              if (widget.comment.user != null &&
+                                  userSecondaryName(
+                                        username: widget.comment.user!.username,
+                                        name: widget.comment.user!.name,
+                                      ) !=
+                                      null)
+                                Text(
+                                  userSecondaryName(
+                                    username: widget.comment.user!.username,
+                                    name: widget.comment.user!.name,
+                                  )!,
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .bodySmall
+                                      ?.copyWith(
+                                        color: Theme.of(context)
+                                            .colorScheme
+                                            .onSurfaceVariant,
+                                      ),
+                                ),
+                            ],
                           ),
                         ),
                       ),

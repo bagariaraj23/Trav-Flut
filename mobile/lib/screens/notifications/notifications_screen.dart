@@ -10,6 +10,7 @@ import 'package:tripthread/providers/user_provider.dart';
 import 'package:tripthread/providers/auth_provider.dart';
 import 'package:tripthread/providers/trip_provider.dart';
 import 'package:tripthread/services/api_service.dart';
+import 'package:tripthread/utils/user_display_labels.dart';
 
 /// Time grouping for notifications
 enum NotificationTimeGroup { today, yesterday, thisWeek, older }
@@ -597,11 +598,15 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   ) {
     final count = tripInvites.length;
     final first = tripInvites.first;
-    final senderName = first.sender?.name ?? first.sender?.username ?? 'Someone';
+    final senderPrimary = userPrimaryLabel(
+      id: first.senderId,
+      username: first.sender?.username,
+      name: first.sender?.name,
+    );
     final tripTitle = first.trip?.title ?? 'a trip';
     String label;
     if (count == 1) {
-      label = '$senderName invited you to $tripTitle';
+      label = '$senderPrimary invited you to $tripTitle';
     } else {
       label = '$count trip invitations';
     }
@@ -634,7 +639,10 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                       : null,
                   child: avatarUrl == null || avatarUrl.isEmpty
                       ? Text(
-                          senderName.isNotEmpty ? senderName.substring(0, 1).toUpperCase() : '?',
+                          userAvatarInitial(
+                            username: first.sender?.username,
+                            name: first.sender?.name,
+                          ),
                           style: TextStyle(
                             color: Theme.of(context).colorScheme.onSecondaryContainer,
                             fontSize: 18,
@@ -765,14 +773,10 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                                   avatarsToShow[i].actor.avatarUrl == null ||
                                       avatarsToShow[i].actor.avatarUrl!.isEmpty
                                   ? Text(
-                                      avatarsToShow[i]
-                                              .actor
-                                              .displayName
-                                              .isNotEmpty
-                                          ? avatarsToShow[i].actor.displayName
-                                                .substring(0, 1)
-                                                .toUpperCase()
-                                          : '?',
+                                      userAvatarInitial(
+                                        username: avatarsToShow[i].actor.username,
+                                        name: avatarsToShow[i].actor.name,
+                                      ),
                                       style: TextStyle(
                                         color: Theme.of(
                                           context,
@@ -1015,14 +1019,10 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                                   avatarsToShow[i].actor.avatarUrl == null ||
                                       avatarsToShow[i].actor.avatarUrl!.isEmpty
                                   ? Text(
-                                      avatarsToShow[i]
-                                              .actor
-                                              .displayName
-                                              .isNotEmpty
-                                          ? avatarsToShow[i].actor.displayName
-                                                .substring(0, 1)
-                                                .toUpperCase()
-                                          : '?',
+                                      userAvatarInitial(
+                                        username: avatarsToShow[i].actor.username,
+                                        name: avatarsToShow[i].actor.name,
+                                      ),
                                       style: TextStyle(
                                         color: Theme.of(
                                           context,
@@ -1198,9 +1198,10 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                       : null,
                   child: n.actor.avatarUrl == null || n.actor.avatarUrl!.isEmpty
                       ? Text(
-                          actorName.isNotEmpty
-                              ? actorName.substring(0, 1).toUpperCase()
-                              : '?',
+                          userAvatarInitial(
+                            username: n.actor.username,
+                            name: n.actor.name,
+                          ),
                           style: TextStyle(
                             color: Theme.of(
                               context,

@@ -6,6 +6,7 @@ import 'package:tripthread/providers/auth_provider.dart';
 import 'package:tripthread/providers/trip_provider.dart';
 import 'package:tripthread/models/trip.dart';
 import 'package:tripthread/services/api_service.dart';
+import 'package:tripthread/utils/user_display_labels.dart';
 
 class TripParticipantsScreen extends StatefulWidget {
   final String tripId;
@@ -289,9 +290,16 @@ class _TripParticipantsScreenState extends State<TripParticipantsScreen> {
 
   Widget _buildUserSearchResult(Map<String, dynamic> user) {
     final avatarUrl = user['avatarUrl'] as String?;
-    final name = user['name'] ?? 'Unknown User';
-    final username = user['username'] ?? 'No username';
     final userId = user['id'] as String;
+    final uname = user['username'] as String?;
+    final displayName = user['name'] as String?;
+    final primary = userPrimaryLabel(
+      id: userId,
+      username: uname,
+      name: displayName,
+    );
+    final secondary =
+        userSecondaryName(username: uname, name: displayName);
 
     final isParticipant = _participants.any((p) => p.userId == userId);
 
@@ -320,20 +328,21 @@ class _TripParticipantsScreenState extends State<TripParticipantsScreen> {
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     Text(
-                      name,
+                      primary,
                       style: const TextStyle(fontWeight: FontWeight.w600),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
-                    Text(
-                      '@$username',
-                      style: TextStyle(
-                        color: Theme.of(context).colorScheme.onSurfaceVariant,
-                        fontSize: 12,
+                    if (secondary != null)
+                      Text(
+                        secondary,
+                        style: TextStyle(
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                          fontSize: 12,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
                   ],
                 ),
               ),
@@ -380,6 +389,10 @@ class _TripParticipantsScreenState extends State<TripParticipantsScreen> {
   Widget _buildParticipantTile(TripParticipant participant) {
     final currentUser = context.read<AuthProvider>().currentUser;
     final isOwner = participant.userId == currentUser?.id;
+    final participantSecondary = userSecondaryName(
+      username: participant.user?.username,
+      name: participant.user?.name,
+    );
 
     return ListTile(
       leading: CircleAvatar(
@@ -392,14 +405,17 @@ class _TripParticipantsScreenState extends State<TripParticipantsScreen> {
             : null,
       ),
       title: Text(
-        participant.user?.name ?? 'Unknown User',
+        userPrimaryLabel(
+          id: participant.userId,
+          username: participant.user?.username,
+          name: participant.user?.name,
+        ),
         style: const TextStyle(fontWeight: FontWeight.w600),
       ),
       subtitle: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          if (participant.user?.username != null)
-            Text('@${participant.user!.username}'),
+          if (participantSecondary != null) Text(participantSecondary),
           Text(
             'Role: ${participant.role}',
             style: TextStyle(

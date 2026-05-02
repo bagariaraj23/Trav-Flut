@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
+import 'package:tripthread/models/comment_user.dart';
+import 'package:tripthread/providers/auth_provider.dart';
 import 'package:tripthread/providers/comment_provider.dart';
 import 'package:tripthread/models/comment.dart';
 import 'package:tripthread/services/api_service.dart';
@@ -211,12 +213,25 @@ class _CommentComposerState extends State<CommentComposer> {
     HapticFeedback.mediumImpact();
 
     try {
+      final auth = context.read<AuthProvider>();
+      final me = auth.currentUser;
       final provider = context.read<CommentProvider>();
+      CommentUser? preview;
+      if (me != null) {
+        preview = CommentUser(
+          id: me.id,
+          username: me.username,
+          name: me.name,
+          avatarUrl: me.avatarUrl,
+        );
+      }
       await provider.createComment(
         widget.entityType,
         widget.entityId,
         text,
         widget.parentCommentId,
+        currentUserId: me?.id,
+        currentUserPreview: preview,
       );
 
       _textController.clear();
@@ -289,7 +304,7 @@ class _CommentComposerState extends State<CommentComposer> {
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
-                          'Replying to ${widget.parentComment?.user?.name ?? 'user'}',
+                          'Replying to ${widget.parentComment?.user?.displayName ?? 'user'}',
                           style: theme.textTheme.bodySmall?.copyWith(
                             color: colorScheme.onSurfaceVariant,
                           ),
