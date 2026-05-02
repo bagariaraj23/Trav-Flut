@@ -1355,6 +1355,154 @@ class _TripThreadScreenState extends State<TripThreadScreen>
     return map;
   }
 
+  bool _canModerateThreadEntry(TripThreadEntry entry) {
+    final uid = context.read<AuthProvider>().currentUser?.id;
+    if (uid == null) return false;
+    if (entry.authorId == uid) return true;
+    final ownerId = _trip?.userId;
+    return ownerId != null && ownerId == uid;
+  }
+
+  Future<void> _showThreadEntryActions(TripThreadEntry entry) async {
+    if (!mounted || _trip?.status != TripStatus.ongoing) return;
+    if (!_canModerateThreadEntry(entry)) return;
+
+    await showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (sheetCtx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (entry.type == ThreadEntryType.text)
+              ListTile(
+                leading: const Icon(Icons.edit_outlined),
+                title: const Text('Edit text'),
+                onTap: () {
+                  Navigator.pop(sheetCtx);
+                  _showEditTextEntryDialog(entry);
+                },
+              ),
+            ListTile(
+              leading: Icon(
+                Icons.delete_outline,
+                color: Theme.of(sheetCtx).colorScheme.error,
+              ),
+              title: Text(
+                'Delete entry',
+                style: TextStyle(color: Theme.of(sheetCtx).colorScheme.error),
+              ),
+              onTap: () {
+                Navigator.pop(sheetCtx);
+                _confirmDeleteThreadEntry(entry);
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _showEditTextEntryDialog(TripThreadEntry entry) async {
+    final controller = TextEditingController(text: entry.contentText ?? '');
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (dialogCtx) => AlertDialog(
+        title: const Text('Edit entry'),
+        content: TextField(
+          controller: controller,
+          maxLines: 5,
+          maxLength: 1000,
+          decoration: const InputDecoration(hintText: 'Update your message'),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogCtx, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogCtx, true),
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+    if (!mounted || ok != true) {
+      controller.dispose();
+      return;
+    }
+    final text = controller.text.trim();
+    controller.dispose();
+    if (text.isEmpty) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Text cannot be empty')));
+      return;
+    }
+
+    final tripProvider = context.read<TripProvider>();
+    final success = await tripProvider.updateThreadEntryText(
+      tripId: widget.tripId,
+      entryId: entry.id,
+      contentText: text,
+    );
+    if (!mounted) return;
+    if (success) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Entry updated')));
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(tripProvider.error ?? 'Could not update entry')),
+      );
+    }
+  }
+
+  Future<void> _confirmDeleteThreadEntry(TripThreadEntry entry) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (dialogCtx) => AlertDialog(
+        title: const Text('Delete this entry?'),
+        content: const Text(
+          'This removes the entry from the thread and the trip map. '
+          'Media will be removed from storage when applicable.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogCtx, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: Theme.of(dialogCtx).colorScheme.error,
+            ),
+            onPressed: () => Navigator.pop(dialogCtx, true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (!mounted || confirm != true) return;
+
+    final tripProvider = context.read<TripProvider>();
+    final engagement = context.read<EngagementProvider>();
+    final success = await tripProvider.deleteThreadEntry(
+      tripId: widget.tripId,
+      entryId: entry.id,
+    );
+    if (!mounted) return;
+    if (success) {
+      engagement.clearEntity(entry.id);
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Entry deleted')));
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(tripProvider.error ?? 'Could not delete entry')),
+      );
+    }
+  }
+
   Widget _buildThreadEntry(TripThreadEntry entry) {
     final isCurrentUser =
         context.read<AuthProvider>().currentUser?.id == entry.authorId;
@@ -1422,268 +1570,278 @@ class _TripThreadScreenState extends State<TripThreadScreen>
 
             // Entry content
             Expanded(
-              child: Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: isCurrentUser
-                      ? Theme.of(
-                          context,
-                        ).colorScheme.primary.withValues(alpha: 0.12)
-                      : (Theme.of(context).brightness == Brightness.dark
-                            ? Theme.of(
-                                context,
-                              ).colorScheme.onSurface.withValues(alpha: 0.06)
-                            : const Color(0xFFFAF9F6)),
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(
+              child: GestureDetector(
+                onLongPress:
+                    _trip?.status == TripStatus.ongoing &&
+                        _canModerateThreadEntry(entry)
+                    ? () => _showThreadEntryActions(entry)
+                    : null,
+                child: Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
                     color: isCurrentUser
                         ? Theme.of(
                             context,
-                          ).colorScheme.primary.withValues(alpha: 0.3)
+                          ).colorScheme.primary.withValues(alpha: 0.12)
                         : (Theme.of(context).brightness == Brightness.dark
                               ? Theme.of(
                                   context,
-                                ).colorScheme.onSurface.withValues(alpha: 0.18)
-                              : Theme.of(
-                                  context,
-                                ).colorScheme.onSurface.withValues(
-                                  alpha:
-                                      Theme.of(context).brightness ==
-                                          Brightness.dark
-                                      ? 0.18
-                                      : 0.10,
-                                )),
-                    width: 1.5,
-                  ),
-                  boxShadow: [
-                    BoxShadow(
+                                ).colorScheme.onSurface.withValues(alpha: 0.06)
+                              : const Color(0xFFFAF9F6)),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(
                       color: isCurrentUser
                           ? Theme.of(
                               context,
-                            ).colorScheme.primary.withValues(alpha: 0.1)
-                          : Colors.black.withValues(alpha: 0.04),
-                      blurRadius: 6,
-                      offset: const Offset(0, 2),
+                            ).colorScheme.primary.withValues(alpha: 0.3)
+                          : (Theme.of(context).brightness == Brightness.dark
+                                ? Theme.of(context).colorScheme.onSurface
+                                      .withValues(alpha: 0.18)
+                                : Theme.of(
+                                    context,
+                                  ).colorScheme.onSurface.withValues(
+                                    alpha:
+                                        Theme.of(context).brightness ==
+                                            Brightness.dark
+                                        ? 0.18
+                                        : 0.10,
+                                  )),
+                      width: 1.5,
                     ),
-                  ],
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Header (author name tappable → profile)
-                    Row(
-                      children: [
-                        Flexible(
-                          child: GestureDetector(
-                            onTap: () =>
-                                context.push('/profile/${entry.authorId}'),
+                    boxShadow: [
+                      BoxShadow(
+                        color: isCurrentUser
+                            ? Theme.of(
+                                context,
+                              ).colorScheme.primary.withValues(alpha: 0.1)
+                            : Colors.black.withValues(alpha: 0.04),
+                        blurRadius: 6,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Header (author name tappable → profile)
+                      Row(
+                        children: [
+                          Flexible(
+                            child: GestureDetector(
+                              onTap: () =>
+                                  context.push('/profile/${entry.authorId}'),
+                              child: Text(
+                                entry.author.name ?? 'User',
+                                style: Theme.of(context).textTheme.titleSmall
+                                    ?.copyWith(
+                                      fontWeight: FontWeight.w600,
+                                      color: isCurrentUser
+                                          ? Theme.of(
+                                              context,
+                                            ).colorScheme.primary
+                                          : Theme.of(
+                                              context,
+                                            ).colorScheme.onSurface,
+                                    ),
+                                overflow: TextOverflow.ellipsis,
+                                maxLines: 1,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          _buildEntryTypeIcon(entry.type),
+                          const SizedBox(width: 8),
+                          Flexible(
                             child: Text(
-                              entry.author.name ?? 'User',
-                              style: Theme.of(context).textTheme.titleSmall
+                              _formatDateTime(entry.createdAt),
+                              style: Theme.of(context).textTheme.bodySmall
                                   ?.copyWith(
-                                    fontWeight: FontWeight.w600,
                                     color: isCurrentUser
                                         ? Theme.of(context).colorScheme.primary
+                                              .withValues(alpha: 0.8)
                                         : Theme.of(
                                             context,
-                                          ).colorScheme.onSurface,
+                                          ).colorScheme.onSurfaceVariant,
+                                    fontWeight: FontWeight.w500,
                                   ),
                               overflow: TextOverflow.ellipsis,
                               maxLines: 1,
                             ),
                           ),
-                        ),
-                        const SizedBox(width: 8),
-                        _buildEntryTypeIcon(entry.type),
-                        const SizedBox(width: 8),
-                        Flexible(
-                          child: Text(
-                            _formatDateTime(entry.createdAt),
-                            style: Theme.of(context).textTheme.bodySmall
-                                ?.copyWith(
-                                  color: isCurrentUser
-                                      ? Theme.of(context).colorScheme.primary
-                                            .withValues(alpha: 0.8)
-                                      : Theme.of(
-                                          context,
-                                        ).colorScheme.onSurfaceVariant,
-                                  fontWeight: FontWeight.w500,
-                                ),
-                            overflow: TextOverflow.ellipsis,
-                            maxLines: 1,
+                          const SizedBox(width: 8),
+                          _buildThreadEntryLikeButton(
+                            entry,
+                            hasLiked: hasLiked,
+                            likeCount: likeCount,
+                            isToggling: isToggling,
                           ),
-                        ),
-                        const SizedBox(width: 8),
-                        _buildThreadEntryLikeButton(
-                          entry,
-                          hasLiked: hasLiked,
-                          likeCount: likeCount,
-                          isToggling: isToggling,
-                        ),
-                      ],
-                    ),
-
-                    const SizedBox(height: 8),
-
-                    // Content (with tappable @mentions; no separate chips to avoid duplicate)
-                    if (entry.contentText != null) ...[
-                      MentionText(
-                        text: entry.contentText!,
-                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          color: Theme.of(context).colorScheme.onSurface,
-                          height: 1.5,
-                        ),
-                        usernameToUserId: _usernameToUserIdFromTagged(
-                          entry.taggedUsers,
-                        ),
+                        ],
                       ),
-                      const SizedBox(height: 8),
-                    ],
 
-                    // Location card with theme colors
-                    if (entry.type == ThreadEntryType.location ||
-                        entry.locationName != null ||
-                        entry.place != null ||
-                        entry.gpsCoordinates != null)
-                      GestureDetector(
-                        onTap: () {
-                          if (entry.place != null) {
-                            context.push(
-                              '/trip/${widget.tripId}/map',
-                              extra: {
-                                'tripTitle': _trip?.title ?? 'Trip Map',
-                                'initialZoomLocation': entry.place,
-                              },
-                            );
-                          }
-                        },
-                        child: Container(
-                          margin: const EdgeInsets.only(top: 8),
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            color: Colors.red[50],
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(
-                              color: Colors.red[200]!,
-                              width: 1.5,
-                            ),
+                      const SizedBox(height: 8),
+
+                      // Content (with tappable @mentions; no separate chips to avoid duplicate)
+                      if (entry.contentText != null) ...[
+                        MentionText(
+                          text: entry.contentText!,
+                          style: Theme.of(context).textTheme.bodyMedium
+                              ?.copyWith(
+                                color: Theme.of(context).colorScheme.onSurface,
+                                height: 1.5,
+                              ),
+                          usernameToUserId: _usernameToUserIdFromTagged(
+                            entry.taggedUsers,
                           ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              // Place name and icon
-                              Row(
-                                children: [
-                                  Container(
-                                    padding: const EdgeInsets.all(8),
-                                    decoration: BoxDecoration(
-                                      color: Colors.red[100],
-                                      borderRadius: BorderRadius.circular(8),
+                        ),
+                        const SizedBox(height: 8),
+                      ],
+
+                      // Location card with theme colors
+                      if (entry.type == ThreadEntryType.location ||
+                          entry.locationName != null ||
+                          entry.place != null ||
+                          entry.gpsCoordinates != null)
+                        GestureDetector(
+                          onTap: () {
+                            if (entry.place != null) {
+                              context.push(
+                                '/trip/${widget.tripId}/map',
+                                extra: {
+                                  'tripTitle': _trip?.title ?? 'Trip Map',
+                                  'initialZoomLocation': entry.place,
+                                },
+                              );
+                            }
+                          },
+                          child: Container(
+                            margin: const EdgeInsets.only(top: 8),
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: Colors.red[50],
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(
+                                color: Colors.red[200]!,
+                                width: 1.5,
+                              ),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                // Place name and icon
+                                Row(
+                                  children: [
+                                    Container(
+                                      padding: const EdgeInsets.all(8),
+                                      decoration: BoxDecoration(
+                                        color: Colors.red[100],
+                                        borderRadius: BorderRadius.circular(8),
+                                      ),
+                                      child: Icon(
+                                        entry.type == ThreadEntryType.checkin
+                                            ? Icons.check_circle
+                                            : Icons.location_on,
+                                        size: 18,
+                                        color: Colors.red[700],
+                                      ),
                                     ),
-                                    child: Icon(
-                                      entry.type == ThreadEntryType.checkin
-                                          ? Icons.check_circle
-                                          : Icons.location_on,
-                                      size: 18,
-                                      color: Colors.red[700],
-                                    ),
-                                  ),
-                                  const SizedBox(width: 8),
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          entry.place?.name ??
-                                              entry.locationName ??
-                                              'Location',
-                                          style: TextStyle(
-                                            color: Colors.red[900],
-                                            fontWeight: FontWeight.w600,
-                                            fontSize: 14,
-                                          ),
-                                          overflow: TextOverflow.ellipsis,
-                                          maxLines: 2,
-                                        ),
-                                        if (entry.place?.address != null)
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
                                           Text(
-                                            entry.place!.address!,
+                                            entry.place?.name ??
+                                                entry.locationName ??
+                                                'Location',
                                             style: TextStyle(
-                                              color: Colors.red[700]!
-                                                  .withValues(alpha: 0.8),
-                                              fontSize: 12,
+                                              color: Colors.red[900],
+                                              fontWeight: FontWeight.w600,
+                                              fontSize: 14,
                                             ),
                                             overflow: TextOverflow.ellipsis,
                                             maxLines: 2,
                                           ),
-                                      ],
-                                    ),
-                                  ),
-                                  if (entry.place != null)
-                                    IconButton(
-                                      onPressed: () {
-                                        context.push(
-                                          '/trip/${widget.tripId}/map',
-                                          extra: {
-                                            'tripTitle':
-                                                _trip?.title ?? 'Trip Map',
-                                            'initialZoomLocation': entry.place,
-                                          },
-                                        );
-                                      },
-                                      icon: const Icon(
-                                        Icons.map_outlined,
-                                        size: 20,
-                                      ),
-                                      style: IconButton.styleFrom(
-                                        visualDensity: VisualDensity.compact,
-                                        padding: const EdgeInsets.all(8),
-                                        backgroundColor: Colors.red[100],
-                                        foregroundColor: Colors.red[700],
+                                          if (entry.place?.address != null)
+                                            Text(
+                                              entry.place!.address!,
+                                              style: TextStyle(
+                                                color: Colors.red[700]!
+                                                    .withValues(alpha: 0.8),
+                                                fontSize: 12,
+                                              ),
+                                              overflow: TextOverflow.ellipsis,
+                                              maxLines: 2,
+                                            ),
+                                        ],
                                       ),
                                     ),
-                                ],
-                              ),
-                              // GPS coordinates
-                              if ((entry.place?.lat != null &&
-                                      entry.place?.lng != null) ||
-                                  entry.gpsCoordinates != null) ...[
-                                const SizedBox(height: 8),
-                                Row(
-                                  children: [
-                                    Icon(
-                                      Icons.gps_fixed,
-                                      size: 12,
-                                      color: Colors.red[700]!.withValues(
-                                        alpha: 0.7,
-                                      ),
-                                    ),
-                                    const SizedBox(width: 4),
-                                    Text(
-                                      entry.place != null
-                                          ? '${entry.place!.lat.toStringAsFixed(4)}, ${entry.place!.lng.toStringAsFixed(4)}'
-                                          : '${entry.gpsCoordinates!.lat.toStringAsFixed(4)}, ${entry.gpsCoordinates!.lng.toStringAsFixed(4)}',
-                                      style: TextStyle(
-                                        color: Colors.red[700]!.withValues(
-                                          alpha: 0.8,
+                                    if (entry.place != null)
+                                      IconButton(
+                                        onPressed: () {
+                                          context.push(
+                                            '/trip/${widget.tripId}/map',
+                                            extra: {
+                                              'tripTitle':
+                                                  _trip?.title ?? 'Trip Map',
+                                              'initialZoomLocation':
+                                                  entry.place,
+                                            },
+                                          );
+                                        },
+                                        icon: const Icon(
+                                          Icons.map_outlined,
+                                          size: 20,
                                         ),
-                                        fontSize: 11,
-                                        fontFamily: 'monospace',
+                                        style: IconButton.styleFrom(
+                                          visualDensity: VisualDensity.compact,
+                                          padding: const EdgeInsets.all(8),
+                                          backgroundColor: Colors.red[100],
+                                          foregroundColor: Colors.red[700],
+                                        ),
                                       ),
-                                    ),
                                   ],
                                 ),
+                                // GPS coordinates
+                                if ((entry.place?.lat != null &&
+                                        entry.place?.lng != null) ||
+                                    entry.gpsCoordinates != null) ...[
+                                  const SizedBox(height: 8),
+                                  Row(
+                                    children: [
+                                      Icon(
+                                        Icons.gps_fixed,
+                                        size: 12,
+                                        color: Colors.red[700]!.withValues(
+                                          alpha: 0.7,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 4),
+                                      Text(
+                                        entry.place != null
+                                            ? '${entry.place!.lat.toStringAsFixed(4)}, ${entry.place!.lng.toStringAsFixed(4)}'
+                                            : '${entry.gpsCoordinates!.lat.toStringAsFixed(4)}, ${entry.gpsCoordinates!.lng.toStringAsFixed(4)}',
+                                        style: TextStyle(
+                                          color: Colors.red[700]!.withValues(
+                                            alpha: 0.8,
+                                          ),
+                                          fontSize: 11,
+                                          fontFamily: 'monospace',
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ],
                               ],
-                            ],
+                            ),
                           ),
                         ),
-                      ),
 
-                    // Media display
-                    if (entry.type == ThreadEntryType.media)
-                      _buildMediaPreview(entry),
-                  ],
+                      // Media display
+                      if (entry.type == ThreadEntryType.media)
+                        _buildMediaPreview(entry),
+                    ],
+                  ),
                 ),
               ),
             ),

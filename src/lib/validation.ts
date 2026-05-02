@@ -476,6 +476,18 @@ export const createThreadEntrySchema = z
     }
   );
 
+export const patchThreadEntryTextSchema = z.object({
+  contentText: z
+    .string()
+    .min(1, "Content is required")
+    .max(1000, "Content must be less than 1000 characters")
+    .transform((text) => {
+      const trimmed = text.trim();
+      if (trimmed.length === 0) return trimmed;
+      return trimmed.charAt(0).toUpperCase() + trimmed.slice(1);
+    }),
+});
+
 export const addParticipantSchema = z.object({
   userId: z.string().uuid("Invalid user ID format"),
   role: z

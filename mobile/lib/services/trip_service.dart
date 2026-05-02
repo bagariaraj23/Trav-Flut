@@ -418,6 +418,68 @@ class TripService {
     }
   }
 
+  Future<ApiResponse<void>> deleteThreadEntry({
+    required String tripId,
+    required String entryId,
+  }) async {
+    try {
+      final response = await _dio.delete('/trips/$tripId/entries/$entryId');
+      final ok = response.data['success'] == true;
+      if (ok) {
+        return ApiResponse<void>(success: true);
+      }
+      return ApiResponse<void>(
+        success: false,
+        error: response.data['error'] as String? ?? 'Failed to delete entry',
+      );
+    } on DioException catch (e) {
+      return ApiResponse<void>(
+        success: false,
+        error: e.response?.data['error'] ?? 'Network error occurred',
+      );
+    } catch (e) {
+      return ApiResponse<void>(
+        success: false,
+        error: 'An unexpected error occurred: $e',
+      );
+    }
+  }
+
+  Future<ApiResponse<TripThreadEntry>> patchThreadEntryText({
+    required String tripId,
+    required String entryId,
+    required String contentText,
+  }) async {
+    try {
+      final response = await _dio.patch(
+        '/trips/$tripId/entries/$entryId',
+        data: {'contentText': contentText},
+      );
+      if (response.data['success'] == true && response.data['data'] != null) {
+        return ApiResponse<TripThreadEntry>(
+          success: true,
+          data: TripThreadEntry.fromJson(
+            response.data['data'] as Map<String, dynamic>,
+          ),
+        );
+      }
+      return ApiResponse<TripThreadEntry>(
+        success: false,
+        error: response.data['error'] as String? ?? 'Failed to update entry',
+      );
+    } on DioException catch (e) {
+      return ApiResponse<TripThreadEntry>(
+        success: false,
+        error: e.response?.data['error'] ?? 'Network error occurred',
+      );
+    } catch (e) {
+      return ApiResponse<TripThreadEntry>(
+        success: false,
+        error: 'An unexpected error occurred: $e',
+      );
+    }
+  }
+
   // Participants
   Future<ApiResponse<TripParticipant>> addParticipant(
     String tripId,

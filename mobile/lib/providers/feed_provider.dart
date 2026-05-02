@@ -235,11 +235,8 @@ class FeedProvider extends ChangeNotifier {
 
             debugPrint('[FeedProvider] Parsing trip $i: ${item.keys.toList()}');
             final trip = Trip.fromJson(item);
-
-            // Only add trips that are either public or from followed users
-            if (trip.user?.isPrivate != true || item['isFollowing'] == true) {
-              trips.add(trip);
-            }
+            // Discover API already returns only followed owners or public profiles.
+            trips.add(trip);
 
             debugPrint('[FeedProvider] Successfully parsed trip: ${trip.id}');
           } catch (parseError) {
@@ -254,7 +251,7 @@ class FeedProvider extends ChangeNotifier {
         }
 
         _discoverTrips.addAll(trips);
-        _hasMoreDiscoverTrips = hasNext && trips.isNotEmpty;
+        _hasMoreDiscoverTrips = hasNext;
         _discoverTripsPage++;
         _discoverTripsError = null;
 

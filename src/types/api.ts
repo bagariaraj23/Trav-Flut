@@ -107,6 +107,8 @@ export interface TripResponse {
   threadEntries?: TripThreadEntryResponse[] | null;
   finalPost?: TripFinalPostResponse | null;
   coverMedia?: MediaResponse | null;
+  /** Present on discover feed: whether the current user follows the trip owner. */
+  isFollowing?: boolean;
   _count?: {
     threadEntries: number | null;
     media: number | null;

@@ -366,6 +366,76 @@ class TripProvider extends ChangeNotifier {
         tripId: tripId);
   }
 
+  Future<bool> deleteThreadEntry({
+    required String tripId,
+    required String entryId,
+  }) async {
+    try {
+      final response = await _tripService.deleteThreadEntry(
+        tripId: tripId,
+        entryId: entryId,
+      );
+      if (response.success) {
+        _currentTripEntries.removeWhere((e) => e.id == entryId);
+        if (_currentTrip?.id == tripId) {
+          final raw = _currentTrip!.entryCount - 1;
+          final nextCount = raw < 0 ? 0 : raw;
+          _currentTrip = _currentTrip!.copyWith(
+            threadEntries: List<TripThreadEntry>.from(_currentTripEntries),
+            entryCount: nextCount,
+          );
+        }
+        _error = null;
+        notifyListeners();
+        return true;
+      }
+      _error = response.error ?? 'Failed to delete entry';
+      notifyListeners();
+      return false;
+    } catch (e) {
+      _error = 'Failed to delete entry';
+      notifyListeners();
+      debugPrint('Delete thread entry error: $e');
+      return false;
+    }
+  }
+
+  Future<bool> updateThreadEntryText({
+    required String tripId,
+    required String entryId,
+    required String contentText,
+  }) async {
+    try {
+      final response = await _tripService.patchThreadEntryText(
+        tripId: tripId,
+        entryId: entryId,
+        contentText: contentText,
+      );
+      if (response.success && response.data != null) {
+        final idx = _currentTripEntries.indexWhere((e) => e.id == entryId);
+        if (idx >= 0) {
+          _currentTripEntries[idx] = response.data!;
+        }
+        if (_currentTrip?.id == tripId) {
+          _currentTrip = _currentTrip!.copyWith(
+            threadEntries: List<TripThreadEntry>.from(_currentTripEntries),
+          );
+        }
+        _error = null;
+        notifyListeners();
+        return true;
+      }
+      _error = response.error ?? 'Failed to update entry';
+      notifyListeners();
+      return false;
+    } catch (e) {
+      _error = 'Failed to update entry';
+      notifyListeners();
+      debugPrint('Update thread entry error: $e');
+      return false;
+    }
+  }
+
   // Get trip by ID
   Future<Trip?> getTrip(String tripId) async {
     try {
