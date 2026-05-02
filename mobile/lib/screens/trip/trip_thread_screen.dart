@@ -90,6 +90,8 @@ class _TripThreadScreenState extends State<TripThreadScreen>
 
   bool _wasOngoingTrip = false;
   TripProvider? _tripProvider;
+  final Map<String, GlobalKey> _highlightEntryKeys = {};
+  bool _pendingOlderPageLoad = false;
 
   @override
   void initState() {
@@ -109,6 +111,7 @@ class _TripThreadScreenState extends State<TripThreadScreen>
       ),
     );
     _textController.addListener(_onTextChanged);
+    _scrollController.addListener(_onThreadScrollNearTop);
 
     // Defer _loadTrip and _loadTripParticipants - they call clearCurrentTripEntries
     // and setState which trigger notifyListeners during build if run in initState
@@ -163,6 +166,7 @@ class _TripThreadScreenState extends State<TripThreadScreen>
     _textController.dispose();
     _entryInputFocusNode.dispose();
     _locationController.dispose();
+    _scrollController.removeListener(_onThreadScrollNearTop);
     _scrollController.dispose();
     _replyBannerController.dispose();
     _disposePendingVideoController();
@@ -358,9 +362,32 @@ class _TripThreadScreenState extends State<TripThreadScreen>
       if (trip != null) {
         await tripProvider.loadCurrentTripEntries(widget.tripId);
         _syncEntryEngagementState();
+
+        final hl = widget.highlightEntryId;
+        if (hl != null && hl.isNotEmpty) {
+          await tripProvider.loadUntilEntryPresent(widget.tripId, hl);
+          if (mounted) _syncEntryEngagementState();
+        }
+
         if (mounted) {
           setState(() {
             _isLoadingEntries = false;
+          });
+        }
+
+        if (mounted) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (!mounted) return;
+            final hl2 = widget.highlightEntryId;
+            if (hl2 != null && hl2.isNotEmpty) {
+              _scrollHighlightedEntryIntoView(hl2);
+            } else {
+              _scrollThreadToBottom(animated: false);
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                if (!mounted) return;
+                _scrollThreadToBottom(animated: false);
+              });
+            }
           });
         }
       } else {
@@ -383,6 +410,86 @@ class _TripThreadScreenState extends State<TripThreadScreen>
     engagementProvider.setLikeStatusBatch({
       for (final entry in entries) entry.id: entry.hasLiked,
     });
+  }
+
+  void _onThreadScrollNearTop() {
+    if (!_scrollController.hasClients) return;
+    if (_scrollController.position.pixels > 180) return;
+    _maybeLoadOlderThreadEntries();
+  }
+
+  Future<void> _maybeLoadOlderThreadEntries() async {
+    if (!mounted || _pendingOlderPageLoad) return;
+    final tripProvider = context.read<TripProvider>();
+    if (!tripProvider.threadEntriesHasMoreOlder ||
+        tripProvider.isLoadingOlderThreadEntries) {
+      return;
+    }
+
+    _pendingOlderPageLoad = true;
+    final scroll = _scrollController;
+    final oldPixels = scroll.hasClients ? scroll.position.pixels : 0.0;
+    final oldMax = scroll.hasClients ? scroll.position.maxScrollExtent : 0.0;
+
+    await tripProvider.loadOlderThreadEntries(widget.tripId);
+
+    if (!mounted) {
+      _pendingOlderPageLoad = false;
+      return;
+    }
+
+    _syncEntryEngagementState();
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) {
+        _pendingOlderPageLoad = false;
+        return;
+      }
+      if (scroll.hasClients) {
+        final newMax = scroll.position.maxScrollExtent;
+        final delta = newMax - oldMax;
+        final target = (oldPixels + delta).clamp(0.0, newMax);
+        scroll.jumpTo(target);
+      }
+      _pendingOlderPageLoad = false;
+    });
+  }
+
+  void _scrollThreadToBottom({bool animated = true}) {
+    if (!_scrollController.hasClients) return;
+    final max = _scrollController.position.maxScrollExtent;
+    if (max <= 0) return;
+    if (animated) {
+      _scrollController.animateTo(
+        max,
+        duration: const Duration(milliseconds: 280),
+        curve: Curves.easeOutCubic,
+      );
+    } else {
+      _scrollController.jumpTo(max);
+    }
+  }
+
+  Future<void> _scrollHighlightedEntryIntoView(String entryId) async {
+    for (var attempt = 0; attempt < 8; attempt++) {
+      await WidgetsBinding.instance.endOfFrame;
+      if (!mounted) return;
+      final key = _highlightEntryKeys[entryId];
+      final ctx = key?.currentContext;
+      if (ctx != null && ctx.mounted) {
+        try {
+          await Scrollable.ensureVisible(
+            ctx,
+            duration: const Duration(milliseconds: 320),
+            curve: Curves.easeOutCubic,
+            alignment: 0.12,
+          );
+        } catch (_) {}
+        if (!mounted) return;
+        return;
+      }
+    }
+    _scrollThreadToBottom(animated: false);
   }
 
   Future<void> _addEntry() async {
@@ -1515,7 +1622,13 @@ class _TripThreadScreenState extends State<TripThreadScreen>
         : entry.likeCount;
     final isToggling = engagementProvider.isToggling(entry.id);
 
-    return Dismissible(
+    GlobalKey? highlightKey;
+    final hid = widget.highlightEntryId;
+    if (hid != null && hid.isNotEmpty && hid == entry.id) {
+      highlightKey = _highlightEntryKeys[entry.id] ??= GlobalKey();
+    }
+
+    final tree = Dismissible(
       key: ValueKey('entry-reply-${entry.id}'),
       direction: DismissDirection.startToEnd,
       background: _buildReplySwipeBackground(),
@@ -1849,6 +1962,11 @@ class _TripThreadScreenState extends State<TripThreadScreen>
         ),
       ),
     );
+
+    if (highlightKey != null) {
+      return KeyedSubtree(key: highlightKey, child: tree);
+    }
+    return tree;
   }
 
   Widget _buildMediaPreview(TripThreadEntry entry) {

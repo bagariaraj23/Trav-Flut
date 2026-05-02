@@ -6,13 +6,115 @@ import { createThreadEntrySchema } from "@/lib/validation";
 import {
   ApiResponse,
   TripThreadEntryResponse,
+  TripThreadEntriesPageResponse,
   PlaceResponse,
 } from "@/types/api";
 import { serializePlace } from "@/lib/place";
 import { checkLikeStatus } from "@/lib/services/like";
 import { createNotification } from "@/lib/services/notification";
-import { EntityType } from "@prisma/client";
+import { EntityType, Prisma } from "@prisma/client";
 import { canViewEntity } from "@/lib/auth/permissions";
+
+const THREAD_ENTRY_LIST_INCLUDE = {
+  author: {
+    select: {
+      id: true,
+      email: true,
+      username: true,
+      name: true,
+      avatarUrl: true,
+      bio: true,
+      isPrivate: true,
+      createdAt: true,
+      updatedAt: true,
+    },
+  },
+  taggedUsers: {
+    include: {
+      taggedUser: {
+        select: {
+          id: true,
+          email: true,
+          username: true,
+          name: true,
+          avatarUrl: true,
+          bio: true,
+          isPrivate: true,
+          createdAt: true,
+          updatedAt: true,
+        },
+      },
+    },
+  },
+  media: true,
+  place: true,
+} as const;
+
+type ThreadEntryListRow = Prisma.TripThreadEntryGetPayload<{
+  include: typeof THREAD_ENTRY_LIST_INCLUDE;
+}>;
+
+function encodeEntryCursor(createdAt: Date, id: string): string {
+  return Buffer.from(
+    JSON.stringify({ c: createdAt.toISOString(), i: id })
+  ).toString("base64url");
+}
+
+function decodeEntryCursor(cursor: string): { createdAt: Date; id: string } {
+  const raw = Buffer.from(cursor, "base64url").toString("utf8");
+  const obj = JSON.parse(raw) as { c?: string; i?: string };
+  if (!obj.c || !obj.i) {
+    throw new Error("invalid_cursor");
+  }
+  return { createdAt: new Date(obj.c), id: obj.i };
+}
+
+function mapThreadEntryRowsToResponse(
+  entries: ThreadEntryListRow[],
+  likeStatusMap: Record<string, boolean>
+): (TripThreadEntryResponse & {
+  likeCount: number;
+  commentCount: number;
+  hasLiked: boolean;
+})[] {
+  return entries.map((entry) => ({
+    ...entry,
+    gpsCoordinates: entry.gpsCoordinates
+      ? ((typeof entry.gpsCoordinates === "string"
+        ? JSON.parse(entry.gpsCoordinates)
+        : entry.gpsCoordinates) as {
+        lat: number | null;
+        lng: number | null;
+      })
+      : null,
+    createdAt: entry.createdAt.toISOString(),
+    likeCount: entry.likeCount,
+    commentCount: entry.commentCount,
+    hasLiked: likeStatusMap[entry.id] || false,
+    author: {
+      ...entry.author,
+      createdAt: entry.author.createdAt.toISOString(),
+      updatedAt: entry.author.updatedAt.toISOString(),
+    },
+    taggedUsers:
+      entry.taggedUsers && entry.taggedUsers.length > 0
+        ? entry.taggedUsers.map((tag) => ({
+          ...tag.taggedUser,
+          createdAt: tag.taggedUser.createdAt.toISOString(),
+          updatedAt: tag.taggedUser.updatedAt.toISOString(),
+        }))
+        : [],
+    media: entry.media
+      ? {
+        ...entry.media,
+        createdAt: entry.media.createdAt.toISOString(),
+      }
+      : undefined,
+    place: entry.place
+      ? (serializePlace(entry.place) as PlaceResponse)
+      : null,
+  }));
+}
 
 // Create a new thread entry
 export async function POST(
@@ -507,98 +609,70 @@ export async function GET(
       }
     }
 
-    // Get thread entries
-    const entries = await prisma.tripThreadEntry.findMany({
-      where: { tripId },
-      include: {
-        author: {
-          select: {
-            id: true,
-            email: true,
-            username: true,
-            name: true,
-            avatarUrl: true,
-            bio: true,
-            isPrivate: true,
-            createdAt: true,
-            updatedAt: true,
+    const { searchParams } = new URL(request.url);
+    const limitRaw = parseInt(searchParams.get("limit") || "30", 10);
+    const limit = Math.min(Math.max(Number.isFinite(limitRaw) ? limitRaw : 30, 1), 100);
+    const cursorParam = searchParams.get("cursor");
+
+    let whereClause: Prisma.TripThreadEntryWhereInput = { tripId };
+
+    if (cursorParam) {
+      let decoded: { createdAt: Date; id: string };
+      try {
+        decoded = decodeEntryCursor(cursorParam);
+      } catch {
+        return NextResponse.json<ApiResponse>(
+          { success: false, error: "Invalid cursor" },
+          { status: 400 }
+        );
+      }
+      whereClause = {
+        tripId,
+        OR: [
+          { createdAt: { lt: decoded.createdAt } },
+          {
+            AND: [
+              { createdAt: decoded.createdAt },
+              { id: { lt: decoded.id } },
+            ],
           },
-        },
-        taggedUsers: {
-          include: {
-            taggedUser: {
-              select: {
-                id: true,
-                email: true,
-                username: true,
-                name: true,
-                avatarUrl: true,
-                bio: true,
-                isPrivate: true,
-                createdAt: true,
-                updatedAt: true,
-              },
-            },
-          },
-        },
-        media: true,
-        place: true,
-      },
-      orderBy: { createdAt: "asc" },
+        ],
+      };
+    }
+
+    const rows = await prisma.tripThreadEntry.findMany({
+      where: whereClause,
+      include: THREAD_ENTRY_LIST_INCLUDE,
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      take: limit + 1,
     });
 
-    const entryIds = entries.map((e) => e.id);
+    const hasMoreOlder = rows.length > limit;
+    const pageRows = hasMoreOlder ? rows.slice(0, limit) : rows;
+    pageRows.reverse();
+
+    const entryIds = pageRows.map((e) => e.id);
     const likeStatusMap = await checkLikeStatus(
       userId,
       EntityType.TRIP_THREAD_ENTRY,
       entryIds
     );
 
-    const entriesResponse: (TripThreadEntryResponse & {
-      likeCount: number;
-      commentCount: number;
-      hasLiked: boolean;
-    })[] = entries.map((entry) => ({
-      ...entry,
-      gpsCoordinates: entry.gpsCoordinates
-        ? ((typeof entry.gpsCoordinates === "string"
-          ? JSON.parse(entry.gpsCoordinates)
-          : entry.gpsCoordinates) as {
-            lat: number | null;
-            lng: number | null;
-          })
-        : null,
-      createdAt: entry.createdAt.toISOString(),
-      likeCount: entry.likeCount,
-      commentCount: entry.commentCount,
-      hasLiked: likeStatusMap[entry.id] || false,
-      author: {
-        ...entry.author,
-        createdAt: entry.author.createdAt.toISOString(),
-        updatedAt: entry.author.updatedAt.toISOString(),
-      },
-      taggedUsers:
-        entry.taggedUsers && entry.taggedUsers.length > 0
-          ? entry.taggedUsers.map((tag) => ({
-            ...tag.taggedUser,
-            createdAt: tag.taggedUser.createdAt.toISOString(),
-            updatedAt: tag.taggedUser.updatedAt.toISOString(),
-          }))
-          : [],
-      media: entry.media
-        ? {
-          ...entry.media,
-          createdAt: entry.media.createdAt.toISOString(),
-        }
-        : undefined,
-      place: entry.place
-        ? (serializePlace(entry.place) as PlaceResponse)
-        : null,
-    }));
+    const items = mapThreadEntryRowsToResponse(pageRows, likeStatusMap);
 
-    return NextResponse.json<ApiResponse<TripThreadEntryResponse[]>>({
+    const oldestInPage = pageRows[0] ?? null;
+    const pageData: TripThreadEntriesPageResponse = {
+      items,
+      hasMoreOlder,
+      nextOlderCursor:
+        hasMoreOlder && oldestInPage
+          ? encodeEntryCursor(oldestInPage.createdAt, oldestInPage.id)
+          : null,
+    };
+
+    return NextResponse.json<ApiResponse<TripThreadEntriesPageResponse>>({
       success: true,
-      data: entriesResponse,
+      data: pageData,
     });
   } catch (error: any) {
     console.error("Get thread entries error:", error);

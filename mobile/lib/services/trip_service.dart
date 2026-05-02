@@ -3,6 +3,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
 import 'package:tripthread/models/api_response.dart';
 import 'package:tripthread/models/trip.dart';
+import 'package:tripthread/models/thread_entries_page.dart';
 import 'package:tripthread/models/trip_join_request.dart';
 import 'package:tripthread/services/storage_service.dart';
 import 'package:tripthread/config/app_config.dart';
@@ -397,23 +398,43 @@ class TripService {
     }
   }
 
-  Future<ApiResponse<List<TripThreadEntry>>> getThreadEntries(
-      String tripId) async {
+  Future<ApiResponse<ThreadEntriesPage>> getThreadEntries(
+    String tripId, {
+    int limit = 30,
+    String? olderThanCursor,
+  }) async {
     try {
-      final response = await _dio.get('/trips/$tripId/entries');
+      final response = await _dio.get(
+        '/trips/$tripId/entries',
+        queryParameters: {
+          'limit': limit,
+          if (olderThanCursor != null) 'cursor': olderThanCursor,
+        },
+      );
 
-      final entries = (response.data['data'] as List)
-          .map((json) => TripThreadEntry.fromJson(json))
-          .toList();
+      if (response.data['success'] == true && response.data['data'] != null) {
+        final page = ThreadEntriesPage.fromJson(
+          response.data['data'] as Map<String, dynamic>,
+        );
+        return ApiResponse<ThreadEntriesPage>(
+          success: true,
+          data: page,
+        );
+      }
 
-      return ApiResponse<List<TripThreadEntry>>(
-        success: response.data['success'],
-        data: entries,
+      return ApiResponse<ThreadEntriesPage>(
+        success: false,
+        error: response.data['error'] ?? 'Failed to load thread entries',
       );
     } on DioException catch (e) {
-      return ApiResponse<List<TripThreadEntry>>(
+      return ApiResponse<ThreadEntriesPage>(
         success: false,
         error: e.response?.data['error'] ?? 'Network error occurred',
+      );
+    } catch (e) {
+      return ApiResponse<ThreadEntriesPage>(
+        success: false,
+        error: 'An unexpected error occurred: $e',
       );
     }
   }

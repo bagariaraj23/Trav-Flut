@@ -295,9 +295,11 @@ describe("Engagement API - Trip Entries Integration", () => {
 
       expect(response.status).toBe(200);
       expect(data.success).toBe(true);
-      expect(data.data.length).toBe(2);
+      expect(data.data.items.length).toBe(2);
+      expect(typeof data.data.hasMoreOlder).toBe("boolean");
+      expect(data.data.nextOlderCursor === null || typeof data.data.nextOlderCursor === "string").toBe(true);
 
-      const entry = data.data.find((e: any) => e.id === entry1.id);
+      const entry = data.data.items.find((e: any) => e.id === entry1.id);
       expect(entry).toBeDefined();
       expect(entry.likeCount).toBe(2);
       expect(entry.commentCount).toBe(2);
@@ -318,7 +320,7 @@ describe("Engagement API - Trip Entries Integration", () => {
       const data = await getResponseData(response);
 
       expect(response.status).toBe(200);
-      const entry = data.data.find((e: any) => e.id === entry1.id);
+      const entry = data.data.items.find((e: any) => e.id === entry1.id);
       expect(entry.hasLiked).toBe(true);
     });
 
@@ -339,7 +341,7 @@ describe("Engagement API - Trip Entries Integration", () => {
       const data = await getResponseData(response);
 
       expect(response.status).toBe(200);
-      const entry = data.data.find((e: any) => e.id === entry2.id);
+      const entry = data.data.items.find((e: any) => e.id === entry2.id);
       if (entry) {
         expect(entry.hasLiked).toBe(false);
       }

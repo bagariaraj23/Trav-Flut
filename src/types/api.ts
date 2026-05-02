@@ -141,6 +141,17 @@ export interface TripThreadEntryResponse {
   media?: MediaResponse | null;
 }
 
+/** Cursor-paginated GET /trips/:id/entries (newest page first; items ascending). */
+export interface TripThreadEntriesPageResponse {
+  items: (TripThreadEntryResponse & {
+    likeCount: number;
+    commentCount: number;
+    hasLiked: boolean;
+  })[];
+  hasMoreOlder: boolean;
+  nextOlderCursor: string | null;
+}
+
 export interface PlaceResponse {
   id: string;
   name: string;

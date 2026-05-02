@@ -1810,12 +1810,29 @@ class ApiService {
         '[ApiService] Get trip entries response: ${response.statusCode}',
       );
 
-      if (response.data['success'] && response.data['data'] != null) {
-        final entries = (response.data['data'] as List)
-            .map(
-              (json) => TripThreadEntry.fromJson(json as Map<String, dynamic>),
-            )
-            .toList();
+      if (response.data['success'] == true && response.data['data'] != null) {
+        final data = response.data['data'];
+        final List<TripThreadEntry> entries;
+        if (data is List) {
+          entries = data
+              .map(
+                (json) =>
+                    TripThreadEntry.fromJson(json as Map<String, dynamic>),
+              )
+              .toList();
+        } else if (data is Map<String, dynamic> && data['items'] is List) {
+          entries = (data['items'] as List)
+              .map(
+                (json) =>
+                    TripThreadEntry.fromJson(json as Map<String, dynamic>),
+              )
+              .toList();
+        } else {
+          return ApiResponse<List<TripThreadEntry>>(
+            success: false,
+            error: 'Invalid thread entries response',
+          );
+        }
 
         debugPrint('[ApiService] Found ${entries.length} trip entries');
         return ApiResponse<List<TripThreadEntry>>(success: true, data: entries);
@@ -1854,12 +1871,29 @@ class ApiService {
         '[ApiService] Get thread entries response: ${response.statusCode}',
       );
 
-      if (response.data['success'] && response.data['data'] != null) {
-        final entries = (response.data['data'] as List)
-            .map(
-              (json) => TripThreadEntry.fromJson(json as Map<String, dynamic>),
-            )
-            .toList();
+      if (response.data['success'] == true && response.data['data'] != null) {
+        final data = response.data['data'];
+        final List<TripThreadEntry> entries;
+        if (data is List) {
+          entries = data
+              .map(
+                (json) =>
+                    TripThreadEntry.fromJson(json as Map<String, dynamic>),
+              )
+              .toList();
+        } else if (data is Map<String, dynamic> && data['items'] is List) {
+          entries = (data['items'] as List)
+              .map(
+                (json) =>
+                    TripThreadEntry.fromJson(json as Map<String, dynamic>),
+              )
+              .toList();
+        } else {
+          return ApiResponse<List<TripThreadEntry>>(
+            success: false,
+            error: 'Invalid thread entries response',
+          );
+        }
 
         debugPrint('[ApiService] Found ${entries.length} thread entries');
         return ApiResponse<List<TripThreadEntry>>(success: true, data: entries);

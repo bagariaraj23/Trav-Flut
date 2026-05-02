@@ -13,6 +13,9 @@ class TripProvider extends ChangeNotifier {
   Trip? _currentTrip;
   List<Trip> _trips = [];
   List<TripThreadEntry> _currentTripEntries = [];
+  String? _threadEntriesOlderCursor;
+  bool _threadEntriesHasMoreOlder = false;
+  bool _isLoadingOlderThreadEntries = false;
   List<TripJoinRequest> _pendingTripInvitations = [];
   List<TripJoinRequest> _sentTripInvitations = [];
   bool _isLoading = false;
@@ -32,6 +35,8 @@ class TripProvider extends ChangeNotifier {
   String? get error => _error;
   String? get tripInvitesError => _tripInvitesError;
   bool get hasOngoingTrip => _currentTrip?.status == TripStatus.ongoing;
+  bool get threadEntriesHasMoreOlder => _threadEntriesHasMoreOlder;
+  bool get isLoadingOlderThreadEntries => _isLoadingOlderThreadEntries;
 
   // Initialize
   Future<void> initialize() async {
@@ -191,20 +196,30 @@ class TripProvider extends ChangeNotifier {
     }
   }
 
-  // Load thread entries for current trip
+  static const int _threadPageSize = 30;
+
+  // Load latest page of thread entries (chronological ascending within page).
   Future<void> loadCurrentTripEntries([String? tripId]) async {
     final id = tripId ?? _currentTrip?.id;
     if (id == null) return;
 
-    // Clear entries immediately to prevent showing old trip's entries
     _currentTripEntries = [];
+    _threadEntriesOlderCursor = null;
+    _threadEntriesHasMoreOlder = false;
     notifyListeners();
 
     try {
-      final response = await _tripService.getThreadEntries(id);
+      final response = await _tripService.getThreadEntries(
+        id,
+        limit: _threadPageSize,
+      );
 
       if (response.success && response.data != null) {
-        _currentTripEntries = response.data!;
+        final page = response.data!;
+        _currentTripEntries = page.items;
+        _threadEntriesHasMoreOlder = page.hasMoreOlder;
+        _threadEntriesOlderCursor = page.nextOlderCursor;
+        _error = null;
         notifyListeners();
       } else {
         _error = response.error;
@@ -217,9 +232,65 @@ class TripProvider extends ChangeNotifier {
     }
   }
 
+  /// Loads older entries (prepend). Cursor-based; call when user scrolls up.
+  Future<void> loadOlderThreadEntries(String tripId) async {
+    if (!_threadEntriesHasMoreOlder ||
+        _isLoadingOlderThreadEntries ||
+        _threadEntriesOlderCursor == null) {
+      return;
+    }
+
+    // Do not notifyListeners() here — a loading header would change list extent
+    // and break scroll anchoring. Only notify after the page is merged.
+    _isLoadingOlderThreadEntries = true;
+
+    try {
+      final response = await _tripService.getThreadEntries(
+        tripId,
+        limit: _threadPageSize,
+        olderThanCursor: _threadEntriesOlderCursor,
+      );
+
+      if (response.success && response.data != null) {
+        final page = response.data!;
+        final existingIds = _currentTripEntries.map((e) => e.id).toSet();
+        final older = page.items
+            .where((e) => !existingIds.contains(e.id))
+            .toList();
+        _currentTripEntries = [...older, ..._currentTripEntries];
+        _threadEntriesHasMoreOlder = page.hasMoreOlder;
+        _threadEntriesOlderCursor = page.nextOlderCursor;
+        _error = null;
+      } else {
+        _error = response.error;
+      }
+    } catch (e) {
+      _error = 'Failed to load older entries';
+      debugPrint('Load older thread entries error: $e');
+    } finally {
+      _isLoadingOlderThreadEntries = false;
+      notifyListeners();
+    }
+  }
+
+  /// Fetches older pages until [entryId] is in memory or history is exhausted.
+  Future<void> loadUntilEntryPresent(String tripId, String entryId) async {
+    var guard = 0;
+    while (guard < 100 &&
+        !_currentTripEntries.any((e) => e.id == entryId) &&
+        _threadEntriesHasMoreOlder &&
+        _threadEntriesOlderCursor != null) {
+      guard++;
+      await loadOlderThreadEntries(tripId);
+    }
+  }
+
   // Clear current trip entries (useful when switching trips)
   void clearCurrentTripEntries() {
     _currentTripEntries = [];
+    _threadEntriesOlderCursor = null;
+    _threadEntriesHasMoreOlder = false;
+    _isLoadingOlderThreadEntries = false;
     notifyListeners();
   }
 
