@@ -1,26 +1,25 @@
-FROM node:18-alpine
+# Build from repository root (parent of scheduler/):
+#   docker build -f scheduler/Dockerfile .
+#
+# Requires DATABASE_URL (or direct env used by scheduler) at runtime, e.g.:
+#   docker run --env-file .env tripthread-scheduler
+
+FROM node:20-alpine
 
 WORKDIR /app
 
-# Copy package files
-COPY scheduler/package*.json ./
+COPY prisma ./prisma
+COPY scheduler/package.json scheduler/package-lock.json ./scheduler/
 
-# Install dependencies
-RUN npm install
+WORKDIR /app/scheduler
+RUN npm ci
 
-# Copy source code
-COPY scheduler/ .
-COPY scheduler/tsconfig.json ./ 
-COPY prisma/ ./prisma/
+COPY scheduler/ ./
 
-# Generate Prisma client
-RUN npx prisma generate --schema=./prisma/schema.prisma
+RUN npx prisma generate --schema=../prisma/schema.prisma \
+  && npm run build \
+  && npm prune --omit=dev
 
-# Build TypeScript
-RUN npm run build
+ENV NODE_ENV=production
 
-# Verify build output exists
-RUN ls -la dist/ || (echo "Build failed - dist directory not found" && exit 1)
-
-# Start the scheduler
-CMD ["npm", "start"]
+CMD ["node", "dist/index.js"]

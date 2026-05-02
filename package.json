@@ -22,7 +22,13 @@
     "db:migrate": "prisma migrate dev",
     "db:studio": "prisma studio",
     "db:seed": "dotenv -e .env.test -- npx tsx src/scripts/seed.ts",
-    "cleanup:resets": "npx tsx src/scripts/cleanupExpiredPasswordResets.ts"
+    "cleanup:resets": "npx tsx src/scripts/cleanupExpiredPasswordResets.ts",
+    "setup:env": "bash scripts/setup-env.sh",
+    "docker:start": "bash scripts/docker-start.sh",
+    "docker:stop": "bash scripts/docker-stop.sh",
+    "docker:reset": "bash scripts/docker-reset.sh",
+    "docker:logs": "bash -c 'docker compose -f docker-compose.dev.yml logs -f 2>/dev/null || docker-compose -f docker-compose.dev.yml logs -f'",
+    "docker:ps": "bash -c 'docker compose -f docker-compose.dev.yml ps 2>/dev/null || docker-compose -f docker-compose.dev.yml ps'"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",
