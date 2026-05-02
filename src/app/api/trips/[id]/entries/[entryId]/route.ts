@@ -331,6 +331,21 @@ export async function PATCH(
       );
     }
 
+    const EDIT_WINDOW_MS = 15 * 60 * 1000;
+    if (isAuthor) {
+      const ageMs = Date.now() - entry.createdAt.getTime();
+      if (ageMs > EDIT_WINDOW_MS) {
+        return NextResponse.json<ApiResponse>(
+          {
+            success: false,
+            error:
+              "Text entries can only be edited within 15 minutes of posting",
+          },
+          { status: 400 }
+        );
+      }
+    }
+
     await prisma.tripThreadEntry.update({
       where: { id: entryId },
       data: { contentText },

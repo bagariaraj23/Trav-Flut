@@ -1470,6 +1470,24 @@ class _TripThreadScreenState extends State<TripThreadScreen>
     return ownerId != null && ownerId == uid;
   }
 
+  /// Authors may edit text only within 15 minutes. Trip owner (non-author) may still edit for moderation.
+  bool _canEditThreadEntryText(TripThreadEntry entry) {
+    if (entry.type != ThreadEntryType.text) return false;
+    if (_trip?.status != TripStatus.ongoing) return false;
+    final uid = context.read<AuthProvider>().currentUser?.id;
+    if (uid == null) return false;
+    final isAuthor = entry.authorId == uid;
+    final isTripOwner = _trip?.userId == uid;
+    if (!isAuthor && !isTripOwner) return false;
+    if (isAuthor) {
+      if (DateTime.now().difference(entry.createdAt) >
+          const Duration(minutes: 15)) {
+        return false;
+      }
+    }
+    return true;
+  }
+
   Future<void> _showThreadEntryActions(TripThreadEntry entry) async {
     if (!mounted || _trip?.status != TripStatus.ongoing) return;
     if (!_canModerateThreadEntry(entry)) return;
@@ -1481,7 +1499,7 @@ class _TripThreadScreenState extends State<TripThreadScreen>
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            if (entry.type == ThreadEntryType.text)
+            if (_canEditThreadEntryText(entry))
               ListTile(
                 leading: const Icon(Icons.edit_outlined),
                 title: const Text('Edit text'),
