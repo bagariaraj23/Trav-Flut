@@ -329,13 +329,21 @@ function buildSummary(trip: TripForFinalizer) {
     .slice(0, 2)
     .map((entry) => `“${truncate(entry.contentText!, 160)}”`);
 
+  const tripTitle = trip.title?.trim() ?? "";
   const destinationLabel =
     destinations.length > 1
       ? `${destinations.length} places`
-      : destinations[0] ?? "the road";
+      : destinations.length === 1
+        ? destinations[0]!
+        : tripTitle || "your trip";
+
+  const opening =
+    destinations.length === 0
+        ? `${tripTitle || "your trip"} was a ${durationDays}-day adventure.`
+        : `${tripTitle || destinationLabel} was a ${durationDays}-day adventure through ${destinationLabel}.`;
 
   const summaryParts = [
-    `${trip.title} was a ${durationDays}-day adventure through ${destinationLabel}.`,
+    opening,
     highlightedLocations.length
       ? `Highlights included ${highlightedLocations.join(", ")}.`
       : undefined,
@@ -397,7 +405,10 @@ function selectCuratedMedia(trip: TripForFinalizer) {
 }
 
 function generateDefaultCaption(trip: TripForFinalizer) {
-  const primaryDestination = trip.destinations[0] ?? trip.title;
+  const primaryDestination =
+    trip.destinations[0]?.trim() ||
+    trip.title?.trim() ||
+    "your trip";
   const mood = trip.mood ? `#${trip.mood.toLowerCase()}` : "";
   return [`#${sanitizeTag(primaryDestination)}`, mood]
     .filter(Boolean)

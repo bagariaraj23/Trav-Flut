@@ -247,28 +247,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
         // debugPrint('[ProfileScreen] pendingRequests: ${}');
 
         return PopScope(
-          canPop: true,
+          canPop: false,
           onPopInvokedWithResult: (didPop, result) {
-            if (!didPop) {
-              if (context.canPop()) {
-                context.pop();
-              } else {
-                context.go('/home');
-              }
-            }
+            if (didPop) return;
+            context.go('/home', extra: {'explicitHome': true});
           },
           child: Scaffold(
             appBar: AppBar(
               title: Text(user.username ?? 'Profile'),
               leading: IconButton(
                 icon: const Icon(Icons.arrow_back),
-                onPressed: () {
-                  if (context.canPop()) {
-                    context.pop();
-                  } else {
-                    context.go('/home');
-                  }
-                },
+                onPressed: () =>
+                    context.go('/home', extra: {'explicitHome': true}),
               ),
               actions: _buildAppBarActions(
                 context,

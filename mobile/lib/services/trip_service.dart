@@ -563,6 +563,25 @@ class TripService {
     }
   }
 
+  /// Owner-only. Idempotent: returns existing draft if already generated.
+  Future<ApiResponse<TripFinalPost>> generateFinalPostDraft(
+      String tripId) async {
+    try {
+      final response =
+          await _dio.post('/trips/$tripId/final-post/generate');
+
+      return ApiResponse<TripFinalPost>.fromJson(
+        response.data,
+        (json) => TripFinalPost.fromJson(json as Map<String, dynamic>),
+      );
+    } on DioException catch (e) {
+      return ApiResponse<TripFinalPost>(
+        success: false,
+        error: e.response?.data['error'] ?? 'Network error occurred',
+      );
+    }
+  }
+
   Future<ApiResponse<TripFinalPost>> updateFinalPost(
     String tripId,
     Map<String, dynamic> updates,

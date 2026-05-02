@@ -32,7 +32,22 @@ class FinalPostProvider extends ChangeNotifier {
     _error = null;
     notifyListeners();
 
-    final response = await _tripService.getFinalPost(tripId);
+    var response = await _tripService.getFinalPost(tripId);
+
+    final missingDraft = !response.success &&
+        response.data == null &&
+        response.error == 'Final post not found';
+
+    if (missingDraft) {
+      final generated = await _tripService.generateFinalPostDraft(tripId);
+      if (generated.success && generated.data != null) {
+        _draft = generated.data;
+        _isLoading = false;
+        notifyListeners();
+        return;
+      }
+      response = await _tripService.getFinalPost(tripId);
+    }
 
     if (response.success && response.data != null) {
       _draft = response.data;
