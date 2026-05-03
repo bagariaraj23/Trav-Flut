@@ -602,6 +602,7 @@ export const createShareSchema = z.object({
   entityType: z.enum(["TRIP_FINAL_POST"]),
   entityId: z.string().uuid("Invalid entity ID format"),
   shareType: z.enum(["DEEP_LINK", "WEB_LINK", "EXTERNAL"]),
+  shareSource: z.enum(["SYSTEM_SHEET", "IN_APP_DM"]).optional().default("SYSTEM_SHEET"),
   expiresAt: z
     .string()
     .datetime()

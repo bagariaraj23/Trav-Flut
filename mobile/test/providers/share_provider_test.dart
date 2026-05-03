@@ -1,13 +1,15 @@
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:tripthread/utils/error_handler.dart';
 import 'package:tripthread/providers/share_provider.dart';
 import 'package:tripthread/services/share_service.dart';
-import 'package:tripthread/services/deep_link_service.dart';
 class MockShareService extends ShareService {
   bool shouldFail = false;
   String? failError;
   int createCallCount = 0;
 
-  Future<String> createShare(
+  @override
+  Future<ShareLinkResult> createShare(
     String entityType,
     String entityId,
   ) async {
@@ -16,9 +18,13 @@ class MockShareService extends ShareService {
       throw Exception(failError ?? 'Failed to create share');
     }
     await Future.delayed(const Duration(milliseconds: 100));
-    return 'https://tripthread.app/share?token=test-token-$createCallCount';
+    return ShareLinkResult(
+      webUrl: 'https://tripthread.app/share/test-token-$createCallCount',
+      shareToken: 'test-token-$createCallCount',
+    );
   }
 
+  @override
   Future<SharedEntity> resolveShare(String shareToken) async {
     if (shouldFail) {
       throw Exception(failError ?? 'Failed to resolve share');
@@ -45,6 +51,8 @@ class MockShareService extends ShareService {
 }
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
   late ShareProvider provider;
   late MockShareService mockShareService;
 
@@ -54,7 +62,6 @@ void main() {
     // So we'll use the real instance for testing
     provider = ShareProvider(
       shareService: mockShareService,
-      deepLinkService: DeepLinkService(),
     );
   });
 
@@ -73,10 +80,11 @@ void main() {
 
       expect(provider.isCreating(entityKey), true);
 
-      final shareUrl = await shareFuture;
+      final link = await shareFuture;
 
-      expect(shareUrl, isA<String>());
-      expect(shareUrl, contains('share?token='));
+      expect(link, isA<ShareLinkResult>());
+      expect(link.webUrl, contains('/share/'));
+      expect(link.shareToken, isNotEmpty);
       expect(provider.isCreating(entityKey), false);
       expect(provider.userShares, isNotEmpty);
     });
@@ -96,20 +104,20 @@ void main() {
 
     test('createShare - should prevent duplicate creation', () async {
       final share1 = provider.createShare('TRIP_FINAL_POST', 'entity1');
-      final share2 = provider.createShare('TRIP_FINAL_POST', 'entity1');
-
-      await Future.wait([share1, share2]);
-
-      // Should only create one share
+      await expectLater(
+        provider.createShare('TRIP_FINAL_POST', 'entity1'),
+        throwsA(isA<AppException>()),
+      );
+      await share1;
       expect(mockShareService.createCallCount, 1);
     });
 
-    test('openNativeShare - should handle share action', () async {
-      final shareUrl = await provider.createShare('TRIP_FINAL_POST', 'entity1');
+    test('openNativeShare - fails without platform plugin (vm test)', () async {
+      final link = await provider.createShare('TRIP_FINAL_POST', 'entity1');
 
       await expectLater(
-        provider.openNativeShare(shareUrl),
-        completes,
+        provider.openNativeShare(link),
+        throwsA(isA<MissingPluginException>()),
       );
     });
 

@@ -47,6 +47,7 @@ import 'package:tripthread/screens/settings/settings_screen.dart';
 import 'package:tripthread/screens/engagement/liked_by_screen.dart';
 import 'package:tripthread/screens/notifications/notifications_screen.dart';
 import 'package:tripthread/screens/post/post_detail_screen.dart';
+import 'package:tripthread/screens/share/share_link_screen.dart';
 import 'package:tripthread/utils/app_theme.dart';
 import 'package:tripthread/utils/error_handler.dart';
 import 'package:tripthread/widgets/auth_gate.dart';
@@ -242,7 +243,6 @@ void main() async {
               debugPrint('[main] Creating ShareProvider');
               final provider = ShareProvider(
                 shareService: shareService,
-                deepLinkService: deepLinkService,
               );
               shareService.setStorageService(storageService);
               return provider;
@@ -628,6 +628,13 @@ class _TripThreadAppRouterState extends State<TripThreadAppRouter> {
                 entityId: entityId,
                 scrollToCommentId: scrollToCommentId,
               );
+            },
+          ),
+          GoRoute(
+            path: '/share/:shareToken',
+            builder: (context, state) {
+              final shareToken = state.pathParameters['shareToken']!;
+              return ShareLinkScreen(shareToken: shareToken);
             },
           ),
           GoRoute(

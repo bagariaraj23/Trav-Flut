@@ -46,6 +46,20 @@ class AppConfig {
     );
   }
 
+  /// Origin for public share pages (Next.js /share/[token]). If empty, falls back to API origin without /api.
+  static String get _shareLinkBaseUrl {
+    if (_isInitialized) {
+      final envValue = dotenv.env['SHARE_LINK_BASE_URL'];
+      if (envValue != null && envValue.isNotEmpty) {
+        return envValue.replaceAll(RegExp(r'/+$'), '');
+      }
+    }
+    return const String.fromEnvironment(
+      'SHARE_LINK_BASE_URL',
+      defaultValue: '',
+    );
+  }
+
   static String get _googleClientId {
     if (_isInitialized) {
       final envValue = dotenv.env['GOOGLE_CLIENT_ID'];
@@ -60,6 +74,17 @@ class AppConfig {
   }
 
   // API Configuration
+  /// e.g. https://tripthread.app — must serve /share/[token] and host AASA / assetlinks for Universal Links.
+  static String get shareLinkBaseUrl => _shareLinkBaseUrl;
+
+  /// Resolved origin used in shared HTTPS links.
+  static String get effectiveShareLinkOrigin {
+    final custom = _shareLinkBaseUrl.trim();
+    if (custom.isNotEmpty) return custom;
+    final api = _baseUrl.replaceAll(RegExp(r'/+$'), '');
+    return api.replaceAll(RegExp(r'/api$'), '');
+  }
+
   static String get apiBaseUrl {
     if (kDebugMode) {
       debugPrint('[AppConfig] Using API base URL: $_baseUrl');

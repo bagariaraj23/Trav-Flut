@@ -5,6 +5,18 @@ import 'package:tripthread/services/storage_service.dart';
 import 'package:tripthread/services/token_refresh_manager.dart';
 import 'package:tripthread/config/app_config.dart';
 
+class ShareLinkResult {
+  final String webUrl;
+  final String shareToken;
+
+  const ShareLinkResult({
+    required this.webUrl,
+    required this.shareToken,
+  });
+
+  String get primaryAppDeepLink => 'tripthread://share/$shareToken';
+}
+
 class SharedEntity {
   final String entityType;
   final String entityId;
@@ -92,7 +104,7 @@ class ShareService {
     ));
   }
 
-  Future<String> createShare(
+  Future<ShareLinkResult> createShare(
     String entityType,
     String entityId,
   ) async {
@@ -103,6 +115,7 @@ class ShareService {
           'entityType': entityType,
           'entityId': entityId,
           'shareType': 'DEEP_LINK',
+          'shareSource': 'SYSTEM_SHEET',
         },
       );
 
@@ -111,7 +124,9 @@ class ShareService {
         if (data['success'] == true && data['data'] != null) {
           final shareData = data['data'] as Map<String, dynamic>;
           final shareToken = shareData['shareToken'] as String;
-          return '${AppConfig.apiBaseUrl.replaceAll('/api', '')}/share/$shareToken';
+          final origin = AppConfig.effectiveShareLinkOrigin;
+          final webUrl = '$origin/share/$shareToken';
+          return ShareLinkResult(webUrl: webUrl, shareToken: shareToken);
         }
       }
 

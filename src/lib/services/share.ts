@@ -22,12 +22,15 @@ async function invalidateShareTokenCache(shareToken: string): Promise<void> {
   }
 }
 
+export type ShareSource = "SYSTEM_SHEET" | "IN_APP_DM";
+
 export async function createShare(
   userId: string,
   entityType: EntityType,
   entityId: string,
   shareType: ShareType,
-  expiresAt?: Date
+  expiresAt?: Date,
+  shareSource: ShareSource = "SYSTEM_SHEET"
 ) {
   const exists = await validateEntityExists(entityType, entityId);
   if (!exists) {
@@ -57,6 +60,7 @@ export async function createShare(
 
   const metadata: Record<string, any> = {
     createdAt: new Date().toISOString(),
+    shareSource,
   };
 
   return await prisma.$transaction(async (tx) => {
@@ -72,7 +76,9 @@ export async function createShare(
       },
     });
 
-    await incrementEntityCount(entityType, entityId, "shareCount", tx);
+    if (shareSource === "IN_APP_DM") {
+      await incrementEntityCount(entityType, entityId, "shareCount", tx);
+    }
 
     if (redis) {
       const ttl = expiresAt

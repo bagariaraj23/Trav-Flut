@@ -1,7 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:tripthread/services/share_service.dart';
-import 'package:tripthread/services/deep_link_service.dart';
 import 'package:tripthread/utils/error_handler.dart';
 import 'package:tripthread/utils/error_handler.dart' as errors;
 
@@ -10,6 +9,7 @@ class ShareRecord {
   final String entityType;
   final String entityId;
   final String shareUrl;
+  final String shareToken;
   final DateTime createdAt;
 
   const ShareRecord({
@@ -17,19 +17,17 @@ class ShareRecord {
     required this.entityType,
     required this.entityId,
     required this.shareUrl,
+    required this.shareToken,
     required this.createdAt,
   });
 }
 
 class ShareProvider extends ChangeNotifier {
   final ShareService _shareService;
-  final DeepLinkService _deepLinkService;
 
   ShareProvider({
     required ShareService shareService,
-    required DeepLinkService deepLinkService,
-  }) : _shareService = shareService,
-       _deepLinkService = deepLinkService;
+  }) : _shareService = shareService;
 
   final List<ShareRecord> _userShares = [];
   final Map<String, bool> _isCreating = {};
@@ -39,7 +37,7 @@ class ShareProvider extends ChangeNotifier {
   String? get error => _error;
   bool isCreating(String entityId) => _isCreating[entityId] ?? false;
 
-  Future<String> createShare(String entityType, String entityId) async {
+  Future<ShareLinkResult> createShare(String entityType, String entityId) async {
     final cacheKey = '$entityType:$entityId';
 
     if (_isCreating[cacheKey] == true) {
@@ -51,13 +49,14 @@ class ShareProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final shareUrl = await _shareService.createShare(entityType, entityId);
+      final result = await _shareService.createShare(entityType, entityId);
 
       final shareRecord = ShareRecord(
         id: DateTime.now().millisecondsSinceEpoch.toString(),
         entityType: entityType,
         entityId: entityId,
-        shareUrl: shareUrl,
+        shareUrl: result.webUrl,
+        shareToken: result.shareToken,
         createdAt: DateTime.now(),
       );
 
@@ -65,7 +64,7 @@ class ShareProvider extends ChangeNotifier {
       _isCreating[cacheKey] = false;
       notifyListeners();
 
-      return shareUrl;
+      return result;
     } catch (e) {
       _isCreating[cacheKey] = false;
       _error = ErrorHandler.handleError(e).message;
@@ -75,15 +74,18 @@ class ShareProvider extends ChangeNotifier {
   }
 
   Future<void> openNativeShare(
-    String shareUrl, {
+    ShareLinkResult link, {
     String? subject,
     String? text,
   }) async {
     try {
-      debugPrint('[ShareProvider] Opening native share with URL: $shareUrl');
+      debugPrint('[ShareProvider] Opening native share with URL: ${link.webUrl}');
 
-      // Create share text with optional custom message
-      final shareText = text != null ? '$text\n\n$shareUrl' : shareUrl;
+      final shareText = [
+        if (text != null && text.isNotEmpty) text,
+        link.webUrl,
+        'Open in TripThread: ${link.primaryAppDeepLink}',
+      ].join('\n\n');
 
       // Use share_plus to open the native share dialog
       await Share.share(
