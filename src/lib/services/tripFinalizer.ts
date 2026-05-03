@@ -1,10 +1,10 @@
 import { prisma, type PrismaTransactionClient } from "@/lib/prisma";
 import {
+  EntityType,
   GenerationStatus,
   MediaProcessingStatus,
   MediaType,
   Trip,
-  TripFinalPost,
 } from "@prisma/client";
 import {
   AuthorizationError,
@@ -159,9 +159,7 @@ export class TripFinalizerService {
         throw new NotFoundError("Final post not found");
       }
 
-      if (finalPost.isPublished) {
-        throw new ConflictError("Published posts cannot be edited");
-      }
+      const wasPublished = finalPost.isPublished;
 
       const data: FinalPostUpdates = {};
 
@@ -197,7 +195,9 @@ export class TripFinalizerService {
         where: { tripId },
         data: {
           ...data,
-          generationStatus: GenerationStatus.READY,
+          generationStatus: wasPublished
+            ? GenerationStatus.PUBLISHED
+            : GenerationStatus.READY,
           updatedAt: new Date(),
         },
         select: {
@@ -299,6 +299,78 @@ export class TripFinalizerService {
       });
     });
   }
+
+  /** Owner only. Removes final post row and engagement (likes, comments, shares, notifications). */
+  static async deleteFinalPost(tripId: string, userId: string) {
+    await prisma.$transaction(async (tx) => {
+      const trip = await tx.trip.findUnique({
+        where: { id: tripId },
+        select: {
+          userId: true,
+          finalPost: { select: { id: true } },
+        },
+      });
+
+      if (!trip) {
+        throw new NotFoundError("Trip not found");
+      }
+
+      if (trip.userId !== userId) {
+        throw new AuthorizationError(
+          "Only the trip owner can delete the final post"
+        );
+      }
+
+      if (!trip.finalPost) {
+        throw new NotFoundError("Final post not found");
+      }
+
+      await deleteEngagementForTripFinalPost(tx, trip.finalPost.id);
+
+      await tx.tripFinalPost.delete({
+        where: { tripId },
+      });
+    });
+  }
+}
+
+async function deleteEngagementForTripFinalPost(
+  tx: PrismaTransactionClient,
+  finalPostId: string
+) {
+  const postEntity = EntityType.TRIP_FINAL_POST;
+
+  for (;;) {
+    const candidates = await tx.comment.findMany({
+      where: { entityType: postEntity, entityId: finalPostId },
+      select: {
+        id: true,
+        _count: { select: { replies: true } },
+      },
+    });
+    const leaves = candidates.filter((c) => c._count.replies === 0);
+    if (leaves.length === 0) {
+      break;
+    }
+    const ids = leaves.map((c) => c.id);
+    await tx.like.deleteMany({
+      where: {
+        entityType: EntityType.COMMENT,
+        entityId: { in: ids },
+      },
+    });
+    await tx.comment.deleteMany({ where: { id: { in: ids } } });
+  }
+
+  await tx.like.deleteMany({
+    where: { entityType: postEntity, entityId: finalPostId },
+  });
+  await tx.share.deleteMany({
+    where: { entityType: postEntity, entityId: finalPostId },
+  });
+  await tx.notification.deleteMany({
+    where: { entityType: postEntity, entityId: finalPostId },
+  });
 }
 
 function buildSummary(trip: TripForFinalizer) {

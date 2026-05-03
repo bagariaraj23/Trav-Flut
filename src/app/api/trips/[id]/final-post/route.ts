@@ -154,3 +154,35 @@ export async function PUT(
   });
   return handler(request);
 }
+
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const handler = withLogging(async (req) => {
+    return withRateLimit(req, async (rateLimitedReq) => {
+      return withAuth(rateLimitedReq, async (authenticatedReq) => {
+        try {
+          const { id } = await params;
+          const tripId = id;
+          const userId = authenticatedReq.user!.userId;
+
+          const permissionError = await ensureOwner(tripId, userId);
+          if (permissionError) {
+            return permissionError;
+          }
+
+          await TripFinalizerService.deleteFinalPost(tripId, userId);
+
+          return NextResponse.json<ApiResponse>({
+            success: true,
+            message: "Final post deleted",
+          });
+        } catch (error) {
+          return handleApiError(error);
+        }
+      });
+    });
+  });
+  return handler(request);
+}

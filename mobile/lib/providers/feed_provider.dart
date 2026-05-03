@@ -46,6 +46,11 @@ class FeedProvider extends ChangeNotifier {
     }
   }
 
+  void removeHomeFeedPostById(String postId) {
+    _homeFeedPosts.removeWhere((p) => p.id == postId);
+    notifyListeners();
+  }
+
   // Home Feed Methods
   Future<void> loadHomeFeed({bool refresh = false}) async {
     try {

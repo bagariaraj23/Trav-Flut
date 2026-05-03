@@ -649,6 +649,24 @@ class TripService {
     }
   }
 
+  /// Owner-only. Deletes final post and engagement; trip remains (new draft can be generated).
+  Future<ApiResponse<void>> deleteFinalPost(String tripId) async {
+    try {
+      final response = await _dio.delete('/trips/$tripId/final-post');
+
+      return ApiResponse<void>(
+        success: response.data['success'] == true,
+        message: response.data['message']?.toString(),
+        error: response.data['error']?.toString(),
+      );
+    } on DioException catch (e) {
+      return ApiResponse<void>(
+        success: false,
+        error: e.response?.data['error'] ?? 'Network error occurred',
+      );
+    }
+  }
+
   // Trip Join Request methods
   Future<ApiResponse<Map<String, dynamic>>> sendTripInvitation(
       String tripId, String receiverId) async {

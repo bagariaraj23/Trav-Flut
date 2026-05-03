@@ -13,6 +13,7 @@ class FinalPostProvider extends ChangeNotifier {
 
   TripFinalPost? _draft;
   String? _tripId;
+  bool _isTripOwner = false;
   bool _isLoading = false;
   bool _isSaving = false;
   bool _isPublishing = false;
@@ -20,11 +21,18 @@ class FinalPostProvider extends ChangeNotifier {
   final Map<String, dynamic> _pendingUpdates = {};
 
   TripFinalPost? get draft => _draft;
-  bool get _canEdit => _draft != null && !_draft!.isPublished;
+  bool get isTripOwner => _isTripOwner;
+  bool get _canEdit => _draft != null && _isTripOwner;
   bool get isLoading => _isLoading;
   bool get isSaving => _isSaving;
   bool get isPublishing => _isPublishing;
   String? get error => _error;
+
+  void setTripOwner(bool isOwner) {
+    if (_isTripOwner == isOwner) return;
+    _isTripOwner = isOwner;
+    notifyListeners();
+  }
 
   Future<void> loadDraft(String tripId) async {
     _tripId = tripId;
@@ -126,6 +134,23 @@ class FinalPostProvider extends ChangeNotifier {
     }
 
     return _persistUpdates(force: true);
+  }
+
+  Future<bool> deleteFinalPost() async {
+    if (_tripId == null) return false;
+    _error = null;
+    notifyListeners();
+
+    final response = await _tripService.deleteFinalPost(_tripId!);
+
+    if (response.success) {
+      _draft = null;
+      notifyListeners();
+      return true;
+    }
+    _error = response.error ?? 'Failed to delete final post';
+    notifyListeners();
+    return false;
   }
 
   Future<bool> publish() async {

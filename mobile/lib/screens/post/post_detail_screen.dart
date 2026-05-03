@@ -2,8 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
 import 'package:tripthread/models/trip.dart';
+import 'package:tripthread/providers/auth_provider.dart';
 import 'package:tripthread/providers/engagement_provider.dart';
+import 'package:tripthread/providers/feed_provider.dart';
 import 'package:tripthread/services/api_service.dart';
+import 'package:tripthread/services/trip_service.dart';
 import 'package:tripthread/utils/cloudinary_utils.dart';
 import 'package:tripthread/widgets/engagement/engagement_action_bar.dart';
 import 'package:tripthread/widgets/mention_text.dart';
@@ -107,6 +110,47 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
     );
   }
 
+  Future<void> _confirmDeleteFinalPost() async {
+    final post = _post;
+    if (post == null) return;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete post?'),
+        content: const Text(
+          'This removes the final post from feeds and deletes its likes and comments.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text(
+              'Delete',
+              style: TextStyle(color: Theme.of(ctx).colorScheme.error),
+            ),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+    final res = await context.read<TripService>().deleteFinalPost(post.tripId);
+    if (!mounted) return;
+    if (res.success) {
+      context.read<FeedProvider>().removeHomeFeedPostById(post.id);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Post deleted')),
+      );
+      context.pop();
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(res.error ?? 'Could not delete post')),
+      );
+    }
+  }
+
   String _formatDateTime(DateTime dateTime) {
     final now = DateTime.now();
     final difference = now.difference(dateTime);
@@ -118,6 +162,11 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final uid = context.watch<AuthProvider>().currentUser?.id;
+    final isOwner = _post != null &&
+        uid != null &&
+        (_post!.trip?.userId == uid || _post!.trip?.user?.id == uid);
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Post'),
@@ -125,6 +174,24 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
           icon: const Icon(Icons.arrow_back),
           onPressed: () => context.pop(),
         ),
+        actions: [
+          if (isOwner)
+            PopupMenuButton<String>(
+              icon: const Icon(Icons.more_vert),
+              onSelected: (value) async {
+                if (!mounted) return;
+                if (value == 'edit') {
+                  context.push('/trip/${_post!.tripId}/final-post');
+                } else if (value == 'delete') {
+                  await _confirmDeleteFinalPost();
+                }
+              },
+              itemBuilder: (ctx) => const [
+                PopupMenuItem(value: 'edit', child: Text('Edit')),
+                PopupMenuItem(value: 'delete', child: Text('Delete')),
+              ],
+            ),
+        ],
       ),
       body: _buildBody(),
     );
