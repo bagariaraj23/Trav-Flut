@@ -365,8 +365,20 @@ class _TripThreadScreenState extends State<TripThreadScreen>
 
         final hl = widget.highlightEntryId;
         if (hl != null && hl.isNotEmpty) {
-          await tripProvider.loadUntilEntryPresent(widget.tripId, hl);
+          final found = await tripProvider.loadUntilEntryPresent(
+            widget.tripId,
+            hl,
+          );
           if (mounted) _syncEntryEngagementState();
+          if (mounted && !found) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text(
+                  'Jump target is older than the loaded history. Scroll up to load more.',
+                ),
+              ),
+            );
+          }
         }
 
         if (mounted) {

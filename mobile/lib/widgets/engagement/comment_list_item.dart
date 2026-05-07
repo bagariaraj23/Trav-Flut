@@ -6,6 +6,7 @@ import 'package:tripthread/models/comment.dart';
 import 'package:tripthread/providers/comment_provider.dart';
 import 'package:tripthread/providers/auth_provider.dart';
 import 'package:tripthread/providers/engagement_provider.dart';
+import 'package:tripthread/utils/error_handler.dart';
 import 'package:tripthread/utils/user_display_labels.dart';
 import 'package:tripthread/widgets/mention_text.dart';
 import 'package:cached_network_image/cached_network_image.dart';
@@ -32,6 +33,7 @@ class CommentListItem extends StatefulWidget {
 
 class _CommentListItemState extends State<CommentListItem> {
   bool _showFullText = false;
+  bool _serverRejectedEditWindow = false;
 
   bool _withinAuthorEditWindow() {
     return DateTime.now().difference(widget.comment.createdAt) <=
@@ -44,7 +46,8 @@ class _CommentListItemState extends State<CommentListItem> {
     final isOwnComment = authProvider.currentUser?.id == widget.comment.userId;
     final text = widget.comment.contentText;
     final shouldTruncate = text.length > 150;
-    final inEditWindow = isOwnComment && _withinAuthorEditWindow();
+    final inEditWindow =
+        isOwnComment && !_serverRejectedEditWindow && _withinAuthorEditWindow();
 
     return Dismissible(
       key: Key(widget.comment.id),
@@ -336,10 +339,17 @@ class _CommentListItemState extends State<CommentListItem> {
         );
       }
     } catch (e) {
+      if (e is ValidationException && mounted) {
+        setState(() => _serverRejectedEditWindow = true);
+      }
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Failed to delete comment: ${e.toString()}'),
+            content: Text(
+              e is ValidationException
+                  ? 'Delete window expired for this comment.'
+                  : 'Failed to delete comment: ${e.toString()}',
+            ),
             backgroundColor: Colors.red,
           ),
         );
@@ -385,10 +395,17 @@ class _CommentListItemState extends State<CommentListItem> {
           ).showSnackBar(const SnackBar(content: Text('Comment updated')));
         }
       } catch (e) {
+        if (e is ValidationException && mounted) {
+          setState(() => _serverRejectedEditWindow = true);
+        }
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('Failed to update comment: ${e.toString()}'),
+              content: Text(
+                e is ValidationException
+                    ? 'Edit window expired for this comment.'
+                    : 'Failed to update comment: ${e.toString()}',
+              ),
               backgroundColor: Colors.red,
             ),
           );

@@ -274,15 +274,51 @@ class TripProvider extends ChangeNotifier {
   }
 
   /// Fetches older pages until [entryId] is in memory or history is exhausted.
-  Future<void> loadUntilEntryPresent(String tripId, String entryId) async {
-    var guard = 0;
-    while (guard < 100 &&
+  /// Returns true when the entry is found.
+  Future<bool> loadUntilEntryPresent(
+    String tripId,
+    String entryId, {
+    int maxPages = 8,
+  }) async {
+    if (_currentTripEntries.any((e) => e.id == entryId)) {
+      return true;
+    }
+
+    final contextResponse = await _tripService.getThreadEntryContext(
+      tripId,
+      entryId,
+    );
+    if (contextResponse.success && contextResponse.data != null) {
+      final contextPage = contextResponse.data!;
+      _currentTripEntries = contextPage.items;
+      _threadEntriesHasMoreOlder = contextPage.hasMoreOlder;
+      _threadEntriesOlderCursor = contextPage.nextOlderCursor;
+      _error = null;
+      notifyListeners();
+      if (_currentTripEntries.any((e) => e.id == entryId)) {
+        return true;
+      }
+    }
+
+    var pagesLoaded = 0;
+    while (pagesLoaded < maxPages &&
         !_currentTripEntries.any((e) => e.id == entryId) &&
         _threadEntriesHasMoreOlder &&
         _threadEntriesOlderCursor != null) {
-      guard++;
+      final previousCursor = _threadEntriesOlderCursor;
+      final previousLength = _currentTripEntries.length;
+      pagesLoaded++;
       await loadOlderThreadEntries(tripId);
+
+      // Defensive exit when pagination makes no progress.
+      final madeProgress =
+          _threadEntriesOlderCursor != previousCursor ||
+          _currentTripEntries.length > previousLength;
+      if (!madeProgress) {
+        break;
+      }
     }
+    return _currentTripEntries.any((e) => e.id == entryId);
   }
 
   // Clear current trip entries (useful when switching trips)

@@ -439,6 +439,41 @@ class TripService {
     }
   }
 
+  Future<ApiResponse<ThreadEntriesPage>> getThreadEntryContext(
+    String tripId,
+    String entryId, {
+    int contextSize = 25,
+  }) async {
+    try {
+      final response = await _dio.get(
+        '/trips/$tripId/entries/$entryId/context',
+        queryParameters: {'contextSize': contextSize},
+      );
+
+      if (response.data['success'] == true && response.data['data'] != null) {
+        final page = ThreadEntriesPage.fromJson(
+          response.data['data'] as Map<String, dynamic>,
+        );
+        return ApiResponse<ThreadEntriesPage>(success: true, data: page);
+      }
+
+      return ApiResponse<ThreadEntriesPage>(
+        success: false,
+        error: response.data['error'] ?? 'Failed to load entry context',
+      );
+    } on DioException catch (e) {
+      return ApiResponse<ThreadEntriesPage>(
+        success: false,
+        error: e.response?.data['error'] ?? 'Network error occurred',
+      );
+    } catch (e) {
+      return ApiResponse<ThreadEntriesPage>(
+        success: false,
+        error: 'An unexpected error occurred: $e',
+      );
+    }
+  }
+
   Future<ApiResponse<void>> deleteThreadEntry({
     required String tripId,
     required String entryId,
