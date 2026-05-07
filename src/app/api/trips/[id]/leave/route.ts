@@ -6,7 +6,7 @@ import { leaveTripSchema } from "@/lib/validation";
 import { ApiResponse } from "@/types/api";
 import {
   cleanupThreadEntryMedia,
-  purgeThreadEntryWithClient,
+  purgeAuthorThreadEntriesWithClient,
 } from "@/lib/services/threadEntryPurge";
 
 export async function POST(
@@ -83,15 +83,12 @@ export async function POST(
 
     await prisma.$transaction(async (tx) => {
       if (removeMyData) {
-        const entries = await tx.tripThreadEntry.findMany({
-          where: { tripId, authorId: userId },
-          select: { id: true },
-        });
-        for (const { id: entryId } of entries) {
-          mediaCleanups.push(
-            await purgeThreadEntryWithClient(tx, tripId, entryId)
-          );
-        }
+        const refs = await purgeAuthorThreadEntriesWithClient(
+          tx,
+          tripId,
+          userId
+        );
+        mediaCleanups.push(...refs);
       }
 
       await tx.tripParticipant.delete({
@@ -117,7 +114,14 @@ export async function POST(
       });
     });
 
-    for (const m of mediaCleanups) {
+    const dedupedMediaCleanups = Array.from(
+      new Map(
+        mediaCleanups
+          .filter((m) => m.mediaId && m.mediaPublicId)
+          .map((m) => [`${m.mediaId}:${m.mediaPublicId}`, m])
+      ).values()
+    );
+    for (const m of dedupedMediaCleanups) {
       await cleanupThreadEntryMedia(m.mediaId, m.mediaPublicId);
     }
 
