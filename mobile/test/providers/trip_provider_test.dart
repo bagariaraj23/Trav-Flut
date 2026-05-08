@@ -9,8 +9,41 @@ import 'package:tripthread/services/trip_service.dart';
 class MockTripService extends TripService {
   ThreadEntriesPage? contextPage;
   final List<ThreadEntriesPage> threadPages = [];
+  final List<List<Trip>> tripsResponses = [];
+  final List<Trip?> currentTripResponses = [];
+  ApiResponse<void> leaveResponse = ApiResponse<void>(success: true);
+  int leaveCalls = 0;
+  bool? lastRemoveMyData;
   int contextCalls = 0;
   int olderCalls = 0;
+
+  @override
+  Future<ApiResponse<List<Trip>>> getTrips({TripStatus? status}) async {
+    return ApiResponse<List<Trip>>(
+      success: true,
+      data: tripsResponses.isNotEmpty ? tripsResponses.removeAt(0) : <Trip>[],
+    );
+  }
+
+  @override
+  Future<ApiResponse<Trip?>> getCurrentTrip() async {
+    return ApiResponse<Trip?>(
+      success: true,
+      data: currentTripResponses.isNotEmpty
+          ? currentTripResponses.removeAt(0)
+          : null,
+    );
+  }
+
+  @override
+  Future<ApiResponse<void>> leaveTrip(
+    String tripId, {
+    required bool removeMyData,
+  }) async {
+    leaveCalls++;
+    lastRemoveMyData = removeMyData;
+    return leaveResponse;
+  }
 
   @override
   Future<ApiResponse<ThreadEntriesPage>> getThreadEntryContext(
@@ -68,6 +101,20 @@ TripThreadEntry _entry(String id, DateTime createdAt) => TripThreadEntry(
       author: _user('u1'),
     );
 
+Trip _trip(String id) => Trip(
+      id: id,
+      userId: 'owner-1',
+      title: 'Test Trip',
+      startDate: DateTime.parse('2026-01-01T00:00:00.000Z'),
+      endDate: DateTime.parse('2026-01-05T00:00:00.000Z'),
+      destinations: const ['Paris'],
+      status: TripStatus.ongoing,
+      entryCount: 0,
+      participantCount: 2,
+      createdAt: DateTime.parse('2026-01-01T00:00:00.000Z'),
+      updatedAt: DateTime.parse('2026-01-01T00:00:00.000Z'),
+    );
+
 void main() {
   group('TripProvider.loadUntilEntryPresent', () {
     test('uses context endpoint and finds target without older paging', () async {
@@ -119,6 +166,46 @@ void main() {
       expect(mockService.contextCalls, 1);
       expect(mockService.olderCalls, greaterThanOrEqualTo(2));
       expect(provider.currentTripEntries.any((e) => e.id == 'target'), isTrue);
+    });
+  });
+
+  group('TripProvider.leaveTrip', () {
+    test('calls service, clears local trip list, and refreshes state on success',
+        () async {
+      final mockService = MockTripService();
+      mockService.tripsResponses.addAll([
+        [_trip('trip-1')],
+        <Trip>[],
+      ]);
+      final provider = TripProvider(tripService: mockService);
+
+      await provider.loadTrips();
+      expect(provider.trips.map((t) => t.id), contains('trip-1'));
+
+      final left = await provider.leaveTrip('trip-1', removeMyData: true);
+
+      expect(left, isTrue);
+      expect(mockService.leaveCalls, 1);
+      expect(mockService.lastRemoveMyData, isTrue);
+      expect(provider.trips.where((t) => t.id == 'trip-1'), isEmpty);
+      expect(provider.isLoading, isFalse);
+      expect(provider.error, isNull);
+    });
+
+    test('keeps state and exposes service error on failure', () async {
+      final mockService = MockTripService()
+        ..leaveResponse = ApiResponse<void>(
+          success: false,
+          error: 'Cannot leave ended trip',
+        );
+      final provider = TripProvider(tripService: mockService);
+
+      final left = await provider.leaveTrip('trip-1', removeMyData: true);
+
+      expect(left, isFalse);
+      expect(mockService.leaveCalls, 1);
+      expect(provider.isLoading, isFalse);
+      expect(provider.error, 'Cannot leave ended trip');
     });
   });
 }
