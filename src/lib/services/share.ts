@@ -18,7 +18,14 @@ async function invalidateShareTokenCache(shareToken: string): Promise<void> {
   const key = getShareTokenCacheKey(shareToken);
   memoryCache.delete(key);
   if (redis) {
-    await redis.del(key);
+    try {
+      await redis.del(key);
+    } catch (err) {
+      console.warn("[share] Redis cache invalidate failed (non-fatal)", {
+        key,
+        error: err,
+      });
+    }
   }
 }
 
@@ -63,37 +70,53 @@ export async function createShare(
     shareSource,
   };
 
-  return await prisma.$transaction(async (tx) => {
-    const share = await tx.share.create({
-      data: {
-        userId,
-        entityType,
-        entityId,
-        shareToken: shareToken!,
-        shareType,
-        metadata,
-        expiresAt,
-      },
-    });
+  const createData = {
+    userId,
+    entityType,
+    entityId,
+    shareToken: shareToken!,
+    shareType,
+    metadata,
+    expiresAt,
+  };
 
-    if (shareSource === "IN_APP_DM") {
-      await incrementEntityCount(entityType, entityId, "shareCount", tx);
-    }
+  // SYSTEM_SHEET does not bump shareCount — use a plain create to avoid holding an
+  // interactive transaction open (Neon/slow pools + default ~5s tx timeout caused
+  // INSERT-then-ROLLBACK 500s in logs).
+  const share =
+    shareSource === "IN_APP_DM"
+      ? await prisma.$transaction(
+          async (tx) => {
+            const created = await tx.share.create({ data: createData });
+            await incrementEntityCount(entityType, entityId, "shareCount", tx);
+            return created;
+          },
+          { maxWait: 15_000, timeout: 20_000 }
+        )
+      : await prisma.share.create({ data: createData });
 
-    if (redis) {
-      const ttl = expiresAt
+  if (redis) {
+    try {
+      const ttlSeconds = expiresAt
         ? Math.floor((expiresAt.getTime() - Date.now()) / 1000)
         : Math.floor(ENGAGEMENT_CONSTANTS.CACHE_TTL.SHARE_TOKEN / 1000);
 
-      await redis.set(
-        getShareTokenCacheKey(shareToken!),
-        JSON.stringify(share),
-        { ex: ttl }
-      );
+      if (ttlSeconds > 0) {
+        await redis.set(
+          getShareTokenCacheKey(shareToken!),
+          JSON.stringify(share),
+          { ex: ttlSeconds }
+        );
+      }
+    } catch (err) {
+      console.warn("[share] Redis cache set failed (non-fatal)", {
+        shareToken: shareToken!,
+        error: err,
+      });
     }
+  }
 
-    return share;
-  });
+  return share;
 }
 
 export async function resolveShareToken(shareToken: string) {
