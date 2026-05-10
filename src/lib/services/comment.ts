@@ -113,15 +113,18 @@ export async function createComment(
         "commentCount",
         tx
       );
-      await invalidateEngagementCache(
-        "comment",
-        finalEntityType,
-        finalEntityId
-      );
     }
 
     return newComment;
   });
+
+  if (!parentCommentId) {
+    await invalidateEngagementCache(
+      "comment",
+      finalEntityType,
+      finalEntityId
+    );
+  }
 
   // Fire-and-forget: create notifications without blocking response
   void (async () => {
@@ -298,7 +301,7 @@ export async function updateComment(
 }
 
 export async function deleteComment(userId: string, commentId: string) {
-  return await prisma.$transaction(async (tx) => {
+  const result = await prisma.$transaction(async (tx) => {
     const comment = await tx.comment.findUnique({
       where: { id: commentId },
       include: {
@@ -341,15 +344,30 @@ export async function deleteComment(userId: string, commentId: string) {
         "commentCount",
         tx
       );
-      await invalidateEngagementCache(
-        "comment",
-        comment.entityType,
-        comment.entityId
-      );
     }
 
-    return { deleted: true, replyCount: replyIds.length };
+    return {
+      deleted: true,
+      replyCount: replyIds.length,
+      invalidatedEntity:
+        !comment.parentCommentId
+          ? {
+              entityType: comment.entityType,
+              entityId: comment.entityId,
+            }
+          : null,
+    };
   });
+
+  if (result.invalidatedEntity) {
+    await invalidateEngagementCache(
+      "comment",
+      result.invalidatedEntity.entityType,
+      result.invalidatedEntity.entityId
+    );
+  }
+
+  return { deleted: result.deleted, replyCount: result.replyCount };
 }
 
 export async function getCommentsByEntity(

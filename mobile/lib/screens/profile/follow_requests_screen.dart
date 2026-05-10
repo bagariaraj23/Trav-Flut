@@ -100,19 +100,21 @@ class _FollowRequestsScreenState extends State<FollowRequestsScreen> {
   @override
   Widget build(BuildContext context) {
     return PopScope(
-      canPop: false,
+      canPop: true,
       onPopInvokedWithResult: (didPop, result) {
-        if (didPop) return;
-        if (context.canPop()) {
-          context.pop();
-        } else {
-          context.go('/home');
+        if (!didPop && context.mounted) {
+          if (context.canPop()) {
+            context.pop();
+          } else {
+            context.go('/home');
+          }
         }
       },
       child: Scaffold(
         appBar: AppBar(
           title: const Text('Follow Requests'),
-          leading: BackButton(
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back),
             onPressed: () {
               if (context.canPop()) {
                 context.pop();

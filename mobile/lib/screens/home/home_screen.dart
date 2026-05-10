@@ -217,10 +217,6 @@ class _HomeFeedScreenState extends State<HomeFeedScreen> {
     });
   }
 
-  void _openFinalPostDetail(BuildContext context, TripFinalPost post) {
-    context.push('/post/TRIP_FINAL_POST/${post.id}');
-  }
-
   Future<void> _confirmDeleteFinalPost(
     BuildContext context,
     TripFinalPost post,
@@ -529,7 +525,12 @@ class _HomeFeedScreenState extends State<HomeFeedScreen> {
             ),
           ),
           InkWell(
-            onTap: () => _openFinalPostDetail(context, post),
+            onTap: () {
+              context.push(
+                '/trip/${post.tripId}',
+                extra: {'from': '/home'},
+              );
+            },
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -1527,7 +1528,7 @@ class ProfileTab extends StatelessWidget {
                     userProvider.getDetailedFollowStatus(currentUser.id);
                   }
                   if (context.mounted) {
-                    context.go('/follow-requests');
+                    context.push('/follow-requests');
                   }
                 },
               ),
