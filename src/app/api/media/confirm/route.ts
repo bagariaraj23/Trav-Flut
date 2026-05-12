@@ -5,7 +5,12 @@ import { withAuth, AuthenticatedRequest, withLogging } from "@/lib/middleware";
 import { prisma } from "@/lib/prisma";
 import { CloudinaryService } from "@/lib/cloudinary";
 
-const mediaUsageEnum = z.enum(["trip_cover", "thread_entry", "general"]);
+const mediaUsageEnum = z.enum([
+  "trip_cover",
+  "thread_entry",
+  "general",
+  "chat",
+]);
 
 const confirmSchema = z.object({
   url: z.string().url(),
