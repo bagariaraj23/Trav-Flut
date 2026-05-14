@@ -14,6 +14,7 @@ import { checkLikeStatus } from "@/lib/services/like";
 import { createNotification } from "@/lib/services/notification";
 import { EntityType, Prisma } from "@prisma/client";
 import { canViewEntity } from "@/lib/auth/permissions";
+import { resolveTaggedUserIdsForTripThread } from "@/lib/services/tripTagResolution";
 
 const THREAD_ENTRY_LIST_INCLUDE = {
   author: {
@@ -177,34 +178,6 @@ export async function POST(
       }
     }
 
-    // Resolve tagged usernames to user IDs
-    let taggedUserIds: string[] = [];
-    if (
-      validatedData.taggedUsernames &&
-      validatedData.taggedUsernames.length > 0
-    ) {
-      const taggedUsers = await prisma.user.findMany({
-        where: {
-          username: { in: validatedData.taggedUsernames },
-        },
-        select: { id: true, username: true },
-      });
-
-      taggedUserIds = taggedUsers.map((user) => user.id);
-
-      // Log if some usernames weren't found
-      const foundUsernames = taggedUsers.map((user) => user.username);
-      const notFoundUsernames = validatedData.taggedUsernames.filter(
-        (username) => !foundUsernames.includes(username)
-      );
-
-      if (notFoundUsernames.length > 0) {
-        console.log(
-          `[DEBUG] Tagged usernames not found: ${notFoundUsernames.join(", ")}`
-        );
-      }
-    }
-
     // Check if trip exists and user has access
     const trip = await prisma.trip.findUnique({
       where: { id: tripId },
@@ -235,6 +208,18 @@ export async function POST(
         },
         { status: 403 }
       );
+    }
+
+    let taggedUserIds: string[] = [];
+    if (validatedData.taggedUsernames?.length) {
+      taggedUserIds = await resolveTaggedUserIdsForTripThread({
+        trip: {
+          userId: trip.userId,
+          participants: trip.participants,
+        },
+        actorId: userId,
+        taggedUsernames: validatedData.taggedUsernames,
+      });
     }
 
     if (trip.status !== "ONGOING") {
@@ -404,8 +389,11 @@ export async function POST(
               entityType: "TRIP_THREAD_ENTRY",
               entityId: createdEntry.id,
               metadata: {
+                tagSource: "thread_entry",
                 tripId,
                 threadEntryId: createdEntry.id,
+                postEntityType: "TRIP_THREAD_ENTRY",
+                postEntityId: createdEntry.id,
                 ...(contentPreview && { contentPreview }),
               },
             });

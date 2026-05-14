@@ -247,6 +247,10 @@ class _TripThreadScreenState extends State<TripThreadScreen>
             setState(() {
               _tripParticipants = participants;
             });
+            // Participants often arrive after "@"; rebuild so the menu appears.
+            if (_mentionQuery != null) {
+              setState(() {});
+            }
           }
         });
       }
@@ -255,48 +259,90 @@ class _TripThreadScreenState extends State<TripThreadScreen>
     }
   }
 
+  bool _isMentionBoundaryWhitespace(String ch) {
+    return ch == ' ' || ch == '\t' || ch == '\n' || ch == '\r';
+  }
+
+  /// Participants from API plus trip owner when owner is not a [TripParticipant] row.
+  List<TripParticipant> _mentionParticipantPool() {
+    final out = List<TripParticipant>.from(_tripParticipants);
+    final trip = _trip;
+    if (trip == null) return out;
+    final ownerId = trip.userId;
+    final ownerUser = trip.user;
+    final hasOwnerRow = out.any((p) => p.userId == ownerId);
+    if (!hasOwnerRow && ownerUser != null) {
+      out.add(
+        TripParticipant(
+          id: 'trip-owner-$ownerId',
+          tripId: trip.id,
+          userId: ownerId,
+          role: 'owner',
+          joinedAt: trip.createdAt,
+          user: ownerUser,
+        ),
+      );
+    }
+    return out;
+  }
+
   void _onTextChanged() {
     final text = _textController.text;
     final selection = _textController.selection;
     final cursorPosition = selection.baseOffset;
 
-    // Find the last @ mention before cursor
-    final textBeforeCursor = text.substring(0, cursorPosition);
-    final lastAtIndex = textBeforeCursor.lastIndexOf('@');
-
-    if (lastAtIndex != -1) {
-      // Check if there's a space after @ (meaning mention is complete)
-      final textAfterAt = textBeforeCursor.substring(lastAtIndex + 1);
-      if (textAfterAt.contains(' ')) {
-        // Mention is complete (space found), clear mention state
-        if (mounted) {
-          setState(() {
-            _mentionQuery = null;
-            _mentionStartPosition = null;
-          });
-        }
-        return;
-      }
-
-      // Extract the query after @ (can be empty if just '@')
-      final query = textAfterAt.toLowerCase();
-      debugPrint(
-        '[MentionMenu] Detected @ mention: query="$query", position=$lastAtIndex',
-      );
-      _mentionQuery = query;
-      _mentionStartPosition = lastAtIndex;
-
-      // Show autocomplete menu
-      _showMentionMenu();
-    } else {
-      // No @ found, clear mention state
+    if (cursorPosition < 0 || cursorPosition > text.length) {
       if (mounted) {
         setState(() {
           _mentionQuery = null;
           _mentionStartPosition = null;
         });
       }
+      return;
     }
+
+    final textBeforeCursor = text.substring(0, cursorPosition);
+    final lastAtIndex = textBeforeCursor.lastIndexOf('@');
+
+    if (lastAtIndex == -1) {
+      if (mounted) {
+        setState(() {
+          _mentionQuery = null;
+          _mentionStartPosition = null;
+        });
+      }
+      return;
+    }
+
+    if (lastAtIndex > 0 &&
+        !_isMentionBoundaryWhitespace(textBeforeCursor[lastAtIndex - 1])) {
+      if (mounted) {
+        setState(() {
+          _mentionQuery = null;
+          _mentionStartPosition = null;
+        });
+      }
+      return;
+    }
+
+    final rawQuery = textBeforeCursor.substring(lastAtIndex + 1);
+    if (rawQuery.contains(RegExp(r'\s'))) {
+      if (mounted) {
+        setState(() {
+          _mentionQuery = null;
+          _mentionStartPosition = null;
+        });
+      }
+      return;
+    }
+
+    final query = rawQuery.toLowerCase();
+    debugPrint(
+      '[MentionMenu] Detected @ mention: query="$query", position=$lastAtIndex',
+    );
+    _mentionQuery = query;
+    _mentionStartPosition = lastAtIndex;
+    _showMentionMenu();
   }
 
   void _showMentionMenu() {
@@ -331,6 +377,25 @@ class _TripThreadScreenState extends State<TripThreadScreen>
     _mentionStartPosition = null;
   }
 
+  void _insertAllMention() {
+    if (_mentionStartPosition == null) return;
+    final text = _textController.text;
+    final beforeAt = text.substring(0, _mentionStartPosition!);
+    final afterCursor = text.substring(_textController.selection.baseOffset);
+    const token = '@all ';
+    final newText = '$beforeAt$token$afterCursor';
+    final newCursor = _mentionStartPosition! + token.length;
+    _textController.value = TextEditingValue(
+      text: newText,
+      selection: TextSelection.collapsed(
+        offset: newCursor.clamp(0, newText.length),
+      ),
+    );
+    _mentionQuery = null;
+    _mentionStartPosition = null;
+    if (mounted) setState(() {});
+  }
+
   List<String> _extractTaggedUsernames(String text) {
     final regex = RegExp(r'@(\w+)');
     final matches = regex.allMatches(text);
@@ -358,6 +423,11 @@ class _TripThreadScreenState extends State<TripThreadScreen>
         _trip = trip;
         _isLoading = false;
       });
+      if (_mentionQuery != null) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) setState(() {});
+        });
+      }
 
       if (trip != null) {
         await tripProvider.loadCurrentTripEntries(widget.tripId);
@@ -1149,6 +1219,7 @@ class _TripThreadScreenState extends State<TripThreadScreen>
           onTap: () => FocusScope.of(context).unfocus(),
           child: Stack(
             key: _stackKey,
+            clipBehavior: Clip.none,
             children: [
               Column(
                 children: [
@@ -1314,17 +1385,22 @@ class _TripThreadScreenState extends State<TripThreadScreen>
 
     // Filter participants by query, excluding current user
     final query = _mentionQuery?.toLowerCase() ?? '';
-    final filtered = _tripParticipants.where((p) {
+    final pool = _mentionParticipantPool();
+    final filtered = pool.where((p) {
       if (p.userId == currentUserId) return false;
 
       if (query.isEmpty) return true;
 
       final username = p.user?.username?.toLowerCase() ?? '';
       final name = p.user?.name?.toLowerCase() ?? '';
-      return username.startsWith(query) || name.startsWith(query);
+      return username.contains(query) || name.contains(query);
     }).toList();
 
-    if (filtered.isEmpty) return const SizedBox.shrink();
+    final othersOnTrip = pool.where((p) => p.userId != currentUserId).length;
+    final showAllRow =
+        othersOnTrip > 0 && (query.isEmpty || query == 'all');
+
+    if (filtered.isEmpty && !showAllRow) return const SizedBox.shrink();
 
     final renderBox =
         _textFieldKey.currentContext?.findRenderObject() as RenderBox?;
@@ -1372,14 +1448,20 @@ class _TripThreadScreenState extends State<TripThreadScreen>
     final availableHeight = hasKeyboard ? spaceAbove : spaceBelow;
     const itemHeight = 56.0;
     final maxItems = (availableHeight / itemHeight).floor().clamp(1, 5);
+    final maxUserSlots = (maxItems - (showAllRow ? 1 : 0)).clamp(0, maxItems);
+    final shownUsers = filtered.length > maxUserSlots
+        ? filtered.sublist(0, maxUserSlots)
+        : filtered;
+    final totalRows = (showAllRow ? 1 : 0) + shownUsers.length;
+    if (totalRows == 0) return const SizedBox.shrink();
+
     final maxHeightCap = (stackSize.height * 0.7).clamp(36.0, 280.0).toDouble();
     final minHeightCap = maxHeightCap < 44.0 ? maxHeightCap : 44.0;
-    final desiredHeight =
-        (filtered.length > maxItems ? maxItems : filtered.length) * itemHeight;
+    final desiredHeight = totalRows * itemHeight;
     final menuHeight = desiredHeight.clamp(minHeightCap, maxHeightCap);
 
     debugPrint(
-      '[MentionMenu] Showing menu: query="$query", filtered=${filtered.length}, position=($menuLeft, $menuTop), width=$menuWidth, keyboard=$hasKeyboard',
+      '[MentionMenu] Showing menu: query="$query", users=${shownUsers.length}, allRow=$showAllRow, position=($menuLeft, $menuTop), width=$menuWidth, keyboard=$hasKeyboard',
     );
 
     return Positioned(
@@ -1413,9 +1495,44 @@ class _TripThreadScreenState extends State<TripThreadScreen>
           child: ListView.builder(
             shrinkWrap: true,
             padding: const EdgeInsets.symmetric(vertical: 4),
-            itemCount: filtered.length > maxItems ? maxItems : filtered.length,
+            itemCount: totalRows,
             itemBuilder: (context, index) {
-              final participant = filtered[index];
+              if (showAllRow && index == 0) {
+                return ListTile(
+                  dense: true,
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 0,
+                  ),
+                  leading: CircleAvatar(
+                    radius: 16,
+                    backgroundColor: Theme.of(context)
+                        .colorScheme
+                        .secondaryContainer,
+                    child: Icon(
+                      Icons.groups,
+                      size: 18,
+                      color: Theme.of(context)
+                          .colorScheme
+                          .onSecondaryContainer,
+                    ),
+                  ),
+                  title: const Text(
+                    'Everyone on this trip',
+                    style: TextStyle(fontSize: 14),
+                  ),
+                  subtitle: Text(
+                    '@all',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                  onTap: _insertAllMention,
+                );
+              }
+              final pi = showAllRow ? index - 1 : index;
+              final participant = shownUsers[pi];
               final user = participant.user;
               return ListTile(
                 dense: true,
