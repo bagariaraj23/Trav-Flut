@@ -204,7 +204,7 @@ class _TripParticipantsScreenState extends State<TripParticipantsScreen> {
     if (matchingInvitations.isNotEmpty) {
       final invitation = matchingInvitations.first;
       return InkWell(
-        onTap: tripProvider.isLoading
+        onTap: tripProvider.invitationCancelInviteId == invitation.id
             ? null
             : () => _cancelInvitation(invitation.id),
         borderRadius: BorderRadius.circular(8),
@@ -218,7 +218,17 @@ class _TripParticipantsScreenState extends State<TripParticipantsScreen> {
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(Icons.access_time, color: Colors.amber.shade700, size: 16),
+              if (tripProvider.invitationCancelInviteId == invitation.id)
+                SizedBox(
+                  width: 14,
+                  height: 14,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: Colors.amber.shade800,
+                  ),
+                )
+              else
+                Icon(Icons.access_time, color: Colors.amber.shade700, size: 16),
               const SizedBox(width: 4),
               Text(
                 'Pending',
@@ -235,8 +245,9 @@ class _TripParticipantsScreenState extends State<TripParticipantsScreen> {
     }
 
     return IconButton(
-      onPressed: tripProvider.isLoading ? null : () => _sendInvitation(userId),
-      icon: tripProvider.isLoading
+      onPressed:
+          tripProvider.invitationSendReceiverId == userId ? null : () => _sendInvitation(userId),
+      icon: tripProvider.invitationSendReceiverId == userId
           ? SizedBox(
               width: 20,
               height: 20,

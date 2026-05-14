@@ -421,9 +421,11 @@ class ApiService {
       );
     } on DioException catch (e) {
       debugPrint('[ApiService] Complete profile DioException: ${e.message}');
+      final data = e.response?.data;
+      final err = data is Map<String, dynamic> ? data['error'] as String? : null;
       return ApiResponse<AuthResponse>(
         success: false,
-        error: e.response?.data['error'] ?? 'Network error occurred',
+        error: err ?? 'Network error occurred',
       );
     } catch (e) {
       debugPrint('[ApiService] Complete profile unexpected error: $e');

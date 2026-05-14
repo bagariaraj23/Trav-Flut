@@ -20,6 +20,10 @@ class TripProvider extends ChangeNotifier {
   List<TripJoinRequest> _sentTripInvitations = [];
   bool _isLoading = false;
   bool _isTripInvitesLoading = false;
+  String? _invitationSendReceiverId;
+  String? _invitationCancelInviteId;
+  String? _respondingTripInviteId;
+  bool? _respondingTripInviteAccept;
   String? _error;
   String? _tripInvitesError;
   bool _hasCompletedInitialOngoingTripRedirect = false;
@@ -32,6 +36,12 @@ class TripProvider extends ChangeNotifier {
   List<TripJoinRequest> get sentTripInvitations => _sentTripInvitations;
   bool get isLoading => _isLoading;
   bool get isTripInvitesLoading => _isTripInvitesLoading;
+  /// Non-null while a trip invitation is being sent to this receiver (manage participants).
+  String? get invitationSendReceiverId => _invitationSendReceiverId;
+  /// Non-null while cancelling this pending invite id.
+  String? get invitationCancelInviteId => _invitationCancelInviteId;
+  String? get respondingTripInviteId => _respondingTripInviteId;
+  bool? get respondingTripInviteAccept => _respondingTripInviteAccept;
   String? get error => _error;
   String? get tripInvitesError => _tripInvitesError;
   bool get hasOngoingTrip => _currentTrip?.status == TripStatus.ongoing;
@@ -679,7 +689,7 @@ class TripProvider extends ChangeNotifier {
   // Trip invitation methods
   Future<bool> sendTripInvitation(String tripId, String receiverId) async {
     try {
-      _isLoading = true;
+      _invitationSendReceiverId = receiverId;
       _error = null;
       notifyListeners();
 
@@ -689,27 +699,27 @@ class TripProvider extends ChangeNotifier {
       if (response.success) {
         // Optionally refresh sent invitations for this trip
         await loadSentTripInvitations(tripId);
-        _isLoading = false;
         notifyListeners();
         return true;
       } else {
         _error = response.error ?? 'Failed to send invitation';
-        _isLoading = false;
         notifyListeners();
         return false;
       }
     } catch (e) {
       _error = 'An unexpected error occurred';
-      _isLoading = false;
       notifyListeners();
       debugPrint('Send trip invitation error: $e');
       return false;
+    } finally {
+      _invitationSendReceiverId = null;
+      notifyListeners();
     }
   }
 
   Future<bool> cancelTripInvitation(String tripId, String inviteId) async {
     try {
-      _isLoading = true;
+      _invitationCancelInviteId = inviteId;
       _error = null;
       notifyListeners();
 
@@ -719,21 +729,21 @@ class TripProvider extends ChangeNotifier {
       if (response.success) {
         // Remove the cancelled invitation from the list
         _sentTripInvitations.removeWhere((invite) => invite.id == inviteId);
-        _isLoading = false;
         notifyListeners();
         return true;
       } else {
         _error = response.error ?? 'Failed to cancel invitation';
-        _isLoading = false;
         notifyListeners();
         return false;
       }
     } catch (e) {
       _error = 'An unexpected error occurred';
-      _isLoading = false;
       notifyListeners();
       debugPrint('Cancel trip invitation error: $e');
       return false;
+    } finally {
+      _invitationCancelInviteId = null;
+      notifyListeners();
     }
   }
 
@@ -771,7 +781,8 @@ class TripProvider extends ChangeNotifier {
   }
 
   Future<bool> respondToTripInvitation(String inviteId, bool accept) async {
-    _isTripInvitesLoading = true;
+    _respondingTripInviteId = inviteId;
+    _respondingTripInviteAccept = accept;
     _tripInvitesError = null;
     notifyListeners();
     try {
@@ -797,7 +808,8 @@ class TripProvider extends ChangeNotifier {
       debugPrint('Respond to trip invitation error: $e');
       return false;
     } finally {
-      _isTripInvitesLoading = false;
+      _respondingTripInviteId = null;
+      _respondingTripInviteAccept = null;
       notifyListeners();
     }
   }
@@ -824,6 +836,10 @@ class TripProvider extends ChangeNotifier {
     _currentTripEntries = [];
     _pendingTripInvitations = [];
     _sentTripInvitations = [];
+    _invitationSendReceiverId = null;
+    _invitationCancelInviteId = null;
+    _respondingTripInviteId = null;
+    _respondingTripInviteAccept = null;
     _error = null;
     _tripInvitesError = null;
     _hasCompletedInitialOngoingTripRedirect = false;

@@ -112,6 +112,7 @@ class _TripThreadScreenState extends State<TripThreadScreen>
     );
     _textController.addListener(_onTextChanged);
     _scrollController.addListener(_onThreadScrollNearTop);
+    _entryInputFocusNode.addListener(_onComposerFocusChanged);
 
     // Defer _loadTrip and _loadTripParticipants - they call clearCurrentTripEntries
     // and setState which trigger notifyListeners during build if run in initState
@@ -153,6 +154,18 @@ class _TripThreadScreenState extends State<TripThreadScreen>
     }
   }
 
+  void _onComposerFocusChanged() {
+    if (!_entryInputFocusNode.hasFocus || !mounted) return;
+    final bottom = MediaQuery.viewInsetsOf(context).bottom;
+    if (bottom <= 0) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_scrollController.hasClients) return;
+      final max = _scrollController.position.maxScrollExtent;
+      if (max <= 0) return;
+      _scrollController.jumpTo(max);
+    });
+  }
+
   @override
   void dispose() {
     // Remove listener - use stored reference to avoid context.read on deactivated widget
@@ -163,6 +176,7 @@ class _TripThreadScreenState extends State<TripThreadScreen>
     }
 
     _textController.removeListener(_onTextChanged);
+    _entryInputFocusNode.removeListener(_onComposerFocusChanged);
     _textController.dispose();
     _entryInputFocusNode.dispose();
     _locationController.dispose();
@@ -353,19 +367,21 @@ class _TripThreadScreenState extends State<TripThreadScreen>
   }
 
   void _selectMention(TripParticipant participant) {
-    if (_mentionStartPosition == null || participant.user?.username == null) {
+    final username = participant.user?.username;
+    if (_mentionStartPosition == null ||
+        username == null ||
+        username.isEmpty) {
       _mentionQuery = null;
       _mentionStartPosition = null;
       return;
     }
 
-    final username = participant.user!.username!;
     final text = _textController.text;
-    final beforeAt = text.substring(0, _mentionStartPosition!);
+    final start = _mentionStartPosition!;
+    final beforeAt = text.substring(0, start);
     final afterCursor = text.substring(_textController.selection.baseOffset);
     final newText = '$beforeAt@$username $afterCursor';
-    final newCursorPosition =
-        _mentionStartPosition! + username.length + 2; // +2 for @ and space
+    final newCursorPosition = start + username.length + 2; // +2 for @ and space
 
     _textController.value = TextEditingValue(
       text: newText,
@@ -1354,7 +1370,13 @@ class _TripThreadScreenState extends State<TripThreadScreen>
 
                         return ListView.builder(
                           controller: _scrollController,
-                          padding: const EdgeInsets.all(16),
+                          padding: EdgeInsets.fromLTRB(
+                            16,
+                            16,
+                            16,
+                            16 +
+                                MediaQuery.viewInsetsOf(context).bottom,
+                          ),
                           itemCount: entries.length,
                           itemBuilder: (context, index) {
                             return _buildThreadEntry(entries[index]);
@@ -1424,6 +1446,13 @@ class _TripThreadScreenState extends State<TripThreadScreen>
     final keyboardHeight = MediaQuery.of(context).viewInsets.bottom;
     final stackSize = stackRenderBox.size;
 
+    if (!stackSize.height.isFinite ||
+        !stackSize.width.isFinite ||
+        stackSize.height <= 0 ||
+        stackSize.width <= 0) {
+      return const SizedBox.shrink();
+    }
+
     final hasKeyboard = keyboardHeight > 0;
     final menuWidth = size.width
         .clamp(120.0, 400.0)
@@ -1445,7 +1474,10 @@ class _TripThreadScreenState extends State<TripThreadScreen>
 
     final spaceAbove = menuTop;
     final spaceBelow = stackSize.height - menuTop;
-    final availableHeight = hasKeyboard ? spaceAbove : spaceBelow;
+    var availableHeight = hasKeyboard ? spaceAbove : spaceBelow;
+    if (!availableHeight.isFinite || availableHeight < 56) {
+      availableHeight = (stackSize.height * 0.35).clamp(56.0, 280.0);
+    }
     const itemHeight = 56.0;
     final maxItems = (availableHeight / itemHeight).floor().clamp(1, 5);
     final maxUserSlots = (maxItems - (showAllRow ? 1 : 0)).clamp(0, maxItems);
@@ -1455,10 +1487,14 @@ class _TripThreadScreenState extends State<TripThreadScreen>
     final totalRows = (showAllRow ? 1 : 0) + shownUsers.length;
     if (totalRows == 0) return const SizedBox.shrink();
 
-    final maxHeightCap = (stackSize.height * 0.7).clamp(36.0, 280.0).toDouble();
+    final maxHeightCap =
+        (stackSize.height * 0.7).clamp(36.0, 280.0).toDouble();
     final minHeightCap = maxHeightCap < 44.0 ? maxHeightCap : 44.0;
     final desiredHeight = totalRows * itemHeight;
-    final menuHeight = desiredHeight.clamp(minHeightCap, maxHeightCap);
+    var menuHeight = desiredHeight.clamp(minHeightCap, maxHeightCap);
+    if (!menuHeight.isFinite || menuHeight <= 0) {
+      menuHeight = 200.0;
+    }
 
     debugPrint(
       '[MentionMenu] Showing menu: query="$query", users=${shownUsers.length}, allRow=$showAllRow, position=($menuLeft, $menuTop), width=$menuWidth, keyboard=$hasKeyboard',
@@ -1623,35 +1659,38 @@ class _TripThreadScreenState extends State<TripThreadScreen>
 
     await showModalBottomSheet<void>(
       context: context,
+      isScrollControlled: true,
       showDragHandle: true,
       builder: (sheetCtx) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (_canEditThreadEntryText(entry))
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (_canEditThreadEntryText(entry))
+                ListTile(
+                  leading: const Icon(Icons.edit_outlined),
+                  title: const Text('Edit text'),
+                  onTap: () {
+                    Navigator.pop(sheetCtx);
+                    _showEditTextEntryDialog(entry);
+                  },
+                ),
               ListTile(
-                leading: const Icon(Icons.edit_outlined),
-                title: const Text('Edit text'),
+                leading: Icon(
+                  Icons.delete_outline,
+                  color: Theme.of(sheetCtx).colorScheme.error,
+                ),
+                title: Text(
+                  'Delete entry',
+                  style: TextStyle(color: Theme.of(sheetCtx).colorScheme.error),
+                ),
                 onTap: () {
                   Navigator.pop(sheetCtx);
-                  _showEditTextEntryDialog(entry);
+                  _confirmDeleteThreadEntry(entry);
                 },
               ),
-            ListTile(
-              leading: Icon(
-                Icons.delete_outline,
-                color: Theme.of(sheetCtx).colorScheme.error,
-              ),
-              title: Text(
-                'Delete entry',
-                style: TextStyle(color: Theme.of(sheetCtx).colorScheme.error),
-              ),
-              onTap: () {
-                Navigator.pop(sheetCtx);
-                _confirmDeleteThreadEntry(entry);
-              },
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -1661,25 +1700,39 @@ class _TripThreadScreenState extends State<TripThreadScreen>
     final controller = TextEditingController(text: entry.contentText ?? '');
     final ok = await showDialog<bool>(
       context: context,
-      builder: (dialogCtx) => AlertDialog(
-        title: const Text('Edit entry'),
-        content: TextField(
-          controller: controller,
-          maxLines: 5,
-          maxLength: 1000,
-          decoration: const InputDecoration(hintText: 'Update your message'),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogCtx, false),
-            child: const Text('Cancel'),
+      builder: (dialogCtx) {
+        final maxH = MediaQuery.sizeOf(dialogCtx).height * 0.45;
+        return AlertDialog(
+          title: const Text('Edit entry'),
+          content: SizedBox(
+            width: double.maxFinite,
+            child: ConstrainedBox(
+              constraints: BoxConstraints(maxHeight: maxH),
+              child: SingleChildScrollView(
+                child: TextField(
+                  controller: controller,
+                  minLines: 3,
+                  maxLines: 8,
+                  maxLength: 1000,
+                  decoration: const InputDecoration(
+                    hintText: 'Update your message',
+                  ),
+                ),
+              ),
+            ),
           ),
-          FilledButton(
-            onPressed: () => Navigator.pop(dialogCtx, true),
-            child: const Text('Save'),
-          ),
-        ],
-      ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogCtx, false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(dialogCtx, true),
+              child: const Text('Save'),
+            ),
+          ],
+        );
+      },
     );
     if (!mounted || ok != true) {
       controller.dispose();
@@ -2077,16 +2130,26 @@ class _TripThreadScreenState extends State<TripThreadScreen>
                                         ),
                                       ),
                                       const SizedBox(width: 4),
-                                      Text(
-                                        entry.place != null
-                                            ? '${entry.place!.lat.toStringAsFixed(4)}, ${entry.place!.lng.toStringAsFixed(4)}'
-                                            : '${entry.gpsCoordinates!.lat.toStringAsFixed(4)}, ${entry.gpsCoordinates!.lng.toStringAsFixed(4)}',
-                                        style: TextStyle(
-                                          color: Colors.red[700]!.withValues(
-                                            alpha: 0.8,
+                                      Expanded(
+                                        child: Text(
+                                          () {
+                                            final place = entry.place;
+                                            if (place != null) {
+                                              return '${place.lat.toStringAsFixed(4)}, ${place.lng.toStringAsFixed(4)}';
+                                            }
+                                            final g = entry.gpsCoordinates;
+                                            if (g != null) {
+                                              return '${g.lat.toStringAsFixed(4)}, ${g.lng.toStringAsFixed(4)}';
+                                            }
+                                            return '';
+                                          }(),
+                                          style: TextStyle(
+                                            color: Colors.red[700]!.withValues(
+                                              alpha: 0.8,
+                                            ),
+                                            fontSize: 11,
+                                            fontFamily: 'monospace',
                                           ),
-                                          fontSize: 11,
-                                          fontFamily: 'monospace',
                                         ),
                                       ),
                                     ],

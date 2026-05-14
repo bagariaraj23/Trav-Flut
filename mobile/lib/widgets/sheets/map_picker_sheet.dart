@@ -166,7 +166,7 @@ class _MapPickerModalState extends State<MapPickerModal> {
 
       final resolvedPlace = await placeProvider
           .resolvePlace(placeCandidate)
-          .timeout(const Duration(seconds: 10));
+          .timeout(const Duration(seconds: 30));
 
       if (resolvedPlace != null && mounted) {
         debugPrint('[MapPickerModal] Place resolved: ${resolvedPlace.id}');
