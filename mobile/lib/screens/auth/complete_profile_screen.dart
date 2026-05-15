@@ -44,7 +44,11 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
   Future<void> _handleSubmit() async {
     if (!_formKey.currentState!.validate()) return;
     final authProvider = context.read<AuthProvider>();
-    final username = Validators.normalizeUsernameToAscii(_usernameController.text.trim());
+    var rawUsername = _usernameController.text.trim();
+    while (rawUsername.startsWith('@')) {
+      rawUsername = rawUsername.substring(1).trim();
+    }
+    final username = Validators.normalizeUsernameToAscii(rawUsername);
     final success = await authProvider.completeProfile(
       username: username,
       password: _passwordController.text,
@@ -113,7 +117,11 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
                     label: 'Username',
                     prefixIcon: Icons.alternate_email,
                     validator: (value) {
-                      final normalized = Validators.normalizeUsernameToAscii(value?.trim() ?? '');
+                      var t = value?.trim() ?? '';
+                      while (t.startsWith('@')) {
+                        t = t.substring(1).trim();
+                      }
+                      final normalized = Validators.normalizeUsernameToAscii(t);
                       if (normalized.isEmpty) return 'Username is required';
                       if (normalized.length < 3) {
                         return 'Username must be at least 3 characters';

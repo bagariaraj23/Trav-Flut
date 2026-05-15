@@ -324,7 +324,8 @@ class _FollowRequestsScreenState extends State<FollowRequestsScreen> {
                         foregroundColor: Colors.red,
                         side: BorderSide(color: Colors.red[300]!),
                       ),
-                      child: userProvider.isProcessingRequestId == request.id
+                      child: userProvider.isProcessingRequestId == request.id &&
+                              userProvider.followRequestActionIsAccept == false
                           ? const SizedBox(
                               height: 16,
                               width: 16,
@@ -343,7 +344,8 @@ class _FollowRequestsScreenState extends State<FollowRequestsScreen> {
                                     request.id,
                                     follower.name ?? 'User',
                                   ),
-                      child: userProvider.isProcessingRequestId == request.id
+                      child: userProvider.isProcessingRequestId == request.id &&
+                              userProvider.followRequestActionIsAccept == true
                           ? const SizedBox(
                               height: 16,
                               width: 16,

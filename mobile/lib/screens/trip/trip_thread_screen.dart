@@ -112,6 +112,7 @@ class _TripThreadScreenState extends State<TripThreadScreen>
     );
     _textController.addListener(_onTextChanged);
     _scrollController.addListener(_onThreadScrollNearTop);
+    _entryInputFocusNode.addListener(_onComposerFocusChanged);
 
     // Defer _loadTrip and _loadTripParticipants - they call clearCurrentTripEntries
     // and setState which trigger notifyListeners during build if run in initState
@@ -153,6 +154,20 @@ class _TripThreadScreenState extends State<TripThreadScreen>
     }
   }
 
+  void _onComposerFocusChanged() {
+    if (!_entryInputFocusNode.hasFocus || !mounted) return;
+    void scrollThreadToEnd() {
+      if (!mounted || !_scrollController.hasClients) return;
+      final max = _scrollController.position.maxScrollExtent;
+      if (max > 0) _scrollController.jumpTo(max);
+    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      scrollThreadToEnd();
+      // Keyboard animates in after focus; scroll again once inset is applied.
+      Future.delayed(const Duration(milliseconds: 280), scrollThreadToEnd);
+    });
+  }
+
   @override
   void dispose() {
     // Remove listener - use stored reference to avoid context.read on deactivated widget
@@ -163,6 +178,7 @@ class _TripThreadScreenState extends State<TripThreadScreen>
     }
 
     _textController.removeListener(_onTextChanged);
+    _entryInputFocusNode.removeListener(_onComposerFocusChanged);
     _textController.dispose();
     _entryInputFocusNode.dispose();
     _locationController.dispose();
@@ -247,6 +263,10 @@ class _TripThreadScreenState extends State<TripThreadScreen>
             setState(() {
               _tripParticipants = participants;
             });
+            // Participants often arrive after "@"; rebuild so the menu appears.
+            if (_mentionQuery != null) {
+              setState(() {});
+            }
           }
         });
       }
@@ -255,48 +275,90 @@ class _TripThreadScreenState extends State<TripThreadScreen>
     }
   }
 
+  bool _isMentionBoundaryWhitespace(String ch) {
+    return ch == ' ' || ch == '\t' || ch == '\n' || ch == '\r';
+  }
+
+  /// Participants from API plus trip owner when owner is not a [TripParticipant] row.
+  List<TripParticipant> _mentionParticipantPool() {
+    final out = List<TripParticipant>.from(_tripParticipants);
+    final trip = _trip;
+    if (trip == null) return out;
+    final ownerId = trip.userId;
+    final ownerUser = trip.user;
+    final hasOwnerRow = out.any((p) => p.userId == ownerId);
+    if (!hasOwnerRow && ownerUser != null) {
+      out.add(
+        TripParticipant(
+          id: 'trip-owner-$ownerId',
+          tripId: trip.id,
+          userId: ownerId,
+          role: 'owner',
+          joinedAt: trip.createdAt,
+          user: ownerUser,
+        ),
+      );
+    }
+    return out;
+  }
+
   void _onTextChanged() {
     final text = _textController.text;
     final selection = _textController.selection;
     final cursorPosition = selection.baseOffset;
 
-    // Find the last @ mention before cursor
-    final textBeforeCursor = text.substring(0, cursorPosition);
-    final lastAtIndex = textBeforeCursor.lastIndexOf('@');
-
-    if (lastAtIndex != -1) {
-      // Check if there's a space after @ (meaning mention is complete)
-      final textAfterAt = textBeforeCursor.substring(lastAtIndex + 1);
-      if (textAfterAt.contains(' ')) {
-        // Mention is complete (space found), clear mention state
-        if (mounted) {
-          setState(() {
-            _mentionQuery = null;
-            _mentionStartPosition = null;
-          });
-        }
-        return;
-      }
-
-      // Extract the query after @ (can be empty if just '@')
-      final query = textAfterAt.toLowerCase();
-      debugPrint(
-        '[MentionMenu] Detected @ mention: query="$query", position=$lastAtIndex',
-      );
-      _mentionQuery = query;
-      _mentionStartPosition = lastAtIndex;
-
-      // Show autocomplete menu
-      _showMentionMenu();
-    } else {
-      // No @ found, clear mention state
+    if (cursorPosition < 0 || cursorPosition > text.length) {
       if (mounted) {
         setState(() {
           _mentionQuery = null;
           _mentionStartPosition = null;
         });
       }
+      return;
     }
+
+    final textBeforeCursor = text.substring(0, cursorPosition);
+    final lastAtIndex = textBeforeCursor.lastIndexOf('@');
+
+    if (lastAtIndex == -1) {
+      if (mounted) {
+        setState(() {
+          _mentionQuery = null;
+          _mentionStartPosition = null;
+        });
+      }
+      return;
+    }
+
+    if (lastAtIndex > 0 &&
+        !_isMentionBoundaryWhitespace(textBeforeCursor[lastAtIndex - 1])) {
+      if (mounted) {
+        setState(() {
+          _mentionQuery = null;
+          _mentionStartPosition = null;
+        });
+      }
+      return;
+    }
+
+    final rawQuery = textBeforeCursor.substring(lastAtIndex + 1);
+    if (rawQuery.contains(RegExp(r'\s'))) {
+      if (mounted) {
+        setState(() {
+          _mentionQuery = null;
+          _mentionStartPosition = null;
+        });
+      }
+      return;
+    }
+
+    final query = rawQuery.toLowerCase();
+    debugPrint(
+      '[MentionMenu] Detected @ mention: query="$query", position=$lastAtIndex',
+    );
+    _mentionQuery = query;
+    _mentionStartPosition = lastAtIndex;
+    _showMentionMenu();
   }
 
   void _showMentionMenu() {
@@ -307,19 +369,21 @@ class _TripThreadScreenState extends State<TripThreadScreen>
   }
 
   void _selectMention(TripParticipant participant) {
-    if (_mentionStartPosition == null || participant.user?.username == null) {
+    final username = participant.user?.username;
+    if (_mentionStartPosition == null ||
+        username == null ||
+        username.isEmpty) {
       _mentionQuery = null;
       _mentionStartPosition = null;
       return;
     }
 
-    final username = participant.user!.username!;
     final text = _textController.text;
-    final beforeAt = text.substring(0, _mentionStartPosition!);
+    final start = _mentionStartPosition!;
+    final beforeAt = text.substring(0, start);
     final afterCursor = text.substring(_textController.selection.baseOffset);
     final newText = '$beforeAt@$username $afterCursor';
-    final newCursorPosition =
-        _mentionStartPosition! + username.length + 2; // +2 for @ and space
+    final newCursorPosition = start + username.length + 2; // +2 for @ and space
 
     _textController.value = TextEditingValue(
       text: newText,
@@ -329,6 +393,25 @@ class _TripThreadScreenState extends State<TripThreadScreen>
     // Clear mention state
     _mentionQuery = null;
     _mentionStartPosition = null;
+  }
+
+  void _insertAllMention() {
+    if (_mentionStartPosition == null) return;
+    final text = _textController.text;
+    final beforeAt = text.substring(0, _mentionStartPosition!);
+    final afterCursor = text.substring(_textController.selection.baseOffset);
+    const token = '@all ';
+    final newText = '$beforeAt$token$afterCursor';
+    final newCursor = _mentionStartPosition! + token.length;
+    _textController.value = TextEditingValue(
+      text: newText,
+      selection: TextSelection.collapsed(
+        offset: newCursor.clamp(0, newText.length),
+      ),
+    );
+    _mentionQuery = null;
+    _mentionStartPosition = null;
+    if (mounted) setState(() {});
   }
 
   List<String> _extractTaggedUsernames(String text) {
@@ -358,6 +441,11 @@ class _TripThreadScreenState extends State<TripThreadScreen>
         _trip = trip;
         _isLoading = false;
       });
+      if (_mentionQuery != null) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) setState(() {});
+        });
+      }
 
       if (trip != null) {
         await tripProvider.loadCurrentTripEntries(widget.tripId);
@@ -1149,6 +1237,7 @@ class _TripThreadScreenState extends State<TripThreadScreen>
           onTap: () => FocusScope.of(context).unfocus(),
           child: Stack(
             key: _stackKey,
+            clipBehavior: Clip.none,
             children: [
               Column(
                 children: [
@@ -1314,17 +1403,22 @@ class _TripThreadScreenState extends State<TripThreadScreen>
 
     // Filter participants by query, excluding current user
     final query = _mentionQuery?.toLowerCase() ?? '';
-    final filtered = _tripParticipants.where((p) {
+    final pool = _mentionParticipantPool();
+    final filtered = pool.where((p) {
       if (p.userId == currentUserId) return false;
 
       if (query.isEmpty) return true;
 
       final username = p.user?.username?.toLowerCase() ?? '';
       final name = p.user?.name?.toLowerCase() ?? '';
-      return username.startsWith(query) || name.startsWith(query);
+      return username.contains(query) || name.contains(query);
     }).toList();
 
-    if (filtered.isEmpty) return const SizedBox.shrink();
+    final othersOnTrip = pool.where((p) => p.userId != currentUserId).length;
+    final showAllRow =
+        othersOnTrip > 0 && (query.isEmpty || query == 'all');
+
+    if (filtered.isEmpty && !showAllRow) return const SizedBox.shrink();
 
     final renderBox =
         _textFieldKey.currentContext?.findRenderObject() as RenderBox?;
@@ -1348,6 +1442,13 @@ class _TripThreadScreenState extends State<TripThreadScreen>
     final keyboardHeight = MediaQuery.of(context).viewInsets.bottom;
     final stackSize = stackRenderBox.size;
 
+    if (!stackSize.height.isFinite ||
+        !stackSize.width.isFinite ||
+        stackSize.height <= 0 ||
+        stackSize.width <= 0) {
+      return const SizedBox.shrink();
+    }
+
     final hasKeyboard = keyboardHeight > 0;
     final menuWidth = size.width
         .clamp(120.0, 400.0)
@@ -1369,17 +1470,30 @@ class _TripThreadScreenState extends State<TripThreadScreen>
 
     final spaceAbove = menuTop;
     final spaceBelow = stackSize.height - menuTop;
-    final availableHeight = hasKeyboard ? spaceAbove : spaceBelow;
+    var availableHeight = hasKeyboard ? spaceAbove : spaceBelow;
+    if (!availableHeight.isFinite || availableHeight < 56) {
+      availableHeight = (stackSize.height * 0.35).clamp(56.0, 280.0);
+    }
     const itemHeight = 56.0;
     final maxItems = (availableHeight / itemHeight).floor().clamp(1, 5);
-    final maxHeightCap = (stackSize.height * 0.7).clamp(36.0, 280.0).toDouble();
+    final maxUserSlots = (maxItems - (showAllRow ? 1 : 0)).clamp(0, maxItems);
+    final shownUsers = filtered.length > maxUserSlots
+        ? filtered.sublist(0, maxUserSlots)
+        : filtered;
+    final totalRows = (showAllRow ? 1 : 0) + shownUsers.length;
+    if (totalRows == 0) return const SizedBox.shrink();
+
+    final maxHeightCap =
+        (stackSize.height * 0.7).clamp(36.0, 280.0).toDouble();
     final minHeightCap = maxHeightCap < 44.0 ? maxHeightCap : 44.0;
-    final desiredHeight =
-        (filtered.length > maxItems ? maxItems : filtered.length) * itemHeight;
-    final menuHeight = desiredHeight.clamp(minHeightCap, maxHeightCap);
+    final desiredHeight = totalRows * itemHeight;
+    var menuHeight = desiredHeight.clamp(minHeightCap, maxHeightCap);
+    if (!menuHeight.isFinite || menuHeight <= 0) {
+      menuHeight = 200.0;
+    }
 
     debugPrint(
-      '[MentionMenu] Showing menu: query="$query", filtered=${filtered.length}, position=($menuLeft, $menuTop), width=$menuWidth, keyboard=$hasKeyboard',
+      '[MentionMenu] Showing menu: query="$query", users=${shownUsers.length}, allRow=$showAllRow, position=($menuLeft, $menuTop), width=$menuWidth, keyboard=$hasKeyboard',
     );
 
     return Positioned(
@@ -1413,9 +1527,44 @@ class _TripThreadScreenState extends State<TripThreadScreen>
           child: ListView.builder(
             shrinkWrap: true,
             padding: const EdgeInsets.symmetric(vertical: 4),
-            itemCount: filtered.length > maxItems ? maxItems : filtered.length,
+            itemCount: totalRows,
             itemBuilder: (context, index) {
-              final participant = filtered[index];
+              if (showAllRow && index == 0) {
+                return ListTile(
+                  dense: true,
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 0,
+                  ),
+                  leading: CircleAvatar(
+                    radius: 16,
+                    backgroundColor: Theme.of(context)
+                        .colorScheme
+                        .secondaryContainer,
+                    child: Icon(
+                      Icons.groups,
+                      size: 18,
+                      color: Theme.of(context)
+                          .colorScheme
+                          .onSecondaryContainer,
+                    ),
+                  ),
+                  title: const Text(
+                    'Everyone on this trip',
+                    style: TextStyle(fontSize: 14),
+                  ),
+                  subtitle: Text(
+                    '@all',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                  onTap: _insertAllMention,
+                );
+              }
+              final pi = showAllRow ? index - 1 : index;
+              final participant = shownUsers[pi];
               final user = participant.user;
               return ListTile(
                 dense: true,
@@ -1500,82 +1649,98 @@ class _TripThreadScreenState extends State<TripThreadScreen>
     return true;
   }
 
+  Widget _threadEntryActionSheetRow({
+    required BuildContext sheetCtx,
+    required IconData icon,
+    required String label,
+    required VoidCallback onTap,
+    Color? foregroundColor,
+  }) {
+    final color = foregroundColor ?? Theme.of(sheetCtx).colorScheme.onSurface;
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+          child: Row(
+            children: [
+              Icon(icon, color: color, size: 22),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Text(
+                  label,
+                  style: Theme.of(sheetCtx).textTheme.titleMedium?.copyWith(
+                        color: color,
+                        fontWeight: FontWeight.w500,
+                      ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   Future<void> _showThreadEntryActions(TripThreadEntry entry) async {
     if (!mounted || _trip?.status != TripStatus.ongoing) return;
     if (!_canModerateThreadEntry(entry)) return;
 
     await showModalBottomSheet<void>(
       context: context,
+      isScrollControlled: true,
       showDragHandle: true,
-      builder: (sheetCtx) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (_canEditThreadEntryText(entry))
-              ListTile(
-                leading: const Icon(Icons.edit_outlined),
-                title: const Text('Edit text'),
-                onTap: () {
-                  Navigator.pop(sheetCtx);
-                  _showEditTextEntryDialog(entry);
-                },
+      builder: (sheetCtx) {
+        final errorColor = Theme.of(sheetCtx).colorScheme.error;
+        return SafeArea(
+          child: Material(
+            color: Theme.of(sheetCtx).colorScheme.surface,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (_canEditThreadEntryText(entry))
+                    _threadEntryActionSheetRow(
+                      sheetCtx: sheetCtx,
+                      icon: Icons.edit_outlined,
+                      label: 'Edit text',
+                      onTap: () {
+                        Navigator.pop(sheetCtx);
+                        _showEditTextEntryDialog(entry);
+                      },
+                    ),
+                  _threadEntryActionSheetRow(
+                    sheetCtx: sheetCtx,
+                    icon: Icons.delete_outline,
+                    label: 'Delete entry',
+                    foregroundColor: errorColor,
+                    onTap: () {
+                      Navigator.pop(sheetCtx);
+                      _confirmDeleteThreadEntry(entry);
+                    },
+                  ),
+                ],
               ),
-            ListTile(
-              leading: Icon(
-                Icons.delete_outline,
-                color: Theme.of(sheetCtx).colorScheme.error,
-              ),
-              title: Text(
-                'Delete entry',
-                style: TextStyle(color: Theme.of(sheetCtx).colorScheme.error),
-              ),
-              onTap: () {
-                Navigator.pop(sheetCtx);
-                _confirmDeleteThreadEntry(entry);
-              },
             ),
-          ],
-        ),
-      ),
+          ),
+        );
+      },
     );
   }
 
   Future<void> _showEditTextEntryDialog(TripThreadEntry entry) async {
-    final controller = TextEditingController(text: entry.contentText ?? '');
-    final ok = await showDialog<bool>(
+    FocusManager.instance.primaryFocus?.unfocus();
+    await Future<void>.delayed(const Duration(milliseconds: 50));
+    if (!mounted) return;
+
+    final text = await showDialog<String>(
       context: context,
-      builder: (dialogCtx) => AlertDialog(
-        title: const Text('Edit entry'),
-        content: TextField(
-          controller: controller,
-          maxLines: 5,
-          maxLength: 1000,
-          decoration: const InputDecoration(hintText: 'Update your message'),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogCtx, false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(dialogCtx, true),
-            child: const Text('Save'),
-          ),
-        ],
+      builder: (dialogCtx) => _EditThreadEntryDialog(
+        initialText: entry.contentText ?? '',
       ),
     );
-    if (!mounted || ok != true) {
-      controller.dispose();
-      return;
-    }
-    final text = controller.text.trim();
-    controller.dispose();
-    if (text.isEmpty) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Text cannot be empty')));
-      return;
-    }
+    if (!mounted || text == null) return;
 
     final tripProvider = context.read<TripProvider>();
     final success = await tripProvider.updateThreadEntryText(
@@ -1960,16 +2125,26 @@ class _TripThreadScreenState extends State<TripThreadScreen>
                                         ),
                                       ),
                                       const SizedBox(width: 4),
-                                      Text(
-                                        entry.place != null
-                                            ? '${entry.place!.lat.toStringAsFixed(4)}, ${entry.place!.lng.toStringAsFixed(4)}'
-                                            : '${entry.gpsCoordinates!.lat.toStringAsFixed(4)}, ${entry.gpsCoordinates!.lng.toStringAsFixed(4)}',
-                                        style: TextStyle(
-                                          color: Colors.red[700]!.withValues(
-                                            alpha: 0.8,
+                                      Expanded(
+                                        child: Text(
+                                          () {
+                                            final place = entry.place;
+                                            if (place != null) {
+                                              return '${place.lat.toStringAsFixed(4)}, ${place.lng.toStringAsFixed(4)}';
+                                            }
+                                            final g = entry.gpsCoordinates;
+                                            if (g != null) {
+                                              return '${g.lat.toStringAsFixed(4)}, ${g.lng.toStringAsFixed(4)}';
+                                            }
+                                            return '';
+                                          }(),
+                                          style: TextStyle(
+                                            color: Colors.red[700]!.withValues(
+                                              alpha: 0.8,
+                                            ),
+                                            fontSize: 11,
+                                            fontFamily: 'monospace',
                                           ),
-                                          fontSize: 11,
-                                          fontFamily: 'monospace',
                                         ),
                                       ),
                                     ],
@@ -2215,32 +2390,35 @@ class _TripThreadScreenState extends State<TripThreadScreen>
     );
   }
 
-  Widget _buildAddEntrySection() {
-    final mediaQuery = MediaQuery.of(context);
+  /// Max height for the bottom compose panel. When the keyboard is open, cap
+  /// aggressively so the thread list keeps most of the viewport (fixes entries
+  /// hidden behind keyboard + bottom overflow on location + comment).
+  double _composePanelMaxHeight(MediaQueryData mediaQuery) {
     final keyboardInset = mediaQuery.viewInsets.bottom;
     final screenHeight = mediaQuery.size.height;
     final safeVerticalPadding =
         mediaQuery.padding.top + mediaQuery.padding.bottom;
-    final availableHeight = screenHeight - safeVerticalPadding;
-
-    double maxHeight = screenHeight * 0.5;
+    final availableHeight = (screenHeight - safeVerticalPadding).clamp(
+      200.0,
+      screenHeight,
+    );
 
     if (keyboardInset > 0) {
-      final heightWithoutKeyboard = (availableHeight - keyboardInset).clamp(
-        availableHeight * 0.25,
-        availableHeight * 0.85,
-      );
-      maxHeight = heightWithoutKeyboard * 0.95;
-    } else {
-      maxHeight = maxHeight.clamp(
-        availableHeight * 0.35,
-        availableHeight * 0.6,
-      );
+      final aboveKeyboard = (availableHeight - keyboardInset).clamp(160.0, availableHeight);
+      // Leave ~55%+ of space above the keyboard for the thread list.
+      final cap = aboveKeyboard * 0.42;
+      return cap.clamp(140.0, 300.0);
     }
 
-    if (maxHeight <= 0 || maxHeight.isNaN) {
-      maxHeight = availableHeight * 0.5;
-    }
+    return (screenHeight * 0.48).clamp(
+      availableHeight * 0.32,
+      availableHeight * 0.55,
+    );
+  }
+
+  Widget _buildAddEntrySection() {
+    final mediaQuery = MediaQuery.of(context);
+    final maxHeight = _composePanelMaxHeight(mediaQuery);
 
     return Container(
       decoration: BoxDecoration(
@@ -2253,13 +2431,14 @@ class _TripThreadScreenState extends State<TripThreadScreen>
           ),
         ],
       ),
-      child: SafeArea(
-        top: false,
-        left: false,
-        right: false,
-        child: ConstrainedBox(
-          constraints: BoxConstraints(maxHeight: maxHeight),
-          child: SingleChildScrollView(
+      child: ConstrainedBox(
+        constraints: BoxConstraints(maxHeight: maxHeight),
+        child: SingleChildScrollView(
+          keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+          child: SafeArea(
+            top: false,
+            left: false,
+            right: false,
             child: Padding(
               padding: const EdgeInsets.all(16.0),
               child: Column(
@@ -3153,6 +3332,70 @@ class _TripThreadScreenState extends State<TripThreadScreen>
           .padLeft(2, '0');
       return '$minutes:$seconds';
     }
+  }
+}
+
+class _EditThreadEntryDialog extends StatefulWidget {
+  final String initialText;
+
+  const _EditThreadEntryDialog({required this.initialText});
+
+  @override
+  State<_EditThreadEntryDialog> createState() => _EditThreadEntryDialogState();
+}
+
+class _EditThreadEntryDialogState extends State<_EditThreadEntryDialog> {
+  late final TextEditingController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController(text: widget.initialText);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _save() {
+    final text = _controller.text.trim();
+    if (text.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Text cannot be empty')),
+      );
+      return;
+    }
+    Navigator.of(context).pop(text);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      scrollable: true,
+      title: const Text('Edit entry'),
+      content: TextField(
+        controller: _controller,
+        autofocus: true,
+        minLines: 3,
+        maxLines: 8,
+        maxLength: 1000,
+        decoration: const InputDecoration(
+          hintText: 'Update your message',
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: _save,
+          child: const Text('Save'),
+        ),
+      ],
+    );
   }
 }
 

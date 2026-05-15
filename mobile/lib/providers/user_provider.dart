@@ -79,6 +79,8 @@ class UserProvider extends ChangeNotifier {
   final MetadataCacheService? _metadataCache;
   String? _followRequestsError;
   String? isProcessingRequestId;
+  /// When handling a follow request, true = accept in flight, false = reject in flight.
+  bool? _followRequestActionIsAccept;
 
   UserProvider({
     required ApiService apiService,
@@ -137,6 +139,7 @@ class UserProvider extends ChangeNotifier {
   bool get hasMoreUsers => _hasMoreUsers;
   List<FollowRequestDto> get pendingFollowRequests => _pendingFollowRequests;
   String? get followRequestsError => _followRequestsError;
+  bool? get followRequestActionIsAccept => _followRequestActionIsAccept;
   List<UnifiedNotificationItem> get unifiedNotifications =>
       _unifiedNotifications;
   bool get isNotificationsLoading => _isNotificationsLoading;
@@ -462,6 +465,7 @@ class UserProvider extends ChangeNotifier {
     try {
       _isFollowRequestsLoading = true;
       isProcessingRequestId = requestId;
+      _followRequestActionIsAccept = true;
       notifyListeners();
 
       // Get the request to find followerId before accepting
@@ -497,6 +501,7 @@ class UserProvider extends ChangeNotifier {
     } finally {
       _isFollowRequestsLoading = false;
       isProcessingRequestId = null;
+      _followRequestActionIsAccept = null;
       notifyListeners();
     }
   }
@@ -505,6 +510,7 @@ class UserProvider extends ChangeNotifier {
     try {
       _isFollowRequestsLoading = true;
       isProcessingRequestId = requestId;
+      _followRequestActionIsAccept = false;
       notifyListeners();
 
       // Get the request to find followerId before rejecting
@@ -536,6 +542,7 @@ class UserProvider extends ChangeNotifier {
       return false;
     } finally {
       isProcessingRequestId = null;
+      _followRequestActionIsAccept = null;
       _isFollowRequestsLoading = false;
       notifyListeners();
     }
