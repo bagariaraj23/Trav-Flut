@@ -421,9 +421,11 @@ class ApiService {
       );
     } on DioException catch (e) {
       debugPrint('[ApiService] Complete profile DioException: ${e.message}');
+      final data = e.response?.data;
+      final err = data is Map<String, dynamic> ? data['error'] as String? : null;
       return ApiResponse<AuthResponse>(
         success: false,
-        error: e.response?.data['error'] ?? 'Network error occurred',
+        error: err ?? 'Network error occurred',
       );
     } catch (e) {
       debugPrint('[ApiService] Complete profile unexpected error: $e');
@@ -1657,9 +1659,20 @@ class ApiService {
 
       if (response.data['success'] && response.data['data'] != null) {
         final data = response.data['data'];
-        final trips = (data['items'] as List<dynamic>)
-            .map((trip) => Trip.fromJson(trip))
-            .toList();
+        final List<dynamic> rawList;
+        if (data is List) {
+          rawList = data;
+        } else if (data is Map<String, dynamic> && data['items'] is List) {
+          rawList = data['items'] as List<dynamic>;
+        } else {
+          debugPrint('[ApiService] Unexpected /trips data shape: ${data.runtimeType}');
+          return ApiResponse<List<Trip>>(
+            success: false,
+            error: 'Unexpected trips response',
+          );
+        }
+        final trips =
+            rawList.map((trip) => Trip.fromJson(trip as Map<String, dynamic>)).toList();
 
         debugPrint('[ApiService] Found ${trips.length} user trips');
         return ApiResponse<List<Trip>>(success: true, data: trips);
@@ -1680,6 +1693,40 @@ class ApiService {
       );
     } catch (e) {
       debugPrint('[ApiService] Get user trips unexpected error: $e');
+      return ApiResponse<List<Trip>>(
+        success: false,
+        error: 'An unexpected error occurred',
+      );
+    }
+  }
+
+  /// Profile: trips owned by or joined by [userId] (server enforces privacy).
+  Future<ApiResponse<List<Trip>>> getTripsForUser(String userId) async {
+    try {
+      final response = await _dio.get('/users/$userId/trips');
+      if (response.data['success'] == true && response.data['data'] != null) {
+        final raw = response.data['data'];
+        final List<dynamic> rawList = raw is List
+            ? raw
+            : (raw is Map<String, dynamic> && raw['items'] is List
+                ? raw['items'] as List<dynamic>
+                : <dynamic>[]);
+        final trips = rawList
+            .map((t) => Trip.fromJson(t as Map<String, dynamic>))
+            .toList();
+        return ApiResponse<List<Trip>>(success: true, data: trips);
+      }
+      return ApiResponse<List<Trip>>(
+        success: false,
+        error: response.data['error'] ?? 'Failed to load trips',
+      );
+    } on DioException catch (e) {
+      return ApiResponse<List<Trip>>(
+        success: false,
+        error: e.response?.data['error'] ?? 'Network error occurred',
+      );
+    } catch (e) {
+      debugPrint('[ApiService] getTripsForUser error: $e');
       return ApiResponse<List<Trip>>(
         success: false,
         error: 'An unexpected error occurred',
@@ -1765,12 +1812,29 @@ class ApiService {
         '[ApiService] Get trip entries response: ${response.statusCode}',
       );
 
-      if (response.data['success'] && response.data['data'] != null) {
-        final entries = (response.data['data'] as List)
-            .map(
-              (json) => TripThreadEntry.fromJson(json as Map<String, dynamic>),
-            )
-            .toList();
+      if (response.data['success'] == true && response.data['data'] != null) {
+        final data = response.data['data'];
+        final List<TripThreadEntry> entries;
+        if (data is List) {
+          entries = data
+              .map(
+                (json) =>
+                    TripThreadEntry.fromJson(json as Map<String, dynamic>),
+              )
+              .toList();
+        } else if (data is Map<String, dynamic> && data['items'] is List) {
+          entries = (data['items'] as List)
+              .map(
+                (json) =>
+                    TripThreadEntry.fromJson(json as Map<String, dynamic>),
+              )
+              .toList();
+        } else {
+          return ApiResponse<List<TripThreadEntry>>(
+            success: false,
+            error: 'Invalid thread entries response',
+          );
+        }
 
         debugPrint('[ApiService] Found ${entries.length} trip entries');
         return ApiResponse<List<TripThreadEntry>>(success: true, data: entries);
@@ -1809,12 +1873,29 @@ class ApiService {
         '[ApiService] Get thread entries response: ${response.statusCode}',
       );
 
-      if (response.data['success'] && response.data['data'] != null) {
-        final entries = (response.data['data'] as List)
-            .map(
-              (json) => TripThreadEntry.fromJson(json as Map<String, dynamic>),
-            )
-            .toList();
+      if (response.data['success'] == true && response.data['data'] != null) {
+        final data = response.data['data'];
+        final List<TripThreadEntry> entries;
+        if (data is List) {
+          entries = data
+              .map(
+                (json) =>
+                    TripThreadEntry.fromJson(json as Map<String, dynamic>),
+              )
+              .toList();
+        } else if (data is Map<String, dynamic> && data['items'] is List) {
+          entries = (data['items'] as List)
+              .map(
+                (json) =>
+                    TripThreadEntry.fromJson(json as Map<String, dynamic>),
+              )
+              .toList();
+        } else {
+          return ApiResponse<List<TripThreadEntry>>(
+            success: false,
+            error: 'Invalid thread entries response',
+          );
+        }
 
         debugPrint('[ApiService] Found ${entries.length} thread entries');
         return ApiResponse<List<TripThreadEntry>>(success: true, data: entries);

@@ -1,10 +1,10 @@
 import { prisma, type PrismaTransactionClient } from "@/lib/prisma";
 import {
+  EntityType,
   GenerationStatus,
   MediaProcessingStatus,
   MediaType,
   Trip,
-  TripFinalPost,
 } from "@prisma/client";
 import {
   AuthorizationError,
@@ -159,9 +159,7 @@ export class TripFinalizerService {
         throw new NotFoundError("Final post not found");
       }
 
-      if (finalPost.isPublished) {
-        throw new ConflictError("Published posts cannot be edited");
-      }
+      const wasPublished = finalPost.isPublished;
 
       const data: FinalPostUpdates = {};
 
@@ -197,7 +195,9 @@ export class TripFinalizerService {
         where: { tripId },
         data: {
           ...data,
-          generationStatus: GenerationStatus.READY,
+          generationStatus: wasPublished
+            ? GenerationStatus.PUBLISHED
+            : GenerationStatus.READY,
           updatedAt: new Date(),
         },
         select: {
@@ -299,6 +299,78 @@ export class TripFinalizerService {
       });
     });
   }
+
+  /** Owner only. Removes final post row and engagement (likes, comments, shares, notifications). */
+  static async deleteFinalPost(tripId: string, userId: string) {
+    await prisma.$transaction(async (tx) => {
+      const trip = await tx.trip.findUnique({
+        where: { id: tripId },
+        select: {
+          userId: true,
+          finalPost: { select: { id: true } },
+        },
+      });
+
+      if (!trip) {
+        throw new NotFoundError("Trip not found");
+      }
+
+      if (trip.userId !== userId) {
+        throw new AuthorizationError(
+          "Only the trip owner can delete the final post"
+        );
+      }
+
+      if (!trip.finalPost) {
+        throw new NotFoundError("Final post not found");
+      }
+
+      await deleteEngagementForTripFinalPost(tx, trip.finalPost.id);
+
+      await tx.tripFinalPost.delete({
+        where: { tripId },
+      });
+    });
+  }
+}
+
+async function deleteEngagementForTripFinalPost(
+  tx: PrismaTransactionClient,
+  finalPostId: string
+) {
+  const postEntity = EntityType.TRIP_FINAL_POST;
+
+  for (;;) {
+    const candidates = await tx.comment.findMany({
+      where: { entityType: postEntity, entityId: finalPostId },
+      select: {
+        id: true,
+        _count: { select: { replies: true } },
+      },
+    });
+    const leaves = candidates.filter((c) => c._count.replies === 0);
+    if (leaves.length === 0) {
+      break;
+    }
+    const ids = leaves.map((c) => c.id);
+    await tx.like.deleteMany({
+      where: {
+        entityType: EntityType.COMMENT,
+        entityId: { in: ids },
+      },
+    });
+    await tx.comment.deleteMany({ where: { id: { in: ids } } });
+  }
+
+  await tx.like.deleteMany({
+    where: { entityType: postEntity, entityId: finalPostId },
+  });
+  await tx.share.deleteMany({
+    where: { entityType: postEntity, entityId: finalPostId },
+  });
+  await tx.notification.deleteMany({
+    where: { entityType: postEntity, entityId: finalPostId },
+  });
 }
 
 function buildSummary(trip: TripForFinalizer) {
@@ -329,13 +401,21 @@ function buildSummary(trip: TripForFinalizer) {
     .slice(0, 2)
     .map((entry) => `“${truncate(entry.contentText!, 160)}”`);
 
+  const tripTitle = trip.title?.trim() ?? "";
   const destinationLabel =
     destinations.length > 1
       ? `${destinations.length} places`
-      : destinations[0] ?? "the road";
+      : destinations.length === 1
+        ? destinations[0]!
+        : tripTitle || "your trip";
+
+  const opening =
+    destinations.length === 0
+        ? `${tripTitle || "your trip"} was a ${durationDays}-day adventure.`
+        : `${tripTitle || destinationLabel} was a ${durationDays}-day adventure through ${destinationLabel}.`;
 
   const summaryParts = [
-    `${trip.title} was a ${durationDays}-day adventure through ${destinationLabel}.`,
+    opening,
     highlightedLocations.length
       ? `Highlights included ${highlightedLocations.join(", ")}.`
       : undefined,
@@ -397,7 +477,10 @@ function selectCuratedMedia(trip: TripForFinalizer) {
 }
 
 function generateDefaultCaption(trip: TripForFinalizer) {
-  const primaryDestination = trip.destinations[0] ?? trip.title;
+  const primaryDestination =
+    trip.destinations[0]?.trim() ||
+    trip.title?.trim() ||
+    "your trip";
   const mood = trip.mood ? `#${trip.mood.toLowerCase()}` : "";
   return [`#${sanitizeTag(primaryDestination)}`, mood]
     .filter(Boolean)

@@ -476,6 +476,23 @@ export const createThreadEntrySchema = z
     }
   );
 
+export const patchThreadEntryTextSchema = z.object({
+  contentText: z
+    .string()
+    .min(1, "Content is required")
+    .max(1000, "Content must be less than 1000 characters")
+    .transform((text) => {
+      const trimmed = text.trim();
+      if (trimmed.length === 0) return trimmed;
+      return trimmed.charAt(0).toUpperCase() + trimmed.slice(1);
+    }),
+});
+
+/** Participant self-leave: if true, purge author's thread entries (ongoing trips only). */
+export const leaveTripSchema = z.object({
+  removeMyData: z.boolean(),
+});
+
 export const addParticipantSchema = z.object({
   userId: z.string().uuid("Invalid user ID format"),
   role: z
@@ -585,6 +602,7 @@ export const createShareSchema = z.object({
   entityType: z.enum(["TRIP_FINAL_POST"]),
   entityId: z.string().uuid("Invalid entity ID format"),
   shareType: z.enum(["DEEP_LINK", "WEB_LINK", "EXTERNAL"]),
+  shareSource: z.enum(["SYSTEM_SHEET", "IN_APP_DM"]).optional().default("SYSTEM_SHEET"),
   expiresAt: z
     .string()
     .datetime()

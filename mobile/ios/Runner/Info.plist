@@ -55,10 +55,10 @@
 	<array>
 		<dict>
 			<key>CFBundleURLName</key>
-			<string>travello</string>
+			<string>com.tripthread.app</string>
 			<key>CFBundleURLSchemes</key>
 			<array>
-				<string>travello</string>
+				<string>tripthread</string>
 			</array>
 		</dict>
 	</array>

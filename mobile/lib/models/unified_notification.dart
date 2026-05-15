@@ -1,3 +1,5 @@
+import 'package:tripthread/utils/user_display_labels.dart';
+
 /// Unified notification item: follow request, like, comment, or tag.
 /// Matches backend GET /users/me/notifications response shape.
 class UnifiedNotificationItem {
@@ -195,7 +197,15 @@ class UnifiedNotificationActor {
     };
   }
 
-  String get displayName => (name ?? username ?? 'Someone').trim();
+  /// Unique handle first (@username) so duplicate legal names don’t collide.
+  String get displayName => userPrimaryLabel(
+        id: id,
+        username: username,
+        name: name,
+      );
+
+  String? get displayNameSecondary =>
+      userSecondaryName(username: username, name: name);
 }
 
 class NotificationsPayload {

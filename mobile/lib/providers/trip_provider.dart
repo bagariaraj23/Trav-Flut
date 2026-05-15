@@ -13,10 +13,17 @@ class TripProvider extends ChangeNotifier {
   Trip? _currentTrip;
   List<Trip> _trips = [];
   List<TripThreadEntry> _currentTripEntries = [];
+  String? _threadEntriesOlderCursor;
+  bool _threadEntriesHasMoreOlder = false;
+  bool _isLoadingOlderThreadEntries = false;
   List<TripJoinRequest> _pendingTripInvitations = [];
   List<TripJoinRequest> _sentTripInvitations = [];
   bool _isLoading = false;
   bool _isTripInvitesLoading = false;
+  String? _invitationSendReceiverId;
+  String? _invitationCancelInviteId;
+  String? _respondingTripInviteId;
+  bool? _respondingTripInviteAccept;
   String? _error;
   String? _tripInvitesError;
   bool _hasCompletedInitialOngoingTripRedirect = false;
@@ -29,9 +36,17 @@ class TripProvider extends ChangeNotifier {
   List<TripJoinRequest> get sentTripInvitations => _sentTripInvitations;
   bool get isLoading => _isLoading;
   bool get isTripInvitesLoading => _isTripInvitesLoading;
+  /// Non-null while a trip invitation is being sent to this receiver (manage participants).
+  String? get invitationSendReceiverId => _invitationSendReceiverId;
+  /// Non-null while cancelling this pending invite id.
+  String? get invitationCancelInviteId => _invitationCancelInviteId;
+  String? get respondingTripInviteId => _respondingTripInviteId;
+  bool? get respondingTripInviteAccept => _respondingTripInviteAccept;
   String? get error => _error;
   String? get tripInvitesError => _tripInvitesError;
   bool get hasOngoingTrip => _currentTrip?.status == TripStatus.ongoing;
+  bool get threadEntriesHasMoreOlder => _threadEntriesHasMoreOlder;
+  bool get isLoadingOlderThreadEntries => _isLoadingOlderThreadEntries;
 
   // Initialize
   Future<void> initialize() async {
@@ -191,20 +206,30 @@ class TripProvider extends ChangeNotifier {
     }
   }
 
-  // Load thread entries for current trip
+  static const int _threadPageSize = 30;
+
+  // Load latest page of thread entries (chronological ascending within page).
   Future<void> loadCurrentTripEntries([String? tripId]) async {
     final id = tripId ?? _currentTrip?.id;
     if (id == null) return;
 
-    // Clear entries immediately to prevent showing old trip's entries
     _currentTripEntries = [];
+    _threadEntriesOlderCursor = null;
+    _threadEntriesHasMoreOlder = false;
     notifyListeners();
 
     try {
-      final response = await _tripService.getThreadEntries(id);
+      final response = await _tripService.getThreadEntries(
+        id,
+        limit: _threadPageSize,
+      );
 
       if (response.success && response.data != null) {
-        _currentTripEntries = response.data!;
+        final page = response.data!;
+        _currentTripEntries = page.items;
+        _threadEntriesHasMoreOlder = page.hasMoreOlder;
+        _threadEntriesOlderCursor = page.nextOlderCursor;
+        _error = null;
         notifyListeners();
       } else {
         _error = response.error;
@@ -217,9 +242,101 @@ class TripProvider extends ChangeNotifier {
     }
   }
 
+  /// Loads older entries (prepend). Cursor-based; call when user scrolls up.
+  Future<void> loadOlderThreadEntries(String tripId) async {
+    if (!_threadEntriesHasMoreOlder ||
+        _isLoadingOlderThreadEntries ||
+        _threadEntriesOlderCursor == null) {
+      return;
+    }
+
+    // Do not notifyListeners() here — a loading header would change list extent
+    // and break scroll anchoring. Only notify after the page is merged.
+    _isLoadingOlderThreadEntries = true;
+
+    try {
+      final response = await _tripService.getThreadEntries(
+        tripId,
+        limit: _threadPageSize,
+        olderThanCursor: _threadEntriesOlderCursor,
+      );
+
+      if (response.success && response.data != null) {
+        final page = response.data!;
+        final existingIds = _currentTripEntries.map((e) => e.id).toSet();
+        final older = page.items
+            .where((e) => !existingIds.contains(e.id))
+            .toList();
+        _currentTripEntries = [...older, ..._currentTripEntries];
+        _threadEntriesHasMoreOlder = page.hasMoreOlder;
+        _threadEntriesOlderCursor = page.nextOlderCursor;
+        _error = null;
+      } else {
+        _error = response.error;
+      }
+    } catch (e) {
+      _error = 'Failed to load older entries';
+      debugPrint('Load older thread entries error: $e');
+    } finally {
+      _isLoadingOlderThreadEntries = false;
+      notifyListeners();
+    }
+  }
+
+  /// Fetches older pages until [entryId] is in memory or history is exhausted.
+  /// Returns true when the entry is found.
+  Future<bool> loadUntilEntryPresent(
+    String tripId,
+    String entryId, {
+    int maxPages = 8,
+  }) async {
+    if (_currentTripEntries.any((e) => e.id == entryId)) {
+      return true;
+    }
+
+    final contextResponse = await _tripService.getThreadEntryContext(
+      tripId,
+      entryId,
+    );
+    if (contextResponse.success && contextResponse.data != null) {
+      final contextPage = contextResponse.data!;
+      _currentTripEntries = contextPage.items;
+      _threadEntriesHasMoreOlder = contextPage.hasMoreOlder;
+      _threadEntriesOlderCursor = contextPage.nextOlderCursor;
+      _error = null;
+      notifyListeners();
+      if (_currentTripEntries.any((e) => e.id == entryId)) {
+        return true;
+      }
+    }
+
+    var pagesLoaded = 0;
+    while (pagesLoaded < maxPages &&
+        !_currentTripEntries.any((e) => e.id == entryId) &&
+        _threadEntriesHasMoreOlder &&
+        _threadEntriesOlderCursor != null) {
+      final previousCursor = _threadEntriesOlderCursor;
+      final previousLength = _currentTripEntries.length;
+      pagesLoaded++;
+      await loadOlderThreadEntries(tripId);
+
+      // Defensive exit when pagination makes no progress.
+      final madeProgress =
+          _threadEntriesOlderCursor != previousCursor ||
+          _currentTripEntries.length > previousLength;
+      if (!madeProgress) {
+        break;
+      }
+    }
+    return _currentTripEntries.any((e) => e.id == entryId);
+  }
+
   // Clear current trip entries (useful when switching trips)
   void clearCurrentTripEntries() {
     _currentTripEntries = [];
+    _threadEntriesOlderCursor = null;
+    _threadEntriesHasMoreOlder = false;
+    _isLoadingOlderThreadEntries = false;
     notifyListeners();
   }
 
@@ -366,6 +483,76 @@ class TripProvider extends ChangeNotifier {
         tripId: tripId);
   }
 
+  Future<bool> deleteThreadEntry({
+    required String tripId,
+    required String entryId,
+  }) async {
+    try {
+      final response = await _tripService.deleteThreadEntry(
+        tripId: tripId,
+        entryId: entryId,
+      );
+      if (response.success) {
+        _currentTripEntries.removeWhere((e) => e.id == entryId);
+        if (_currentTrip?.id == tripId) {
+          final raw = _currentTrip!.entryCount - 1;
+          final nextCount = raw < 0 ? 0 : raw;
+          _currentTrip = _currentTrip!.copyWith(
+            threadEntries: List<TripThreadEntry>.from(_currentTripEntries),
+            entryCount: nextCount,
+          );
+        }
+        _error = null;
+        notifyListeners();
+        return true;
+      }
+      _error = response.error ?? 'Failed to delete entry';
+      notifyListeners();
+      return false;
+    } catch (e) {
+      _error = 'Failed to delete entry';
+      notifyListeners();
+      debugPrint('Delete thread entry error: $e');
+      return false;
+    }
+  }
+
+  Future<bool> updateThreadEntryText({
+    required String tripId,
+    required String entryId,
+    required String contentText,
+  }) async {
+    try {
+      final response = await _tripService.patchThreadEntryText(
+        tripId: tripId,
+        entryId: entryId,
+        contentText: contentText,
+      );
+      if (response.success && response.data != null) {
+        final idx = _currentTripEntries.indexWhere((e) => e.id == entryId);
+        if (idx >= 0) {
+          _currentTripEntries[idx] = response.data!;
+        }
+        if (_currentTrip?.id == tripId) {
+          _currentTrip = _currentTrip!.copyWith(
+            threadEntries: List<TripThreadEntry>.from(_currentTripEntries),
+          );
+        }
+        _error = null;
+        notifyListeners();
+        return true;
+      }
+      _error = response.error ?? 'Failed to update entry';
+      notifyListeners();
+      return false;
+    } catch (e) {
+      _error = 'Failed to update entry';
+      notifyListeners();
+      debugPrint('Update thread entry error: $e');
+      return false;
+    }
+  }
+
   // Get trip by ID
   Future<Trip?> getTrip(String tripId) async {
     try {
@@ -383,6 +570,53 @@ class TripProvider extends ChangeNotifier {
       notifyListeners();
       debugPrint('Get trip error: $e');
       return null;
+    }
+  }
+
+  /// Current user leaves as participant (not owner). Refreshes trip lists.
+  Future<bool> leaveTrip(
+    String tripId, {
+    required bool removeMyData,
+  }) async {
+    try {
+      _isLoading = true;
+      _error = null;
+      notifyListeners();
+
+      final response = await _tripService.leaveTrip(
+        tripId,
+        removeMyData: removeMyData,
+      );
+
+      if (!response.success) {
+        _error = response.error ?? 'Failed to leave trip';
+        _isLoading = false;
+        notifyListeners();
+        return false;
+      }
+
+      if (_currentTrip?.id == tripId) {
+        _currentTrip = null;
+        _currentTripEntries = [];
+        _threadEntriesOlderCursor = null;
+        _threadEntriesHasMoreOlder = false;
+      }
+      _trips.removeWhere((t) => t.id == tripId);
+
+      await Future.wait([
+        loadTrips(),
+        loadCurrentTrip(),
+      ]);
+
+      _isLoading = false;
+      notifyListeners();
+      return true;
+    } catch (e) {
+      _error = 'Failed to leave trip';
+      _isLoading = false;
+      notifyListeners();
+      debugPrint('leaveTrip error: $e');
+      return false;
     }
   }
 
@@ -455,7 +689,7 @@ class TripProvider extends ChangeNotifier {
   // Trip invitation methods
   Future<bool> sendTripInvitation(String tripId, String receiverId) async {
     try {
-      _isLoading = true;
+      _invitationSendReceiverId = receiverId;
       _error = null;
       notifyListeners();
 
@@ -465,27 +699,27 @@ class TripProvider extends ChangeNotifier {
       if (response.success) {
         // Optionally refresh sent invitations for this trip
         await loadSentTripInvitations(tripId);
-        _isLoading = false;
         notifyListeners();
         return true;
       } else {
         _error = response.error ?? 'Failed to send invitation';
-        _isLoading = false;
         notifyListeners();
         return false;
       }
     } catch (e) {
       _error = 'An unexpected error occurred';
-      _isLoading = false;
       notifyListeners();
       debugPrint('Send trip invitation error: $e');
       return false;
+    } finally {
+      _invitationSendReceiverId = null;
+      notifyListeners();
     }
   }
 
   Future<bool> cancelTripInvitation(String tripId, String inviteId) async {
     try {
-      _isLoading = true;
+      _invitationCancelInviteId = inviteId;
       _error = null;
       notifyListeners();
 
@@ -495,21 +729,21 @@ class TripProvider extends ChangeNotifier {
       if (response.success) {
         // Remove the cancelled invitation from the list
         _sentTripInvitations.removeWhere((invite) => invite.id == inviteId);
-        _isLoading = false;
         notifyListeners();
         return true;
       } else {
         _error = response.error ?? 'Failed to cancel invitation';
-        _isLoading = false;
         notifyListeners();
         return false;
       }
     } catch (e) {
       _error = 'An unexpected error occurred';
-      _isLoading = false;
       notifyListeners();
       debugPrint('Cancel trip invitation error: $e');
       return false;
+    } finally {
+      _invitationCancelInviteId = null;
+      notifyListeners();
     }
   }
 
@@ -547,7 +781,8 @@ class TripProvider extends ChangeNotifier {
   }
 
   Future<bool> respondToTripInvitation(String inviteId, bool accept) async {
-    _isTripInvitesLoading = true;
+    _respondingTripInviteId = inviteId;
+    _respondingTripInviteAccept = accept;
     _tripInvitesError = null;
     notifyListeners();
     try {
@@ -573,7 +808,8 @@ class TripProvider extends ChangeNotifier {
       debugPrint('Respond to trip invitation error: $e');
       return false;
     } finally {
-      _isTripInvitesLoading = false;
+      _respondingTripInviteId = null;
+      _respondingTripInviteAccept = null;
       notifyListeners();
     }
   }
@@ -600,6 +836,10 @@ class TripProvider extends ChangeNotifier {
     _currentTripEntries = [];
     _pendingTripInvitations = [];
     _sentTripInvitations = [];
+    _invitationSendReceiverId = null;
+    _invitationCancelInviteId = null;
+    _respondingTripInviteId = null;
+    _respondingTripInviteAccept = null;
     _error = null;
     _tripInvitesError = null;
     _hasCompletedInitialOngoingTripRedirect = false;

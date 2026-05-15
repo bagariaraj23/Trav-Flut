@@ -107,6 +107,8 @@ export interface TripResponse {
   threadEntries?: TripThreadEntryResponse[] | null;
   finalPost?: TripFinalPostResponse | null;
   coverMedia?: MediaResponse | null;
+  /** Present on discover feed: whether the current user follows the trip owner. */
+  isFollowing?: boolean;
   _count?: {
     threadEntries: number | null;
     media: number | null;
@@ -137,6 +139,17 @@ export interface TripThreadEntryResponse {
   author: UserProfile;
   taggedUsers?: UserProfile[] | null;
   media?: MediaResponse | null;
+}
+
+/** Cursor-paginated GET /trips/:id/entries (newest page first; items ascending). */
+export interface TripThreadEntriesPageResponse {
+  items: (TripThreadEntryResponse & {
+    likeCount: number;
+    commentCount: number;
+    hasLiked: boolean;
+  })[];
+  hasMoreOlder: boolean;
+  nextOlderCursor: string | null;
 }
 
 export interface PlaceResponse {

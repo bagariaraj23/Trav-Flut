@@ -47,6 +47,7 @@ import 'package:tripthread/screens/settings/settings_screen.dart';
 import 'package:tripthread/screens/engagement/liked_by_screen.dart';
 import 'package:tripthread/screens/notifications/notifications_screen.dart';
 import 'package:tripthread/screens/post/post_detail_screen.dart';
+import 'package:tripthread/screens/share/share_link_screen.dart';
 import 'package:tripthread/utils/app_theme.dart';
 import 'package:tripthread/utils/error_handler.dart';
 import 'package:tripthread/widgets/auth_gate.dart';
@@ -172,6 +173,14 @@ void main() async {
               final authProvider = context.read<AuthProvider>();
               final provider = TripProvider(tripService: tripService);
               tripService.setStorageService(storageService);
+              tripService.setUnauthorizedCallback(() {
+                debugPrint(
+                  '[main] TripService unauthorized — forcing logout',
+                );
+                authProvider.forceLogout(
+                  message: 'Session expired. Please log in again.',
+                );
+              });
               authProvider.addListener(() {
                 if (!authProvider.isAuthenticated) {
                   provider.clearData();
@@ -234,7 +243,6 @@ void main() async {
               debugPrint('[main] Creating ShareProvider');
               final provider = ShareProvider(
                 shareService: shareService,
-                deepLinkService: deepLinkService,
               );
               shareService.setStorageService(storageService);
               return provider;
@@ -269,6 +277,41 @@ void main() async {
       ),
     );
   }
+}
+
+/// Resolves GoRouter `extra` for `/trip/:tripId/map` into [MapPlace] list.
+/// Supports thread jumps (`initialZoomLocation`), [PlaceOnTrip] visits from trip detail, and [MapPlace].
+List<MapPlace>? mapPlacesFromTripMapExtra(Map<String, dynamic>? extra) {
+  if (extra == null) return null;
+
+  final zoom = extra['initialZoomLocation'];
+  if (zoom is Place) {
+    return [
+      MapPlace(
+        place: zoom,
+        origin: MapPlaceOrigin.threadEntry,
+      ),
+    ];
+  }
+
+  final raw = extra['places'];
+  if (raw == null) return null;
+  if (raw is List<MapPlace>) return List<MapPlace>.from(raw);
+  if (raw is List<PlaceOnTrip>) {
+    return raw.map(MapPlace.fromPlaceOnTrip).toList();
+  }
+  if (raw is Iterable) {
+    final out = <MapPlace>[];
+    for (final e in raw) {
+      if (e is MapPlace) {
+        out.add(e);
+      } else if (e is PlaceOnTrip) {
+        out.add(MapPlace.fromPlaceOnTrip(e));
+      }
+    }
+    return out.isEmpty ? null : out;
+  }
+  return null;
 }
 
 class TripThreadAppRouter extends StatefulWidget {
@@ -570,7 +613,7 @@ class _TripThreadAppRouterState extends State<TripThreadAppRouter> {
               final tripId = state.pathParameters['tripId']!;
               final extra = state.extra as Map<String, dynamic>?;
               final tripTitle = extra?['tripTitle'] as String? ?? 'Trip Map';
-              final places = extra?['places'] as List<MapPlace>?;
+              final places = mapPlacesFromTripMapExtra(extra);
 
               return TripMapScreen(
                 tripId: tripId,
@@ -620,6 +663,13 @@ class _TripThreadAppRouterState extends State<TripThreadAppRouter> {
                 entityId: entityId,
                 scrollToCommentId: scrollToCommentId,
               );
+            },
+          ),
+          GoRoute(
+            path: '/share/:shareToken',
+            builder: (context, state) {
+              final shareToken = state.pathParameters['shareToken']!;
+              return ShareLinkScreen(shareToken: shareToken);
             },
           ),
           GoRoute(

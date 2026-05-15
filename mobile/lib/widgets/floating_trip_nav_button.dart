@@ -143,7 +143,7 @@ class _FloatingTripNavButtonState extends State<FloatingTripNavButton>
                     child: _buildButtonContent(
                       context,
                       isOnThreadScreen,
-                      currentTrip!.id,
+                      currentTrip.id,
                     ),
                   ),
                 ),

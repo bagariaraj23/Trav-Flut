@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
+import 'package:tripthread/models/comment_user.dart';
+import 'package:tripthread/providers/auth_provider.dart';
 import 'package:tripthread/providers/comment_provider.dart';
 import 'package:tripthread/models/comment.dart';
 import 'package:tripthread/services/api_service.dart';
@@ -45,11 +47,21 @@ class _MentionCandidate {
       (username != null && username!.trim().isNotEmpty) ? '@$username' : (name ?? 'User');
 }
 
+const _kTripEveryoneMention = _MentionCandidate(
+  id: '__trip_all__',
+  username: 'all',
+  name: 'Everyone on this trip',
+);
+
 class _CommentComposerState extends State<CommentComposer> {
   final _textController = TextEditingController();
   final _focusNode = FocusNode();
   bool _isSubmitting = false;
   final int _maxLength = 250;
+
+  bool get _tripScopedForTag =>
+      widget.entityType == 'TRIP_THREAD_ENTRY' ||
+      widget.entityType == 'TRIP_FINAL_POST';
 
   final Debouncer _mentionDebouncer =
       Debouncer(delay: const Duration(milliseconds: 220));
@@ -149,7 +161,7 @@ class _CommentComposerState extends State<CommentComposer> {
 
         if (!mounted || requestId != _mentionRequestId) return;
 
-        final users = (resp.success ? (resp.data ?? const []) : const [])
+        List<_MentionCandidate> users = (resp.success ? (resp.data ?? const []) : const [])
             .whereType<Map<String, dynamic>>()
             .map(
               (u) => _MentionCandidate(
@@ -161,6 +173,12 @@ class _CommentComposerState extends State<CommentComposer> {
             )
             .where((u) => u.id.isNotEmpty)
             .toList(growable: false);
+
+        if (_tripScopedForTag &&
+            _mentionQuery != null &&
+            _mentionQuery!.toLowerCase() == 'all') {
+          users = [_kTripEveryoneMention, ...users];
+        }
 
         setState(() {
           _mentionResults = users;
@@ -211,12 +229,25 @@ class _CommentComposerState extends State<CommentComposer> {
     HapticFeedback.mediumImpact();
 
     try {
+      final auth = context.read<AuthProvider>();
+      final me = auth.currentUser;
       final provider = context.read<CommentProvider>();
+      CommentUser? preview;
+      if (me != null) {
+        preview = CommentUser(
+          id: me.id,
+          username: me.username,
+          name: me.name,
+          avatarUrl: me.avatarUrl,
+        );
+      }
       await provider.createComment(
         widget.entityType,
         widget.entityId,
         text,
         widget.parentCommentId,
+        currentUserId: me?.id,
+        currentUserPreview: preview,
       );
 
       _textController.clear();
@@ -289,7 +320,7 @@ class _CommentComposerState extends State<CommentComposer> {
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
-                          'Replying to ${widget.parentComment?.user?.name ?? 'user'}',
+                          'Replying to ${widget.parentComment?.user?.displayName ?? 'user'}',
                           style: theme.textTheme.bodySmall?.copyWith(
                             color: colorScheme.onSurfaceVariant,
                           ),

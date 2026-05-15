@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
 import 'package:tripthread/providers/auth_provider.dart';
@@ -6,6 +7,7 @@ import 'package:tripthread/providers/trip_provider.dart';
 import 'package:tripthread/providers/feed_provider.dart';
 import 'package:tripthread/providers/user_provider.dart';
 import 'package:tripthread/providers/engagement_provider.dart';
+import 'package:tripthread/services/trip_service.dart';
 import 'package:tripthread/models/trip.dart';
 import 'package:tripthread/screens/discover/discover_tab.dart';
 import 'package:tripthread/utils/cloudinary_utils.dart';
@@ -94,44 +96,80 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      body: Stack(
-        children: [
-          _screens[_currentIndex],
-          // Floating navigation button for ongoing trips
-          const FloatingTripNavButton(),
-        ],
-      ),
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: _currentIndex,
-        onTap: (index) {
-          setState(() {
-            _currentIndex = index;
-          });
-        },
-        type: BottomNavigationBarType.fixed,
-        items: const [
-          BottomNavigationBarItem(
-            icon: Icon(Icons.home_outlined),
-            activeIcon: Icon(Icons.home),
-            label: 'Feed',
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) async {
+        if (didPop) return;
+        if (_currentIndex != 0) {
+          setState(() => _currentIndex = 0);
+          return;
+        }
+        final exit = await showDialog<bool>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: const Text('Exit TripThread?'),
+            content: const Text('Close the app?'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('Cancel'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, true),
+                child: const Text('Exit'),
+              ),
+            ],
           ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.map_outlined),
-            activeIcon: Icon(Icons.map),
-            label: 'Trips',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.explore_outlined),
-            activeIcon: Icon(Icons.explore),
-            label: 'Discover',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.person_outlined),
-            activeIcon: Icon(Icons.person),
-            label: 'Profile',
-          ),
-        ],
+        );
+        if (exit == true && context.mounted) {
+          SystemNavigator.pop();
+        }
+      },
+      child: Scaffold(
+        body: Stack(
+          children: [
+            _screens[_currentIndex],
+            // Floating navigation button for ongoing trips
+            const FloatingTripNavButton(),
+          ],
+        ),
+        bottomNavigationBar: BottomNavigationBar(
+          currentIndex: _currentIndex,
+          onTap: (index) {
+            setState(() {
+              _currentIndex = index;
+            });
+            if (index == 2) {
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                if (!context.mounted) return;
+                context.read<FeedProvider>().loadDiscoverTrips(refresh: true);
+              });
+            }
+          },
+          type: BottomNavigationBarType.fixed,
+          items: const [
+            BottomNavigationBarItem(
+              icon: Icon(Icons.home_outlined),
+              activeIcon: Icon(Icons.home),
+              label: 'Feed',
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.map_outlined),
+              activeIcon: Icon(Icons.map),
+              label: 'Trips',
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.explore_outlined),
+              activeIcon: Icon(Icons.explore),
+              label: 'Discover',
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.person_outlined),
+              activeIcon: Icon(Icons.person),
+              label: 'Profile',
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -179,6 +217,48 @@ class _HomeFeedScreenState extends State<HomeFeedScreen> {
     });
   }
 
+  Future<void> _confirmDeleteFinalPost(
+    BuildContext context,
+    TripFinalPost post,
+  ) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete post?'),
+        content: const Text(
+          'This removes the final post from feeds and deletes its likes and comments. You can create a new final post from the trip later.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text(
+              'Delete',
+              style: TextStyle(color: Theme.of(ctx).colorScheme.error),
+            ),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !context.mounted) return;
+    final tripService = context.read<TripService>();
+    final res = await tripService.deleteFinalPost(post.tripId);
+    if (!context.mounted) return;
+    if (res.success) {
+      context.read<FeedProvider>().removeHomeFeedPostById(post.id);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Post deleted')),
+      );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(res.error ?? 'Could not delete post')),
+      );
+    }
+  }
+
   void _onScroll() {
     if (_scrollController.position.pixels >=
         _scrollController.position.maxScrollExtent - 200) {
@@ -204,9 +284,15 @@ class _HomeFeedScreenState extends State<HomeFeedScreen> {
         title: const Text('TripThread'),
         actions: [
           IconButton(
-            icon: const Icon(Icons.search),
+            icon: const Icon(Icons.chat_bubble_outline),
+            tooltip: 'Messages',
             onPressed: () {
-              // TODO: Implement search
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Direct messages are coming soon.'),
+                  duration: Duration(seconds: 2),
+                ),
+              );
             },
           ),
           // Combined Notification Icon
@@ -355,9 +441,15 @@ class _HomeFeedScreenState extends State<HomeFeedScreen> {
   }
 
   Widget _buildFinalPostCard(BuildContext context, TripFinalPost post) {
+    final authUserId = context.read<AuthProvider>().currentUser?.id;
+    final tripOwnerId = post.trip?.userId ?? post.trip?.user?.id;
+    final isOwner =
+        authUserId != null && tripOwnerId != null && authUserId == tripOwnerId;
+
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       elevation: 2,
+      clipBehavior: Clip.antiAlias,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -411,164 +503,185 @@ class _HomeFeedScreenState extends State<HomeFeedScreen> {
                     ],
                   ),
                 ),
-                IconButton(
-                  icon: const Icon(Icons.more_vert),
-                  onPressed: () {
-                    // TODO: Implement post options
-                  },
-                ),
+                if (isOwner)
+                  PopupMenuButton<String>(
+                    icon: const Icon(Icons.more_vert),
+                    onSelected: (value) async {
+                      if (!context.mounted) return;
+                      if (value == 'edit') {
+                        context.push('/trip/${post.tripId}/final-post');
+                      } else if (value == 'delete') {
+                        await _confirmDeleteFinalPost(context, post);
+                      }
+                    },
+                    itemBuilder: (ctx) => const [
+                      PopupMenuItem(value: 'edit', child: Text('Edit')),
+                      PopupMenuItem(value: 'delete', child: Text('Delete')),
+                    ],
+                  )
+                else
+                  const SizedBox(width: 48),
               ],
             ),
           ),
-
-          // Media carousel
-          if (post.curatedMedia.isNotEmpty)
-            SizedBox(
-              height: 300,
-              child: PageView.builder(
-                itemCount: post.curatedMedia.length,
-                itemBuilder: (context, index) {
-                  return Container(
-                    margin: const EdgeInsets.symmetric(horizontal: 4),
-                    decoration: BoxDecoration(
-                      color: Theme.of(context).colorScheme.onSurface.withValues(
-                        alpha: Theme.of(context).brightness == Brightness.dark
-                            ? 0.06
-                            : 0.03,
-                      ),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(12),
-                      child: Image.network(
-                        buildOptimizedImageUrl(
-                          post.curatedMedia[index],
-                          width: 1600,
-                        ),
-                        fit: BoxFit.cover,
-                        errorBuilder: (context, error, stackTrace) {
-                          return Container(
-                            color: Theme.of(context).colorScheme.onSurface
+          InkWell(
+            onTap: () {
+              context.push(
+                '/trip/${post.tripId}',
+                extra: {'from': '/home'},
+              );
+            },
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (post.curatedMedia.isNotEmpty)
+                  SizedBox(
+                    height: 300,
+                    child: PageView.builder(
+                      itemCount: post.curatedMedia.length,
+                      itemBuilder: (context, index) {
+                        return Container(
+                          margin: const EdgeInsets.symmetric(horizontal: 4),
+                          decoration: BoxDecoration(
+                            color: Theme.of(context)
+                                .colorScheme
+                                .onSurface
                                 .withValues(
-                                  alpha:
-                                      Theme.of(context).brightness ==
+                                  alpha: Theme.of(context).brightness ==
                                           Brightness.dark
                                       ? 0.06
                                       : 0.03,
                                 ),
-                            child: const Center(
-                              child: Icon(
-                                Icons.image_not_supported,
-                                size: 48,
-                                color: Colors.grey,
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(12),
+                            child: Image.network(
+                              buildOptimizedImageUrl(
+                                post.curatedMedia[index],
+                                width: 1600,
                               ),
+                              fit: BoxFit.cover,
+                              errorBuilder: (context, error, stackTrace) {
+                                return Container(
+                                  color: Theme.of(context)
+                                      .colorScheme
+                                      .onSurface
+                                      .withValues(
+                                        alpha: Theme.of(context).brightness ==
+                                                Brightness.dark
+                                            ? 0.06
+                                            : 0.03,
+                                      ),
+                                  child: const Center(
+                                    child: Icon(
+                                      Icons.image_not_supported,
+                                      size: 48,
+                                      color: Colors.grey,
+                                    ),
+                                  ),
+                                );
+                              },
                             ),
-                          );
-                        },
-                      ),
-                    ),
-                  );
-                },
-              ),
-            ),
-
-          // Post content
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Summary text
-                Text(
-                  post.summaryText,
-                  style: Theme.of(context).textTheme.bodyLarge,
-                ),
-
-                // Caption
-                if (post.caption != null) ...[
-                  const SizedBox(height: 8),
-                  Text(
-                    post.caption!,
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: Theme.of(
-                        context,
-                      ).colorScheme.onSurfaceVariant.withValues(alpha: 0.9),
-                    ),
-                  ),
-                ],
-
-                const SizedBox(height: 12),
-
-                // Engagement action bar
-                Row(
-                  children: [
-                    Expanded(
-                      child: Align(
-                        alignment: Alignment.centerLeft,
-                        child: EngagementActionBar(
-                          entityType: 'TRIP_FINAL_POST',
-                          entityId: post.id,
-                          likeCount: post.likeCount,
-                          commentCount: post.commentCount,
-                          shareCount: post.shareCount,
-                          hasLiked: post.hasLiked,
-                          onCommentTap: () {
-                            showModalBottomSheet(
-                              context: context,
-                              isScrollControlled: true,
-                              backgroundColor: Colors.transparent,
-                              builder: (context) => CommentBottomSheet(
-                                entityType: 'TRIP_FINAL_POST',
-                                entityId: post.id,
-                              ),
-                            );
-                          },
-                          onShareTap: () {
-                            showModalBottomSheet(
-                              context: context,
-                              backgroundColor: Colors.transparent,
-                              builder: (context) => ShareBottomSheet(
-                                entityType: 'TRIP_FINAL_POST',
-                                entityId: post.id,
-                              ),
-                            );
-                          },
-                          onLikeChanged: () {
-                            // Update the post in FeedProvider with new like count
-                            final engagementProvider = context
-                                .read<EngagementProvider>();
-                            final newLikeCount = engagementProvider
-                                .getLikeCount(post.id);
-                            final newHasLiked = engagementProvider.isLiked(
-                              post.id,
-                            );
-
-                            // Update the post in the feed
-                            final feedProvider = context.read<FeedProvider>();
-                            final updatedPost = post.copyWith(
-                              likeCount: newLikeCount,
-                              hasLiked: newHasLiked,
-                            );
-                            final index = feedProvider.homeFeedPosts.indexWhere(
-                              (p) => p.id == post.id,
-                            );
-                            if (index >= 0) {
-                              feedProvider.updatePost(index, updatedPost);
-                            }
-                          },
-                        ),
-                      ),
-                    ),
-                    TextButton(
-                      onPressed: () {
-                        context.push(
-                          '/trip/${post.tripId}',
-                          extra: {'from': '/home'},
+                          ),
                         );
                       },
-                      child: const Text('View Trip'),
                     ),
-                  ],
+                  ),
+                Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        post.summaryText,
+                        style: Theme.of(context).textTheme.bodyLarge,
+                      ),
+                      if (post.caption != null) ...[
+                        const SizedBox(height: 8),
+                        Text(
+                          post.caption!,
+                          style: Theme.of(context)
+                              .textTheme
+                              .bodyMedium
+                              ?.copyWith(
+                                color: Theme.of(context)
+                                    .colorScheme
+                                    .onSurfaceVariant
+                                    .withValues(alpha: 0.9),
+                              ),
+                        ),
+                      ],
+                      const SizedBox(height: 12),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Align(
+                              alignment: Alignment.centerLeft,
+                              child: EngagementActionBar(
+                                entityType: 'TRIP_FINAL_POST',
+                                entityId: post.id,
+                                likeCount: post.likeCount,
+                                commentCount: post.commentCount,
+                                shareCount: post.shareCount,
+                                hasLiked: post.hasLiked,
+                                onCommentTap: () {
+                                  showModalBottomSheet(
+                                    context: context,
+                                    isScrollControlled: true,
+                                    backgroundColor: Colors.transparent,
+                                    builder: (context) => CommentBottomSheet(
+                                      entityType: 'TRIP_FINAL_POST',
+                                      entityId: post.id,
+                                    ),
+                                  );
+                                },
+                                onShareTap: () {
+                                  showModalBottomSheet(
+                                    context: context,
+                                    backgroundColor: Colors.transparent,
+                                    builder: (context) => ShareBottomSheet(
+                                      entityType: 'TRIP_FINAL_POST',
+                                      entityId: post.id,
+                                    ),
+                                  );
+                                },
+                                onLikeChanged: () {
+                                  final engagementProvider = context
+                                      .read<EngagementProvider>();
+                                  final newLikeCount = engagementProvider
+                                      .getLikeCount(post.id);
+                                  final newHasLiked =
+                                      engagementProvider.isLiked(post.id);
+
+                                  final feedProvider =
+                                      context.read<FeedProvider>();
+                                  final updatedPost = post.copyWith(
+                                    likeCount: newLikeCount,
+                                    hasLiked: newHasLiked,
+                                  );
+                                  final index = feedProvider.homeFeedPosts
+                                      .indexWhere((p) => p.id == post.id);
+                                  if (index >= 0) {
+                                    feedProvider.updatePost(index, updatedPost);
+                                  }
+                                },
+                              ),
+                            ),
+                          ),
+                          TextButton(
+                            onPressed: () {
+                              context.push(
+                                '/trip/${post.tripId}',
+                                extra: {'from': '/home'},
+                              );
+                            },
+                            child: const Text('View Trip'),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
                 ),
               ],
             ),
@@ -1415,7 +1528,7 @@ class ProfileTab extends StatelessWidget {
                     userProvider.getDetailedFollowStatus(currentUser.id);
                   }
                   if (context.mounted) {
-                    context.go('/follow-requests');
+                    context.push('/follow-requests');
                   }
                 },
               ),

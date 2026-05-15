@@ -69,6 +69,31 @@ export async function POST(
       );
     }
 
+    const ownerProfile = await prisma.user.findUnique({
+      where: { id: trip.userId },
+      select: { isPrivate: true },
+    });
+    if (ownerProfile?.isPrivate) {
+      const follow = await prisma.follow.findUnique({
+        where: {
+          followerId_followeeId: {
+            followerId: validatedData.userId,
+            followeeId: trip.userId,
+          },
+        },
+      });
+      if (!follow) {
+        return NextResponse.json<ApiResponse>(
+          {
+            success: false,
+            error:
+              "User must follow the private trip owner before they can be added as a participant.",
+          },
+          { status: 403 }
+        );
+      }
+    }
+
     // Check if user to be added exists
     const userToAdd = await prisma.user.findUnique({
       where: { id: validatedData.userId },

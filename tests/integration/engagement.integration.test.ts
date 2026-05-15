@@ -920,6 +920,31 @@ describe("Engagement API - Shares", () => {
       const updatedPost = await prisma.tripFinalPost.findUnique({
         where: { id: finalPost.id },
       });
+      expect(updatedPost?.shareCount).toBe(0);
+    });
+
+    it("should increment shareCount only for IN_APP_DM shareSource", async () => {
+      const req = createAuthenticatedRequest(
+        "http://localhost/api/shares",
+        "POST",
+        {
+          entityType: "TRIP_FINAL_POST",
+          entityId: finalPost.id,
+          shareType: "DEEP_LINK",
+          shareSource: "IN_APP_DM",
+        },
+        token1
+      );
+
+      const response = await createShareRoute(req);
+      const data = await getResponseData(response);
+
+      expect(response.status).toBe(200);
+      expect(data.success).toBe(true);
+
+      const updatedPost = await prisma.tripFinalPost.findUnique({
+        where: { id: finalPost.id },
+      });
       expect(updatedPost?.shareCount).toBe(1);
     });
 

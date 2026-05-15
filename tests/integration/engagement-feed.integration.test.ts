@@ -6,6 +6,7 @@ import { EntityType, TripStatus } from "@prisma/client";
 
 import { GET as getFeedRoute } from "../../src/app/api/feed/home/route";
 import { GET as getTripEntriesRoute } from "../../src/app/api/trips/[id]/entries/route";
+import { GET as getTripEntryContextRoute } from "../../src/app/api/trips/[id]/entries/[entryId]/context/route";
 
 function createAuthenticatedRequest(
   url: string,
@@ -295,9 +296,11 @@ describe("Engagement API - Trip Entries Integration", () => {
 
       expect(response.status).toBe(200);
       expect(data.success).toBe(true);
-      expect(data.data.length).toBe(2);
+      expect(data.data.items.length).toBe(2);
+      expect(typeof data.data.hasMoreOlder).toBe("boolean");
+      expect(data.data.nextOlderCursor === null || typeof data.data.nextOlderCursor === "string").toBe(true);
 
-      const entry = data.data.find((e: any) => e.id === entry1.id);
+      const entry = data.data.items.find((e: any) => e.id === entry1.id);
       expect(entry).toBeDefined();
       expect(entry.likeCount).toBe(2);
       expect(entry.commentCount).toBe(2);
@@ -318,7 +321,7 @@ describe("Engagement API - Trip Entries Integration", () => {
       const data = await getResponseData(response);
 
       expect(response.status).toBe(200);
-      const entry = data.data.find((e: any) => e.id === entry1.id);
+      const entry = data.data.items.find((e: any) => e.id === entry1.id);
       expect(entry.hasLiked).toBe(true);
     });
 
@@ -339,10 +342,64 @@ describe("Engagement API - Trip Entries Integration", () => {
       const data = await getResponseData(response);
 
       expect(response.status).toBe(200);
-      const entry = data.data.find((e: any) => e.id === entry2.id);
+      const entry = data.data.items.find((e: any) => e.id === entry2.id);
       if (entry) {
         expect(entry.hasLiked).toBe(false);
       }
+    });
+  });
+
+  describe("GET /api/trips/[id]/entries/[entryId]/context", () => {
+    it("should return a context window including the target entry", async () => {
+      const req = createAuthenticatedRequest(
+        `http://localhost/api/trips/${trip.id}/entries/${entry1.id}/context?contextSize=5`,
+        "GET",
+        undefined,
+        token1
+      );
+
+      const response = await getTripEntryContextRoute(req, {
+        params: Promise.resolve({ id: trip.id, entryId: entry1.id }),
+      });
+      const data = await getResponseData(response);
+
+      expect(response.status).toBe(200);
+      expect(data.success).toBe(true);
+      expect(Array.isArray(data.data.items)).toBe(true);
+      expect(data.data.items.some((e: any) => e.id === entry1.id)).toBe(true);
+      expect(typeof data.data.hasMoreOlder).toBe("boolean");
+      expect(
+        data.data.nextOlderCursor === null ||
+          typeof data.data.nextOlderCursor === "string"
+      ).toBe(true);
+    });
+
+    it("should return 404 when entry does not belong to trip", async () => {
+      const otherTrip = await createTrip({
+        userId: user1.id,
+        status: TripStatus.ONGOING,
+      });
+      const otherEntry = await prisma.tripThreadEntry.create({
+        data: {
+          tripId: otherTrip.id,
+          authorId: user1.id,
+          type: "TEXT",
+          contentText: "Other trip entry",
+        },
+      });
+
+      const req = createAuthenticatedRequest(
+        `http://localhost/api/trips/${trip.id}/entries/${otherEntry.id}/context`,
+        "GET",
+        undefined,
+        token1
+      );
+
+      const response = await getTripEntryContextRoute(req, {
+        params: Promise.resolve({ id: trip.id, entryId: otherEntry.id }),
+      });
+
+      expect(response.status).toBe(404);
     });
   });
 });

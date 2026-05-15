@@ -280,14 +280,6 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
                 ),
               ),
               actions: [
-                if (_canEditCover)
-                  IconButton(
-                    icon: const Icon(Icons.photo_camera_back_outlined),
-                    tooltip: _trip?.coverMedia == null
-                        ? 'Add Cover Photo'
-                        : 'Change Cover Photo',
-                    onPressed: _isUpdatingCover ? null : _showCoverOptions,
-                  ),
                 if (_trip != null &&
                     _trip!.status == TripStatus.ongoing &&
                     _isOwnerOrParticipant())
@@ -300,6 +292,14 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
                         extra: {'from': '/trip/${widget.tripId}'},
                       );
                     },
+                  ),
+                if (_canEditCover)
+                  IconButton(
+                    icon: const Icon(Icons.photo_camera_back_outlined),
+                    tooltip: _trip?.coverMedia == null
+                        ? 'Add Cover Photo'
+                        : 'Change Cover Photo',
+                    onPressed: _isUpdatingCover ? null : _showCoverOptions,
                   ),
               ],
             ),
@@ -429,10 +429,27 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
     required String label,
     required VoidCallback onTap,
   }) {
-    return ListTile(
-      leading: Icon(icon),
-      title: Text(label),
-      onTap: onTap,
+    final theme = Theme.of(context);
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+          child: Row(
+            children: [
+              Icon(icon, size: 24, color: theme.colorScheme.onSurface),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Text(
+                  label,
+                  style: theme.textTheme.titleMedium,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 
@@ -618,6 +635,72 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
     return _isOwner() || _isParticipant();
   }
 
+  Future<void> _leaveTripAsParticipant() async {
+    final tripProvider = context.read<TripProvider>();
+    final choice = await showDialog<_TripDetailLeaveChoice>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Leave trip?'),
+        content: const Text(
+          'You will be removed as a participant.\n\n'
+          'Keep your thread entries visible to others on this trip, '
+          'or remove all entries you posted? '
+          '(Removing entries is only allowed while the trip is ongoing.)',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, _TripDetailLeaveChoice.cancel),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () =>
+                Navigator.pop(ctx, _TripDetailLeaveChoice.keepEntries),
+            child: const Text('Keep my entries'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: Theme.of(ctx).colorScheme.error,
+            ),
+            onPressed: () =>
+                Navigator.pop(ctx, _TripDetailLeaveChoice.removeEntries),
+            child: const Text('Remove my entries'),
+          ),
+        ],
+      ),
+    );
+
+    if (choice == null || choice == _TripDetailLeaveChoice.cancel) {
+      return;
+    }
+
+    final removeMyData = choice == _TripDetailLeaveChoice.removeEntries;
+    final ok = await tripProvider.leaveTrip(
+      widget.tripId,
+      removeMyData: removeMyData,
+    );
+
+    if (!mounted) return;
+    final err = tripProvider.error;
+    if (ok) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            removeMyData
+                ? 'You left the trip; your entries were removed.'
+                : 'You left the trip.',
+          ),
+        ),
+      );
+      context.go('/trips');
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(err ?? 'Could not leave trip'),
+        ),
+      );
+    }
+  }
+
   Widget _buildTripActions() {
     final isOwner = _isOwner();
 
@@ -651,6 +734,33 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
               ),
             ),
             const SizedBox(height: 8),
+            if (_trip!.status == TripStatus.upcoming &&
+                _isOwnerOrParticipant()) ...[
+              ElevatedButton.icon(
+                onPressed: () {
+                  context.push(
+                    '/trip/${widget.tripId}/participants',
+                    extra: {'from': '/trip/${widget.tripId}'},
+                  );
+                },
+                icon: const Icon(Icons.people),
+                label: Text(
+                  isOwner ? 'Manage Participants' : 'View Participants',
+                ),
+              ),
+              if (!isOwner && _isParticipant()) ...[
+                const SizedBox(height: 8),
+                OutlinedButton.icon(
+                  onPressed: _leaveTripAsParticipant,
+                  icon: const Icon(Icons.logout),
+                  label: const Text('Leave trip'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: Theme.of(context).colorScheme.error,
+                  ),
+                ),
+              ],
+              const SizedBox(height: 8),
+            ],
             if (_trip!.status == TripStatus.ongoing) ...[
               ElevatedButton.icon(
                 onPressed: () {
@@ -662,19 +772,31 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
                 icon: const Icon(Icons.add),
                 label: const Text('Add Entry'),
               ),
-              // Owner-only actions
-              if (isOwner) ...[
-                const SizedBox(height: 8),
-                ElevatedButton.icon(
-                  onPressed: () {
-                    context.push(
-                      '/trip/${widget.tripId}/participants',
-                      extra: {'from': '/trip/${widget.tripId}'},
-                    );
-                  },
-                  icon: const Icon(Icons.people),
-                  label: const Text('Manage Participants'),
+              const SizedBox(height: 8),
+              ElevatedButton.icon(
+                onPressed: () {
+                  context.push(
+                    '/trip/${widget.tripId}/participants',
+                    extra: {'from': '/trip/${widget.tripId}'},
+                  );
+                },
+                icon: const Icon(Icons.people),
+                label: Text(
+                  isOwner ? 'Manage Participants' : 'View Participants',
                 ),
+              ),
+              if (!isOwner && _isParticipant()) ...[
+                const SizedBox(height: 8),
+                OutlinedButton.icon(
+                  onPressed: _leaveTripAsParticipant,
+                  icon: const Icon(Icons.logout),
+                  label: const Text('Leave trip'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: Theme.of(context).colorScheme.error,
+                  ),
+                ),
+              ],
+              if (isOwner) ...[
                 const SizedBox(height: 8),
                 Consumer<TripProvider>(
                   builder: (context, tripProvider, child) {
@@ -689,15 +811,53 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
                   },
                 ),
               ],
-            ] else if (_trip!.status == TripStatus.ended &&
-                _trip!.finalPost != null) ...[
-              ElevatedButton.icon(
-                onPressed: () {
-                  context.go('/trip/${widget.tripId}/final-post');
-                },
-                icon: const Icon(Icons.auto_awesome),
-                label: const Text('View Final Post'),
-              ),
+            ] else if (_trip!.status == TripStatus.ended) ...[
+              if (_isOwnerOrParticipant()) ...[
+                ElevatedButton.icon(
+                  onPressed: () {
+                    context.push(
+                      '/trip/${widget.tripId}/participants',
+                      extra: {'from': '/trip/${widget.tripId}'},
+                    );
+                  },
+                  icon: const Icon(Icons.people),
+                  label: Text(
+                    isOwner ? 'Manage Participants' : 'View Participants',
+                  ),
+                ),
+                if (!isOwner && _isParticipant()) ...[
+                  const SizedBox(height: 8),
+                  OutlinedButton.icon(
+                    onPressed: _leaveTripAsParticipant,
+                    icon: const Icon(Icons.logout),
+                    label: const Text('Leave trip'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Theme.of(context).colorScheme.error,
+                    ),
+                  ),
+                ],
+                const SizedBox(height: 8),
+              ],
+              if (isOwner)
+                ElevatedButton.icon(
+                  onPressed: () {
+                    context.go('/trip/${widget.tripId}/final-post');
+                  },
+                  icon: const Icon(Icons.auto_awesome),
+                  label: Text(
+                    _trip!.finalPost != null
+                        ? 'View Final Post'
+                        : 'Create Final Post',
+                  ),
+                )
+              else if (_trip!.finalPost != null && _isOwnerOrParticipant())
+                ElevatedButton.icon(
+                  onPressed: () {
+                    context.go('/trip/${widget.tripId}/final-post');
+                  },
+                  icon: const Icon(Icons.auto_awesome),
+                  label: const Text('View Final Post'),
+                ),
             ],
           ],
         ),
@@ -1128,3 +1288,5 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
     }
   }
 }
+
+enum _TripDetailLeaveChoice { cancel, keepEntries, removeEntries }
