@@ -3334,7 +3334,7 @@ class _TripThreadScreenState extends State<TripThreadScreen>
     }
   }
 }
-
+//Edit Thread Entry Dialog
 class _EditThreadEntryDialog extends StatefulWidget {
   final String initialText;
 
