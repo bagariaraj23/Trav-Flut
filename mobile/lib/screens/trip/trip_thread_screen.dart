@@ -1730,55 +1730,17 @@ class _TripThreadScreenState extends State<TripThreadScreen>
   }
 
   Future<void> _showEditTextEntryDialog(TripThreadEntry entry) async {
-    final controller = TextEditingController(text: entry.contentText ?? '');
-    final ok = await showDialog<bool>(
+    FocusManager.instance.primaryFocus?.unfocus();
+    await Future<void>.delayed(const Duration(milliseconds: 50));
+    if (!mounted) return;
+
+    final text = await showDialog<String>(
       context: context,
-      builder: (dialogCtx) {
-        final maxH = MediaQuery.sizeOf(dialogCtx).height * 0.45;
-        return AlertDialog(
-          title: const Text('Edit entry'),
-          content: SizedBox(
-            width: double.maxFinite,
-            child: ConstrainedBox(
-              constraints: BoxConstraints(maxHeight: maxH),
-              child: SingleChildScrollView(
-                child: TextField(
-                  controller: controller,
-                  minLines: 3,
-                  maxLines: 8,
-                  maxLength: 1000,
-                  decoration: const InputDecoration(
-                    hintText: 'Update your message',
-                  ),
-                ),
-              ),
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(dialogCtx, false),
-              child: const Text('Cancel'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.pop(dialogCtx, true),
-              child: const Text('Save'),
-            ),
-          ],
-        );
-      },
+      builder: (dialogCtx) => _EditThreadEntryDialog(
+        initialText: entry.contentText ?? '',
+      ),
     );
-    if (!mounted || ok != true) {
-      controller.dispose();
-      return;
-    }
-    final text = controller.text.trim();
-    controller.dispose();
-    if (text.isEmpty) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Text cannot be empty')));
-      return;
-    }
+    if (!mounted || text == null) return;
 
     final tripProvider = context.read<TripProvider>();
     final success = await tripProvider.updateThreadEntryText(
@@ -3370,6 +3332,70 @@ class _TripThreadScreenState extends State<TripThreadScreen>
           .padLeft(2, '0');
       return '$minutes:$seconds';
     }
+  }
+}
+
+class _EditThreadEntryDialog extends StatefulWidget {
+  final String initialText;
+
+  const _EditThreadEntryDialog({required this.initialText});
+
+  @override
+  State<_EditThreadEntryDialog> createState() => _EditThreadEntryDialogState();
+}
+
+class _EditThreadEntryDialogState extends State<_EditThreadEntryDialog> {
+  late final TextEditingController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController(text: widget.initialText);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _save() {
+    final text = _controller.text.trim();
+    if (text.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Text cannot be empty')),
+      );
+      return;
+    }
+    Navigator.of(context).pop(text);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      scrollable: true,
+      title: const Text('Edit entry'),
+      content: TextField(
+        controller: _controller,
+        autofocus: true,
+        minLines: 3,
+        maxLines: 8,
+        maxLength: 1000,
+        decoration: const InputDecoration(
+          hintText: 'Update your message',
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: _save,
+          child: const Text('Save'),
+        ),
+      ],
+    );
   }
 }
 
