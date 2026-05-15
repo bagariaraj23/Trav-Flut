@@ -91,7 +91,11 @@ function detectMimeType(buffer: Buffer): string | null {
   return null;
 }
 
-export type MediaUploadUsage = "trip_cover" | "thread_entry" | "general" | "chat";
+export type MediaUploadUsage =
+  | "trip_cover"
+  | "thread_entry"
+  | "general"
+  | "chat";
 
 interface UploadSignatureArgs {
   filename: string;

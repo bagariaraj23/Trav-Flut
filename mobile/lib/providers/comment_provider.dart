@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:tripthread/models/comment.dart';
+import 'package:tripthread/models/comment_user.dart';
 import 'package:tripthread/services/comment_service.dart';
 import 'package:tripthread/utils/error_handler.dart';
 import 'package:tripthread/utils/error_handler.dart' as errors;
@@ -95,8 +96,10 @@ class CommentProvider extends ChangeNotifier {
     String entityType,
     String entityId,
     String text,
-    String? parentId,
-  ) async {
+    String? parentId, {
+    String? currentUserId,
+    CommentUser? currentUserPreview,
+  }) async {
     final entityKey = _getEntityKey(entityType, entityId);
 
     if (_isCreating[entityKey] == true) {
@@ -109,13 +112,14 @@ class CommentProvider extends ChangeNotifier {
 
     final tempComment = Comment(
       id: 'temp-${DateTime.now().millisecondsSinceEpoch}',
-      userId: '',
+      userId: currentUserId ?? '',
       entityType: entityType,
       entityId: entityId,
       contentText: text,
       parentCommentId: parentId,
       createdAt: DateTime.now(),
       updatedAt: DateTime.now(),
+      user: currentUserPreview,
     );
 
     if (parentId == null) {

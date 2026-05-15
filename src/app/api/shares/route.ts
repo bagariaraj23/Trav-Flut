@@ -36,7 +36,8 @@ export async function POST(request: NextRequest) {
             validatedData.entityType,
             validatedData.entityId,
             validatedData.shareType,
-            validatedData.expiresAt
+            validatedData.expiresAt,
+            validatedData.shareSource
           );
 
           return NextResponse.json<ApiResponse>({

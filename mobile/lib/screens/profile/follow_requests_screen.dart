@@ -102,7 +102,7 @@ class _FollowRequestsScreenState extends State<FollowRequestsScreen> {
     return PopScope(
       canPop: true,
       onPopInvokedWithResult: (didPop, result) {
-        if (!didPop) {
+        if (!didPop && context.mounted) {
           if (context.canPop()) {
             context.pop();
           } else {
@@ -113,7 +113,8 @@ class _FollowRequestsScreenState extends State<FollowRequestsScreen> {
       child: Scaffold(
         appBar: AppBar(
           title: const Text('Follow Requests'),
-          leading: BackButton(
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back),
             onPressed: () {
               if (context.canPop()) {
                 context.pop();
@@ -323,7 +324,8 @@ class _FollowRequestsScreenState extends State<FollowRequestsScreen> {
                         foregroundColor: Colors.red,
                         side: BorderSide(color: Colors.red[300]!),
                       ),
-                      child: userProvider.isProcessingRequestId == request.id
+                      child: userProvider.isProcessingRequestId == request.id &&
+                              userProvider.followRequestActionIsAccept == false
                           ? const SizedBox(
                               height: 16,
                               width: 16,
@@ -342,7 +344,8 @@ class _FollowRequestsScreenState extends State<FollowRequestsScreen> {
                                     request.id,
                                     follower.name ?? 'User',
                                   ),
-                      child: userProvider.isProcessingRequestId == request.id
+                      child: userProvider.isProcessingRequestId == request.id &&
+                              userProvider.followRequestActionIsAccept == true
                           ? const SizedBox(
                               height: 16,
                               width: 16,

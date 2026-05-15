@@ -125,16 +125,13 @@ class _CommentsScreenState extends State<CommentsScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Comments'),
-      ),
+      appBar: AppBar(title: const Text('Comments')),
       body: Column(
         children: [
           Expanded(
             child: Consumer<CommentProvider>(
               builder: (context, provider, child) {
-                final entityKey =
-                    '${widget.entityType}:${widget.entityId}';
+                final entityKey = '${widget.entityType}:${widget.entityId}';
                 final comments = provider.getCommentsList(entityKey);
                 final isLoading = provider.isLoading(entityKey);
                 final error = provider.error;
@@ -201,7 +198,8 @@ class _CommentsScreenState extends State<CommentsScreen> {
                       final comment = comments[index];
                       final isExpanded = _expandedReplies[comment.id] ?? false;
                       final replies = provider.getRepliesList(comment.id);
-                      final hasReplies = comment.replyCount != null && comment.replyCount! > 0;
+                      final hasReplies =
+                          comment.replyCount != null && comment.replyCount! > 0;
 
                       return Column(
                         children: [
@@ -218,9 +216,12 @@ class _CommentsScreenState extends State<CommentsScreen> {
                               (reply) => CommentListItem(
                                 comment: reply,
                                 isReply: true,
+                                onReplyTap: () => _startReply(reply.id),
                               ),
                             ),
-                          if (isExpanded && replies.isEmpty && provider.isLoadingReplies(comment.id))
+                          if (isExpanded &&
+                              replies.isEmpty &&
+                              provider.isLoadingReplies(comment.id))
                             const Padding(
                               padding: EdgeInsets.only(left: 48, bottom: 8),
                               child: CircularProgressIndicator(),
@@ -251,4 +252,3 @@ class _CommentsScreenState extends State<CommentsScreen> {
     );
   }
 }
-

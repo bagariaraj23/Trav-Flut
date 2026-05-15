@@ -139,6 +139,12 @@ class AuthErrorMessages {
       'between',
       'invalid format',
       'invalid email',
+      'username',
+      'password',
+      'underscore',
+      'letters',
+      'only contain',
+      'characters',
     ];
     return keepPatterns.any((p) => lower.contains(p));
   }

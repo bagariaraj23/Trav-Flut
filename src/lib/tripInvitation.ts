@@ -41,6 +41,27 @@ export class TripInvitationService {
           throw new ConflictError("Cannot invite yourself to a trip");
         }
 
+        // 3b. Private trip owner: invitee must already follow the owner
+        const ownerProfile = await tx.user.findUnique({
+          where: { id: trip.userId },
+          select: { isPrivate: true },
+        });
+        if (ownerProfile?.isPrivate) {
+          const follow = await tx.follow.findUnique({
+            where: {
+              followerId_followeeId: {
+                followerId: receiverId,
+                followeeId: trip.userId,
+              },
+            },
+          });
+          if (!follow) {
+            throw new AuthorizationError(
+              "This user must follow you before you can invite them to a private trip."
+            );
+          }
+        }
+
         // 4. Check if receiver is already a participant
         const existingParticipant = await tx.tripParticipant.findUnique({
           where: { tripId_userId: { tripId, userId: receiverId } },

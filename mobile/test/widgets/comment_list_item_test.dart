@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 import 'package:tripthread/widgets/engagement/comment_list_item.dart';
+import 'package:tripthread/widgets/mention_text.dart';
 import 'package:tripthread/models/comment.dart';
 import 'package:tripthread/models/comment_user.dart';
 import 'package:tripthread/models/user.dart';
@@ -214,17 +215,21 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('User One'), findsOneWidget);
-      expect(find.text('Test comment'), findsOneWidget);
+      final mention = find.byType(MentionText);
+      expect(mention, findsOneWidget);
+      expect(tester.widget<MentionText>(mention).text, 'Test comment');
       expect(find.byType(CircleAvatar), findsOneWidget);
     });
 
-    testWidgets('should show reply button for top-level comments', (
+    testWidgets('should show reply button when onReplyTap is set', (
       tester,
     ) async {
       final comment = createTestComment(parentCommentId: null);
 
       await tester.pumpWidget(
-        createTestWidget(CommentListItem(comment: comment)),
+        createTestWidget(
+          CommentListItem(comment: comment, onReplyTap: () {}),
+        ),
       );
 
       await tester.pumpAndSettle();
@@ -267,7 +272,7 @@ void main() {
       },
     );
 
-    testWidgets('should hide edit button after 15 minutes but keep delete', (
+    testWidgets('should hide edit and delete after 15 minutes', (
       tester,
     ) async {
       // Create an old comment (older than 15 minutes)
@@ -282,10 +287,8 @@ void main() {
 
       await tester.pumpAndSettle();
 
-      // Should NOT show Edit button (past 15-minute window)
       expect(find.text('Edit'), findsNothing);
-      // Should still show Delete button
-      expect(find.text('Delete'), findsOneWidget);
+      expect(find.text('Delete'), findsNothing);
     });
 
     testWidgets('should not show edit/delete for other users comments', (
@@ -312,12 +315,21 @@ void main() {
 
       await tester.pumpAndSettle();
 
-      expect(find.textContaining('...'), findsOneWidget);
+      final mention = find.byType(MentionText);
+      expect(mention, findsOneWidget);
+      final truncated = tester.widget<MentionText>(mention).text;
+      expect(truncated.endsWith('...'), isTrue);
+      expect(truncated.length, 153);
 
-      await tester.tap(find.textContaining('...'));
+      final tapTarget = find.ancestor(
+        of: mention,
+        matching: find.byType(GestureDetector),
+      );
+      await tester.tap(tapTarget.first);
       await tester.pumpAndSettle();
 
-      expect(find.textContaining('...'), findsNothing);
+      expect(tester.widget<MentionText>(mention).text.length, 200);
+      expect(tester.widget<MentionText>(mention).text.contains('...'), isFalse);
     });
 
     testWidgets('should indent reply comments', (tester) async {
@@ -362,26 +374,27 @@ void main() {
       );
     });
 
-    testWidgets('should support swipe-to-delete for own comments', (
-      tester,
-    ) async {
-      final comment = createTestComment(userId: 'user1');
+    testWidgets(
+      'should support swipe-to-delete for own comments within 15 minutes',
+      (tester) async {
+        final comment = createTestComment(
+          userId: 'user1',
+          createdAt: DateTime.now().subtract(const Duration(minutes: 2)),
+        );
 
-      await tester.pumpWidget(
-        createTestWidget(CommentListItem(comment: comment)),
-      );
+        await tester.pumpWidget(
+          createTestWidget(CommentListItem(comment: comment)),
+        );
 
-      await tester.pumpAndSettle();
+        await tester.pumpAndSettle();
 
-      // Verify Dismissible widget exists
-      expect(find.byType(Dismissible), findsOneWidget);
+        expect(find.byType(Dismissible), findsOneWidget);
 
-      // Swipe to delete
-      await tester.drag(find.byType(Dismissible), const Offset(-500, 0));
-      await tester.pumpAndSettle();
+        await tester.drag(find.byType(Dismissible), const Offset(-500, 0));
+        await tester.pumpAndSettle();
 
-      // Should show confirmation dialog
-      expect(find.text('Delete Comment'), findsOneWidget);
-    });
+        expect(find.text('Delete Comment'), findsOneWidget);
+      },
+    );
   });
 }

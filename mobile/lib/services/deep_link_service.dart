@@ -51,6 +51,21 @@ class DeepLinkService {
     try {
       final uri = Uri.parse(link);
 
+      // Custom scheme: tripthread://share/{token}
+      if (uri.scheme == 'tripthread') {
+        if (uri.host == 'share') {
+          final seg = uri.pathSegments.where((s) => s.isNotEmpty).toList();
+          final token = seg.isNotEmpty ? seg.first : null;
+          if (token != null && token.isNotEmpty) {
+            debugPrint(
+              '[DeepLinkService] App scheme share link, token: $token',
+            );
+            _router!.go('/share/$token');
+            return;
+          }
+        }
+      }
+
       // Handle password reset links
       if (uri.path.contains('reset') || uri.queryParameters.containsKey('t')) {
         final token = uri.queryParameters['t'];
@@ -68,13 +83,16 @@ class DeepLinkService {
         return;
       }
 
-      // Handle share links
+      // HTTPS (Universal / App Links): https://host/share/{token}
       if (uri.path.startsWith('/share/')) {
-        if (uri.pathSegments.isNotEmpty) {
-          final shareToken = uri.pathSegments.last;
+        final segments =
+            uri.pathSegments.where((s) => s.isNotEmpty).toList();
+        final shareIdx = segments.indexOf('share');
+        if (shareIdx >= 0 && shareIdx + 1 < segments.length) {
+          final shareToken = segments[shareIdx + 1];
           if (shareToken.isNotEmpty) {
             debugPrint(
-              '[DeepLinkService] Navigating to shared content: $shareToken',
+              '[DeepLinkService] HTTPS share path, token: $shareToken',
             );
             _router!.go('/share/$shareToken');
             return;

@@ -35,11 +35,14 @@ export async function GET(request: NextRequest) {
 
     const userId = payload.userId;
 
-    // Get ongoing trip
+    // Ongoing trip where user is owner or participant
     const trip = await prisma.trip.findFirst({
       where: {
-        userId,
         status: "ONGOING",
+        OR: [
+          { userId },
+          { participants: { some: { userId } } },
+        ],
       },
       include: {
         user: {

@@ -3,6 +3,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
 import 'package:tripthread/models/api_response.dart';
 import 'package:tripthread/models/trip.dart';
+import 'package:tripthread/models/thread_entries_page.dart';
 import 'package:tripthread/models/trip_join_request.dart';
 import 'package:tripthread/services/storage_service.dart';
 import 'package:tripthread/config/app_config.dart';
@@ -13,6 +14,7 @@ class TripService {
   late final Dio _dio;
   late final Dio _refreshDio;
   StorageService? _storageService;
+  VoidCallback? _onUnauthorized;
 
   TripService() {
     _dio = Dio(BaseOptions(
@@ -33,6 +35,10 @@ class TripService {
 
   void setStorageService(StorageService storageService) {
     _storageService = storageService;
+  }
+
+  void setUnauthorizedCallback(VoidCallback? callback) {
+    _onUnauthorized = callback;
   }
 
   void _setupInterceptors() {
@@ -67,9 +73,11 @@ class TripService {
             }
 
             await _storageService!.clearTokens();
+            _onUnauthorized?.call();
             return handler.next(error);
           } catch (e) {
             await _storageService!.clearTokens();
+            _onUnauthorized?.call();
             return handler.next(error);
           }
         }
@@ -390,23 +398,140 @@ class TripService {
     }
   }
 
-  Future<ApiResponse<List<TripThreadEntry>>> getThreadEntries(
-      String tripId) async {
+  Future<ApiResponse<ThreadEntriesPage>> getThreadEntries(
+    String tripId, {
+    int limit = 30,
+    String? olderThanCursor,
+  }) async {
     try {
-      final response = await _dio.get('/trips/$tripId/entries');
+      final response = await _dio.get(
+        '/trips/$tripId/entries',
+        queryParameters: {
+          'limit': limit,
+          if (olderThanCursor != null) 'cursor': olderThanCursor,
+        },
+      );
 
-      final entries = (response.data['data'] as List)
-          .map((json) => TripThreadEntry.fromJson(json))
-          .toList();
+      if (response.data['success'] == true && response.data['data'] != null) {
+        final page = ThreadEntriesPage.fromJson(
+          response.data['data'] as Map<String, dynamic>,
+        );
+        return ApiResponse<ThreadEntriesPage>(
+          success: true,
+          data: page,
+        );
+      }
 
-      return ApiResponse<List<TripThreadEntry>>(
-        success: response.data['success'],
-        data: entries,
+      return ApiResponse<ThreadEntriesPage>(
+        success: false,
+        error: response.data['error'] ?? 'Failed to load thread entries',
       );
     } on DioException catch (e) {
-      return ApiResponse<List<TripThreadEntry>>(
+      return ApiResponse<ThreadEntriesPage>(
         success: false,
         error: e.response?.data['error'] ?? 'Network error occurred',
+      );
+    } catch (e) {
+      return ApiResponse<ThreadEntriesPage>(
+        success: false,
+        error: 'An unexpected error occurred: $e',
+      );
+    }
+  }
+
+  Future<ApiResponse<ThreadEntriesPage>> getThreadEntryContext(
+    String tripId,
+    String entryId, {
+    int contextSize = 25,
+  }) async {
+    try {
+      final response = await _dio.get(
+        '/trips/$tripId/entries/$entryId/context',
+        queryParameters: {'contextSize': contextSize},
+      );
+
+      if (response.data['success'] == true && response.data['data'] != null) {
+        final page = ThreadEntriesPage.fromJson(
+          response.data['data'] as Map<String, dynamic>,
+        );
+        return ApiResponse<ThreadEntriesPage>(success: true, data: page);
+      }
+
+      return ApiResponse<ThreadEntriesPage>(
+        success: false,
+        error: response.data['error'] ?? 'Failed to load entry context',
+      );
+    } on DioException catch (e) {
+      return ApiResponse<ThreadEntriesPage>(
+        success: false,
+        error: e.response?.data['error'] ?? 'Network error occurred',
+      );
+    } catch (e) {
+      return ApiResponse<ThreadEntriesPage>(
+        success: false,
+        error: 'An unexpected error occurred: $e',
+      );
+    }
+  }
+
+  Future<ApiResponse<void>> deleteThreadEntry({
+    required String tripId,
+    required String entryId,
+  }) async {
+    try {
+      final response = await _dio.delete('/trips/$tripId/entries/$entryId');
+      final ok = response.data['success'] == true;
+      if (ok) {
+        return ApiResponse<void>(success: true);
+      }
+      return ApiResponse<void>(
+        success: false,
+        error: response.data['error'] as String? ?? 'Failed to delete entry',
+      );
+    } on DioException catch (e) {
+      return ApiResponse<void>(
+        success: false,
+        error: e.response?.data['error'] ?? 'Network error occurred',
+      );
+    } catch (e) {
+      return ApiResponse<void>(
+        success: false,
+        error: 'An unexpected error occurred: $e',
+      );
+    }
+  }
+
+  Future<ApiResponse<TripThreadEntry>> patchThreadEntryText({
+    required String tripId,
+    required String entryId,
+    required String contentText,
+  }) async {
+    try {
+      final response = await _dio.patch(
+        '/trips/$tripId/entries/$entryId',
+        data: {'contentText': contentText},
+      );
+      if (response.data['success'] == true && response.data['data'] != null) {
+        return ApiResponse<TripThreadEntry>(
+          success: true,
+          data: TripThreadEntry.fromJson(
+            response.data['data'] as Map<String, dynamic>,
+          ),
+        );
+      }
+      return ApiResponse<TripThreadEntry>(
+        success: false,
+        error: response.data['error'] as String? ?? 'Failed to update entry',
+      );
+    } on DioException catch (e) {
+      return ApiResponse<TripThreadEntry>(
+        success: false,
+        error: e.response?.data['error'] ?? 'Network error occurred',
+      );
+    } catch (e) {
+      return ApiResponse<TripThreadEntry>(
+        success: false,
+        error: 'An unexpected error occurred: $e',
       );
     }
   }
@@ -456,10 +581,60 @@ class TripService {
     }
   }
 
+  /// Participant removes themselves. [removeMyData] deletes their thread entries (ongoing trips only).
+  Future<ApiResponse<void>> leaveTrip(
+    String tripId, {
+    required bool removeMyData,
+  }) async {
+    try {
+      final response = await _dio.post(
+        '/trips/$tripId/leave',
+        data: {'removeMyData': removeMyData},
+      );
+      if (response.data['success'] == true) {
+        return ApiResponse<void>(success: true);
+      }
+      return ApiResponse<void>(
+        success: false,
+        error: response.data['error']?.toString() ?? 'Failed to leave trip',
+      );
+    } on DioException catch (e) {
+      return ApiResponse<void>(
+        success: false,
+        error: e.response?.data['error']?.toString() ??
+            'Network error occurred',
+      );
+    } catch (e) {
+      return ApiResponse<void>(
+        success: false,
+        error: 'An unexpected error occurred: $e',
+      );
+    }
+  }
+
   // Final post
   Future<ApiResponse<TripFinalPost>> getFinalPost(String tripId) async {
     try {
       final response = await _dio.get('/trips/$tripId/final-post');
+
+      return ApiResponse<TripFinalPost>.fromJson(
+        response.data,
+        (json) => TripFinalPost.fromJson(json as Map<String, dynamic>),
+      );
+    } on DioException catch (e) {
+      return ApiResponse<TripFinalPost>(
+        success: false,
+        error: e.response?.data['error'] ?? 'Network error occurred',
+      );
+    }
+  }
+
+  /// Owner-only. Idempotent: returns existing draft if already generated.
+  Future<ApiResponse<TripFinalPost>> generateFinalPostDraft(
+      String tripId) async {
+    try {
+      final response =
+          await _dio.post('/trips/$tripId/final-post/generate');
 
       return ApiResponse<TripFinalPost>.fromJson(
         response.data,
@@ -500,6 +675,24 @@ class TripService {
       return ApiResponse<void>(
         success: response.data['success'],
         message: response.data['message'],
+      );
+    } on DioException catch (e) {
+      return ApiResponse<void>(
+        success: false,
+        error: e.response?.data['error'] ?? 'Network error occurred',
+      );
+    }
+  }
+
+  /// Owner-only. Deletes final post and engagement; trip remains (new draft can be generated).
+  Future<ApiResponse<void>> deleteFinalPost(String tripId) async {
+    try {
+      final response = await _dio.delete('/trips/$tripId/final-post');
+
+      return ApiResponse<void>(
+        success: response.data['success'] == true,
+        message: response.data['message']?.toString(),
+        error: response.data['error']?.toString(),
       );
     } on DioException catch (e) {
       return ApiResponse<void>(

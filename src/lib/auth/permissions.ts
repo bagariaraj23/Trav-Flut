@@ -18,6 +18,7 @@ export async function canViewEntity(
       where: { id: entityId },
       select: {
         id: true,
+        tripId: true,
         trip: {
           select: {
             userId: true,
@@ -40,6 +41,16 @@ export async function canViewEntity(
 
     if (userId === post.trip.userId) return true;
 
+    const participant = await prisma.tripParticipant.findUnique({
+      where: {
+        tripId_userId: {
+          tripId: post.tripId,
+          userId,
+        },
+      },
+    });
+    if (participant) return true;
+
     const follow = await prisma.follow.findUnique({
       where: {
         followerId_followeeId: {
@@ -57,6 +68,7 @@ export async function canViewEntity(
       where: { id: entityId },
       select: {
         id: true,
+        tripId: true,
         trip: {
           select: {
             userId: true,
@@ -78,6 +90,16 @@ export async function canViewEntity(
     if (!userId) return false;
 
     if (userId === entry.trip.userId) return true;
+
+    const participant = await prisma.tripParticipant.findUnique({
+      where: {
+        tripId_userId: {
+          tripId: entry.tripId,
+          userId,
+        },
+      },
+    });
+    if (participant) return true;
 
     const follow = await prisma.follow.findUnique({
       where: {

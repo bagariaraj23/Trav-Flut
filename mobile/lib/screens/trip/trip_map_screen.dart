@@ -24,6 +24,8 @@ class TripMapScreen extends StatefulWidget {
 }
 
 class _TripMapScreenState extends State<TripMapScreen> {
+  static const String _mapStyleUri = 'mapbox://styles/mapbox/streets-v12';
+
   mapbox.MapboxMap? _mapboxMap;
   List<MapPlace>? _places;
   bool _loading = true;
@@ -35,7 +37,13 @@ class _TripMapScreenState extends State<TripMapScreen> {
   @override
   void initState() {
     super.initState();
-    mapbox.MapboxOptions.setAccessToken(AppConfig.mapboxAccessToken);
+    final token = AppConfig.mapboxAccessToken;
+    if (token.isEmpty) {
+      _loading = false;
+      _error = 'Mapbox access token is not configured.';
+      return;
+    }
+    mapbox.MapboxOptions.setAccessToken(token);
     _loadPlaces();
   }
 
@@ -227,6 +235,16 @@ class _TripMapScreenState extends State<TripMapScreen> {
                   // Map widget
                   mapbox.MapWidget(
                     key: const Key('tripMapWidget'),
+                    styleUri: _mapStyleUri,
+                    cameraOptions: mapbox.CameraOptions(
+                      center: mapbox.Point(
+                        coordinates: mapbox.Position(
+                          _places!.first.place.lng,
+                          _places!.first.place.lat,
+                        ),
+                      ),
+                      zoom: 12.0,
+                    ),
                     onMapCreated: _onMapCreated,
                   ),
 
@@ -546,9 +564,11 @@ class _TripMapScreenState extends State<TripMapScreen> {
 
   @override
   void dispose() {
-    _routeManager?.deleteAll();
-    _circleManager?.deleteAll();
-    _textManager?.deleteAll();
+    try {
+      _routeManager?.deleteAll();
+      _circleManager?.deleteAll();
+      _textManager?.deleteAll();
+    } catch (_) {}
     _mapboxMap = null;
     super.dispose();
   }

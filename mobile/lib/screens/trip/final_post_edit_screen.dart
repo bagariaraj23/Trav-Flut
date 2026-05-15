@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import 'package:tripthread/models/trip.dart';
+import 'package:tripthread/providers/auth_provider.dart';
 import 'package:tripthread/providers/final_post_provider.dart';
 import 'package:tripthread/services/trip_service.dart';
 import 'package:tripthread/utils/cloudinary_utils.dart';
@@ -49,12 +50,21 @@ class _FinalPostEditScreenState extends State<FinalPostEditScreen> {
     if (!mounted) return;
 
     if (response.success && response.data != null) {
+      final trip = response.data!;
+      final authId = context.read<AuthProvider>().currentUser?.id;
+      final isOwner = authId != null && trip.userId == authId;
+      if (mounted) {
+        context.read<FinalPostProvider>().setTripOwner(isOwner);
+      }
       setState(() {
-        _trip = response.data;
+        _trip = trip;
         _isTripLoading = false;
         _tripError = null;
       });
     } else {
+      if (mounted) {
+        context.read<FinalPostProvider>().setTripOwner(false);
+      }
       setState(() {
         _tripError = response.error ?? 'Failed to load trip details';
         _isTripLoading = false;
@@ -114,7 +124,7 @@ class _FinalPostEditScreenState extends State<FinalPostEditScreen> {
     _syncControllers(draft);
 
     final isBusy = provider.isLoading || draft == null || _isTripLoading;
-    final isEditableDraft = draft != null && !draft.isPublished;
+    final canEditContent = draft != null && provider.isTripOwner;
 
     return Scaffold(
       appBar: AppBar(
@@ -175,10 +185,10 @@ class _FinalPostEditScreenState extends State<FinalPostEditScreen> {
                     onChanged: provider.updateSummary,
                     minLines: 5,
                     maxLines: 10,
-                    editable: isEditableDraft,
+                    editable: canEditContent,
                     isEditing: _isSummaryEditing,
                     onToggleEdit: () {
-                      if (!isEditableDraft) return;
+                      if (!canEditContent) return;
                       setState(() => _isSummaryEditing = true);
                       Future.microtask(() => _summaryFocus.requestFocus());
                     },
@@ -192,10 +202,10 @@ class _FinalPostEditScreenState extends State<FinalPostEditScreen> {
                     onChanged: provider.updateCaption,
                     minLines: 2,
                     maxLines: 4,
-                    editable: isEditableDraft,
+                    editable: canEditContent,
                     isEditing: _isCaptionEditing,
                     onToggleEdit: () {
-                      if (!isEditableDraft) return;
+                      if (!canEditContent) return;
                       setState(() => _isCaptionEditing = true);
                       Future.microtask(() => _captionFocus.requestFocus());
                     },
@@ -334,7 +344,7 @@ class _FinalPostEditScreenState extends State<FinalPostEditScreen> {
                 ),
                 tooltip: editable
                     ? 'Edit $title'
-                    : 'Editing disabled after publish',
+                    : 'Only the trip owner can edit',
                 onPressed: editable ? onToggleEdit : null,
               )
             ],
@@ -368,7 +378,7 @@ class _FinalPostEditScreenState extends State<FinalPostEditScreen> {
   Widget _buildMediaSelector(
       FinalPostProvider provider, TripFinalPost draft) {
     final mediaItems = _mediaItems;
-    final locked = draft.isPublished;
+    final locked = !provider.isTripOwner;
 
     return Card(
       child: Padding(
@@ -403,7 +413,7 @@ class _FinalPostEditScreenState extends State<FinalPostEditScreen> {
               Padding(
                 padding: const EdgeInsets.only(bottom: 8),
                 child: Text(
-                  'Photos are locked after publishing.',
+                  'Only the trip owner can change photos.',
                   style: Theme.of(context)
                       .textTheme
                       .bodySmall
@@ -543,16 +553,61 @@ class _FinalPostEditScreenState extends State<FinalPostEditScreen> {
   Widget _buildBottomBar(
       BuildContext context, FinalPostProvider provider, TripFinalPost draft) {
     if (draft.isPublished) {
+      if (!provider.isTripOwner) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: ElevatedButton.icon(
+              onPressed: () => context.push('/post/TRIP_FINAL_POST/${draft.id}'),
+              icon: const Icon(Icons.visibility),
+              label: const Text('View post'),
+              style: ElevatedButton.styleFrom(
+                minimumSize: const Size.fromHeight(48),
+              ),
+            ),
+          ),
+        );
+      }
       return SafeArea(
         child: Padding(
           padding: const EdgeInsets.all(16),
-          child: ElevatedButton.icon(
-            onPressed: () => context.go('/home'),
-            icon: const Icon(Icons.check_circle),
-            label: const Text('View Published Post'),
-            style: ElevatedButton.styleFrom(
-              minimumSize: const Size.fromHeight(48),
-            ),
+          child: Row(
+            children: [
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: provider.isSaving
+                      ? null
+                      : () async {
+                          final messenger = ScaffoldMessenger.of(context);
+                          final success = await provider.saveDraft();
+                          if (!mounted) return;
+                          if (success) {
+                            messenger.showSnackBar(
+                              const SnackBar(content: Text('Changes saved')),
+                            );
+                          }
+                        },
+                  child: provider.isSaving
+                      ? const SizedBox(
+                          height: 20,
+                          width: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Text('Save changes'),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: ElevatedButton(
+                  onPressed: () =>
+                      context.push('/post/TRIP_FINAL_POST/${draft.id}'),
+                  style: ElevatedButton.styleFrom(
+                    minimumSize: const Size.fromHeight(48),
+                  ),
+                  child: const Text('View post'),
+                ),
+              ),
+            ],
           ),
         ),
       );
@@ -595,7 +650,7 @@ class _FinalPostEditScreenState extends State<FinalPostEditScreen> {
                     ? null
                     : () async {
                         final messenger = ScaffoldMessenger.of(context);
-                        final navigator = context;
+                        final router = GoRouter.of(context);
                         final success = await provider.publish();
                         if (!mounted) return;
                         if (success) {
@@ -604,7 +659,7 @@ class _FinalPostEditScreenState extends State<FinalPostEditScreen> {
                               content: Text('Trip published to your feed!'),
                             ),
                           );
-                          navigator.go('/home');
+                          router.go('/home');
                         }
                       },
                 style: ElevatedButton.styleFrom(

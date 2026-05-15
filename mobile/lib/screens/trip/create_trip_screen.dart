@@ -272,28 +272,18 @@ class _CreateTripScreenState extends State<CreateTripScreen> {
   @override
   Widget build(BuildContext context) {
     return PopScope(
-      canPop: true,
+      canPop: false,
       onPopInvokedWithResult: (didPop, result) {
-        if (!didPop) {
-          if (context.canPop()) {
-            context.pop();
-          } else {
-            context.go('/home');
-          }
-        }
+        if (didPop) return;
+        context.go('/home', extra: {'explicitHome': true});
       },
       child: Scaffold(
         appBar: AppBar(
           title: const Text('Create Trip'),
           leading: IconButton(
             icon: const Icon(Icons.close),
-            onPressed: () {
-              if (context.canPop()) {
-                context.pop();
-              } else {
-                context.go('/home');
-              }
-            },
+            onPressed: () =>
+                context.go('/home', extra: {'explicitHome': true}),
           ),
         ),
         body: SafeArea(

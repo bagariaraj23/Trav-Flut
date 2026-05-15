@@ -26,6 +26,10 @@ class AuthProvider extends ChangeNotifier {
   bool _hasShownError = false;
   bool _isInitializing = false;
 
+  /// True after session restore failed while refresh/access tokens were still on disk.
+  /// Lets the login screen offer "Retry" without treating transient failures as logout.
+  bool _canRetrySessionRestore = false;
+
   // Notifier dedicated for UI-only updates (e.g., error banner)
   final ChangeNotifier uiNotifier = ChangeNotifier();
   // Notifier dedicated for routing-related changes only (auth/loading)
@@ -47,6 +51,15 @@ class AuthProvider extends ChangeNotifier {
   bool get isLoading => _isLoading;
   bool get isAuthenticated => _currentUser != null;
   String? get error => _error;
+
+  /// Whether the user can tap "Retry restoring session" on the login screen.
+  bool get canRetrySessionRestore => _canRetrySessionRestore;
+
+  /// Re-runs cold-start session restore after a transient error (slow network, timeout).
+  Future<void> retrySessionRestore() async {
+    _clearError();
+    await _initializeAuth();
+  }
 
   /// True when user is authenticated but must complete profile (username + password) before full access.
   bool get requiresProfileCompletion =>
@@ -71,12 +84,18 @@ class AuthProvider extends ChangeNotifier {
     debugPrint('AuthProvider: Starting initialization');
     _isInitializing = true;
     _setLoadingState(true);
+    _canRetrySessionRestore = false;
+    const storageTimeout = Duration(seconds: 15);
+    const restoreTimeout = Duration(seconds: 30);
+    var attemptedSessionRestore = false;
     try {
       debugPrint('AuthProvider: Checking tokens...');
       final hasTokens = await _storageService.hasValidTokens().timeout(
-        const Duration(seconds: 5),
+        storageTimeout,
         onTimeout: () {
-          debugPrint('AuthProvider: hasValidTokens() timed out!');
+          debugPrint(
+            'AuthProvider: hasValidTokens() timed out (slow secure storage)',
+          );
           throw Exception('hasValidTokens() timed out');
         },
       );
@@ -91,9 +110,10 @@ class AuthProvider extends ChangeNotifier {
       }
 
       if (hasTokens) {
+        attemptedSessionRestore = true;
         debugPrint('AuthProvider: Getting userId...');
         final userId = await _storageService.getUserId().timeout(
-          const Duration(seconds: 5),
+          storageTimeout,
           onTimeout: () {
             debugPrint('AuthProvider: getUserId() timed out!');
             throw Exception('getUserId() timed out');
@@ -112,7 +132,7 @@ class AuthProvider extends ChangeNotifier {
         if (userId != null) {
           debugPrint('AuthProvider: Calling getCurrentUser...');
           final response = await _apiService.getCurrentUser().timeout(
-            const Duration(seconds: 5),
+            restoreTimeout,
             onTimeout: () {
               debugPrint('AuthProvider: getCurrentUser() timed out!');
               throw Exception('getCurrentUser() timed out');
@@ -135,19 +155,35 @@ class AuthProvider extends ChangeNotifier {
             routingNotifier.notifyListeners();
             notifyListeners();
           } else {
-            debugPrint('AuthProvider: Invalid tokens, clearing');
-            await _storageService.clearTokens();
+            // Do not clear tokens here. Network errors, slow servers, and timeouts
+            // surface as success:false without implying invalid credentials.
+            // Real auth failure is handled by ApiService (401 + refresh + forceLogout).
+            debugPrint(
+              'AuthProvider: getCurrentUser failed during restore, keeping stored tokens: ${response.error}',
+            );
+            _error =
+                'Could not restore your session. Check your connection and try opening the app again.';
+            _hasShownError = false;
+            _canRetrySessionRestore = true;
+            uiNotifier.notifyListeners();
+            notifyListeners();
           }
         }
       }
     } catch (e, stack) {
-      // Only clear tokens and set error if user is not already authenticated
-      // This prevents clearing tokens that were just set by signup/login
+      // Never wipe tokens on restore errors (timeouts, DNS, slow API). Users were
+      // forced to re-login after back/kill when init hit a 5s cap while the API
+      // took ~5s+. Interceptor + forceLogout still clears on real session expiry.
       if (_currentUser == null) {
-        _error = 'Failed to initialize authentication';
+        _error =
+            'Could not restore your session. Check your connection and try again.';
+        _hasShownError = false;
+        if (attemptedSessionRestore) {
+          _canRetrySessionRestore = true;
+        }
         uiNotifier.notifyListeners();
+        notifyListeners();
         debugPrint('AuthProvider: Exception in _initializeAuth: $e\n$stack');
-        await _storageService.clearTokens();
       } else {
         debugPrint(
           'AuthProvider: Exception in _initializeAuth but user is authenticated, ignoring: $e',
@@ -193,6 +229,7 @@ class AuthProvider extends ChangeNotifier {
 
         // Set user after tokens are saved to prevent race condition
         _currentUser = authData.user;
+        _canRetrySessionRestore = false;
         routingNotifier.notifyListeners();
         notifyListeners();
 
@@ -245,6 +282,7 @@ class AuthProvider extends ChangeNotifier {
 
         // Set user after tokens are saved to prevent race condition
         _currentUser = authData.user;
+        _canRetrySessionRestore = false;
         routingNotifier.notifyListeners();
         notifyListeners();
 
@@ -286,6 +324,7 @@ class AuthProvider extends ChangeNotifier {
           userId: authData.user.id,
         );
         _currentUser = authData.user;
+        _canRetrySessionRestore = false;
         routingNotifier.notifyListeners();
         notifyListeners();
         _setLoadingState(false);
@@ -295,6 +334,7 @@ class AuthProvider extends ChangeNotifier {
         final userResponse = await _apiService.getCurrentUser();
         if (userResponse.success && userResponse.data != null) {
           _currentUser = userResponse.data!.copyWith(profileComplete: true);
+          _canRetrySessionRestore = false;
           routingNotifier.notifyListeners();
           notifyListeners();
           _setLoadingState(false);
@@ -325,6 +365,7 @@ class AuthProvider extends ChangeNotifier {
         _currentUser = null;
         _error = null;
         _isLoading = false;
+        _canRetrySessionRestore = false;
         notifyListeners();
         routingNotifier.notifyListeners();
         debugPrint('[AuthProvider] Account deleted successfully');
@@ -354,6 +395,7 @@ class AuthProvider extends ChangeNotifier {
       debugPrint('Logout error: $e');
     } finally {
       _currentUser = null;
+      _canRetrySessionRestore = false;
       routingNotifier.notifyListeners();
       notifyListeners();
       await _storageService.clearTokens();
@@ -451,6 +493,7 @@ class AuthProvider extends ChangeNotifier {
           userId: authData.user.id,
         );
         _currentUser = authData.user;
+        _canRetrySessionRestore = false;
         routingNotifier.notifyListeners();
         notifyListeners();
         _setLoadingState(false);
@@ -558,6 +601,7 @@ class AuthProvider extends ChangeNotifier {
 
     _isLoading = false;
     _currentUser = null;
+    _canRetrySessionRestore = false;
     await _storageService.clearTokens();
     await _googleSignInService?.signOut();
 

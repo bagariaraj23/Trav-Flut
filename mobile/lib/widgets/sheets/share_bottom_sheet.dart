@@ -77,13 +77,12 @@ class _ShareBottomSheetState extends State<ShareBottomSheet> {
                       if (isCreating) return;
                       await _runAction(_ShareAction.shareVia, () async {
                         try {
-                          final shareUrl = await provider.createShare(
+                          final link = await provider.createShare(
                             widget.entityType,
                             widget.entityId,
                           );
-                          // Open native share dialog
                           await provider.openNativeShare(
-                            shareUrl,
+                            link,
                             text:
                                 'Check out this amazing travel story on TripThread!',
                           );
@@ -114,12 +113,14 @@ class _ShareBottomSheetState extends State<ShareBottomSheet> {
                       if (isCreating) return;
                       await _runAction(_ShareAction.copyLink, () async {
                         try {
-                          final shareUrl = await provider.createShare(
+                          final link = await provider.createShare(
                             widget.entityType,
                             widget.entityId,
                           );
+                          final clip =
+                              '${link.webUrl}\n${link.primaryAppDeepLink}';
                           await Clipboard.setData(
-                            ClipboardData(text: shareUrl),
+                            ClipboardData(text: clip),
                           );
                           if (context.mounted) {
                             ScaffoldMessenger.of(context).showSnackBar(

@@ -188,6 +188,9 @@ void main() {
         'entity1',
         'New comment',
         null,
+        currentUserId: 'user1',
+        currentUserPreview:
+            const CommentUser(id: 'user1', username: 'user1', name: 'User One'),
       );
 
       // Optimistic update should happen immediately
@@ -215,6 +218,9 @@ void main() {
           'entity1',
           'Failed comment',
           null,
+          currentUserId: 'user1',
+          currentUserPreview:
+              const CommentUser(id: 'user1', username: 'user1', name: 'User One'),
         );
         fail('Should have thrown an exception');
       } catch (e) {
