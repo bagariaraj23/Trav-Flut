@@ -156,13 +156,15 @@ class _TripThreadScreenState extends State<TripThreadScreen>
 
   void _onComposerFocusChanged() {
     if (!_entryInputFocusNode.hasFocus || !mounted) return;
-    final bottom = MediaQuery.viewInsetsOf(context).bottom;
-    if (bottom <= 0) return;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
+    void scrollThreadToEnd() {
       if (!mounted || !_scrollController.hasClients) return;
       final max = _scrollController.position.maxScrollExtent;
-      if (max <= 0) return;
-      _scrollController.jumpTo(max);
+      if (max > 0) _scrollController.jumpTo(max);
+    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      scrollThreadToEnd();
+      // Keyboard animates in after focus; scroll again once inset is applied.
+      Future.delayed(const Duration(milliseconds: 280), scrollThreadToEnd);
     });
   }
 
@@ -1370,13 +1372,7 @@ class _TripThreadScreenState extends State<TripThreadScreen>
 
                         return ListView.builder(
                           controller: _scrollController,
-                          padding: EdgeInsets.fromLTRB(
-                            16,
-                            16,
-                            16,
-                            16 +
-                                MediaQuery.viewInsetsOf(context).bottom,
-                          ),
+                          padding: const EdgeInsets.all(16),
                           itemCount: entries.length,
                           itemBuilder: (context, index) {
                             return _buildThreadEntry(entries[index]);
@@ -1653,6 +1649,40 @@ class _TripThreadScreenState extends State<TripThreadScreen>
     return true;
   }
 
+  Widget _threadEntryActionSheetRow({
+    required BuildContext sheetCtx,
+    required IconData icon,
+    required String label,
+    required VoidCallback onTap,
+    Color? foregroundColor,
+  }) {
+    final color = foregroundColor ?? Theme.of(sheetCtx).colorScheme.onSurface;
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+          child: Row(
+            children: [
+              Icon(icon, color: color, size: 22),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Text(
+                  label,
+                  style: Theme.of(sheetCtx).textTheme.titleMedium?.copyWith(
+                        color: color,
+                        fontWeight: FontWeight.w500,
+                      ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   Future<void> _showThreadEntryActions(TripThreadEntry entry) async {
     if (!mounted || _trip?.status != TripStatus.ongoing) return;
     if (!_canModerateThreadEntry(entry)) return;
@@ -1661,38 +1691,41 @@ class _TripThreadScreenState extends State<TripThreadScreen>
       context: context,
       isScrollControlled: true,
       showDragHandle: true,
-      builder: (sheetCtx) => SafeArea(
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if (_canEditThreadEntryText(entry))
-                ListTile(
-                  leading: const Icon(Icons.edit_outlined),
-                  title: const Text('Edit text'),
-                  onTap: () {
-                    Navigator.pop(sheetCtx);
-                    _showEditTextEntryDialog(entry);
-                  },
-                ),
-              ListTile(
-                leading: Icon(
-                  Icons.delete_outline,
-                  color: Theme.of(sheetCtx).colorScheme.error,
-                ),
-                title: Text(
-                  'Delete entry',
-                  style: TextStyle(color: Theme.of(sheetCtx).colorScheme.error),
-                ),
-                onTap: () {
-                  Navigator.pop(sheetCtx);
-                  _confirmDeleteThreadEntry(entry);
-                },
+      builder: (sheetCtx) {
+        final errorColor = Theme.of(sheetCtx).colorScheme.error;
+        return SafeArea(
+          child: Material(
+            color: Theme.of(sheetCtx).colorScheme.surface,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (_canEditThreadEntryText(entry))
+                    _threadEntryActionSheetRow(
+                      sheetCtx: sheetCtx,
+                      icon: Icons.edit_outlined,
+                      label: 'Edit text',
+                      onTap: () {
+                        Navigator.pop(sheetCtx);
+                        _showEditTextEntryDialog(entry);
+                      },
+                    ),
+                  _threadEntryActionSheetRow(
+                    sheetCtx: sheetCtx,
+                    icon: Icons.delete_outline,
+                    label: 'Delete entry',
+                    foregroundColor: errorColor,
+                    onTap: () {
+                      Navigator.pop(sheetCtx);
+                      _confirmDeleteThreadEntry(entry);
+                    },
+                  ),
+                ],
               ),
-            ],
+            ),
           ),
-        ),
-      ),
+        );
+      },
     );
   }
 
@@ -2395,32 +2428,35 @@ class _TripThreadScreenState extends State<TripThreadScreen>
     );
   }
 
-  Widget _buildAddEntrySection() {
-    final mediaQuery = MediaQuery.of(context);
+  /// Max height for the bottom compose panel. When the keyboard is open, cap
+  /// aggressively so the thread list keeps most of the viewport (fixes entries
+  /// hidden behind keyboard + bottom overflow on location + comment).
+  double _composePanelMaxHeight(MediaQueryData mediaQuery) {
     final keyboardInset = mediaQuery.viewInsets.bottom;
     final screenHeight = mediaQuery.size.height;
     final safeVerticalPadding =
         mediaQuery.padding.top + mediaQuery.padding.bottom;
-    final availableHeight = screenHeight - safeVerticalPadding;
-
-    double maxHeight = screenHeight * 0.5;
+    final availableHeight = (screenHeight - safeVerticalPadding).clamp(
+      200.0,
+      screenHeight,
+    );
 
     if (keyboardInset > 0) {
-      final heightWithoutKeyboard = (availableHeight - keyboardInset).clamp(
-        availableHeight * 0.25,
-        availableHeight * 0.85,
-      );
-      maxHeight = heightWithoutKeyboard * 0.95;
-    } else {
-      maxHeight = maxHeight.clamp(
-        availableHeight * 0.35,
-        availableHeight * 0.6,
-      );
+      final aboveKeyboard = (availableHeight - keyboardInset).clamp(160.0, availableHeight);
+      // Leave ~55%+ of space above the keyboard for the thread list.
+      final cap = aboveKeyboard * 0.42;
+      return cap.clamp(140.0, 300.0);
     }
 
-    if (maxHeight <= 0 || maxHeight.isNaN) {
-      maxHeight = availableHeight * 0.5;
-    }
+    return (screenHeight * 0.48).clamp(
+      availableHeight * 0.32,
+      availableHeight * 0.55,
+    );
+  }
+
+  Widget _buildAddEntrySection() {
+    final mediaQuery = MediaQuery.of(context);
+    final maxHeight = _composePanelMaxHeight(mediaQuery);
 
     return Container(
       decoration: BoxDecoration(
@@ -2433,13 +2469,14 @@ class _TripThreadScreenState extends State<TripThreadScreen>
           ),
         ],
       ),
-      child: SafeArea(
-        top: false,
-        left: false,
-        right: false,
-        child: ConstrainedBox(
-          constraints: BoxConstraints(maxHeight: maxHeight),
-          child: SingleChildScrollView(
+      child: ConstrainedBox(
+        constraints: BoxConstraints(maxHeight: maxHeight),
+        child: SingleChildScrollView(
+          keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+          child: SafeArea(
+            top: false,
+            left: false,
+            right: false,
             child: Padding(
               padding: const EdgeInsets.all(16.0),
               child: Column(
