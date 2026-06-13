@@ -67,6 +67,9 @@ prismaBase
 
 export const prisma = prismaClient;
 
+/** Extended client returned from this module (matches `$extends` reconnect wrapper). */
+export type AppPrismaClient = typeof prismaClient;
+
 /** Type of the client passed to prisma.$transaction(async (tx) => ...) — use for services that accept an optional tx. */
 export type PrismaTransactionClient = Parameters<
   Parameters<typeof prismaClient.$transaction>[0]
