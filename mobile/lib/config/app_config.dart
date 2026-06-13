@@ -85,11 +85,72 @@ class AppConfig {
     return api.replaceAll(RegExp(r'/api$'), '');
   }
 
-  static String get apiBaseUrl {
-    if (kDebugMode) {
-      debugPrint('[AppConfig] Using API base URL: $_baseUrl');
+  /// Raw `CHAT_WS_BASE_URL` / `CHAT_WS_ORIGIN` from env or dart-define (trimmed), or empty.
+  static String get _chatWsRawOverride {
+    if (_isInitialized) {
+      final v = dotenv.env['CHAT_WS_BASE_URL'] ?? dotenv.env['CHAT_WS_ORIGIN'];
+      if (v != null && v.trim().isNotEmpty) return v.trim();
+    }
+    return const String.fromEnvironment(
+      'CHAT_WS_BASE_URL',
+      defaultValue: '',
+    ).trim();
+  }
+
+  /// REST base URL aligned with the process that hosts WebSocket + [chatEventBus] (server.cjs).
+  ///
+  /// REST API and WebSocket both run on the same port via server.cjs (`npm run dev` defaults to :3000).
+  /// Override via `CHAT_WS_BASE_URL` only when the WS host/port genuinely differs from the API host/port.
+  static String get _resolvedApiBaseUrl {
+    final apiUri = Uri.parse(_baseUrl);
+    final raw = _chatWsRawOverride;
+    if (raw.isNotEmpty) {
+      final wsOrigin = Uri.parse(raw.contains('://') ? raw : 'http://$raw');
+      if (wsOrigin.host.toLowerCase() == apiUri.host.toLowerCase() &&
+          wsOrigin.hasPort &&
+          apiUri.hasPort &&
+          wsOrigin.port != apiUri.port) {
+        if (kDebugMode) {
+          debugPrint(
+            '[AppConfig] API port ${apiUri.port} → ${wsOrigin.port} (same host as CHAT_WS_BASE_URL; REST must use chat server)',
+          );
+        }
+        return apiUri.replace(port: wsOrigin.port).toString();
+      }
     }
     return _baseUrl;
+  }
+
+  static String get apiBaseUrl {
+    final resolved = _resolvedApiBaseUrl;
+    if (kDebugMode) {
+      debugPrint('[AppConfig] Using API base URL: $resolved');
+      if (resolved != _baseUrl) {
+        debugPrint('[AppConfig] (raw API_BASE_URL in .env was $_baseUrl)');
+      }
+    }
+    return resolved;
+  }
+
+  /// HTTP(S) origin (no path) for the chat WebSocket; the client appends `/chat`.
+  ///
+  /// Matches [_resolvedApiBaseUrl] unless `CHAT_WS_BASE_URL` is set to a different host/port.
+  static Uri get chatWebSocketHttpOrigin {
+    final raw = _chatWsRawOverride;
+    if (raw.isNotEmpty) {
+      final parsed = Uri.parse(raw.contains('://') ? raw : 'http://$raw');
+      return Uri(
+        scheme: parsed.scheme,
+        host: parsed.host,
+        port: parsed.hasPort ? parsed.port : null,
+      );
+    }
+    final api = Uri.parse(_resolvedApiBaseUrl);
+    return Uri(
+      scheme: api.scheme,
+      host: api.host,
+      port: api.hasPort ? api.port : null,
+    );
   }
 
   // Mapbox Configuration
@@ -159,6 +220,20 @@ class AppConfig {
     if (kDebugMode) {
       debugPrint('[AppConfig] Configuration initialized');
       debugPrint('[AppConfig] API Base URL: $apiBaseUrl');
+      final apiUri = Uri.parse(apiBaseUrl);
+      final wsUri = chatWebSocketHttpOrigin;
+      final apiPort = apiUri.hasPort ? '${apiUri.port}' : '(default)';
+      final wsPort = wsUri.hasPort ? '${wsUri.port}' : '(default)';
+      if (apiUri.host != wsUri.host || apiUri.port != wsUri.port) {
+        debugPrint(
+          '[AppConfig] Chat WS origin ${wsUri.scheme}://${wsUri.host}:$wsPort '
+          '≠ API ${apiUri.scheme}://${apiUri.host}:$apiPort (split dev or CHAT_WS_BASE_URL)',
+        );
+      } else {
+        debugPrint(
+          '[AppConfig] Chat WS: same origin as API (${wsUri.host}:$wsPort)',
+        );
+      }
       debugPrint('[AppConfig] Environment: $environment');
     }
   }
