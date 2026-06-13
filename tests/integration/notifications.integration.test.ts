@@ -140,7 +140,7 @@ describe("Notifications improvements", () => {
     await waitFor(async () => {
       const notif = await prisma.notification.findFirst({
         where: {
-          type: NotificationType.LIKE,
+          type: NotificationType.COMMENT_LIKE,
           actorId: liker.id,
           recipientId: commenter.id,
           entityType: EntityType.COMMENT,
@@ -152,7 +152,7 @@ describe("Notifications improvements", () => {
 
     const likeNotif = await prisma.notification.findFirstOrThrow({
       where: {
-        type: NotificationType.LIKE,
+        type: NotificationType.COMMENT_LIKE,
         actorId: liker.id,
         recipientId: commenter.id,
         entityType: EntityType.COMMENT,
