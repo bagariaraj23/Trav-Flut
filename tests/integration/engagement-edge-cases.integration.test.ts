@@ -15,6 +15,7 @@ import { POST as createCommentRoute } from "../../src/app/api/comments/route";
 import { POST as createLikeRoute } from "../../src/app/api/likes/route";
 import { POST as createShareRoute } from "../../src/app/api/shares/route";
 import { DELETE as deleteCommentRoute } from "../../src/app/api/comments/[commentId]/route";
+import { DELETE as deleteLikeRoute } from "../../src/app/api/likes/[entityType]/[entityId]/route";
 
 function createAuthenticatedRequest(
   url: string,
@@ -201,14 +202,14 @@ describe("Engagement API - Edge Cases & Gaps", () => {
         );
 
         // Unlike (delete)
-        await fetch(
-          `http://localhost/api/likes/TRIP_FINAL_POST/${finalPost.id}`,
-          {
-            method: "DELETE",
-            headers: {
-              authorization: `Bearer ${token1}`,
-            },
-          }
+        await deleteLikeRoute(
+          createAuthenticatedRequest(
+            `http://localhost/api/likes/TRIP_FINAL_POST/${finalPost.id}`,
+            "DELETE",
+            undefined,
+            token1
+          ),
+          { params: Promise.resolve({ entityType: "TRIP_FINAL_POST", entityId: finalPost.id }) }
         );
       }
 
@@ -424,12 +425,14 @@ describe("Engagement API - Edge Cases & Gaps", () => {
       expect(post?.likeCount).toBe(2);
 
       // User1 unlikes
-      await fetch(
-        `http://localhost/api/likes/TRIP_FINAL_POST/${finalPost.id}`,
-        {
-          method: "DELETE",
-          headers: { authorization: `Bearer ${token1}` },
-        }
+      await deleteLikeRoute(
+        createAuthenticatedRequest(
+          `http://localhost/api/likes/TRIP_FINAL_POST/${finalPost.id}`,
+          "DELETE",
+          undefined,
+          token1
+        ),
+        { params: Promise.resolve({ entityType: "TRIP_FINAL_POST", entityId: finalPost.id }) }
       );
 
       // Verify count decreased

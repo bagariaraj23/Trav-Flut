@@ -85,6 +85,7 @@ describe("Engagement API - Likes", () => {
         tripId: trip.id,
         summaryText: "Test trip summary",
         curatedMedia: [],
+        isPublished: true,
       },
     });
     threadEntry = await prisma.tripThreadEntry.create({
@@ -483,6 +484,7 @@ describe("Engagement API - Comments", () => {
         tripId: trip.id,
         summaryText: "Test trip summary",
         curatedMedia: [],
+        isPublished: true,
       },
     });
     threadEntry = await prisma.tripThreadEntry.create({
@@ -883,6 +885,7 @@ describe("Engagement API - Shares", () => {
         tripId: trip.id,
         summaryText: "Test trip summary",
         curatedMedia: [],
+        isPublished: true,
       },
     });
   });

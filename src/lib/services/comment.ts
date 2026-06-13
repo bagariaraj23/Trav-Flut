@@ -373,10 +373,25 @@ export async function deleteComment(userId: string, commentId: string) {
 
     const replyIds = comment.replies.map((r) => r.id);
     if (replyIds.length > 0) {
+      // Delete likes on replies
+      await tx.like.deleteMany({
+        where: {
+          entityType: EntityType.COMMENT,
+          entityId: { in: replyIds },
+        },
+      });
       await tx.comment.deleteMany({
         where: { id: { in: replyIds } },
       });
     }
+
+    // Delete likes on comment itself
+    await tx.like.deleteMany({
+      where: {
+        entityType: EntityType.COMMENT,
+        entityId: commentId,
+      },
+    });
 
     await tx.comment.delete({
       where: { id: commentId },
