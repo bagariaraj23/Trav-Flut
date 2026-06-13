@@ -1,176 +1,406 @@
-import { prisma } from "@/lib/prisma";
+/**
+ * Sample data for the **test database only**.
+ *
+ * Loads **`.env.test`** and uses **`TEST_DATABASE_URL`** exclusively (never `.env` / production).
+ * The database name in that URL must end with `_test` (e.g. `tripthread_test`).
+ *
+ * Environment:
+ * - SEED_RESET=full — delete seed users (and cascaded data), then recreate everything.
+ * - Default — delete only trips tagged with SEED_MARKER, then recreate trips/posts/thread data.
+ *
+ * Demo login (password): TripThreadSeed123!
+ */
 
-async function main() {
-  console.log("🌱 Starting database seeding...");
+import dotenv from "dotenv";
+import path from "path";
+import fs from "fs";
+import bcrypt from "bcryptjs";
+import type { AppPrismaClient } from "@/lib/prisma";
+import { assertTestDatabaseUrl } from "@/lib/dbUrlSafety";
+import {
+  GenerationStatus,
+  PlaceSource,
+  PlaceType,
+  ThreadEntryType,
+  TripMood,
+  TripStatus,
+  TripType,
+} from "@prisma/client";
 
-  // Create sample users
-  const user1 = await prisma.user.upsert({
-    where: { email: "bagariaraj23@gmail.com" },
-    update: {},
+const SEED_MARKER = "[tripthread-seed-v1]";
+/** Demo accounts — safe to wipe when SEED_RESET=full */
+const SEED_EMAILS = [
+  "demo.alice@tripthread.seed",
+  "demo.bob@tripthread.seed",
+  "demo.carol@tripthread.seed",
+] as const;
+
+const DEMO_PASSWORD = "TripThreadSeed123!";
+
+/** Resolve TEST_DATABASE_URL from `.env.test` only; production URLs are never read. */
+function loadSeedEnv(): void {
+  const root = process.cwd();
+  const envTest = path.join(root, ".env.test");
+  if (!fs.existsSync(envTest)) {
+    throw new Error(
+      "Seed requires `.env.test` with TEST_DATABASE_URL. Production `.env` is intentionally ignored."
+    );
+  }
+  dotenv.config({ path: envTest });
+  delete process.env.DATABASE_URL;
+  assertTestDatabaseUrl(process.env.TEST_DATABASE_URL, "Seed");
+  process.env.DATABASE_URL = process.env.TEST_DATABASE_URL;
+}
+
+async function wipeSeedTrips(prisma: AppPrismaClient): Promise<void> {
+  const deleted = await prisma.trip.deleteMany({
+    where: { description: { contains: SEED_MARKER } },
+  });
+  if (deleted.count > 0) {
+    console.log(`Removed ${deleted.count} previous seed trip(s).`);
+  }
+}
+
+async function wipeSeedUsers(prisma: AppPrismaClient): Promise<void> {
+  const deleted = await prisma.user.deleteMany({
+    where: { email: { in: [...SEED_EMAILS] } },
+  });
+  if (deleted.count > 0) {
+    console.log(`Removed ${deleted.count} seed user account(s).`);
+  }
+}
+
+async function seed(prisma: AppPrismaClient): Promise<void> {
+  assertTestDatabaseUrl(process.env.DATABASE_URL, "Seed");
+
+  console.log("Starting database seeding…");
+
+  if (process.env.SEED_RESET === "full") {
+    await wipeSeedUsers(prisma);
+  } else {
+    await wipeSeedTrips(prisma);
+  }
+
+  const passwordHash = await bcrypt.hash(DEMO_PASSWORD, 12);
+
+  const alice = await prisma.user.upsert({
+    where: { email: SEED_EMAILS[0] },
+    update: { password: passwordHash },
     create: {
-      email: "bagariaraj23@gmail.com",
-      username: "raj_bagaria",
-      name: "Raj Bagaria",
+      email: SEED_EMAILS[0],
+      username: "alice_demo",
+      name: "Alice Demo",
+      password: passwordHash,
       isPrivate: false,
     },
   });
 
-  const user2 = await prisma.user.upsert({
-    where: { email: "kunal@example.com" },
-    update: {},
+  const bob = await prisma.user.upsert({
+    where: { email: SEED_EMAILS[1] },
+    update: { password: passwordHash },
     create: {
-      email: "kunal@example.com",
-      username: "kunal_kabra",
-      name: "Kunal kabra",
+      email: SEED_EMAILS[1],
+      username: "bob_demo",
+      name: "Bob Demo",
+      password: passwordHash,
       isPrivate: false,
     },
   });
 
-  const user3 = await prisma.user.upsert({
-    where: { email: "raghav@example.com" },
-    update: {},
+  const carol = await prisma.user.upsert({
+    where: { email: SEED_EMAILS[2] },
+    update: { password: passwordHash },
     create: {
-      email: "raghav@example.com",
-      username: "raghav_kashyap",
-      name: "Raghav Kashyap",
+      email: SEED_EMAILS[2],
+      username: "carol_demo",
+      name: "Carol Demo",
+      password: passwordHash,
       isPrivate: false,
     },
   });
 
-  console.log("✅ Users created:", {
-    user1: user1.username,
-    user2: user2.username,
-    user3: user3.username,
+  console.log("Users:", {
+    alice: alice.username,
+    bob: bob.username,
+    carol: carol.username,
   });
 
-  // Create follow relationship
   await prisma.follow.upsert({
     where: {
-      followerId_followeeId: {
-        followerId: user1.id,
-        followeeId: user2.id,
-      },
+      followerId_followeeId: { followerId: alice.id, followeeId: bob.id },
     },
     update: {},
-    create: {
-      followerId: user1.id,
-      followeeId: user2.id,
-    },
+    create: { followerId: alice.id, followeeId: bob.id },
   });
 
   await prisma.follow.upsert({
     where: {
-      followerId_followeeId: {
-        followerId: user1.id,
-        followeeId: user3.id,
-      },
+      followerId_followeeId: { followerId: alice.id, followeeId: carol.id },
     },
     update: {},
+    create: { followerId: alice.id, followeeId: carol.id },
+  });
+
+  console.log("Follow edges: alice → bob, alice → carol");
+
+  const placeTokyo = await prisma.place.upsert({
+    where: { externalId: "seed-place-tokyo" },
+    update: {},
     create: {
-      followerId: user1.id,
-      followeeId: user3.id,
+      name: "Tokyo",
+      address: "Tokyo, Japan",
+      lat: 35.6762,
+      lng: 139.6503,
+      placeType: PlaceType.POI,
+      source: PlaceSource.MAPBOX,
+      externalId: "seed-place-tokyo",
     },
   });
 
-  console.log("✅ Follow relationships created");
+  const placeBali = await prisma.place.upsert({
+    where: { externalId: "seed-place-bali" },
+    update: {},
+    create: {
+      name: "Bali",
+      address: "Bali, Indonesia",
+      lat: -8.409518,
+      lng: 115.188919,
+      placeType: PlaceType.POI,
+      source: PlaceSource.MAPBOX,
+      externalId: "seed-place-bali",
+    },
+  });
 
-  // Create sample trips
-  const trip1 = await prisma.trip.create({
+  const placeParis = await prisma.place.upsert({
+    where: { externalId: "seed-place-paris" },
+    update: {},
+    create: {
+      name: "Paris",
+      address: "Paris, France",
+      lat: 48.8566,
+      lng: 2.3522,
+      placeType: PlaceType.POI,
+      source: PlaceSource.MAPBOX,
+      externalId: "seed-place-paris",
+    },
+  });
+
+  const seedSuffix = `\n\n${SEED_MARKER}`;
+
+  const tripTokyo = await prisma.trip.create({
     data: {
-      userId: user2.id,
+      userId: bob.id,
       title: "Tokyo Adventure",
       destinations: ["Tokyo, Japan"],
-      startDate: new Date("2024-01-15"),
-      endDate: new Date("2024-01-22"),
-      status: "ENDED",
-      mood: "CULTURAL",
-      type: "SOLO",
+      startDate: new Date(Date.UTC(2024, 0, 15)),
+      endDate: new Date(Date.UTC(2024, 0, 22)),
+      status: TripStatus.ENDED,
+      mood: TripMood.CULTURAL,
+      type: TripType.SOLO,
       coverMediaId: null,
+      startLocationId: placeTokyo.id,
+      endLocationId: placeTokyo.id,
       description:
-        "Exploring the vibrant culture, incredible food, and modern marvels of Tokyo",
+        "Exploring the vibrant culture, incredible food, and modern marvels of Tokyo." +
+        seedSuffix,
     },
   });
 
-  const trip2 = await prisma.trip.create({
+  await prisma.placeOnTrip.create({
     data: {
-      userId: user3.id,
+      tripId: tripTokyo.id,
+      placeId: placeTokyo.id,
+      order: 0,
+      dayIndex: 0,
+    },
+  });
+
+  const tripBali = await prisma.trip.create({
+    data: {
+      userId: carol.id,
       title: "Bali Escape",
       destinations: ["Bali, Indonesia"],
-      startDate: new Date("2024-02-10"),
-      endDate: new Date("2024-02-17"),
-      status: "ENDED",
-      mood: "RELAXED",
-      type: "SOLO",
+      startDate: new Date(Date.UTC(2024, 1, 10)),
+      endDate: new Date(Date.UTC(2024, 1, 17)),
+      status: TripStatus.ENDED,
+      mood: TripMood.RELAXED,
+      type: TripType.SOLO,
       coverMediaId: null,
-      description: "Island paradise, temples, and incredible sunsets",
+      startLocationId: placeBali.id,
+      endLocationId: placeBali.id,
+      description:
+        "Island paradise, temples, and incredible sunsets." + seedSuffix,
     },
   });
 
-  const trip3 = await prisma.trip.create({
+  await prisma.placeOnTrip.create({
     data: {
-      userId: user2.id,
+      tripId: tripBali.id,
+      placeId: placeBali.id,
+      order: 0,
+      dayIndex: 0,
+    },
+  });
+
+  const tripParis = await prisma.trip.create({
+    data: {
+      userId: bob.id,
       title: "Paris Weekend",
       destinations: ["Paris, France"],
-      startDate: new Date("2024-03-01"),
-      endDate: new Date("2024-03-03"),
-      status: "ONGOING",
-      mood: "CULTURAL",
-      type: "COUPLE",
+      startDate: new Date(Date.UTC(2026, 4, 10)),
+      endDate: new Date(Date.UTC(2026, 4, 25)),
+      status: TripStatus.ONGOING,
+      mood: TripMood.CULTURAL,
+      type: TripType.COUPLE,
       coverMediaId: null,
-      description: "Romantic weekend in the City of Light",
+      startLocationId: placeParis.id,
+      endLocationId: placeParis.id,
+      participantCount: 2,
+      description: "Romantic weekend in the City of Light." + seedSuffix,
     },
   });
 
-  console.log("✅ Trips created:", {
-    trip1: trip1.title,
-    trip2: trip2.title,
-    trip3: trip3.title,
+  await prisma.placeOnTrip.create({
+    data: {
+      tripId: tripParis.id,
+      placeId: placeParis.id,
+      order: 0,
+      dayIndex: 0,
+    },
   });
 
-  // Create sample final posts
-  const finalPost1 = await prisma.tripFinalPost.create({
+  await prisma.tripParticipant.create({
     data: {
-      tripId: trip1.id,
+      tripId: tripParis.id,
+      userId: alice.id,
+      role: "member",
+    },
+  });
+
+  console.log("Trips:", {
+    tripTokyo: tripTokyo.title,
+    tripBali: tripBali.title,
+    tripParis: tripParis.title,
+  });
+
+  const publishedAt = new Date();
+
+  await prisma.tripFinalPost.create({
+    data: {
+      tripId: tripTokyo.id,
       summaryText:
-        "An incredible week exploring Tokyo's vibrant culture, incredible food, and modern marvels. From the organized chaos of Shibuya Crossing to the peaceful serenity of Senso-ji Temple, every moment was filled with wonder.",
+        "An incredible week exploring Tokyo's vibrant culture, incredible food, and modern marvels. From Shibuya Crossing to Senso-ji Temple, every moment was filled with wonder.",
       curatedMedia: [
         "https://images.pexels.com/photos/2506923/pexels-photo-2506923.jpeg?auto=compress&cs=tinysrgb&w=600",
         "https://images.pexels.com/photos/1907228/pexels-photo-1907228.jpeg?auto=compress&cs=tinysrgb&w=600",
         "https://images.pexels.com/photos/1239291/pexels-photo-1239291.jpeg?auto=compress&cs=tinysrgb&w=600",
       ],
       caption: "Tokyo stole my heart 🇯🇵✨",
+      generationStatus: GenerationStatus.PUBLISHED,
       isPublished: true,
+      publishedAt,
     },
   });
 
-  const finalPost2 = await prisma.tripFinalPost.create({
+  await prisma.tripFinalPost.create({
     data: {
-      tripId: trip2.id,
+      tripId: tripBali.id,
       summaryText:
-        "A week of pure bliss in Bali. From the spiritual temples of Ubud to the pristine beaches of Nusa Penida, this island paradise exceeded all expectations. The sunsets were absolutely magical.",
+        "A week of pure bliss in Bali. Temples of Ubud, beaches of Nusa Penida — magical sunsets every evening.",
       curatedMedia: [
         "https://images.pexels.com/photos/3073666/pexels-photo-3073666.jpeg?auto=compress&cs=tinysrgb&w=600",
         "https://images.pexels.com/photos/3889843/pexels-photo-3889843.jpeg?auto=compress&cs=tinysrgb&w=600",
         "https://images.pexels.com/photos/3889845/pexels-photo-3889845.jpeg?auto=compress&cs=tinysrgb&w=600",
       ],
       caption: "Bali vibes 🌴☀️",
+      generationStatus: GenerationStatus.PUBLISHED,
       isPublished: true,
+      publishedAt,
     },
   });
 
-  console.log("✅ Final posts created:", {
-    post1: finalPost1.id,
-    post2: finalPost2.id,
+  console.log("Final posts: Tokyo & Bali published.");
+
+  await prisma.tripThreadEntry.createMany({
+    data: [
+      {
+        tripId: tripTokyo.id,
+        authorId: bob.id,
+        type: ThreadEntryType.TEXT,
+        contentText: "Landed in Narita — jet lagged but excited!",
+      },
+      {
+        tripId: tripTokyo.id,
+        authorId: bob.id,
+        type: ThreadEntryType.TEXT,
+        contentText: "Senso-ji at sunrise. Quiet streets before the crowds.",
+      },
+      {
+        tripId: tripBali.id,
+        authorId: carol.id,
+        type: ThreadEntryType.TEXT,
+        contentText: "Ubud rice terraces — unreal greens.",
+      },
+      {
+        tripId: tripParis.id,
+        authorId: bob.id,
+        type: ThreadEntryType.TEXT,
+        contentText: "First café au lait by the Seine.",
+      },
+      {
+        tripId: tripParis.id,
+        authorId: alice.id,
+        type: ThreadEntryType.TEXT,
+        contentText: "Joined Bob — Metro to Montmartre tonight!",
+      },
+    ],
   });
 
-  console.log("🎉 Database seeding completed successfully!");
+  await prisma.trip.update({
+    where: { id: tripTokyo.id },
+    data: { entryCount: 2 },
+  });
+  await prisma.trip.update({
+    where: { id: tripBali.id },
+    data: { entryCount: 1 },
+  });
+  await prisma.trip.update({
+    where: { id: tripParis.id },
+    data: { entryCount: 2 },
+  });
+
+  console.log("Thread entries & entry counts updated.");
+  console.log("");
+  console.log("Done. Demo password for all seed users:", DEMO_PASSWORD);
+  console.log("Emails:", SEED_EMAILS.join(", "));
 }
 
-main()
-  .catch((e) => {
-    console.error("❌ Error during seeding:", e);
-    process.exit(1);
-  })
-  .finally(async () => {
+async function main(): Promise<void> {
+  loadSeedEnv();
+  const { prisma } = await import("@/lib/prisma");
+  try {
+    await seed(prisma);
+  } finally {
     await prisma.$disconnect();
-  });
+  }
+}
+
+main().catch((e: unknown) => {
+  const msg = e instanceof Error ? e.message : String(e);
+  const code =
+    typeof e === "object" && e !== null && "code" in e
+      ? String((e as { code?: string }).code ?? "")
+      : typeof e === "object" && e !== null && "errorCode" in e
+        ? String((e as { errorCode?: string }).errorCode ?? "")
+        : "";
+  if (code === "P1003" || msg.includes("does not exist")) {
+    console.error(
+      "Database is missing or unreachable. Create the DB and schema first:\n" +
+        "  bash scripts/setup-test-db.sh\n" +
+        "Ensure `.env.test` sets TEST_DATABASE_URL to a Postgres URL whose DB name ends with _test."
+    );
+  } else {
+    console.error("Error during seeding:", e);
+  }
+  process.exit(1);
+});

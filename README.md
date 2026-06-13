@@ -181,6 +181,37 @@ TripThread/
 
 ## 🚀 Quick Start
 
+### 🐳 Quick Start with Docker (Recommended)
+
+Run the entire backend stack (PostgreSQL databases, Next.js API server, and background scheduler) automatically in Docker without having to configure local databases or Node.js versions on your host:
+
+```bash
+# 1. Generate local environment files
+npm run setup:env
+
+# 2. Spin up the complete stack (databases, API backend, scheduler)
+npm run docker:up
+```
+
+* **API Server**: Accessible at [http://localhost:3000](http://localhost:3000)
+* **Dev Database**: PostgreSQL at `localhost:5432` (`tripthread_dev`)
+* **Test Database**: PostgreSQL at `localhost:5433` (`tripthread_test`)
+* **Scheduler**: Runs in the background (polls and updates trip statuses hourly)
+
+To view backend or database logs:
+```bash
+docker compose logs -f
+```
+
+To stop the entire stack:
+```bash
+npm run docker:down
+```
+
+---
+
+### Manual Setup (Without Docker)
+
 ### Prerequisites
 
 - Node.js 18+
