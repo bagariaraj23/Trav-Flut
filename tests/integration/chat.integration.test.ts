@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { prisma } from "../../src/lib/prisma";
-import { cleanDb, createUser } from "../testUtils";
+import { cleanDb, createUser, createTrip } from "../testUtils";
 import {
   createConversation,
   sendMessage,
@@ -10,6 +10,9 @@ import {
   addGroupParticipant,
   removeGroupParticipant,
   promoteToAdmin,
+  listConversations,
+  markConversationRead,
+  getOrCreateTripConversation,
 } from "../../src/lib/services/chat";
 import { ValidationError, AuthorizationError } from "../../src/lib/errors";
 
@@ -51,6 +54,22 @@ describe("Chat Service Integration Tests", () => {
       expect(conv.type).toBe("GROUP");
       expect(conv.name).toBe("Test Group");
       expect(conv.participants).toHaveLength(2);
+    });
+
+    it("deduplicates DM conversations between the same two users", async () => {
+      const u1 = await createUser({ email: "dm-dedup-1@test.com" });
+      const u2 = await createUser({ email: "dm-dedup-2@test.com" });
+
+      const first = await createConversation(
+        { type: "DM", participantIds: [u2.id] },
+        u1.id
+      );
+      const second = await createConversation(
+        { type: "DM", participantIds: [u1.id] },
+        u2.id
+      );
+
+      expect(second.id).toBe(first.id);
     });
 
     it("fails to create a group conversation with more than 16 total participants", async () => {
@@ -211,6 +230,29 @@ describe("Chat Service Integration Tests", () => {
       expect(updated.avatarUrl).toBe("https://example.com/avatar.png");
     });
 
+    it("allows group admin to clear avatarUrl", async () => {
+      const creator = await createUser({ email: "admin-clear@test.com" });
+      const member = await createUser({ email: "member-clear@test.com" });
+      const conv = await createConversation(
+        {
+          type: "GROUP",
+          name: "Avatar Group",
+          participantIds: [member.id],
+        },
+        creator.id
+      );
+
+      await updateGroupDetails(conv.id, creator.id, {
+        avatarUrl: "https://example.com/avatar.png",
+      });
+
+      const cleared = await updateGroupDetails(conv.id, creator.id, {
+        avatarUrl: null,
+      });
+
+      expect(cleared.avatarUrl).toBeNull();
+    });
+
     it("fails to update if user is not group admin", async () => {
       const creator = await createUser({ email: "admin-g2@test.com" });
       const member = await createUser({ email: "member-g2@test.com" });
@@ -280,6 +322,75 @@ describe("Chat Service Integration Tests", () => {
       await expect(
         addGroupParticipant(conv.id, member.id, target.id)
       ).rejects.toThrow(AuthorizationError);
+    });
+  });
+
+  describe("listConversations and read state", () => {
+    it("bumps conversation ordering after sendMessage and counts unread before first read", async () => {
+      const sender = await createUser({ email: "order-s@test.com" });
+      const receiver = await createUser({ email: "order-r@test.com" });
+      const conv = await createConversation(
+        { type: "DM", participantIds: [receiver.id] },
+        sender.id
+      );
+
+      await sendMessage(conv.id, sender.id, { content: "Hello there" });
+
+      const receiverList = await listConversations(receiver.id);
+      expect(receiverList).toHaveLength(1);
+      expect(receiverList[0].unreadCount).toBe(1);
+      expect(receiverList[0].lastMessage?.content).toBe("Hello there");
+
+      await markConversationRead(conv.id, receiver.id);
+      const afterRead = await listConversations(receiver.id);
+      expect(afterRead[0].unreadCount).toBe(0);
+    });
+
+    it("rejects invalid reply targets", async () => {
+      const u1 = await createUser({ email: "reply-u1@test.com" });
+      const u2 = await createUser({ email: "reply-u2@test.com" });
+      const conv = await createConversation(
+        { type: "DM", participantIds: [u2.id] },
+        u1.id
+      );
+
+      await expect(
+        sendMessage(conv.id, u1.id, {
+          content: "bad reply",
+          replyToMessageId: "00000000-0000-4000-8000-000000000099",
+        })
+      ).rejects.toThrow(ValidationError);
+    });
+  });
+
+  describe("trip conversations", () => {
+    it("creates and syncs trip conversation participants", async () => {
+      const owner = await createUser({ email: "trip-owner@test.com" });
+      const member = await createUser({ email: "trip-member@test.com" });
+      const trip = await createTrip({ userId: owner.id, title: "Chat Trip" });
+
+      await prisma.tripParticipant.createMany({
+        data: [
+          { tripId: trip.id, userId: owner.id },
+          { tripId: trip.id, userId: member.id },
+        ],
+      });
+      await prisma.trip.update({
+        where: { id: trip.id },
+        data: { participantCount: 2 },
+      });
+
+      const conv = await getOrCreateTripConversation(trip.id, owner.id);
+      expect(conv.type).toBe("TRIP");
+      expect(conv.participants).toHaveLength(2);
+
+      const newcomer = await createUser({ email: "trip-new@test.com" });
+      await prisma.tripParticipant.create({
+        data: { tripId: trip.id, userId: newcomer.id },
+      });
+
+      const synced = await getOrCreateTripConversation(trip.id, owner.id);
+      expect(synced.participants).toHaveLength(3);
     });
   });
 });

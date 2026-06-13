@@ -2926,11 +2926,13 @@ class ApiService {
     String conversationId, {
     String? name,
     String? avatarUrl,
+    bool clearAvatar = false,
   }) async {
     try {
       final body = <String, dynamic>{
         if (name != null) 'name': name,
         if (avatarUrl != null) 'avatarUrl': avatarUrl,
+        if (clearAvatar) 'avatarUrl': null,
       };
       final response = await _dio.patch('/chat/conversations/$conversationId', data: body);
       if (response.data['success'] == true && response.data['data'] != null) {

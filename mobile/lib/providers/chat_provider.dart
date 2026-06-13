@@ -2,7 +2,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:tripthread/models/chat_conversation.dart';
-import 'package:tripthread/models/chat_message.dart';
+import 'package:tripthread/models/chat_message.dart' hide ChatMessagePreview;
 import 'package:tripthread/services/api_service.dart';
 import 'package:tripthread/services/chat_socket_service.dart';
 import 'package:tripthread/services/storage_service.dart';
@@ -24,6 +24,8 @@ class ChatProvider with ChangeNotifier {
   Timer? _typingExpiryTimer;
   DateTime? _lastTypingSentAt;
   static const _typingThrottleMs = 250;
+
+  String? _currentUserId;
 
   List<ChatConversationSummary> get conversations => List.unmodifiable(_conversations);
   String? get error => _error;
@@ -58,12 +60,14 @@ class ChatProvider with ChangeNotifier {
 
   /// Call when the user becomes authenticated (e.g. after login). Opens WebSocket with new tokens.
   void onAuthSignedIn() {
+    _storageService.getUserId().then((id) => _currentUserId = id);
     _socketService.resetConnection();
     _socketService.connect();
   }
 
   /// Call when the user logs out. Closes WebSocket; [connect] will work again after next sign-in.
   void onAuthSignedOut() {
+    _currentUserId = null;
     _socketService.resetConnection();
   }
 
@@ -75,18 +79,38 @@ class ChatProvider with ChangeNotifier {
     final list = _messagesByConversation[conversationId] ?? [];
     final existingIndex = list.indexWhere((m) => m.id == message.id);
     if (existingIndex >= 0) {
-      // If a message with same id arrives again (e.g. edit back-compat event),
-      // replace it so content stays in sync across clients.
       final updated = [...list];
       updated[existingIndex] = message;
       _messagesByConversation[conversationId] = updated;
     } else {
       _messagesByConversation[conversationId] = [message, ...list];
+      if (defaultTargetPlatform == TargetPlatform.iOS || defaultTargetPlatform == TargetPlatform.android) {
+        HapticFeedback.lightImpact();
+      }
     }
-    if (defaultTargetPlatform == TargetPlatform.iOS || defaultTargetPlatform == TargetPlatform.android) {
-      HapticFeedback.lightImpact();
-    }
+    _refreshConversationOnMessage(conversationId, message);
     notifyListeners();
+  }
+
+  void _refreshConversationOnMessage(String conversationId, ChatMessageModel message) {
+    final idx = _conversations.indexWhere((c) => c.id == conversationId);
+    if (idx < 0) return;
+
+    final current = _conversations[idx];
+    final isFromSelf = _currentUserId != null && message.senderId == _currentUserId;
+    final preview = ChatMessagePreview(
+      id: message.id,
+      content: message.content,
+      senderId: message.senderId,
+      createdAt: message.createdAt,
+    );
+    final updated = current.copyWith(
+      lastMessage: preview,
+      updatedAt: message.updatedAt,
+      unreadCount: isFromSelf ? current.unreadCount : current.unreadCount + 1,
+    );
+    _conversations.removeAt(idx);
+    _conversations.insert(0, updated);
   }
 
   void _onTyping(String conversationId, String userId, String untilIso) {
@@ -178,6 +202,13 @@ class ChatProvider with ChangeNotifier {
     _loadingConversations = true;
     _error = null;
     notifyListeners();
+    if (tripId != null) {
+      await createConversation(
+        type: 'TRIP',
+        participantIds: const [],
+        tripId: tripId,
+      );
+    }
     final res = await _apiService.getChatConversations(tripId: tripId);
     _loadingConversations = false;
     if (res.success && res.data != null) {
@@ -222,9 +253,6 @@ class ChatProvider with ChangeNotifier {
     );
     if (res.success && res.data != null) {
       _onMessageNew(conversationId, res.data!);
-      if (defaultTargetPlatform == TargetPlatform.iOS || defaultTargetPlatform == TargetPlatform.android) {
-        HapticFeedback.lightImpact();
-      }
       return true;
     }
     _error = res.error;
@@ -271,7 +299,20 @@ class ChatProvider with ChangeNotifier {
     await _apiService.markChatConversationRead(conversationId);
     final idx = _conversations.indexWhere((c) => c.id == conversationId);
     if (idx >= 0) {
-      await loadConversations();
+      _conversations[idx] = _conversations[idx].copyWith(
+        unreadCount: 0,
+        lastReadAt: DateTime.now().toUtc().toIso8601String(),
+      );
+      notifyListeners();
+    }
+  }
+
+  Future<void> ensureConversationLoaded(String conversationId) async {
+    if (_conversations.any((c) => c.id == conversationId)) return;
+    final res = await _apiService.getChatConversation(conversationId);
+    if (res.success && res.data != null) {
+      _conversations.insert(0, res.data!);
+      notifyListeners();
     }
   }
 
@@ -307,8 +348,18 @@ class ChatProvider with ChangeNotifier {
     _socketService.sendTyping(conversationId);
   }
 
-  Future<bool> updateGroupInfo(String conversationId, {String? name, String? avatarUrl}) async {
-    final res = await _apiService.updateGroupSettings(conversationId, name: name, avatarUrl: avatarUrl);
+  Future<bool> updateGroupInfo(
+    String conversationId, {
+    String? name,
+    String? avatarUrl,
+    bool clearAvatar = false,
+  }) async {
+    final res = await _apiService.updateGroupSettings(
+      conversationId,
+      name: name,
+      avatarUrl: avatarUrl,
+      clearAvatar: clearAvatar,
+    );
     if (res.success && res.data != null) {
       final idx = _conversations.indexWhere((c) => c.id == conversationId);
       if (idx >= 0) {

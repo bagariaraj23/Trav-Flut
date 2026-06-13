@@ -286,17 +286,6 @@ class _HomeFeedScreenState extends State<HomeFeedScreen> {
           IconButton(
             icon: const Icon(Icons.chat_bubble_outline),
             tooltip: 'Messages',
-            onPressed: () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Direct messages are coming soon.'),
-                  duration: Duration(seconds: 2),
-                ),
-              );
-            },
-          ),
-          IconButton(
-            icon: const Icon(Icons.chat_bubble_outline),
             onPressed: () => context.push('/chat'),
           ),
           // Combined Notification Icon

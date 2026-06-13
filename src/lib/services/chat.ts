@@ -173,8 +173,10 @@ async function formatConversationSummary(
 ): Promise<ConversationSummary> {
   const myParticipant = conv.participants.find((p: any) => p.userId === currentUserId)
   const lastMsg = conv.messages[0] ?? null
-  const unreadCount = myParticipant?.lastReadAt
-    ? await countUnreadInConversation(conv.id, currentUserId, myParticipant.lastReadAt)
+  const unreadCount = myParticipant
+    ? myParticipant.lastReadAt
+      ? await countUnreadInConversation(conv.id, currentUserId, myParticipant.lastReadAt)
+      : await countAllUnreadFromOthers(conv.id, currentUserId)
     : 0
   return {
     id: conv.id,
@@ -224,22 +226,42 @@ async function countUnreadInConversation(
   return count
 }
 
+async function countAllUnreadFromOthers(
+  conversationId: string,
+  userId: string
+): Promise<number> {
+  return prisma.chatMessage.count({
+    where: {
+      conversationId,
+      senderId: { not: userId },
+      deletedAt: null,
+    },
+  })
+}
+
+async function touchConversation(conversationId: string): Promise<void> {
+  await prisma.conversation.update({
+    where: { id: conversationId },
+    data: { updatedAt: new Date() },
+  })
+}
+
 async function findExistingDM(userId: string, otherId: string): Promise<ConversationSummary | null> {
   const conv = await prisma.conversation.findFirst({
     where: {
       type: 'DM',
-      participants: {
-        every: {
-          userId: { in: [userId, otherId] },
-        },
-      },
+      AND: [
+        { participants: { some: { userId, leftAt: null } } },
+        { participants: { some: { userId: otherId, leftAt: null } } },
+      ],
     },
     include: conversationListInclude,
   })
   if (!conv) return null
-  const participantUserIds = conv.participants.map((p) => p.userId)
-  const set = new Set(participantUserIds)
-  if (set.size !== 2 || !set.has(userId) || !set.has(otherId)) return null
+  const activeParticipants = conv.participants.filter((p) => !p.leftAt)
+  if (activeParticipants.length !== 2) return null
+  const activeUserIds = new Set(activeParticipants.map((p) => p.userId))
+  if (!activeUserIds.has(userId) || !activeUserIds.has(otherId)) return null
   return await formatConversationSummary(conv, userId)
 }
 
@@ -278,9 +300,50 @@ export async function getOrCreateTripConversation(
       },
       include: conversationListInclude,
     })
+  } else {
+    await syncTripConversationParticipants(conv, trip.participants.map((p) => p.userId))
+    conv = await prisma.conversation.findUnique({
+      where: { tripId },
+      include: conversationListInclude,
+    })
+    if (!conv) throw new NotFoundError('Conversation not found')
   }
 
   return await formatConversationSummary(conv, userId)
+}
+
+async function syncTripConversationParticipants(
+  conv: { id: string; participants: Array<{ id: string; userId: string; leftAt: Date | null }> },
+  tripUserIds: string[]
+): Promise<void> {
+  const tripUserIdSet = new Set(tripUserIds)
+
+  for (const tripUserId of tripUserIds) {
+    const existing = conv.participants.find((p) => p.userId === tripUserId)
+    if (!existing) {
+      await prisma.conversationParticipant.create({
+        data: {
+          conversationId: conv.id,
+          userId: tripUserId,
+          role: 'MEMBER',
+        },
+      })
+    } else if (existing.leftAt) {
+      await prisma.conversationParticipant.update({
+        where: { id: existing.id },
+        data: { leftAt: null, joinedAt: new Date() },
+      })
+    }
+  }
+
+  for (const participant of conv.participants) {
+    if (!tripUserIdSet.has(participant.userId) && !participant.leftAt) {
+      await prisma.conversationParticipant.update({
+        where: { id: participant.id },
+        data: { leftAt: new Date() },
+      })
+    }
+  }
 }
 
 export async function listConversations(
@@ -316,8 +379,10 @@ export async function getConversation(
     include: conversationListInclude,
   })
   if (!conv) throw new NotFoundError('Conversation not found')
-  const isParticipant = conv.participants.some((p) => p.userId === userId)
-  if (!isParticipant) throw new AuthorizationError('Not a participant')
+  const isActiveParticipant = conv.participants.some(
+    (p) => p.userId === userId && !p.leftAt
+  )
+  if (!isActiveParticipant) throw new AuthorizationError('Not a participant')
   return await formatConversationSummary(conv, userId)
 }
 
@@ -333,9 +398,25 @@ export async function getMessages(
 
   const conv = await prisma.conversation.findUnique({
     where: { id: conversationId },
-    select: { id: true, participants: { where: { userId }, select: { userId: true } } },
+    select: {
+      id: true,
+      participants: {
+        where: { userId, leftAt: null },
+        select: { userId: true },
+      },
+    },
   })
   if (!conv || conv.participants.length === 0) throw new AuthorizationError('Not a participant')
+
+  if (options.before) {
+    const cursorMsg = await prisma.chatMessage.findUnique({
+      where: { id: options.before },
+      select: { conversationId: true },
+    })
+    if (!cursorMsg || cursorMsg.conversationId !== conversationId) {
+      throw new ValidationError('Invalid message cursor')
+    }
+  }
 
   const cursorCondition: Prisma.ChatMessageWhereUniqueInput | undefined = options.before
     ? { id: options.before }
@@ -459,6 +540,20 @@ export async function sendMessage(
   })
   if (!participant || participant.leftAt) throw new AuthorizationError('Not a participant')
 
+  if (replyToMessageId) {
+    const replyTarget = await prisma.chatMessage.findUnique({
+      where: { id: replyToMessageId },
+      select: { conversationId: true, deletedAt: true },
+    })
+    if (
+      !replyTarget ||
+      replyTarget.conversationId !== conversationId ||
+      replyTarget.deletedAt != null
+    ) {
+      throw new ValidationError('Invalid reply target message')
+    }
+  }
+
   const msg = await prisma.chatMessage.create({
     data: {
       conversationId,
@@ -488,6 +583,8 @@ export async function sendMessage(
         })
       : msg
   const messageForPayload = msgWithAttachments ?? msg
+
+  await touchConversation(conversationId)
 
   const payload: ChatMessagePayload = {
     id: messageForPayload.id,
@@ -522,9 +619,7 @@ export async function sendMessage(
     where: { conversationId, leftAt: null },
     select: { userId: true },
   })
-  const recipientUserIds = participants
-    .map((p) => p.userId)
-    .filter((id) => id !== userId)
+  const recipientUserIds = participants.map((p) => p.userId)
   publishChatEvent({
     event: 'message.new',
     conversationId,
@@ -606,12 +701,13 @@ export async function deleteMessage(
           include: messageInclude,
         })
 
+  await touchConversation(conversationId)
+
   const participants = await prisma.conversationParticipant.findMany({
     where: { conversationId, leftAt: null },
     select: { userId: true },
   })
-  const recipientUserIds = participants
-    .map((p) => p.userId)
+  const recipientUserIds = participants.map((p) => p.userId)
   publishChatEvent({
     event: 'message.deleted',
     conversationId,
@@ -697,6 +793,8 @@ export async function editMessage(
     include: messageInclude,
   })
 
+  await touchConversation(conversationId)
+
   const participants = await prisma.conversationParticipant.findMany({
     where: { conversationId, leftAt: null },
     select: { userId: true },
@@ -735,13 +833,6 @@ export async function editMessage(
 
   publishChatEvent({
     event: 'message.updated',
-    conversationId,
-    message: payload,
-    recipientUserIds,
-  })
-  // Backward compatibility for clients that only handle message.new.
-  publishChatEvent({
-    event: 'message.new',
     conversationId,
     message: payload,
     recipientUserIds,
@@ -786,8 +877,15 @@ export async function markConversationRead(
   conversationId: string,
   userId: string
 ): Promise<void> {
-  await prisma.conversationParticipant.updateMany({
-    where: { conversationId, userId },
+  const participant = await prisma.conversationParticipant.findUnique({
+    where: {
+      conversationId_userId: { conversationId, userId },
+    },
+  })
+  if (!participant || participant.leftAt) return
+
+  await prisma.conversationParticipant.update({
+    where: { id: participant.id },
     data: { lastReadAt: new Date() },
   })
 }
@@ -805,7 +903,7 @@ export async function updateGroupDetails(
   if (!conv) throw new NotFoundError('Group not found')
   if (conv.type !== 'GROUP') throw new ValidationError('Only groups details can be edited')
 
-  const participant = conv.participants.find((p) => p.userId === userId)
+  const participant = conv.participants.find((p) => p.userId === userId && !p.leftAt)
   if (!participant) throw new AuthorizationError('Not a participant')
   if (participant.role !== 'ADMIN') throw new AuthorizationError('Only admins can update group details')
 
@@ -834,7 +932,7 @@ export async function addGroupParticipant(
   if (!conv) throw new NotFoundError('Group not found')
   if (conv.type !== 'GROUP') throw new ValidationError('Only group participants can be managed')
 
-  const adminParticipant = conv.participants.find((p) => p.userId === adminUserId)
+  const adminParticipant = conv.participants.find((p) => p.userId === adminUserId && !p.leftAt)
   if (!adminParticipant) throw new AuthorizationError('Not a participant')
   if (adminParticipant.role !== 'ADMIN') throw new AuthorizationError('Only admins can add participants')
 
@@ -885,7 +983,7 @@ export async function removeGroupParticipant(
   if (!conv) throw new NotFoundError('Group not found')
   if (conv.type !== 'GROUP') throw new ValidationError('Only group participants can be managed')
 
-  const adminParticipant = conv.participants.find((p) => p.userId === adminUserId)
+  const adminParticipant = conv.participants.find((p) => p.userId === adminUserId && !p.leftAt)
   if (!adminParticipant) throw new AuthorizationError('Not a participant')
   if (adminParticipant.role !== 'ADMIN') throw new AuthorizationError('Only admins can remove participants')
 
@@ -924,7 +1022,7 @@ export async function promoteToAdmin(
   if (!conv) throw new NotFoundError('Group not found')
   if (conv.type !== 'GROUP') throw new ValidationError('Only group participants can be managed')
 
-  const adminParticipant = conv.participants.find((p) => p.userId === adminUserId)
+  const adminParticipant = conv.participants.find((p) => p.userId === adminUserId && !p.leftAt)
   if (!adminParticipant) throw new AuthorizationError('Not a participant')
   if (adminParticipant.role !== 'ADMIN') throw new AuthorizationError('Only admins can promote users')
 

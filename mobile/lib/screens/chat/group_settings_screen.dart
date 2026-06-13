@@ -75,7 +75,7 @@ class _GroupSettingsScreenState extends State<GroupSettingsScreen> {
       final chat = context.read<ChatProvider>();
       final ok = await chat.updateGroupInfo(
         widget.conversationId,
-        avatarUrl: '',
+        clearAvatar: true,
       );
       if (!ok && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

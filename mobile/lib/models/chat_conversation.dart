@@ -45,6 +45,36 @@ class ChatConversationSummary {
       updatedAt: json['updatedAt'] as String,
     );
   }
+
+  ChatConversationSummary copyWith({
+    String? id,
+    String? type,
+    String? tripId,
+    String? name,
+    String? avatarUrl,
+    List<ChatParticipant>? participants,
+    ChatMessagePreview? lastMessage,
+    int? unreadCount,
+    String? lastReadAt,
+    String? createdAt,
+    String? updatedAt,
+    bool clearAvatar = false,
+    bool clearLastMessage = false,
+  }) {
+    return ChatConversationSummary(
+      id: id ?? this.id,
+      type: type ?? this.type,
+      tripId: tripId ?? this.tripId,
+      name: name ?? this.name,
+      avatarUrl: clearAvatar ? null : (avatarUrl ?? this.avatarUrl),
+      participants: participants ?? this.participants,
+      lastMessage: clearLastMessage ? null : (lastMessage ?? this.lastMessage),
+      unreadCount: unreadCount ?? this.unreadCount,
+      lastReadAt: lastReadAt ?? this.lastReadAt,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+    );
+  }
 }
 
 class ChatParticipant {

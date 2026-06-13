@@ -160,6 +160,7 @@ class _ChatScreenState extends State<ChatScreen> {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       final chat = context.read<ChatProvider>();
+      await chat.ensureConversationLoaded(widget.conversationId);
       await chat.loadMessages(widget.conversationId);
       chat.markRead(widget.conversationId);
       _scrollController.addListener(_onScroll);

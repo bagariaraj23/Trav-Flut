@@ -982,7 +982,8 @@
                 "tests/integration/followRequests.integration.test.ts",
                 "tests/integration/concurrency.tripInvite.test.ts",
                 "tests/integration/stress.concurrent.test.ts",
-                "tests/integration/chat.integration.test.ts"
+                "tests/integration/chat.integration.test.ts",
+                "tests/integration/chat-routes.integration.test.ts"
             ],
             "routeContract": [
                 "src/app/test/api-route-contract.test.ts"
@@ -994,9 +995,10 @@
             ]
         },
         "mobileSuites": {
-            "testFileCount": 16,
+            "testFileCount": 18,
             "notablePaths": [
-                "mobile/test/providers/trip_provider_test.dart",
+                "mobile/test/providers/chat_provider_test.dart",
+                "mobile/test/widgets/chat_avatar_test.dart",
                 "mobile/test/providers/engagement_provider_test.dart",
                 "mobile/test/providers/comment_provider_test.dart",
                 "mobile/test/widgets/like_button_test.dart",
@@ -1009,8 +1011,8 @@
             "nodeVersion": "20.19.4",
             "testDatabase": "tripthread_test",
             "results": {
-                "testFiles": 21,
-                "testsPassed": 117,
+                "testFiles": 22,
+                "testsPassed": 127,
                 "testsFailed": 0
             },
             "reportPath": "coverage/",
@@ -2108,8 +2110,8 @@
             ]
         },
         "testingCoverage": {
-            "backend": "Good — 117 Vitest tests passing (21 files); v8 coverage 51% statements / 52% lines overall",
-            "mobile": "Partial — 16 Flutter test files; engagement widgets/providers covered; trip leave provider added in PR #45",
+            "backend": "Good — 127 Vitest tests passing (22 files); v8 coverage 51% statements / 52% lines overall",
+            "mobile": "Partial — 18 Flutter test files (incl. chat provider + ChatAvatar widget); engagement widgets/providers covered",
             "integration": "Good — auth, trips, thread, leave, engagement, notifications, invites, concurrency, chat",
             "scheduler": "Partial — behavioral unit tests; DB integration tests exist but scheduler source still low line coverage",
             "reportPath": "coverage/index.html",

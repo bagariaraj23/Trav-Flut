@@ -12,6 +12,7 @@ function getChatEventBus(): { subscribe: (fn: (p: ChatEventPayload) => void) => 
 type ExtendedWebSocket = WebSocket & { userId?: string };
 
 const connectionsByUserId = new Map<string, Set<WebSocket>>();
+const AUTH_TIMEOUT_MS = 10_000;
 
 function sendToUser(userId: string, payload: object): void {
   const conns = connectionsByUserId.get(userId);
@@ -26,6 +27,19 @@ function sendToUser(userId: string, payload: object): void {
       }
     }
   });
+}
+
+function closeUnauthorized(ws: WebSocket, message: string): void {
+  try {
+    ws.send(JSON.stringify({ type: "error", message }));
+  } catch (_) {
+    // ignore send failures on closing sockets
+  }
+  try {
+    ws.close(4401, "Unauthorized");
+  } catch (_) {
+    // ignore close failures
+  }
 }
 
 export function attachChatWebSocket(
@@ -58,7 +72,16 @@ export function attachChatWebSocket(
     const tokenMatch = url.match(/[?&]token=([^&]+)/);
     const token = tokenMatch ? decodeURIComponent(tokenMatch[1]) : null;
 
-    const authenticate = (t: string) => {
+    let authTimeout: ReturnType<typeof setTimeout> | null = null;
+
+    const clearAuthTimeout = () => {
+      if (authTimeout) {
+        clearTimeout(authTimeout);
+        authTimeout = null;
+      }
+    };
+
+    const authenticate = (t: string): boolean => {
       const payload = AuthService.verifyAccessToken(t.replace(/^Bearer\s+/i, "").trim());
       if (!payload) return false;
       extWs.userId = payload.userId;
@@ -68,13 +91,24 @@ export function attachChatWebSocket(
         connectionsByUserId.set(payload.userId, set);
       }
       set.add(ws);
+      clearAuthTimeout();
       return true;
     };
 
-    if (token && authenticate(token)) {
+    if (token) {
+      if (!authenticate(token)) {
+        closeUnauthorized(ws, "Invalid token");
+        return;
+      }
       try {
         ws.send(JSON.stringify({ type: "connected", userId: extWs.userId }));
       } catch (_) {}
+    } else {
+      authTimeout = setTimeout(() => {
+        if (!extWs.userId) {
+          closeUnauthorized(ws, "Authentication required");
+        }
+      }, AUTH_TIMEOUT_MS);
     }
 
     ws.on("message", async (data: Buffer | string) => {
@@ -84,7 +118,7 @@ export function attachChatWebSocket(
           if (authenticate(msg.token)) {
             ws.send(JSON.stringify({ type: "connected", userId: extWs.userId }));
           } else {
-            ws.send(JSON.stringify({ type: "error", message: "Invalid token" }));
+            closeUnauthorized(ws, "Invalid token");
           }
           return;
         }
@@ -99,6 +133,7 @@ export function attachChatWebSocket(
               where: { id: conversationId },
               select: {
                 participants: {
+                  where: { leftAt: null },
                   select: { userId: true },
                 },
               },
@@ -129,6 +164,7 @@ export function attachChatWebSocket(
     });
 
     ws.on("close", () => {
+      clearAuthTimeout();
       const uid = extWs.userId;
       if (uid) {
         const set = connectionsByUserId.get(uid);

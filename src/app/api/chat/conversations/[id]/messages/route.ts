@@ -2,10 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { withAuth, withLogging, handleApiError } from "@/lib/middleware";
 import { deleteMessage, editMessage, getMessages, sendMessage } from "@/lib/services/chat";
 import { ApiResponse } from "@/types/api";
-import { z } from "zod";
+import { z, ZodError } from "zod";
 
 const sendBodySchema = z.object({
-  content: z.string().max(64 * 1024).optional(),
+  content: z.string().max(512).optional(),
   replyToMessageId: z.string().uuid().optional().nullable(),
   attachmentMediaIds: z.array(z.string().uuid()).optional(),
 });
@@ -58,6 +58,12 @@ export async function POST(
           { status: 201 }
         );
       } catch (error) {
+        if (error instanceof ZodError) {
+          return NextResponse.json<ApiResponse>(
+            { success: false, error: error.errors[0]?.message ?? "Validation error" },
+            { status: 400 }
+          );
+        }
         return handleApiError(error);
       }
     });

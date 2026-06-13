@@ -280,6 +280,14 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
                 ),
               ),
               actions: [
+                if (_trip != null && _isOwnerOrParticipant())
+                  IconButton(
+                    icon: const Icon(Icons.chat_bubble_outline),
+                    tooltip: 'Trip Chat',
+                    onPressed: () {
+                      context.push('/chat?tripId=${widget.tripId}');
+                    },
+                  ),
                 if (_trip != null &&
                     _trip!.status == TripStatus.ongoing &&
                     _isOwnerOrParticipant())
