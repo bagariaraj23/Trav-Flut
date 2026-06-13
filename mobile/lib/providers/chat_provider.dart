@@ -46,8 +46,7 @@ class ChatProvider with ChangeNotifier {
       _error = msg;
       notifyListeners();
     };
-    // Keep chat WebSocket connected for the lifetime of the provider
-    _socketService.connect();
+    // Socket is opened from [onAuthSignedIn] / [connectSocket] so it does not race token restore or [resetConnection].
   }
 
   void connectSocket() {
@@ -55,6 +54,17 @@ class ChatProvider with ChangeNotifier {
     if (!_socketService.isConnected) {
       _socketService.connect();
     }
+  }
+
+  /// Call when the user becomes authenticated (e.g. after login). Opens WebSocket with new tokens.
+  void onAuthSignedIn() {
+    _socketService.resetConnection();
+    _socketService.connect();
+  }
+
+  /// Call when the user logs out. Closes WebSocket; [connect] will work again after next sign-in.
+  void onAuthSignedOut() {
+    _socketService.resetConnection();
   }
 
   void disconnectSocket() {

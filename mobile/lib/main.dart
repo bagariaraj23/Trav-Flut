@@ -255,10 +255,30 @@ void main() async {
           ChangeNotifierProvider<ChatProvider>(
             create: (context) {
               debugPrint('[main] Creating ChatProvider');
-              return ChatProvider(
+              final auth = context.read<AuthProvider>();
+              final chat = ChatProvider(
                 apiService: apiService,
                 storageService: storageService,
               );
+              var wasAuthenticated = auth.isAuthenticated;
+              void syncChatSocket() {
+                final authed = auth.isAuthenticated;
+                if (authed && !wasAuthenticated) {
+                  debugPrint('[main] Auth signed in — connecting chat WebSocket');
+                  chat.onAuthSignedIn();
+                } else if (!authed && wasAuthenticated) {
+                  debugPrint('[main] Auth signed out — resetting chat WebSocket');
+                  chat.onAuthSignedOut();
+                }
+                wasAuthenticated = authed;
+              }
+
+              auth.addListener(syncChatSocket);
+              if (auth.isAuthenticated) {
+                // Listener only runs on transitions; opening chat while already logged in must open the socket.
+                chat.onAuthSignedIn();
+              }
+              return chat;
             },
           ),
         ],

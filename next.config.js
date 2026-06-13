@@ -2,6 +2,9 @@
 import 'dotenv/config';
 
 const nextConfig = {
+  // jsonwebtoken / bcryptjs use dynamic requires; bundling them for RSC causes
+  // "TypeError: __webpack_require__.nmd is not a function" on API routes.
+  serverExternalPackages: ["jsonwebtoken", "bcryptjs"],
   // instrumentationHook is now available by default in Next.js 15, no need to enable it
   env: {
     ENABLE_SCHEDULER: process.env.ENABLE_SCHEDULER,

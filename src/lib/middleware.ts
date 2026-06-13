@@ -126,10 +126,16 @@ export function handleApiError(error: unknown, context?: {
   userId?: string;
   endpoint?: string;
 }): NextResponse {
+  if (!(error instanceof AppError)) {
+    console.error(
+      `[handleApiError] Unhandled error${context?.endpoint ? ` (${context.endpoint})` : ""}:`,
+      error
+    );
+  }
   const appError =
     error instanceof AppError
       ? error
-      : new AppError("Internal server error", 500);
+      : new AppError("Internal server error", 500, false);
 
   // Enhanced logging with context
   if (!appError.isOperational) {

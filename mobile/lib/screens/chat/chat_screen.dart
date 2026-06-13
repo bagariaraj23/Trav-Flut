@@ -468,7 +468,10 @@ class _ChatScreenState extends State<ChatScreen> {
             child: Consumer<ChatProvider>(
               builder: (context, chat, _) {
                 final messages = chat.getMessages(widget.conversationId);
-                final typingUsers = chat.getTypingUsers(widget.conversationId);
+                final typingUsers = chat
+                    .getTypingUsers(widget.conversationId)
+                    .where((id) => id != currentUserId)
+                    .toList();
                 if (messages.isEmpty && chat.isLoadingMessages(widget.conversationId)) {
                   return const Center(child: CircularProgressIndicator());
                 }

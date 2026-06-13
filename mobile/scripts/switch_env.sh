@@ -51,13 +51,13 @@ case $ENVIRONMENT in
     update_env_var "$BACKEND_ENV_FILE" "ALLOWED_ORIGINS" "http://localhost:3000,http://localhost:3001,http://127.0.0.1:3000,http://127.0.0.1:3001"
     update_env_var "$BACKEND_ENV_FILE" "APP_RESET_WEB_URL" "http://$IP_ADDRESS:3000/forgot-password"
 
-    echo "✅ Switched to local environment (localhost:3000)"
+    echo "✅ Switched to local environment (API + WebSocket: npm run dev → http://localhost:3000). Android emulator: use http://10.0.2.2:3000/api in mobile/.env"
     ;;
     
   "network")
     read -p "Enter your local IP address: " IP_ADDRESS
     
-    # Update mobile .env - only API_BASE_URL and ENVIRONMENT
+    # Update mobile .env - only API_BASE_URL and ENVIRONMENT (physical device → host npm run dev on 3000)
     update_env_var "$MOBILE_ENV_FILE" "API_BASE_URL" "http://$IP_ADDRESS:3000/api"
     update_env_var "$MOBILE_ENV_FILE" "ENVIRONMENT" "development"
     
@@ -68,7 +68,7 @@ case $ENVIRONMENT in
     update_env_var "$BACKEND_ENV_FILE" "ALLOWED_ORIGINS" "http://$IP_ADDRESS:3000,http://$IP_ADDRESS:3001,http://localhost:3000,http://localhost:3001,http://127.0.0.1:3000,http://127.0.0.1:3001"
     update_env_var "$BACKEND_ENV_FILE" "APP_RESET_WEB_URL" "http://$IP_ADDRESS:3000/forgot-password"
 
-    echo "✅ Switched to network environment ($IP_ADDRESS:3000)"
+    echo "✅ Switched to network environment ($IP_ADDRESS:3000 — same port for REST + WebSocket)"
     ;;
     
   "staging")

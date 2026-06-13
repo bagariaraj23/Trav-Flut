@@ -26,6 +26,7 @@ class ChatSocketService {
   Timer? _reconnectTimer;
   static const _reconnectDelay = Duration(seconds: 3);
   bool _closed = false;
+  bool _connecting = false;
 
   ChatSocketService({required this.getAccessToken});
 
@@ -35,55 +36,78 @@ class ChatSocketService {
 
   void connect() async {
     if (_closed) return;
-    final token = await getAccessToken();
-    if (token == null || token.isEmpty) {
-      debugPrint('[ChatSocket] No token, skip connect');
+    if (_connecting) {
+      if (kDebugMode) {
+        debugPrint('[ChatSocket] connect skipped (already in progress)');
+      }
       return;
     }
+    _connecting = true;
     try {
-      final uri = Uri.parse(AppConfig.apiBaseUrl);
-      final scheme = uri.scheme == 'https' ? 'wss' : 'ws';
-      final port = uri.hasPort ? ':${uri.port}' : '';
-      final wsUrl = '$scheme://${uri.host}$port/chat?token=${Uri.encodeComponent('Bearer $token')}';
-      debugPrint('[ChatSocket] Connecting to $wsUrl');
-      final channel = WebSocketChannel.connect(Uri.parse(wsUrl));
-      // Await the ready future so connection errors are caught here
-      // instead of becoming unhandled exceptions.
-      try {
-        await channel.ready;
-      } catch (e) {
-        debugPrint('[ChatSocket] WebSocket handshake failed: $e');
-        onError?.call(e.toString());
+      final token = await getAccessToken();
+      if (token == null || token.isEmpty) {
+        debugPrint('[ChatSocket] No token yet; scheduling reconnect');
         _scheduleReconnect();
         return;
       }
-      if (_closed) {
-        channel.sink.close();
-        return;
-      }
-      _channel = channel;
-      _subscription = _channel!.stream.listen(
-        _onData,
-        onError: (e) {
-          debugPrint('[ChatSocket] Stream error: $e');
+      try {
+        final origin = AppConfig.chatWebSocketHttpOrigin;
+        final scheme = origin.scheme == 'https' ? 'wss' : 'ws';
+        final port = origin.hasPort ? ':${origin.port}' : '';
+        final wsUrl =
+            '$scheme://${origin.host}$port/chat?token=${Uri.encodeComponent('Bearer $token')}';
+        debugPrint('[ChatSocket] Connecting to $wsUrl');
+        final channel = WebSocketChannel.connect(Uri.parse(wsUrl));
+        try {
+          await channel.ready;
+        } catch (e) {
+          debugPrint('[ChatSocket] WebSocket handshake failed: $e');
+          if (kDebugMode) {
+            debugPrint(
+              '[ChatSocket] Ensure `npm run dev` (server.cjs) is running on port 3000 — '
+              'plain `next dev` does not host /chat (no WebSocket upgrade).',
+            );
+          }
           onError?.call(e.toString());
-          _channel = null;
-          _subscription = null;
           _scheduleReconnect();
-        },
-        onDone: () {
-          debugPrint('[ChatSocket] Done');
-          _channel = null;
-          _subscription = null;
-          if (!_closed) _scheduleReconnect();
-        },
-        cancelOnError: false,
-      );
-      debugPrint('[ChatSocket] Connected successfully');
-    } catch (e) {
-      debugPrint('[ChatSocket] Connect error: $e');
-      onError?.call(e.toString());
-      _scheduleReconnect();
+          return;
+        }
+        if (_closed) {
+          channel.sink.close();
+          return;
+        }
+        await _subscription?.cancel();
+        _subscription = null;
+        try {
+          await _channel?.sink.close();
+        } catch (_) {}
+        _channel = null;
+        _channel = channel;
+        _subscription = _channel!.stream.listen(
+          _onData,
+          onError: (e) {
+            debugPrint('[ChatSocket] Stream error: $e');
+            onError?.call(e.toString());
+            _channel = null;
+            _subscription = null;
+            _scheduleReconnect();
+          },
+          onDone: () {
+            debugPrint('[ChatSocket] Done');
+            _channel = null;
+            _subscription = null;
+            if (!_closed) _scheduleReconnect();
+          },
+          cancelOnError: false,
+        );
+        debugPrint('[ChatSocket] Connected successfully');
+      } catch (e) {
+        debugPrint('[ChatSocket] Connect error: $e');
+        onError?.call(e.toString());
+        _scheduleReconnect();
+      }
+    } finally {
+      _connecting = false;
     }
   }
 
@@ -151,19 +175,30 @@ class ChatSocketService {
     }
   }
 
-  void disconnect() {
-    _closed = true;
+  /// Close the socket but allow [connect] again (e.g. after logout → next login).
+  void resetConnection() {
     _reconnectTimer?.cancel();
     _reconnectTimer = null;
     _subscription?.cancel();
     _subscription = null;
-    _channel?.sink.close();
+    try {
+      _channel?.sink.close();
+    } catch (_) {}
     _channel = null;
     _userId = null;
+    _connecting = false;
+  }
+
+  void disconnect() {
+    _closed = true;
+    resetConnection();
   }
 
   void sendTyping(String conversationId) {
-    if (_channel == null) return;
+    if (_channel == null) {
+      connect();
+      return;
+    }
     try {
       _channel!.sink.add(jsonEncode({
         'type': 'typing',
