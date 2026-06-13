@@ -1,32 +1,38 @@
-# TripThread — minimal Compose file (PostgreSQL dev + test)
+# TripThread — Complete Application Stack
+# Starts PostgreSQL (dev and test), Next.js Backend API, and the Scheduler Service.
 #
-# Prefer docker-compose.dev.yml for day-to-day work (named project `tripthread`, documented in DOCKER_SETUP.md).
-# This file stays for CI/scripts that expect `docker-compose.yml` with two databases on 5432 and 5433.
+# Usage:
+#   docker compose up --build -d   # Start the full stack
+#   docker compose down            # Stop and remove containers
+#
+# Compose reads `.env` in this directory for optional custom overrides.
 
 name: tripthread
 
 services:
-  postgres:
+  postgres-dev:
     image: postgres:16-alpine
-    container_name: tripthread-postgres
+    container_name: tripthread-db-dev
     restart: unless-stopped
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: tripthread_dev
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-tripthread_dev}
     ports:
-      - "5432:5432"
+      - "${POSTGRES_PORT:-5432}:5432"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - postgres_dev_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
-      interval: 5s
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres}"]
+      interval: 10s
       timeout: 5s
       retries: 5
+    networks:
+      - tripthread-network
 
-  postgres_test:
+  postgres-test:
     image: postgres:16-alpine
-    container_name: tripthread-postgres-test
+    container_name: tripthread-db-test
     restart: unless-stopped
     environment:
       POSTGRES_USER: postgres
@@ -38,12 +44,64 @@ services:
       - postgres_test_data:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
-      interval: 5s
+      interval: 10s
       timeout: 5s
       retries: 5
+    networks:
+      - tripthread-network
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: tripthread-backend
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres-dev:5432/${POSTGRES_DB:-tripthread_dev}?schema=public
+      - TEST_DATABASE_URL=postgresql://postgres:postgres@postgres-test:5432/tripthread_test?schema=public
+      - NODE_ENV=production
+      - JWT_SECRET=${JWT_SECRET:-dev-jwt-secret-key-for-local-development}
+      - JWT_REFRESH_SECRET=${JWT_REFRESH_SECRET:-dev-jwt-refresh-secret-key-for-local-development}
+      - ENABLE_SCHEDULER=${ENABLE_SCHEDULER:-true}
+      - CLOUDINARY_CLOUD_NAME=${CLOUDINARY_CLOUD_NAME}
+      - CLOUDINARY_API_KEY=${CLOUDINARY_API_KEY}
+      - CLOUDINARY_API_SECRET=${CLOUDINARY_API_SECRET}
+      - MAPBOX_ACCESS_TOKEN=${MAPBOX_ACCESS_TOKEN}
+      - SENDGRID_API_KEY=${SENDGRID_API_KEY}
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
+      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
+    depends_on:
+      postgres-dev:
+        condition: service_healthy
+    command: ["npm", "run", "start"]
+    networks:
+      - tripthread-network
+
+  scheduler:
+    build:
+      context: .
+      dockerfile: scheduler/Dockerfile
+    container_name: tripthread-scheduler
+    restart: unless-stopped
+    environment:
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres-dev:5432/${POSTGRES_DB:-tripthread_dev}?schema=public
+      - NODE_ENV=production
+    depends_on:
+      postgres-dev:
+        condition: service_healthy
+    # Runs the scheduler script periodically (every hour) in a shell loop
+    command: ["sh", "-c", "while true; do node dist/index.js; echo 'Waiting 1 hour...'; sleep 3600; done"]
+    networks:
+      - tripthread-network
 
 volumes:
-  postgres_data:
+  postgres_dev_data:
     driver: local
   postgres_test_data:
     driver: local
+
+networks:
+  tripthread-network:
+    driver: bridge
