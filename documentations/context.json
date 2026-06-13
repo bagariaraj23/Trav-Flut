@@ -4,8 +4,9 @@
         "workspacePath": "/Users/rajbagaria/Desktop/Bolt-Travello/Flut/project",
         "generatedAt": "2026-06-13",
         "description": "Travel-focused social platform where users create trips, post thread entries (text/media/location/check-ins), and generate/publish final trip posts.",
-        "lastPRReviewed": "PR #47 merged 2026-06-13 → main — fix Railway deployment: remove macOS-only @rolldown/binding-darwin-arm64 from dependencies; lockfile regen; notifications integration test fix.",
+        "lastPRReviewed": "PR #44 — Full stack Dockerization: PostgreSQL (dev/test), Next.js API server, and background scheduler containerized under a single compose network; documentation updated in DOCKER_SETUP.md and QUICKSTART.md.",
         "recentProductionPRs": [
+            "https://github.com/bagariaraj23/Trav-Flut/pull/44",
             "https://github.com/bagariaraj23/Trav-Flut/pull/47",
             "https://github.com/bagariaraj23/Trav-Flut/pull/46",
             "https://github.com/bagariaraj23/Trav-Flut/pull/45",
@@ -42,6 +43,17 @@
             "purpose": "Auto-transition trip status and auto-finalize ended trips",
             "executionModel": "Run once per invocation and exit",
             "redisDependency": "None"
+        },
+        "dockerization": {
+            "type": "Full-stack containerized local environments via Docker Compose",
+            "containers": [
+                "postgres-dev (development database on port 5432)",
+                "postgres-test (test database on port 5433)",
+                "backend (Next.js server on port 3000)",
+                "scheduler (standalone scheduler looping hourly)"
+            ],
+            "entrypoint": "scripts/docker-entrypoint.sh resolves DB readiness, runs migrations, starts Next.js",
+            "hybridMode": "docker-compose.dev.yml launches only Postgres containers for host-based Next.js development"
         }
     },
     "database": {
