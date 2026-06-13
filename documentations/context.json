@@ -1,0 +1,2032 @@
+{
+    "project": {
+        "name": "TripThread",
+        "workspacePath": "/Users/rajbagaria/Desktop/Bolt-Travello/Flut/project",
+        "generatedAt": "2026-06-13",
+        "description": "Travel-focused social platform where users create trips, post thread entries (text/media/location/check-ins), and generate/publish final trip posts.",
+        "lastPRReviewed": "PR #47 merged 2026-06-13 → main — fix Railway deployment: remove macOS-only @rolldown/binding-darwin-arm64 from dependencies; lockfile regen; notifications integration test fix.",
+        "recentProductionPRs": [
+            "https://github.com/bagariaraj23/Trav-Flut/pull/47",
+            "https://github.com/bagariaraj23/Trav-Flut/pull/46",
+            "https://github.com/bagariaraj23/Trav-Flut/pull/45",
+            "https://github.com/bagariaraj23/Trav-Flut/pull/43",
+            "https://github.com/bagariaraj23/Trav-Flut/pull/42",
+            "https://github.com/bagariaraj23/Trav-Flut/pull/41",
+            "https://github.com/bagariaraj23/Trav-Flut/pull/40"
+        ]
+    },
+    "highLevelArchitecture": {
+        "backend": {
+            "framework": "Next.js App Router",
+            "language": "TypeScript",
+            "apiStyle": "REST",
+            "orm": "Prisma",
+            "database": "PostgreSQL",
+            "auth": "JWT access + refresh tokens; login supports email OR username",
+            "cache": "Two-tier cache (in-memory + Upstash Redis)",
+            "media": "Cloudinary signed direct upload flow",
+            "retry": "Exponential backoff utility (src/lib/retry.ts) for Cloudinary + Mapbox calls",
+            "monitoring": "PerformanceMonitor timer instrumentation + ErrorTracker on all API endpoints"
+        },
+        "mobile": {
+            "framework": "Flutter",
+            "stateManagement": "Provider / ChangeNotifier",
+            "navigation": "GoRouter",
+            "network": "Dio with token refresh interceptors + retry with exponential backoff",
+            "svgRendering": "flutter_svg for branded TripThread logo assets",
+            "secureStorage": "flutter_secure_storage",
+            "mapping": "Mapbox (mapbox_maps_flutter) + geolocator/geocoding"
+        },
+        "scheduler": {
+            "type": "Independent cron-executable Node.js TypeScript service",
+            "purpose": "Auto-transition trip status and auto-finalize ended trips",
+            "executionModel": "Run once per invocation and exit",
+            "redisDependency": "None"
+        }
+    },
+    "database": {
+        "prismaSchema": "prisma/schema.prisma",
+        "coreModels": [
+            "User",
+            "Trip",
+            "TripParticipant",
+            "TripThreadEntry",
+            "TripThreadTag",
+            "TripFinalPost",
+            "Media",
+            "Place",
+            "PlaceOnTrip",
+            "PlaceShare",
+            "Follow",
+            "FollowRequest",
+            "TripJoinRequest",
+            "Like",
+            "Comment",
+            "Share",
+            "Notification",
+            "PasswordReset",
+            "JWTRefreshToken",
+            "OAuthAccount",
+            "SecurityEvent"
+        ],
+        "importantEnums": [
+            "TripStatus",
+            "ThreadEntryType",
+            "GenerationStatus",
+            "MediaType",
+            "EntityType",
+            "NotificationType",
+            "PlaceType",
+            "PlaceSource"
+        ],
+        "notableSchemaTraits": [
+            "Trip has status lifecycle: UPCOMING -> ONGOING -> ENDED",
+            "TripFinalPost is currently 1:1 with Trip (tripId unique) - planned migration to personalized posts per participant (composite unique [tripId, userId])",
+            "Engagement counters (likeCount/commentCount/shareCount) are denormalized on entities",
+            "Place model supports external IDs and coordinate index",
+            "Soft-delete style fields exist on User (deletedAt/deleteMeta)",
+            "Media model supports Cloudinary integration with quota tracking",
+            "Notification model supports unified notifications (likes, comments, follows, mentions)"
+        ]
+    },
+    "backendApi": {
+        "basePrefix": "/api",
+        "routeCount": 72,
+        "majorDomains": [
+            "auth",
+            "users",
+            "trips",
+            "places",
+            "media",
+            "feed/discover",
+            "follow",
+            "likes/comments/shares (POST /shares shareSource: SYSTEM_SHEET default, no shareCount bump; IN_APP_DM bumps for future DM)",
+            "notifications"
+        ],
+        "keyTripFlow": {
+            "createTrip": "POST /trips",
+            "threadEntries": "POST /trips/[id]/entries; GET cursor-paginated page { items, hasMoreOlder, nextOlderCursor } (limit default 30); GET /trips/[id]/entries/[entryId]/context returns a centered window around the target entry for deep-link jumps; DELETE/PATCH /trips/[id]/entries/[entryId] (PATCH: author text edit within 15m, owner may moderate later); shared purge in threadEntryPurge.ts",
+            "participantLeave": "POST /trips/[id]/leave { removeMyData: boolean } — non-owner participant leaves; optional purge of author's entries (ONGOING only) now uses bulk cleanup path for scalability",
+            "endTripAndGenerateFinalPost": "POST /trips/[id]/end (transactionally marks ENDED + generates final post)",
+            "finalPostDraftEdit": "GET/PUT/DELETE /trips/[id]/final-post (DELETE owner-only; removes post + engagement)",
+            "publishFinalPost": "POST /trips/[id]/publish",
+            "homeFeed": "GET /feed/home (published final posts from self, followed users, and public users)"
+        },
+        "allRoutes": [
+            {
+                "path": "/admin/cache/metrics",
+                "methods": [
+                    "GET",
+                    "POST"
+                ]
+            },
+            {
+                "path": "/admin/cache/warm",
+                "methods": [
+                    "GET",
+                    "POST"
+                ]
+            },
+            {
+                "path": "/auth/complete-profile",
+                "methods": [
+                    "POST"
+                ]
+            },
+            {
+                "path": "/auth/forgot-password",
+                "methods": [
+                    "POST"
+                ]
+            },
+            {
+                "path": "/auth/google",
+                "methods": [
+                    "POST"
+                ]
+            },
+            {
+                "path": "/auth/link-google",
+                "methods": [
+                    "POST"
+                ]
+            },
+            {
+                "path": "/auth/login",
+                "methods": [
+                    "POST"
+                ]
+            },
+            {
+                "path": "/auth/logout",
+                "methods": [
+                    "POST"
+                ]
+            },
+            {
+                "path": "/auth/refresh-token",
+                "methods": [
+                    "POST"
+                ]
+            },
+            {
+                "path": "/auth/reset-password",
+                "methods": [
+                    "POST"
+                ]
+            },
+            {
+                "path": "/auth/signup",
+                "methods": [
+                    "POST"
+                ]
+            },
+            {
+                "path": "/auth/validate-reset-token",
+                "methods": [
+                    "POST"
+                ]
+            },
+            {
+                "path": "/comments",
+                "methods": [
+                    "POST"
+                ]
+            },
+            {
+                "path": "/comments/[commentId]",
+                "methods": [
+                    "PUT",
+                    "DELETE"
+                ]
+            },
+            {
+                "path": "/comments/[commentId]/like",
+                "methods": [
+                    "POST"
+                ]
+            },
+            {
+                "path": "/comments/[commentId]/replies",
+                "methods": [
+                    "GET"
+                ]
+            },
+            {
+                "path": "/comments/entity/[entityType]/[entityId]",
+                "methods": [
+                    "GET"
+                ]
+            },
+            {
+                "path": "/debug/redis",
+                "methods": [
+                    "GET",
+                    "POST"
+                ]
+            },
+            {
+                "path": "/discover/trips",
+                "methods": [
+                    "GET"
+                ]
+            },
+            {
+                "path": "/feed/home",
+                "methods": [
+                    "GET"
+                ]
+            },
+            {
+                "path": "/follow/[userId]",
+                "methods": [
+                    "GET",
+                    "POST",
+                    "DELETE"
+                ]
+            },
+            {
+                "path": "/follow/requests",
+                "methods": [
+                    "GET",
+                    "POST",
+                    "DELETE"
+                ]
+            },
+            {
+                "path": "/follow/requests/[requestId]/accept",
+                "methods": [
+                    "PUT"
+                ]
+            },
+            {
+                "path": "/follow/requests/[requestId]/reject",
+                "methods": [
+                    "PUT"
+                ]
+            },
+            {
+                "path": "/health",
+                "methods": [
+                    "GET"
+                ]
+            },
+            {
+                "path": "/likes",
+                "methods": [
+                    "POST",
+                    "DELETE"
+                ]
+            },
+            {
+                "path": "/likes/[entityType]/[entityId]",
+                "methods": [
+                    "DELETE"
+                ]
+            },
+            {
+                "path": "/likes/[entityType]/[entityId]/users",
+                "methods": [
+                    "GET"
+                ]
+            },
+            {
+                "path": "/likes/status",
+                "methods": [
+                    "GET"
+                ]
+            },
+            {
+                "path": "/likes/user/[userId]",
+                "methods": [
+                    "GET"
+                ]
+            },
+            {
+                "path": "/media/cloudinary-signature",
+                "methods": [
+                    "POST"
+                ]
+            },
+            {
+                "path": "/media/confirm",
+                "methods": [
+                    "POST"
+                ]
+            },
+            {
+                "path": "/media/delete",
+                "methods": [
+                    "POST"
+                ]
+            },
+            {
+                "path": "/media/quota",
+                "methods": [
+                    "GET"
+                ]
+            },
+            {
+                "path": "/places/[id]",
+                "methods": [
+                    "GET"
+                ]
+            },
+            {
+                "path": "/places/resolve",
+                "methods": [
+                    "POST"
+                ]
+            },
+            {
+                "path": "/places/search",
+                "methods": [
+                    "GET"
+                ]
+            },
+            {
+                "path": "/posts/[entityType]/[entityId]",
+                "methods": [
+                    "GET"
+                ]
+            },
+            {
+                "path": "/shares",
+                "methods": [
+                    "POST"
+                ]
+            },
+            {
+                "path": "/shares/[shareToken]",
+                "methods": [
+                    "GET"
+                ]
+            },
+            {
+                "path": "/shares/stats/[entityType]/[entityId]",
+                "methods": [
+                    "GET"
+                ]
+            },
+            {
+                "path": "/shares/track/[shareToken]",
+                "methods": [
+                    "POST"
+                ]
+            },
+            {
+                "path": "/shares/user/[userId]",
+                "methods": [
+                    "GET"
+                ]
+            },
+            {
+                "path": "/trips",
+                "methods": [
+                    "GET",
+                    "POST"
+                ]
+            },
+            {
+                "path": "/trips/[id]",
+                "methods": [
+                    "GET"
+                ]
+            },
+            {
+                "path": "/trips/[id]/cover",
+                "methods": [
+                    "PATCH"
+                ]
+            },
+            {
+                "path": "/trips/[id]/end",
+                "methods": [
+                    "POST"
+                ]
+            },
+            {
+                "path": "/trips/[id]/entries",
+                "methods": [
+                    "GET",
+                    "POST"
+                ]
+            },
+            {
+                "path": "/trips/[id]/entries/[entryId]",
+                "methods": [
+                    "DELETE",
+                    "PATCH"
+                ]
+            },
+            {
+                "path": "/trips/[id]/entries/[entryId]/context",
+                "methods": [
+                    "GET"
+                ]
+            },
+            {
+                "path": "/trips/[id]/final-post",
+                "methods": [
+                    "GET",
+                    "PUT",
+                    "DELETE"
+                ]
+            },
+            {
+                "path": "/trips/[id]/invites",
+                "methods": [
+                    "GET",
+                    "POST",
+                    "DELETE"
+                ]
+            },
+            {
+                "path": "/trips/[id]/leave",
+                "methods": [
+                    "POST"
+                ]
+            },
+            {
+                "path": "/trips/[id]/participants",
+                "methods": [
+                    "GET",
+                    "POST",
+                    "DELETE"
+                ]
+            },
+            {
+                "path": "/trips/[id]/places",
+                "methods": [
+                    "GET",
+                    "POST"
+                ]
+            },
+            {
+                "path": "/trips/[id]/places/[placeOnTripId]",
+                "methods": [
+                    "DELETE"
+                ]
+            },
+            {
+                "path": "/trips/[id]/publish",
+                "methods": [
+                    "POST"
+                ]
+            },
+            {
+                "path": "/trips/check-conflicts",
+                "methods": [
+                    "GET"
+                ]
+            },
+            {
+                "path": "/trips/status",
+                "methods": [
+                    "GET"
+                ]
+            },
+            {
+                "path": "/users",
+                "methods": [
+                    "GET"
+                ]
+            },
+            {
+                "path": "/users/[id]",
+                "methods": [
+                    "GET",
+                    "PUT"
+                ]
+            },
+            {
+                "path": "/users/[id]/followers",
+                "methods": [
+                    "GET"
+                ]
+            },
+            {
+                "path": "/users/[id]/following",
+                "methods": [
+                    "GET"
+                ]
+            },
+            {
+                "path": "/users/[id]/privacy",
+                "methods": [
+                    "PATCH"
+                ]
+            },
+            {
+                "path": "/users/[id]/stats",
+                "methods": [
+                    "GET"
+                ]
+            },
+            {
+                "path": "/users/me",
+                "methods": [
+                    "GET",
+                    "PUT",
+                    "DELETE"
+                ]
+            },
+            {
+                "path": "/users/me/notifications",
+                "methods": [
+                    "GET"
+                ]
+            },
+            {
+                "path": "/users/me/notifications/[id]/read",
+                "methods": [
+                    "PUT"
+                ]
+            },
+            {
+                "path": "/users/me/notifications/read",
+                "methods": [
+                    "PUT"
+                ]
+            },
+            {
+                "path": "/users/me/notifications/unread-count",
+                "methods": [
+                    "GET"
+                ]
+            },
+            {
+                "path": "/users/me/trip-invites",
+                "methods": [
+                    "GET"
+                ]
+            },
+            {
+                "path": "/users/me/trip-invites/[inviteId]/accept",
+                "methods": [
+                    "PUT"
+                ]
+            },
+            {
+                "path": "/users/me/trip-invites/[inviteId]/reject",
+                "methods": [
+                    "PUT"
+                ]
+            }
+        ]
+    },
+    "backendModules": {
+        "coreLibFiles": [
+            "src/lib/auth.ts",
+            "src/lib/dbUrlSafety.ts",
+            "src/lib/auth/permissions.ts",
+            "src/lib/middleware.ts",
+            "src/lib/validation.ts",
+            "src/lib/rateLimit.ts",
+            "src/lib/cache.ts",
+            "src/lib/redis.ts",
+            "src/lib/place.ts",
+            "src/lib/cloudinary.ts",
+            "src/lib/mapProviders/mapbox.ts",
+            "src/lib/prisma.ts"
+        ],
+        "services": [
+            "src/lib/services/comment.ts",
+            "src/lib/services/email.ts",
+            "src/lib/services/engagement-utils.ts",
+            "src/lib/services/googleAuth.ts",
+            "src/lib/services/like.ts",
+            "src/lib/services/notification.ts",
+            "src/lib/services/passwordReset.ts",
+            "src/lib/services/securityEvent.ts",
+            "src/lib/services/share.ts",
+            "src/lib/services/threadEntryPurge.ts",
+            "src/lib/services/token.ts",
+            "src/lib/services/tripFinalizer.ts",
+            "src/lib/services/tripTagResolution.ts"
+        ],
+        "notableBehaviors": [
+            "Prisma: `PrismaTransactionClient` and `AppPrismaClient` exported for extended client + seed/tooling typing",
+            "Test DB safety: `dbUrlSafety.ts` refuses Postgres URLs unless database name ends with `_test`; Vitest/seed/setup-test-db enforce via TEST_DATABASE_URL only",
+            "TripFinalizerService builds summary, curates up to 10 images, enforces publish requirements",
+            "Comment/Like services create notification records asynchronously (COMMENT_LIKE for comment likes)",
+            "Notification service merges follow requests with engagement notifications using opaque cursor pagination",
+            "withAuth invalidates tokens issued before user.updatedAt",
+            "Rate limits support fixed-window and sliding-window logic (fixed window currently used)"
+        ]
+    },
+    "externalIntegrations": {
+        "cloudinary": {
+            "backendFiles": [
+                "src/lib/cloudinary.ts",
+                "src/app/api/media/cloudinary-signature/route.ts",
+                "src/app/api/media/confirm/route.ts",
+                "src/app/api/media/delete/route.ts",
+                "src/app/api/media/quota/route.ts"
+            ],
+            "mobileFiles": [
+                "mobile/lib/services/media_service.dart",
+                "mobile/lib/services/api_service.dart"
+            ],
+            "flow": [
+                "Mobile requests signed params from backend",
+                "Mobile uploads directly to Cloudinary",
+                "Mobile calls backend confirm endpoint",
+                "Backend validates payload/mime/signature constraints and persists Media row"
+            ]
+        },
+        "mapbox": {
+            "backendFiles": [
+                "src/lib/mapProviders/mapbox.ts",
+                "src/lib/place.ts",
+                "src/app/api/places/search/route.ts",
+                "src/app/api/places/resolve/route.ts"
+            ],
+            "mobileFiles": [
+                "mobile/lib/screens/trip/trip_map_screen.dart",
+                "mobile/lib/config/app_config.dart",
+                "mobile/lib/services/places_service.dart"
+            ],
+            "flow": [
+                "Backend searches via Mapbox Geocode API and deduplicates against local Place DB",
+                "Resolve endpoint canonicalizes place rows with caching + lock",
+                "Mobile map screen renders trip places with Mapbox map widget"
+            ]
+        },
+        "redisUpstash": {
+            "files": [
+                "src/lib/cache.ts",
+                "src/lib/redis.ts",
+                "src/lib/rateLimit.ts"
+            ],
+            "usage": [
+                "Cache place lookups and search outputs",
+                "Fallback-friendly rate limiting and cache metrics",
+                "Share token caching"
+            ]
+        },
+        "googleOAuthAndSignIn": {
+            "backendFiles": [
+                "src/app/api/auth/google/route.ts",
+                "src/app/api/auth/link-google/route.ts",
+                "src/lib/services/googleAuth.ts"
+            ],
+            "mobileFiles": [
+                "mobile/lib/services/google_sign_in_service.dart",
+                "mobile/lib/services/api_service.dart"
+            ]
+        },
+        "sendgrid": {
+            "backendFiles": [
+                "src/lib/services/email.ts",
+                "src/lib/services/passwordReset.ts",
+                "src/app/api/auth/forgot-password/route.ts",
+                "src/app/api/auth/reset-password/route.ts"
+            ]
+        }
+    },
+    "mobileApp": {
+        "entrypoint": "mobile/lib/main.dart",
+        "screenCount": 26,
+        "providerCount": 9,
+        "serviceCount": 12,
+        "screens": [
+            "screens/auth/complete_profile_screen.dart",
+            "screens/auth/forgot_password_screen.dart",
+            "screens/auth/login_screen.dart",
+            "screens/auth/reset_password_screen.dart",
+            "screens/auth/reset_password_success_screen.dart",
+            "screens/auth/reset_success_screen.dart",
+            "screens/auth/signup_screen.dart",
+            "screens/discover/discover_tab.dart",
+            "screens/engagement/comments_screen.dart",
+            "screens/engagement/liked_by_screen.dart",
+            "screens/home/home_screen.dart",
+            "screens/notifications/notifications_screen.dart",
+            "screens/post/post_detail_screen.dart",
+            "screens/profile/edit_profile_screen.dart",
+            "screens/profile/follow_requests_screen.dart",
+            "screens/profile/followers_following_screen.dart",
+            "screens/profile/profile_screen.dart",
+            "screens/profile/trip_invitations_screen.dart",
+            "screens/settings/settings_screen.dart",
+            "screens/splash_screen.dart",
+            "screens/trip/create_trip_screen.dart",
+            "screens/trip/final_post_edit_screen.dart",
+            "screens/trip/trip_detail_screen.dart",
+            "screens/trip/trip_map_screen.dart",
+            "screens/trip/trip_participants_screen.dart",
+            "screens/trip/trip_thread_screen.dart",
+            "screens/share/share_link_screen.dart"
+        ],
+        "providers": [
+            "providers/auth_provider.dart",
+            "providers/comment_provider.dart",
+            "providers/engagement_provider.dart",
+            "providers/feed_provider.dart",
+            "providers/final_post_provider.dart",
+            "providers/place_provider.dart",
+            "providers/share_provider.dart",
+            "providers/trip_provider.dart",
+            "providers/user_provider.dart"
+        ],
+        "services": [
+            "services/api_service.dart",
+            "services/comment_service.dart",
+            "services/connectivity_service.dart",
+            "services/deep_link_service.dart",
+            "services/google_sign_in_service.dart",
+            "services/like_service.dart",
+            "services/media_service.dart",
+            "services/places_service.dart",
+            "services/share_service.dart",
+            "services/storage_service.dart",
+            "services/token_refresh_manager.dart",
+            "services/trip_service.dart"
+        ],
+        "routerHighlights": {
+            "routing": "GoRouter in main.dart",
+            "authRedirectLogic": "Redirects unauthenticated users to /login and profile-incomplete users to /complete-profile",
+            "tripRoutes": [
+                "/trip/:tripId",
+                "/trip/:tripId/thread",
+                "/trip/:tripId/map",
+                "/trip/:tripId/participants",
+                "/trip/:tripId/final-post"
+            ],
+            "deepLinkRoutes": [
+                "/share/:shareToken → ShareLinkScreen (resolves token → /post/TRIP_FINAL_POST/:id)",
+                "tripthread://share/{token} | https://{SHARE_LINK_HOST}/share/{token}"
+            ]
+        }
+    },
+    "scheduler": {
+        "path": "scheduler/",
+        "sourceFiles": [
+            "scheduler/src/index.ts",
+            "scheduler/src/startup-logger.ts",
+            "scheduler/src/tripStatus.ts"
+        ],
+        "jobLogic": [
+            "End trips where endDate <= now and status in UPCOMING/ONGOING",
+            "Generate final posts for ended trips if missing",
+            "Start trips where startDate <= now < endDate and status is UPCOMING"
+        ],
+        "observedDifferenceVsBackendFinalizer": "Scheduler has its own inline final-post generation logic and does not call backend TripFinalizerService directly."
+    },
+    "scriptsAndOps": {
+        "rootScripts": [
+            "scripts/docker-compose-cmd.sh",
+            "scripts/docker-entrypoint.sh",
+            "scripts/docker-reset.sh",
+            "scripts/docker-start.sh",
+            "scripts/docker-stop.sh",
+            "scripts/print-test-env.mjs",
+            "scripts/run-integration-serial.mjs",
+            "scripts/setup-env.sh",
+            "scripts/setup-test-db.sh",
+            "scripts/switch_env.sh",
+            "scripts/test-cache-http.ts"
+        ],
+        "backendScripts": [
+            "src/scripts/cleanupExpiredPasswordResets.ts",
+            "src/scripts/seed.ts"
+        ],
+        "npmScriptsBackend": [
+            "dev",
+            "build",
+            "start",
+            "test",
+            "test:run",
+            "test:coverage",
+            "test:api",
+            "test:serial",
+            "test:scheduler",
+            "db:generate",
+            "db:generate:test",
+            "db:push",
+            "db:push:test",
+            "db:setup:test",
+            "db:migrate",
+            "db:seed",
+            "cleanup:resets",
+            "setup:env",
+            "docker:start",
+            "docker:stop",
+            "docker:reset",
+            "docker:logs",
+            "docker:ps",
+            "docker:up",
+            "docker:down"
+        ]
+    },
+    "testing": {
+        "strategyDoc": "tests/TESTING.md",
+        "prDoc": "PR_docs/PR45_DESCRIPTION.md",
+        "lastMergedPR": {
+            "number": 47,
+            "title": "update test package to fix deployment",
+            "mergedAt": "2026-06-13",
+            "url": "https://github.com/bagariaraj23/Trav-Flut/pull/47"
+        },
+        "deploymentDependencyFixPRs": [
+            {
+                "number": 47,
+                "title": "update test package to fix deployment",
+                "mergedAt": "2026-06-13",
+                "url": "https://github.com/bagariaraj23/Trav-Flut/pull/47",
+                "branch": "feat-tests",
+                "mergeCommit": "267dbacb899a5e809b3a9b12e90dd640f9c6b0a6",
+                "problem": "Railway backend + scheduler builds failed at npm ci with EBADPLATFORM: @rolldown/binding-darwin-arm64 required darwin/arm64 but builders run linux/x64",
+                "resolution": "Removed @rolldown/binding-darwin-arm64 from root dependencies (Vitest/Rolldown still install platform bindings transitively via rolldown optionalDependencies); regenerated package-lock.json",
+                "filesChanged": [
+                    "package.json",
+                    "package-lock.json",
+                    "tests/integration/notifications.integration.test.ts"
+                ],
+                "verification": "97 Vitest tests passing (19 unit+integration files); npm ci succeeds on Linux"
+            },
+            {
+                "number": 46,
+                "title": "update packages",
+                "mergedAt": "2026-05-15",
+                "url": "https://github.com/bagariaraj23/Trav-Flut/pull/46",
+                "branch": "update_packages",
+                "mergeCommit": "65ad0c600afdda0fe98e4c6fec7e5c665f62fa9e",
+                "problem": "Dependency drift between npm lockfile and mobile Flutter packages causing install/build inconsistencies",
+                "resolution": "Refreshed root package-lock.json and synced mobile/pubspec.yaml + pubspec.lock",
+                "filesChanged": [
+                    "package-lock.json",
+                    "mobile/pubspec.yaml",
+                    "mobile/pubspec.lock"
+                ]
+            }
+        ],
+        "runner": "Vitest 4.x (Node 20+ required for Rolldown/Vite 8)",
+        "env": {
+            "file": ".env.test",
+            "requiredVars": [
+                "TEST_DATABASE_URL",
+                "TEST_JWT_SECRET",
+                "TEST_MAPBOX_ACCESS_TOKEN"
+            ],
+            "dbNamingRule": "Postgres database name must end with _test (e.g. tripthread_test)",
+            "prodIsolation": "setupTests.ts clears shell DATABASE_URL; seed.ts reads .env.test only; setup-test-db.sh refuses non-_test DB names"
+        },
+        "backendSuites": {
+            "unit": [
+                "tests/unit/auth.unit.test.ts",
+                "tests/unit/validation-flows.unit.test.ts",
+                "tests/unit/cache.unit.test.ts"
+            ],
+            "integration": [
+                "tests/integration/auth-flow.integration.test.ts",
+                "tests/integration/trip-thread-flow.integration.test.ts",
+                "tests/integration/trip-leave.integration.test.ts",
+                "tests/integration/engagement.integration.test.ts",
+                "tests/integration/engagement-edge-cases.integration.test.ts",
+                "tests/integration/engagement-feed.integration.test.ts",
+                "tests/integration/notifications.integration.test.ts",
+                "tests/integration/userSignup.integration.test.ts",
+                "tests/integration/tripInvitation.integration.test.ts",
+                "tests/integration/followRequests.integration.test.ts",
+                "tests/integration/concurrency.tripInvite.test.ts",
+                "tests/integration/stress.concurrent.test.ts"
+            ],
+            "routeContract": [
+                "src/app/test/api-route-contract.test.ts"
+            ],
+            "scheduler": [
+                "scheduler/tests/tripStatus.behavior.unit.test.ts",
+                "scheduler/tests/tripStatus.unit.test.ts",
+                "scheduler/tests/tripStatus.integration.test.ts"
+            ]
+        },
+        "mobileSuites": {
+            "testFileCount": 16,
+            "notablePaths": [
+                "mobile/test/providers/trip_provider_test.dart",
+                "mobile/test/providers/engagement_provider_test.dart",
+                "mobile/test/providers/comment_provider_test.dart",
+                "mobile/test/widgets/like_button_test.dart",
+                "mobile/test/services/like_service_test.dart"
+            ]
+        },
+        "lastCoverageRun": {
+            "date": "2026-06-13",
+            "command": "npm run test:coverage",
+            "nodeVersion": "20.19.4",
+            "testDatabase": "tripthread_test",
+            "results": {
+                "testFiles": 19,
+                "testsPassed": 97,
+                "testsFailed": 0
+            },
+            "reportPath": "coverage/",
+            "htmlIndex": "coverage/index.html",
+            "summary": {
+                "statements": "51.09%",
+                "statementsFraction": "1655/3239",
+                "branches": "39.04%",
+                "branchesFraction": "927/2374",
+                "functions": "64.60%",
+                "functionsFraction": "323/500",
+                "lines": "51.87%",
+                "linesFraction": "1608/3100"
+            },
+            "highCoverageAreas": [
+                "src/lib/services (comment, like, notification, share) ~75–88%",
+                "src/lib/validation.ts ~80%",
+                "tests/integration helpers ~92%",
+                "src/lib/auth/permissions.ts ~60%"
+            ],
+            "lowCoverageAreas": [
+                "src/lib/place.ts",
+                "src/lib/mapProviders/mapbox.ts",
+                "src/lib/auth.ts (route handlers covered; service file partially)",
+                "scheduler/src/tripStatus.ts (behavior unit tests mock Prisma)"
+            ]
+        },
+        "setupCommands": [
+            "cp .env.test.example .env.test",
+            "npm run db:setup:test",
+            "npm run db:seed"
+        ],
+        "runCommands": [
+            "npm run test:run",
+            "npm run test:coverage",
+            "npm run test:scheduler",
+            "cd mobile && flutter test test/providers/trip_provider_test.dart"
+        ]
+    },
+    "knownContextFromProductBrief": {
+        "idea": "Trip-specific social platform for documenting ongoing journey moments and auto-generating final shareable content at trip end.",
+        "threadEntryTypes": [
+            "media",
+            "text",
+            "location",
+            "check-in"
+        ],
+        "futureScopeMentioned": [
+            "payment logging",
+            "more advanced AI content generation"
+        ]
+    },
+    "functionalRequirements": {
+        "foundationAndArchitecture": {
+            "status": "completed",
+            "prs": [
+                1,
+                2,
+                4,
+                5,
+                11,
+                12,
+                18
+            ],
+            "features": [
+                {
+                    "name": "Initial Login Flow",
+                    "status": "completed",
+                    "description": "Complete login flow with credential validation, error handling, and authentication architecture foundation",
+                    "pr": 1,
+                    "merged": "2025-07-05"
+                },
+                {
+                    "name": "Auth Error UX and Error Handling",
+                    "status": "completed",
+                    "description": "Improved auth error UX, follow status fixes, comprehensive error handling improvements",
+                    "pr": 2,
+                    "merged": "2025-08-15"
+                },
+                {
+                    "name": "Database Schema Alignment",
+                    "status": "completed",
+                    "description": "Fixed mock data to match Prisma schema, established data model foundation",
+                    "pr": 4,
+                    "merged": "2025-08-16"
+                },
+                {
+                    "name": "API Routes Foundation",
+                    "status": "completed",
+                    "description": "Fixed and established core API routes structure and routing",
+                    "pr": 5,
+                    "merged": "2025-08-16"
+                },
+                {
+                    "name": "Environment Setup",
+                    "status": "completed",
+                    "description": "Complete environment configuration system for backend, mobile, and scheduler with documentation",
+                    "pr": 11,
+                    "merged": "2025-09-01"
+                },
+                {
+                    "name": "PR Template",
+                    "status": "completed",
+                    "description": "Standardized pull request template for consistent PR documentation",
+                    "pr": 12,
+                    "merged": "2025-09-01"
+                },
+                {
+                    "name": "Dynamic API Base URL",
+                    "status": "completed",
+                    "description": "Dynamic API base URL configuration for different environments (dev/staging/prod)",
+                    "pr": 18,
+                    "merged": "2025-10-06"
+                }
+            ]
+        },
+        "authenticationAndUserManagement": {
+            "status": "completed",
+            "prs": [
+                1,
+                2,
+                3,
+                20,
+                21,
+                22,
+                34
+            ],
+            "features": [
+                {
+                    "name": "User Authentication (JWT + Refresh Tokens)",
+                    "status": "completed",
+                    "description": "JWT-based authentication with access and refresh token rotation, secure storage",
+                    "pr": 1,
+                    "merged": "2025-07-05",
+                    "additionalPRs": [
+                        22
+                    ]
+                },
+                {
+                    "name": "Token Refresh Management",
+                    "status": "completed",
+                    "description": "Token refresh manager to coordinate refresh flow, prevent duplicate requests, fix first-login logout loop",
+                    "pr": 22,
+                    "merged": "2025-11-09"
+                },
+                {
+                    "name": "Password Reset Flow",
+                    "status": "completed",
+                    "description": "Complete password reset system with email verification, secure token handling, and security event logging",
+                    "pr": 21,
+                    "merged": "2025-10-25"
+                },
+                {
+                    "name": "Change Password",
+                    "status": "completed",
+                    "description": "Settings screen with password change and logout functionality",
+                    "pr": 20,
+                    "merged": "2025-10-15"
+                },
+                {
+                    "name": "Google OAuth Integration",
+                    "status": "completed",
+                    "description": "Google sign-in and OAuth account linking with race condition fixes",
+                    "pr": 34,
+                    "merged": "2026-02-15"
+                },
+                {
+                    "name": "Profile Management",
+                    "status": "completed",
+                    "description": "User profiles with bio field (200 char limit), username validation, privacy settings",
+                    "pr": 34,
+                    "merged": "2026-02-15"
+                },
+                {
+                    "name": "User Search and Discovery",
+                    "status": "completed",
+                    "description": "User search, discovery, and profile viewing with pagination",
+                    "pr": 3,
+                    "merged": "2025-08-15"
+                },
+                {
+                    "name": "Profile Stats",
+                    "status": "completed",
+                    "description": "User profile statistics display (trips, followers, following counts)",
+                    "pr": 3,
+                    "merged": "2025-08-15"
+                },
+                {
+                    "name": "Complete Profile Flow",
+                    "status": "completed",
+                    "description": "Profile completion requirement for new users with validation"
+                }
+            ]
+        },
+        "tripManagement": {
+            "status": "completed",
+            "prs": [
+                6,
+                13,
+                14,
+                17,
+                19,
+                24,
+                26,
+                27,
+                28,
+                29
+            ],
+            "features": [
+                {
+                    "name": "Trip Creation Flow",
+                    "status": "completed",
+                    "description": "Initial trip creation flow with dates, locations, and basic trip management",
+                    "pr": 6,
+                    "merged": "2025-08-17"
+                },
+                {
+                    "name": "Thread Entry Trip Reference",
+                    "status": "completed",
+                    "description": "Thread entries reference tripId for proper trip-thread association",
+                    "pr": 13,
+                    "merged": "2025-09-14"
+                },
+                {
+                    "name": "Trip Management Fixes",
+                    "status": "completed",
+                    "description": "Various trip management fixes and improvements",
+                    "pr": 14,
+                    "merged": "2025-09-14"
+                },
+                {
+                    "name": "Trip Scheduler Fixes",
+                    "status": "completed",
+                    "description": "Trip scheduler fixes and improvements for status transitions",
+                    "pr": 17,
+                    "merged": "2025-10-07"
+                },
+                {
+                    "name": "Trip Creation and Management",
+                    "status": "completed",
+                    "description": "Create trips with dates, locations, participants. Trip status lifecycle (UPCOMING -> ONGOING -> ENDED). Date normalization, conflict prevention",
+                    "pr": 6,
+                    "merged": "2025-08-17",
+                    "additionalPRs": [
+                        28,
+                        29
+                    ]
+                },
+                {
+                    "name": "Trip Participants",
+                    "status": "completed",
+                    "description": "Add/remove participants with duplicate prevention and atomic operations",
+                    "pr": 24,
+                    "merged": "2025-11-23"
+                },
+                {
+                    "name": "Trip Invitations",
+                    "status": "completed",
+                    "description": "Send, accept, reject trip invitations with race condition fixes"
+                },
+                {
+                    "name": "Trip Cover Media",
+                    "status": "completed",
+                    "description": "Update trip cover with image/video/GIF support, improved upload/retry logic",
+                    "pr": 26,
+                    "merged": "2025-12-02"
+                },
+                {
+                    "name": "Location and Map Integration",
+                    "status": "completed",
+                    "description": "Mapbox integration for place search, canonical place tagging, trip destinations, interactive maps",
+                    "pr": 19,
+                    "merged": "2025-11-08"
+                },
+                {
+                    "name": "Trip Status Scheduler",
+                    "status": "completed",
+                    "description": "Automatic trip status transitions via cron-based scheduler (zero Redis dependency)",
+                    "pr": 27,
+                    "merged": "2025-12-04"
+                }
+            ]
+        },
+        "tripThreads": {
+            "status": "completed",
+            "prs": [
+                10,
+                13,
+                23,
+                43
+            ],
+            "features": [
+                {
+                    "name": "Thread entry list pagination & scroll UX",
+                    "status": "completed",
+                    "description": "GET /trips/[id]/entries returns newest page first with cursor-based older pages; mobile anchors to latest and prepends older on scroll up with offset preservation; deep-link highlight loads pages until entry visible",
+                    "pr": 43,
+                    "merged": "2026-04-28"
+                },
+                {
+                    "name": "Thread entry delete and text edit",
+                    "status": "completed",
+                    "description": "DELETE and PATCH (text) for thread entries; Cloudinary cleanup for media; long-press InkWell action sheet (no ListTile crash); scrollable _EditThreadEntryDialog stateful widget (88d5dd5)",
+                    "pr": 43,
+                    "branch": "prod_issue_fixes"
+                },
+                {
+                    "name": "Thread compose keyboard & overflow",
+                    "status": "completed",
+                    "description": "Compose panel max-height capped when keyboard open (~42% above keyboard) so thread list stays visible; scrollable compose; no double keyboard padding on list (4f03d8e)",
+                    "pr": 43,
+                    "branch": "prod_issue_fixes"
+                },
+                {
+                    "name": "Trip-scoped @all mentions",
+                    "status": "completed",
+                    "description": "tripTagResolution.ts expands @all to trip members; thread entries + comments; mobile @all row in mention menu",
+                    "pr": 43,
+                    "branch": "prod_issue_fixes"
+                },
+                {
+                    "name": "Thread Entry Creation",
+                    "status": "completed",
+                    "description": "Create thread entries with text, media, location, check-ins. Support for user tagging",
+                    "pr": 13,
+                    "merged": "2025-09-14"
+                },
+                {
+                    "name": "Text Formatter",
+                    "status": "completed",
+                    "description": "Text formatting utilities for thread entries and content",
+                    "pr": 10,
+                    "merged": "2025-08-31"
+                },
+                {
+                    "name": "Media Uploads",
+                    "status": "completed",
+                    "description": "Cloudinary integration for direct uploads, media quota enforcement, retry logic",
+                    "pr": 23,
+                    "merged": "2025-11-16"
+                },
+                {
+                    "name": "Place Check-ins",
+                    "status": "completed",
+                    "description": "Check-in to places, associate places with trips, place sharing"
+                }
+            ]
+        },
+        "finalPosts": {
+            "status": "completed",
+            "prs": [
+                31,
+                38
+            ],
+            "features": [
+                {
+                    "name": "Final Post Generation",
+                    "status": "completed",
+                    "description": "Auto-generate trip summaries with curated media (one per day, up to 10 items) when trip ends",
+                    "pr": 31,
+                    "merged": "2026-01-04"
+                },
+                {
+                    "name": "Final Post Editing",
+                    "status": "completed",
+                    "description": "Edit summary, media selection, and captions before publishing"
+                },
+                {
+                    "name": "Final Post Publishing",
+                    "status": "completed",
+                    "description": "Publish final posts to home feed with privacy/follow rules"
+                },
+                {
+                    "name": "Personalized Final Posts Per Participant",
+                    "status": "in_progress",
+                    "description": "Each participant can generate, edit, and publish their own final post for the same trip",
+                    "pr": 38,
+                    "state": "open",
+                    "planFile": "personalized_final_posts_per_participant_efaf83cd.plan.md",
+                    "notes": "Schema migration to add userId to TripFinalPost, refactor service layer, update API endpoints"
+                }
+            ]
+        },
+        "socialFeatures": {
+            "status": "completed",
+            "prs": [
+                2,
+                8,
+                9,
+                16,
+                25,
+                33
+            ],
+            "features": [
+                {
+                    "name": "Follow/Unfollow System",
+                    "status": "completed",
+                    "description": "Follow users, follow requests for private profiles, accept/reject requests",
+                    "pr": 8,
+                    "merged": "2025-08-24",
+                    "additionalPRs": [
+                        9,
+                        16
+                    ]
+                },
+                {
+                    "name": "Follow System Overhaul",
+                    "status": "completed",
+                    "description": "Complete follow system overhaul with improved UX and error handling",
+                    "pr": 9,
+                    "merged": "2025-08-30"
+                },
+                {
+                    "name": "Follow System UI Fixes",
+                    "status": "completed",
+                    "description": "UI fixes for follow system, improved follow status handling",
+                    "pr": 16,
+                    "merged": "2025-09-14"
+                },
+                {
+                    "name": "Followers/Following Lists",
+                    "status": "completed",
+                    "description": "View followers and following lists with search and pagination",
+                    "pr": 25,
+                    "merged": "2025-12-02"
+                },
+                {
+                    "name": "Likes System",
+                    "status": "completed",
+                    "description": "Like trip final posts, thread entries, and comments. Atomic like count management",
+                    "pr": 33,
+                    "merged": "2026-02-08"
+                },
+                {
+                    "name": "Comments System",
+                    "status": "completed",
+                    "description": "Threaded comments with single-level replies, content moderation, character limits",
+                    "pr": 33,
+                    "merged": "2026-02-08"
+                },
+                {
+                    "name": "Shares System",
+                    "status": "completed",
+                    "description": "Shareable links for trip final posts with unique tokens, deep links, share tracking",
+                    "pr": 33,
+                    "merged": "2026-02-08"
+                },
+                {
+                    "name": "Notifications",
+                    "status": "completed",
+                    "description": "Unified notification system for likes, comments, follows, mentions with cursor-based pagination, deep linking, auto mark-as-read, and real-time unread badge",
+                    "pr": 37,
+                    "merged": "2026-02-22"
+                }
+            ]
+        },
+        "feedAndDiscovery": {
+            "status": "completed",
+            "prs": [
+                3,
+                7,
+                43
+            ],
+            "features": [
+                {
+                    "name": "Discover trips feed fixes",
+                    "status": "completed",
+                    "description": "Mobile discover trusts API list; pagination uses server hasNext; API adds isFollowing per trip owner",
+                    "pr": 43,
+                    "merged": "2026-05-15"
+                },
+                {
+                    "name": "Home Feed",
+                    "status": "completed",
+                    "description": "Published final posts from self, followed users, and public users with pagination",
+                    "pr": 7,
+                    "merged": "2025-08-23"
+                },
+                {
+                    "name": "Feed Overhaul",
+                    "status": "completed",
+                    "description": "Complete feed system overhaul with improved performance and UX",
+                    "pr": 7,
+                    "merged": "2025-08-23"
+                },
+                {
+                    "name": "Discover Tab",
+                    "status": "completed",
+                    "description": "Discover trips and users with search and filtering",
+                    "pr": 3,
+                    "merged": "2025-08-15"
+                },
+                {
+                    "name": "Discovery Page Updates",
+                    "status": "completed",
+                    "description": "Discovery page updates with profile stats integration",
+                    "pr": 3,
+                    "merged": "2025-08-15"
+                }
+            ]
+        },
+        "infrastructureAndOptimization": {
+            "status": "completed",
+            "prs": [
+                23,
+                27,
+                29,
+                30
+            ],
+            "features": [
+                {
+                    "name": "Two-Tier Caching System",
+                    "status": "completed",
+                    "description": "Memory (L1) + Redis (L2) two-tier caching with 95%+ hit rates, batch operations, graceful degradation",
+                    "pr": 27,
+                    "merged": "2025-12-04"
+                },
+                {
+                    "name": "Media Service Architecture",
+                    "status": "completed",
+                    "description": "Cloudinary integration with MediaService and MediaUploader abstractions, quota enforcement, retry logic",
+                    "pr": 23,
+                    "merged": "2025-11-16"
+                },
+                {
+                    "name": "Race Condition Fixes",
+                    "status": "completed",
+                    "description": "Comprehensive race condition fixes, ACID compliance improvements, transaction wrapping across critical paths",
+                    "pr": 29,
+                    "merged": "2025-12-27"
+                },
+                {
+                    "name": "Flutter Stability Fixes",
+                    "status": "completed",
+                    "description": "Runtime/null-safety fixes, layout fixes, navigation fixes, dependency updates",
+                    "pr": 30,
+                    "merged": "2025-12-28"
+                },
+                {
+                    "name": "Database Layer",
+                    "status": "completed",
+                    "description": "PostgreSQL with Prisma ORM, UUID primary keys, proper relationships, spatial indexes, migrations"
+                },
+                {
+                    "name": "API Layer",
+                    "status": "completed",
+                    "description": "70+ RESTful API endpoints with proper error handling, validation, rate limiting, middleware stacks"
+                },
+                {
+                    "name": "Testing Infrastructure",
+                    "status": "completed",
+                    "description": "Backend unit tests, integration tests, mobile widget tests, test utilities and helpers"
+                }
+            ]
+        },
+        "plannedFeatures": {
+            "status": "planned",
+            "features": [
+                {
+                    "name": "Clubbed Trips",
+                    "status": "planned",
+                    "description": "Multiple participants can start individual trips from different locations/dates, share thread entries in common space",
+                    "planFile": "clubbed_trips_with_personalized_final_posts_3757c139.plan.md",
+                    "notes": "Requires TripGroup model, TripGroupThreadEntry model, personalized final posts per participant"
+                },
+                {
+                    "name": "Payment Logging",
+                    "status": "planned",
+                    "description": "Track expenses and payments during trips",
+                    "notes": "Future scope mentioned in product brief"
+                },
+                {
+                    "name": "Advanced AI Content Generation",
+                    "status": "planned",
+                    "description": "More sophisticated AI for generating reels, blogs, captions, itineraries",
+                    "notes": "Future scope mentioned in product brief"
+                }
+            ]
+        }
+    },
+    "prTracking": {
+        "merged": [
+            {
+                "number": 47,
+                "title": "update test package to fix deployment",
+                "merged_at": "2026-06-13",
+                "url": "https://github.com/bagariaraj23/Trav-Flut/pull/47",
+                "keyFeatures": [
+                    "Fix Railway npm ci EBADPLATFORM: removed @rolldown/binding-darwin-arm64 from dependencies (macOS ARM-only; Linux builders need rolldown transitive optional bindings instead)",
+                    "Regenerated package-lock.json after dependency removal",
+                    "notifications.integration.test.ts: assert COMMENT_LIKE (not LIKE) for comment-like notifications",
+                    "All 97 backend/scheduler Vitest tests pass post-fix"
+                ]
+            },
+            {
+                "number": 46,
+                "title": "update packages",
+                "merged_at": "2026-05-15",
+                "url": "https://github.com/bagariaraj23/Trav-Flut/pull/46",
+                "keyFeatures": [
+                    "Root npm package-lock.json dependency tree refresh (+3666 / -373 lines)",
+                    "mobile/pubspec.yaml version bump and pubspec.lock sync",
+                    "Dependency alignment ahead of production deploys and test toolchain updates"
+                ]
+            },
+            {
+                "number": 45,
+                "title": "Add test suite and coverage to backend, scheduler, and mobile modules",
+                "merged_at": "2026-06-13",
+                "url": "https://github.com/bagariaraj23/Trav-Flut/pull/45",
+                "keyFeatures": [
+                    "Backend unit: auth.unit.test.ts, validation-flows.unit.test.ts",
+                    "Backend integration: auth-flow, trip-thread-flow, trip-leave (+ existing engagement/notification suites)",
+                    "Route contract: src/app/test/api-route-contract.test.ts (70+ routes must export HTTP handlers)",
+                    "Scheduler: tripStatus.behavior.unit.test.ts (mocked Prisma behavioral coverage)",
+                    "Mobile: trip_provider_test.dart leaveTrip provider tests",
+                    "Test DB safety: dbUrlSafety.ts (_test suffix), setupTests.ts, setup-test-db.sh, test-only seed.ts",
+                    "npm scripts: db:setup:test, db:seed via .env.test, test:coverage via .env.test",
+                    "Docs: tests/TESTING.md cross-app strategy; PR_docs/PR45_DESCRIPTION.md"
+                ]
+            },
+            {
+                "number": 43,
+                "title": "Prod fixes — discover, thread CRUD/pagination, shares, @all, QA thread UI",
+                "merged_at": "2026-05-15",
+                "url": "https://github.com/bagariaraj23/Trav-Flut/pull/43",
+                "keyFeatures": [
+                    "Discover: FeedProvider trusts server items; hasMoreDiscoverTrips = API hasNext; GET /discover/trips includes isFollowing per trip",
+                    "Thread: DELETE + PATCH (text); threadEntryPurge.ts; PATCH author 15m window; paginated GET { items, hasMoreOlder, nextOlderCursor }",
+                    "Thread mobile: context endpoint + fallback paging; long-press edit/delete (Material+InkWell, stateful edit dialog); compose keyboard/overflow fix",
+                    "POST /trips/[id]/leave { removeMyData }; bulk purge on leave-with-data",
+                    "tripTagResolution: @all + trip-member-only TAG notifications on entries and comments",
+                    "permissions: trip participants can view/like thread + final post on private trips",
+                    "share/like: longer Prisma tx timeouts; SYSTEM_SHEET vs IN_APP_DM shareCount; Redis del non-fatal",
+                    "Final post: DELETE; owner ⋮ Edit/Delete on feed + post detail; feed tap → trip detail",
+                    "Shares: /share/[token] bridge; tripthread:// + SHARE_LINK_BASE_URL",
+                    "Post-testing: per-action invite/follow loaders; tripInvitation private-profile rules; auth_error_messages"
+                ],
+                "deferredFollowUps": [
+                    "Map picker / Use This Location timeout",
+                    "Universal Links until AASA/assetlinks on SHARE_LINK_BASE_URL"
+                ]
+            },
+            {
+                "number": 42,
+                "title": "Build fixes — Prisma transaction client types",
+                "merged_at": "2026-02-24",
+                "url": "https://github.com/bagariaraj23/Trav-Flut/pull/42",
+                "keyFeatures": [
+                    "Export `PrismaTransactionClient` from `prisma.ts` for `tx` in `$transaction` callbacks",
+                    "`tripFinalizer.generateFinalPost` accepts `PrismaTransactionClient | typeof prisma`",
+                    "`engagement-utils` increment/decrement entity counts use transaction client type",
+                    "Fixes `npm run build` after Prisma reconnect-on-closed extension"
+                ]
+            },
+            {
+                "number": 41,
+                "title": "Prod fixes — trip invitations, FOLLOW notifications, profile UX",
+                "merged_at": "2026-02-24",
+                "url": "https://github.com/bagariaraj23/Trav-Flut/pull/41",
+                "keyFeatures": [
+                    "Notifications: trip invitations section + load pending invites on open; FOLLOW tile + tap to actor profile",
+                    "Backend: FOLLOW notification type + migration; create FOLLOW on public follow; Prisma reconnect-on-closed; mobile `isFollow` on unified item",
+                    "Profile: mail / follow-requests / settings app-bar only on own profile; Profile tab shortcuts + badges",
+                    "`invalidateUserCache` after follow/unfollow; metadata cache warm; distribute script + `.env.example` production API notes"
+                ]
+            },
+            {
+                "number": 40,
+                "title": "Prod fixes — settings privacy, trip cover, follow-requests back, scheduler",
+                "merged_at": "2026-02-23",
+                "url": "https://github.com/bagariaraj23/Trav-Flut/pull/40",
+                "keyFeatures": [
+                    "Settings: public/private account toggle with PATCH privacy API",
+                    "Trip cover: update cover for ongoing and ended trips (backend + mobile)",
+                    "Follow requests: BackButton for correct system back gesture",
+                    "Scheduler: run logging, UpdateTripStatusesResult, empty destinations fallback for final post, UTC date comparison note"
+                ]
+            },
+            {
+                "number": 39,
+                "title": "Scheduler fixes — DB connection retry",
+                "merged_at": "2026-02-23",
+                "url": "https://github.com/bagariaraj23/Trav-Flut/pull/39",
+                "keyFeatures": [
+                    "Scheduler retries on transient DB connection failures"
+                ]
+            },
+            {
+                "number": 37,
+                "title": "Feat notification — unified notifications + thread engagement",
+                "merged_at": "2026-02-22",
+                "url": "https://github.com/bagariaraj23/Trav-Flut/pull/37",
+                "keyFeatures": [
+                    "Backend: Notification model + types (LIKE, COMMENT_LIKE, COMMENT, COMMENT_REPLY, TAG); merged feed with composite cursor pagination",
+                    "APIs: list, unread count, mark read / mark all read; idempotent likes; privacy on mention notifications",
+                    "Mobile: time-grouped UI, unread badge, deep links to post/thread/comment, optimistic read + bulk mark-as-read",
+                    "Thread entry like + swipe-to-reply; integration tests for feed, pagination stability, and race conditions"
+                ]
+            },
+            {
+                "number": 34,
+                "title": "profile page bio & username fixes",
+                "merged_at": "2026-02-15",
+                "keyFeatures": [
+                    "Bio field support",
+                    "Username validation",
+                    "OAuth race condition fixes",
+                    "Profile update improvements"
+                ]
+            },
+            {
+                "number": 33,
+                "title": "Feat engagements",
+                "merged_at": "2026-02-08",
+                "keyFeatures": [
+                    "Likes system",
+                    "Comments system",
+                    "Shares system",
+                    "16 new API endpoints",
+                    "Mobile UI components",
+                    "Rate limiting",
+                    "Security measures"
+                ]
+            },
+            {
+                "number": 31,
+                "title": "Feat final post",
+                "merged_at": "2026-01-04",
+                "keyFeatures": [
+                    "Final post generation",
+                    "Final post editing",
+                    "Final post publishing",
+                    "Media curation"
+                ]
+            },
+            {
+                "number": 30,
+                "title": "Flutter fixes",
+                "merged_at": "2025-12-28",
+                "keyFeatures": [
+                    "Runtime/null-safety fixes",
+                    "Layout fixes",
+                    "Navigation fixes",
+                    "Dependency updates"
+                ]
+            },
+            {
+                "number": 29,
+                "title": "Fix race conditions, DB and API issues",
+                "merged_at": "2025-12-27",
+                "keyFeatures": [
+                    "Race condition fixes",
+                    "ACID compliance improvements",
+                    "Transaction wrapping",
+                    "Error handling"
+                ]
+            },
+            {
+                "number": 28,
+                "title": "Patch trip service",
+                "merged_at": "2025-12-28",
+                "keyFeatures": [
+                    "Date normalization",
+                    "Trip conflict prevention",
+                    "Error handling"
+                ]
+            },
+            {
+                "number": 27,
+                "title": "Patch scheduler fixes",
+                "merged_at": "2025-12-04",
+                "keyFeatures": [
+                    "Removed BullMQ/ioredis",
+                    "Cron-based scheduler",
+                    "Zero Redis dependency",
+                    "Batch caching"
+                ]
+            },
+            {
+                "number": 26,
+                "title": "Update trip cover media",
+                "merged_at": "2025-12-02",
+                "keyFeatures": [
+                    "Image/video/GIF cover support",
+                    "Improved upload/retry logic",
+                    "Better error handling"
+                ]
+            },
+            {
+                "number": 25,
+                "title": "Feat follower following list",
+                "merged_at": "2025-12-02",
+                "keyFeatures": [
+                    "Followers/Following screens",
+                    "Search and pagination",
+                    "Follow/unfollow from lists"
+                ]
+            },
+            {
+                "number": 24,
+                "title": "Patch participant management",
+                "merged_at": "2025-11-23",
+                "keyFeatures": [
+                    "Duplicate prevention",
+                    "Add/remove participant flows",
+                    "Validation and error messages"
+                ]
+            },
+            {
+                "number": 23,
+                "title": "Feat media service",
+                "merged_at": "2025-11-16",
+                "keyFeatures": [
+                    "Cloudinary integration",
+                    "Media service abstraction",
+                    "Profile photos",
+                    "Trip cover media",
+                    "Thread entry media"
+                ]
+            },
+            {
+                "number": 22,
+                "title": "Fixed token issues",
+                "merged_at": "2025-11-09",
+                "keyFeatures": [
+                    "Token refresh manager",
+                    "Single refresh request coordination",
+                    "Token persistence fixes"
+                ]
+            },
+            {
+                "number": 21,
+                "title": "Feature/pwdissuesfix",
+                "merged_at": "2025-10-25",
+                "keyFeatures": [
+                    "Password reset system",
+                    "Email verification",
+                    "Security event logging",
+                    "Password policy enforcement"
+                ]
+            },
+            {
+                "number": 20,
+                "title": "Feature/change password",
+                "merged_at": "2025-10-15",
+                "keyFeatures": [
+                    "Settings screen",
+                    "Change password",
+                    "Logout functionality"
+                ]
+            },
+            {
+                "number": 19,
+                "title": "Feat: Location and Map integration",
+                "merged_at": "2025-11-08",
+                "keyFeatures": [
+                    "Mapbox integration",
+                    "Place search",
+                    "Canonical place tagging",
+                    "Trip destinations",
+                    "Interactive maps"
+                ]
+            },
+            {
+                "number": 18,
+                "title": "use dynamic apiBaseURL",
+                "merged_at": "2025-10-06",
+                "keyFeatures": [
+                    "Dynamic API base URL",
+                    "Environment configuration"
+                ]
+            },
+            {
+                "number": 17,
+                "title": "Patch fix trip scheduler",
+                "merged_at": "2025-10-07",
+                "keyFeatures": [
+                    "Trip scheduler fixes",
+                    "Status transition improvements"
+                ]
+            },
+            {
+                "number": 16,
+                "title": "ui/follow system fixes",
+                "merged_at": "2025-09-14",
+                "keyFeatures": [
+                    "Follow system UI fixes",
+                    "Follow status handling"
+                ]
+            },
+            {
+                "number": 14,
+                "title": "Patch trip management fixes",
+                "merged_at": "2025-09-14",
+                "keyFeatures": [
+                    "Trip management fixes",
+                    "Various improvements"
+                ]
+            },
+            {
+                "number": 13,
+                "title": "reference tripID for thread entries",
+                "merged_at": "2025-09-14",
+                "keyFeatures": [
+                    "Thread entry trip reference",
+                    "Trip-thread association"
+                ]
+            },
+            {
+                "number": 12,
+                "title": "Create pull_request_template.md",
+                "merged_at": "2025-09-01",
+                "keyFeatures": [
+                    "PR template",
+                    "Documentation standardization"
+                ]
+            },
+            {
+                "number": 11,
+                "title": "Environment Setup",
+                "merged_at": "2025-09-01",
+                "keyFeatures": [
+                    "Environment configuration",
+                    "Setup documentation"
+                ]
+            },
+            {
+                "number": 10,
+                "title": "Text formatter",
+                "merged_at": "2025-08-31",
+                "keyFeatures": [
+                    "Text formatting utilities",
+                    "Content formatting"
+                ]
+            },
+            {
+                "number": 9,
+                "title": "Follow overhaul",
+                "merged_at": "2025-08-30",
+                "keyFeatures": [
+                    "Follow system overhaul",
+                    "Improved UX"
+                ]
+            },
+            {
+                "number": 8,
+                "title": "Follow overhaul",
+                "merged_at": "2025-08-24",
+                "keyFeatures": [
+                    "Follow system overhaul",
+                    "Initial implementation"
+                ]
+            },
+            {
+                "number": 7,
+                "title": "Feed overhaul",
+                "merged_at": "2025-08-23",
+                "keyFeatures": [
+                    "Feed system overhaul",
+                    "Performance improvements"
+                ]
+            },
+            {
+                "number": 6,
+                "title": "trip creation flow",
+                "merged_at": "2025-08-17",
+                "keyFeatures": [
+                    "Trip creation flow",
+                    "Initial trip management"
+                ]
+            },
+            {
+                "number": 5,
+                "title": "fix api routes",
+                "merged_at": "2025-08-16",
+                "keyFeatures": [
+                    "API routes fixes",
+                    "Routing foundation"
+                ]
+            },
+            {
+                "number": 4,
+                "title": "Fix mock data to match schema",
+                "merged_at": "2025-08-16",
+                "keyFeatures": [
+                    "Schema alignment",
+                    "Data model foundation"
+                ]
+            },
+            {
+                "number": 3,
+                "title": "Update Discovery Page and profile stats",
+                "merged_at": "2025-08-15",
+                "keyFeatures": [
+                    "Discovery page",
+                    "Profile stats",
+                    "User search"
+                ]
+            },
+            {
+                "number": 2,
+                "title": "Fix 3 issues: auth error UX/follow status/error handling",
+                "merged_at": "2025-08-15",
+                "keyFeatures": [
+                    "Auth error UX",
+                    "Follow status fixes",
+                    "Error handling"
+                ]
+            },
+            {
+                "number": 1,
+                "title": "Login Flow working as per architecture.",
+                "merged_at": "2025-07-05",
+                "keyFeatures": [
+                    "Initial login flow",
+                    "Authentication foundation",
+                    "JWT implementation"
+                ]
+            }
+        ],
+        "open": [
+            {
+                "number": 38,
+                "title": "personalised final posts",
+                "state": "draft",
+                "url": "https://github.com/bagariaraj23/Trav-Flut/pull/38",
+                "created_at": "2026-02-20",
+                "notes": "GitHub PR is draft (branch patch-final-post-update); commits include feature, DB migration, tests",
+                "keyFeatures": [
+                    "Personalized final posts per participant",
+                    "Schema migration",
+                    "Service layer refactor"
+                ]
+            },
+            {
+                "number": 36,
+                "title": "Feat final post",
+                "state": "open",
+                "created_at": "2026-02-17",
+                "keyFeatures": [
+                    "Final post enhancements"
+                ]
+            },
+            {
+                "number": 35,
+                "title": "Feat ux enhancements",
+                "state": "open",
+                "created_at": "2026-02-15",
+                "keyFeatures": [
+                    "Username login (email or username)",
+                    "Username normalization (Unicode lookalike → ASCII)",
+                    "Thread screen auto-open for ongoing trips",
+                    "Floating bubble navigation button (draggable, position persists)",
+                    "Enhanced logout (per-device and all-device)",
+                    "Exponential backoff retry logic (mobile + backend)",
+                    "Performance monitoring on all API endpoints",
+                    "User-friendly auth error messages",
+                    "TripThread branded logo integration (SVG assets + flutter_svg)",
+                    "Android/iOS splash screen fixes (replaced Flutter logo with TripThread icon)",
+                    "Merged PR #37 notification features into branch"
+                ]
+            }
+        ]
+    },
+    "implementationStatus": {
+        "overallCompletion": "92%",
+        "completedFeatures": 61,
+        "inProgressFeatures": 1,
+        "plannedFeatures": 3,
+        "totalPRs": 47,
+        "mergedPRs": 43,
+        "openPRs": 3,
+        "raceConditionFixes": {
+            "total": 17,
+            "fixed": 14,
+            "remaining": 3,
+            "status": "82% secure",
+            "remainingIssues": [
+                "Final post generation race condition (end trip route)",
+                "Media quota tracking race condition",
+                "Cache stampede in getOrSet function"
+            ]
+        },
+        "testingCoverage": {
+            "backend": "Good — 97 Vitest tests passing (19 files); v8 coverage 51% statements / 52% lines overall",
+            "mobile": "Partial — 16 Flutter test files; engagement widgets/providers covered; trip leave provider added in PR #45",
+            "integration": "Good — auth, trips, thread, leave, engagement, notifications, invites, concurrency",
+            "scheduler": "Partial — behavioral unit tests; DB integration tests exist but scheduler source still low line coverage",
+            "reportPath": "coverage/index.html",
+            "lastRun": "2026-06-13",
+            "notes": "See tests/TESTING.md and context.json testing section for suite inventory; run npm run test:coverage on Node 20+ with tripthread_test DB. Do not add platform-specific Rolldown bindings (e.g. @rolldown/binding-darwin-arm64) to root dependencies — breaks Railway Linux deploys (fixed in PR #47)."
+        }
+    },
+    "hotspotsForFurtherDeepDive": [
+        "src/app/api/trips/[id]/entries/route.ts",
+        "src/lib/services/tripFinalizer.ts",
+        "src/lib/place.ts",
+        "src/lib/cache.ts",
+        "mobile/lib/services/api_service.dart",
+        "mobile/lib/screens/trip/trip_thread_screen.dart",
+        "mobile/lib/providers/user_provider.dart",
+        "src/lib/services/notification.ts",
+        "scheduler/src/tripStatus.ts",
+        "src/lib/prisma.ts",
+        "src/lib/services/engagement-utils.ts",
+        "src/lib/services/tripTagResolution.ts",
+        "src/lib/auth/permissions.ts"
+    ]
+}
