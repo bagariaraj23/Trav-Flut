@@ -1,4 +1,5 @@
 import 'package:json_annotation/json_annotation.dart';
+import 'package:tripthread/utils/user_display_labels.dart';
 
 part 'comment_user.g.dart';
 
@@ -38,10 +39,20 @@ class CommentUser {
     );
   }
 
-  /// Display name: prioritizes name, falls back to username, then id
-  String get displayName => name ?? username ?? 'User $id';
+  /// Primary line: @username when set (unique), else name / short id.
+  String get displayName => userPrimaryLabel(
+        id: id,
+        username: username,
+        name: name,
+      );
+
+  /// Optional second line — display name when distinct from username.
+  String? get displayNameSecondary =>
+      userSecondaryName(username: username, name: name);
 
   /// Username with @ prefix, or fallback to id
   String get handle =>
-      username != null ? '@$username' : '@${id.substring(0, 8)}';
+      username != null && username!.trim().isNotEmpty
+          ? '@${username!.trim()}'
+          : '@${id.length >= 8 ? id.substring(0, 8) : id}';
 }

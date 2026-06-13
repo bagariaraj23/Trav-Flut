@@ -18,6 +18,8 @@ export async function canViewEntity(
       where: { id: entityId },
       select: {
         id: true,
+        tripId: true,
+        isPublished: true,
         trip: {
           select: {
             userId: true,
@@ -33,12 +35,38 @@ export async function canViewEntity(
 
     if (!post) return false;
 
+    // If draft (not published), restrict access to owner and participants only
+    if (!post.isPublished) {
+      if (!userId) return false;
+      if (userId === post.trip.userId) return true;
+
+      const participant = await prisma.tripParticipant.findUnique({
+        where: {
+          tripId_userId: {
+            tripId: post.tripId,
+            userId,
+          },
+        },
+      });
+      return !!participant;
+    }
+
     const owner = post.trip.user;
     if (!owner.isPrivate) return true;
 
     if (!userId) return false;
 
     if (userId === post.trip.userId) return true;
+
+    const participant = await prisma.tripParticipant.findUnique({
+      where: {
+        tripId_userId: {
+          tripId: post.tripId,
+          userId,
+        },
+      },
+    });
+    if (participant) return true;
 
     const follow = await prisma.follow.findUnique({
       where: {
@@ -57,6 +85,7 @@ export async function canViewEntity(
       where: { id: entityId },
       select: {
         id: true,
+        tripId: true,
         trip: {
           select: {
             userId: true,
@@ -78,6 +107,16 @@ export async function canViewEntity(
     if (!userId) return false;
 
     if (userId === entry.trip.userId) return true;
+
+    const participant = await prisma.tripParticipant.findUnique({
+      where: {
+        tripId_userId: {
+          tripId: entry.tripId,
+          userId,
+        },
+      },
+    });
+    if (participant) return true;
 
     const follow = await prisma.follow.findUnique({
       where: {

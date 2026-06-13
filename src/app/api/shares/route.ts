@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { prisma } from "@/lib/prisma";
 import { withAuth, withLogging, handleApiError } from "@/lib/middleware";
 import { withEngagementRateLimit } from "@/lib/middleware";
 import { createShareSchema } from "@/lib/validation";
@@ -14,6 +15,22 @@ export async function POST(request: NextRequest) {
           const body = await rateLimitedReq.json();
           const validatedData = createShareSchema.parse(body);
           const userId = authenticatedReq.user!.userId;
+
+          if (validatedData.entityType === "TRIP_FINAL_POST") {
+            const post = await prisma.tripFinalPost.findUnique({
+              where: { id: validatedData.entityId },
+              select: { isPublished: true },
+            });
+            if (post && !post.isPublished) {
+              return NextResponse.json<ApiResponse>(
+                {
+                  success: false,
+                  error: "Forbidden: Only published posts can be shared",
+                },
+                { status: 403 }
+              );
+            }
+          }
 
           const canShare = await canShareEntity(
             userId,
@@ -36,7 +53,8 @@ export async function POST(request: NextRequest) {
             validatedData.entityType,
             validatedData.entityId,
             validatedData.shareType,
-            validatedData.expiresAt
+            validatedData.expiresAt,
+            validatedData.shareSource
           );
 
           return NextResponse.json<ApiResponse>({

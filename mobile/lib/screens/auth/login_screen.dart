@@ -197,6 +197,39 @@ class _LoginScreenState extends State<LoginScreen> {
                   },
                 ),
 
+                // Retry session restore (tokens on device but /users/me failed transiently)
+                Consumer<AuthProvider>(
+                  builder: (context, authProvider, child) {
+                    if (!authProvider.canRetrySessionRestore) {
+                      return const SizedBox.shrink();
+                    }
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 16),
+                      child: SizedBox(
+                        width: double.infinity,
+                        child: OutlinedButton.icon(
+                          onPressed: authProvider.isLoading
+                              ? null
+                              : () async {
+                                  await authProvider.retrySessionRestore();
+                                  if (!context.mounted) return;
+                                  final a = context.read<AuthProvider>();
+                                  if (a.isAuthenticated) {
+                                    if (a.requiresProfileCompletion) {
+                                      context.go('/complete-profile');
+                                    } else {
+                                      context.go('/home');
+                                    }
+                                  }
+                                },
+                          icon: const Icon(Icons.refresh),
+                          label: const Text('Retry restoring session'),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+
                 // Login Button
                 Consumer<AuthProvider>(
                   builder: (context, authProvider, child) {

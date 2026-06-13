@@ -85,6 +85,7 @@ describe("Engagement API - Likes", () => {
         tripId: trip.id,
         summaryText: "Test trip summary",
         curatedMedia: [],
+        isPublished: true,
       },
     });
     threadEntry = await prisma.tripThreadEntry.create({
@@ -483,6 +484,7 @@ describe("Engagement API - Comments", () => {
         tripId: trip.id,
         summaryText: "Test trip summary",
         curatedMedia: [],
+        isPublished: true,
       },
     });
     threadEntry = await prisma.tripThreadEntry.create({
@@ -883,6 +885,7 @@ describe("Engagement API - Shares", () => {
         tripId: trip.id,
         summaryText: "Test trip summary",
         curatedMedia: [],
+        isPublished: true,
       },
     });
   });
@@ -916,6 +919,31 @@ describe("Engagement API - Shares", () => {
         },
       });
       expect(share).toBeTruthy();
+
+      const updatedPost = await prisma.tripFinalPost.findUnique({
+        where: { id: finalPost.id },
+      });
+      expect(updatedPost?.shareCount).toBe(0);
+    });
+
+    it("should increment shareCount only for IN_APP_DM shareSource", async () => {
+      const req = createAuthenticatedRequest(
+        "http://localhost/api/shares",
+        "POST",
+        {
+          entityType: "TRIP_FINAL_POST",
+          entityId: finalPost.id,
+          shareType: "DEEP_LINK",
+          shareSource: "IN_APP_DM",
+        },
+        token1
+      );
+
+      const response = await createShareRoute(req);
+      const data = await getResponseData(response);
+
+      expect(response.status).toBe(200);
+      expect(data.success).toBe(true);
 
       const updatedPost = await prisma.tripFinalPost.findUnique({
         where: { id: finalPost.id },

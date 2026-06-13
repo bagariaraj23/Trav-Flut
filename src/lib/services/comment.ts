@@ -14,6 +14,11 @@ import {
 import { getEntityOwner, getPostFromComment, getTripIdFromEntry, getTripTitle } from "../entity-owner";
 import { canViewEntity } from "../auth/permissions";
 import { createNotification } from "./notification";
+import {
+  loadTripForTagging,
+  parseTripScopedMentions,
+  resolveRecipientIdsForTripMentions,
+} from "./tripTagResolution";
 
 /** Extract @username mentions from text (case-insensitive, unique). */
 function extractMentions(text: string): string[] {
@@ -113,15 +118,18 @@ export async function createComment(
         "commentCount",
         tx
       );
-      await invalidateEngagementCache(
-        "comment",
-        finalEntityType,
-        finalEntityId
-      );
     }
 
     return newComment;
   });
+
+  if (!parentCommentId) {
+    await invalidateEngagementCache(
+      "comment",
+      finalEntityType,
+      finalEntityId
+    );
+  }
 
   // Fire-and-forget: create notifications without blocking response
   void (async () => {
@@ -182,14 +190,47 @@ export async function createComment(
       );
     }
 
-    // 2. @Mention TAG notifications
+    // 2. @Mention TAG notifications (trip thread / final post: @all + trip members only)
     const mentionUsernames = extractMentions(sanitizedText);
     if (mentionUsernames.length > 0) {
       try {
         const postInfo = await getPostFromComment(comment.id);
         if (!postInfo) return;
 
-        const users = await prisma.user.findMany({
+        const contentPreviewShort =
+          sanitizedText.length > 60 ? sanitizedText.slice(0, 60) + "..." : sanitizedText;
+        let tripId: string | null = null;
+        if (postInfo.entityType === "TRIP_THREAD_ENTRY") {
+          tripId = await getTripIdFromEntry(postInfo.entityId);
+        } else if (postInfo.entityType === "TRIP_FINAL_POST") {
+          const fp = await prisma.tripFinalPost.findUnique({
+            where: { id: postInfo.entityId },
+            select: { tripId: true },
+          });
+          tripId = fp?.tripId ?? null;
+        }
+
+        const recipientSet = new Set<string>();
+
+        if (
+          tripId &&
+          (postInfo.entityType === "TRIP_THREAD_ENTRY" ||
+            postInfo.entityType === "TRIP_FINAL_POST")
+        ) {
+          const trip = await loadTripForTagging(tripId);
+          if (trip) {
+            const { wantsAll, specificLower } = parseTripScopedMentions(mentionUsernames);
+            const fromTrip = await resolveRecipientIdsForTripMentions({
+              trip: { userId: trip.userId, participants: trip.participants },
+              actorId: userId,
+              wantsAll,
+              specificLower,
+            });
+            for (const id of fromTrip) recipientSet.add(id);
+          }
+        }
+
+        const globalUsers = await prisma.user.findMany({
           where: {
             deletedAt: null,
             OR: mentionUsernames.map((u) => ({
@@ -198,15 +239,7 @@ export async function createComment(
           },
           select: { id: true },
         });
-
-        const contentPreviewShort =
-          sanitizedText.length > 60 ? sanitizedText.slice(0, 60) + "..." : sanitizedText;
-        let tripId: string | null = null;
-        if (postInfo.entityType === "TRIP_THREAD_ENTRY") {
-          tripId = await getTripIdFromEntry(postInfo.entityId);
-        }
-
-        for (const u of users) {
+        for (const u of globalUsers) {
           if (u.id === userId) continue;
           const canRecipientView = await canViewEntity(
             u.id,
@@ -214,28 +247,43 @@ export async function createComment(
             postInfo.entityId
           );
           if (!canRecipientView) continue;
+          recipientSet.add(u.id);
+        }
+
+        const recipientIds = Array.from(recipientSet);
+
+        const tripNameMeta =
+          tripId != null ? await getTripTitle(tripId) : null;
+
+        for (const recipientId of recipientIds) {
+          if (recipientId === userId) continue;
           try {
             await createNotification({
               type: "TAG",
               actorId: userId,
-              recipientId: u.id,
+              recipientId,
               entityType: "COMMENT",
               entityId: comment.id,
               metadata: {
+                tagSource: "comment",
                 contentPreview: contentPreviewShort,
                 postEntityType: postInfo.entityType,
                 postEntityId: postInfo.entityId,
                 commentId: comment.id,
                 ...(tripId && { tripId }),
+                ...(tripNameMeta && { tripName: tripNameMeta }),
                 ...(postInfo.entityType === "TRIP_THREAD_ENTRY" && {
                   threadEntryId: postInfo.entityId,
+                }),
+                ...(postInfo.entityType === "TRIP_FINAL_POST" && {
+                  tripFinalPostId: postInfo.entityId,
                 }),
               },
             });
           } catch (tagErr) {
             console.error(
               "[Notification] Failed to create TAG notification for mention:",
-              { commentId: comment.id, mentionedUserId: u.id, error: tagErr }
+              { commentId: comment.id, mentionedUserId: recipientId, error: tagErr }
             );
           }
         }
@@ -298,7 +346,7 @@ export async function updateComment(
 }
 
 export async function deleteComment(userId: string, commentId: string) {
-  return await prisma.$transaction(async (tx) => {
+  const result = await prisma.$transaction(async (tx) => {
     const comment = await tx.comment.findUnique({
       where: { id: commentId },
       include: {
@@ -325,10 +373,25 @@ export async function deleteComment(userId: string, commentId: string) {
 
     const replyIds = comment.replies.map((r) => r.id);
     if (replyIds.length > 0) {
+      // Delete likes on replies
+      await tx.like.deleteMany({
+        where: {
+          entityType: EntityType.COMMENT,
+          entityId: { in: replyIds },
+        },
+      });
       await tx.comment.deleteMany({
         where: { id: { in: replyIds } },
       });
     }
+
+    // Delete likes on comment itself
+    await tx.like.deleteMany({
+      where: {
+        entityType: EntityType.COMMENT,
+        entityId: commentId,
+      },
+    });
 
     await tx.comment.delete({
       where: { id: commentId },
@@ -341,15 +404,30 @@ export async function deleteComment(userId: string, commentId: string) {
         "commentCount",
         tx
       );
-      await invalidateEngagementCache(
-        "comment",
-        comment.entityType,
-        comment.entityId
-      );
     }
 
-    return { deleted: true, replyCount: replyIds.length };
+    return {
+      deleted: true,
+      replyCount: replyIds.length,
+      invalidatedEntity:
+        !comment.parentCommentId
+          ? {
+              entityType: comment.entityType,
+              entityId: comment.entityId,
+            }
+          : null,
+    };
   });
+
+  if (result.invalidatedEntity) {
+    await invalidateEngagementCache(
+      "comment",
+      result.invalidatedEntity.entityType,
+      result.invalidatedEntity.entityId
+    );
+  }
+
+  return { deleted: result.deleted, replyCount: result.replyCount };
 }
 
 export async function getCommentsByEntity(

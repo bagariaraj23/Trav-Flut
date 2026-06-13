@@ -95,7 +95,14 @@ export async function invalidateEngagementCache(
   const key = `${cacheType}Count:${entityType}:${entityId}`;
   memoryCache.delete(key);
   if (redis) {
-    await redis.del(key);
+    try {
+      await redis.del(key);
+    } catch (err) {
+      console.warn("[engagement] Redis cache invalidate failed (non-fatal)", {
+        key,
+        error: err,
+      });
+    }
   }
 }
 

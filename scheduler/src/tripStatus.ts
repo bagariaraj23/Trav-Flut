@@ -38,6 +38,7 @@ export async function updateTripStatuses(
     select: {
       id: true,
       destinations: true,
+      title: true,
     },
   });
 
@@ -80,10 +81,11 @@ export async function updateTripStatuses(
           const locationEntries = allThreadEntries.filter(
             (entry) => entry.type === "LOCATION" && entry.locationName
           );
+          const titleTrim = trip.title?.trim() ?? "";
           const destLabel =
             trip.destinations?.length > 0
               ? trip.destinations.join(", ")
-              : "your trip";
+              : titleTrim || "your trip";
           let summaryText = `Amazing trip to ${destLabel}! `;
           if (locationEntries.length > 0)
             summaryText += `Visited ${locationEntries.length} amazing places. `;
@@ -100,7 +102,7 @@ export async function updateTripStatuses(
               tripId: trip.id,
               summaryText,
               curatedMedia,
-              caption: `My trip to ${destLabel} was incredible! 🌟`,
+              caption: `My trip to ${titleTrim || destLabel} was incredible! 🌟`,
             },
           });
         }

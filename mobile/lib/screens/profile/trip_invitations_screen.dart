@@ -340,14 +340,16 @@ class _TripInvitationsScreenState extends State<TripInvitationsScreen> {
                 children: [
                   Expanded(
                     child: OutlinedButton(
-                      onPressed: tripProvider.isTripInvitesLoading
-                          ? null
-                          : () => _handleResponse(invite.id, false, trip.title),
+                      onPressed:
+                          tripProvider.respondingTripInviteId == invite.id
+                              ? null
+                              : () => _handleResponse(invite.id, false, trip.title),
                       style: OutlinedButton.styleFrom(
                         foregroundColor: Colors.red,
                         side: BorderSide(color: Colors.red[300]!),
                       ),
-                      child: tripProvider.isTripInvitesLoading
+                      child: tripProvider.respondingTripInviteId == invite.id &&
+                              tripProvider.respondingTripInviteAccept == false
                           ? const SizedBox(
                               height: 16,
                               width: 16,
@@ -359,10 +361,12 @@ class _TripInvitationsScreenState extends State<TripInvitationsScreen> {
                   const SizedBox(width: 12),
                   Expanded(
                     child: ElevatedButton(
-                      onPressed: tripProvider.isTripInvitesLoading
-                          ? null
-                          : () => _handleResponse(invite.id, true, trip.title),
-                      child: tripProvider.isTripInvitesLoading
+                      onPressed:
+                          tripProvider.respondingTripInviteId == invite.id
+                              ? null
+                              : () => _handleResponse(invite.id, true, trip.title),
+                      child: tripProvider.respondingTripInviteId == invite.id &&
+                              tripProvider.respondingTripInviteAccept == true
                           ? const SizedBox(
                               height: 16,
                               width: 16,

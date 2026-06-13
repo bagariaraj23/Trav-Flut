@@ -1,26 +1,24 @@
-FROM node:18-alpine
+FROM node:20-alpine
+
+# Install native dependencies needed by Prisma
+RUN apk add --no-cache libc6-compat openssl
 
 WORKDIR /app
 
-# Copy package files
-COPY scheduler/package*.json ./
+COPY prisma ./prisma
+COPY scheduler/package.json scheduler/package-lock.json ./scheduler/
 
-# Install dependencies
-RUN npm install
+WORKDIR /app/scheduler
+# Ignore scripts to prevent prisma generate from running before source code is copied
+RUN npm ci --ignore-scripts
 
-# Copy source code
-COPY scheduler/ .
-COPY scheduler/tsconfig.json ./ 
-COPY prisma/ ./prisma/
+COPY scheduler/ ./
 
-# Generate Prisma client
-RUN npx prisma generate --schema=./prisma/schema.prisma
+# Generate Prisma client, build typescript, and prune dev dependencies
+RUN npx prisma generate --schema=../prisma/schema.prisma \
+  && npm run build \
+  && npm prune --omit=dev
 
-# Build TypeScript
-RUN npm run build
+ENV NODE_ENV=production
 
-# Verify build output exists
-RUN ls -la dist/ || (echo "Build failed - dist directory not found" && exit 1)
-
-# Start the scheduler
-CMD ["npm", "start"]
+CMD ["node", "dist/index.js"]

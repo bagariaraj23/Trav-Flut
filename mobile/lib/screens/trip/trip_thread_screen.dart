@@ -90,6 +90,8 @@ class _TripThreadScreenState extends State<TripThreadScreen>
 
   bool _wasOngoingTrip = false;
   TripProvider? _tripProvider;
+  final Map<String, GlobalKey> _highlightEntryKeys = {};
+  bool _pendingOlderPageLoad = false;
 
   @override
   void initState() {
@@ -109,6 +111,8 @@ class _TripThreadScreenState extends State<TripThreadScreen>
       ),
     );
     _textController.addListener(_onTextChanged);
+    _scrollController.addListener(_onThreadScrollNearTop);
+    _entryInputFocusNode.addListener(_onComposerFocusChanged);
 
     // Defer _loadTrip and _loadTripParticipants - they call clearCurrentTripEntries
     // and setState which trigger notifyListeners during build if run in initState
@@ -150,6 +154,20 @@ class _TripThreadScreenState extends State<TripThreadScreen>
     }
   }
 
+  void _onComposerFocusChanged() {
+    if (!_entryInputFocusNode.hasFocus || !mounted) return;
+    void scrollThreadToEnd() {
+      if (!mounted || !_scrollController.hasClients) return;
+      final max = _scrollController.position.maxScrollExtent;
+      if (max > 0) _scrollController.jumpTo(max);
+    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      scrollThreadToEnd();
+      // Keyboard animates in after focus; scroll again once inset is applied.
+      Future.delayed(const Duration(milliseconds: 280), scrollThreadToEnd);
+    });
+  }
+
   @override
   void dispose() {
     // Remove listener - use stored reference to avoid context.read on deactivated widget
@@ -160,9 +178,11 @@ class _TripThreadScreenState extends State<TripThreadScreen>
     }
 
     _textController.removeListener(_onTextChanged);
+    _entryInputFocusNode.removeListener(_onComposerFocusChanged);
     _textController.dispose();
     _entryInputFocusNode.dispose();
     _locationController.dispose();
+    _scrollController.removeListener(_onThreadScrollNearTop);
     _scrollController.dispose();
     _replyBannerController.dispose();
     _disposePendingVideoController();
@@ -243,6 +263,10 @@ class _TripThreadScreenState extends State<TripThreadScreen>
             setState(() {
               _tripParticipants = participants;
             });
+            // Participants often arrive after "@"; rebuild so the menu appears.
+            if (_mentionQuery != null) {
+              setState(() {});
+            }
           }
         });
       }
@@ -251,48 +275,90 @@ class _TripThreadScreenState extends State<TripThreadScreen>
     }
   }
 
+  bool _isMentionBoundaryWhitespace(String ch) {
+    return ch == ' ' || ch == '\t' || ch == '\n' || ch == '\r';
+  }
+
+  /// Participants from API plus trip owner when owner is not a [TripParticipant] row.
+  List<TripParticipant> _mentionParticipantPool() {
+    final out = List<TripParticipant>.from(_tripParticipants);
+    final trip = _trip;
+    if (trip == null) return out;
+    final ownerId = trip.userId;
+    final ownerUser = trip.user;
+    final hasOwnerRow = out.any((p) => p.userId == ownerId);
+    if (!hasOwnerRow && ownerUser != null) {
+      out.add(
+        TripParticipant(
+          id: 'trip-owner-$ownerId',
+          tripId: trip.id,
+          userId: ownerId,
+          role: 'owner',
+          joinedAt: trip.createdAt,
+          user: ownerUser,
+        ),
+      );
+    }
+    return out;
+  }
+
   void _onTextChanged() {
     final text = _textController.text;
     final selection = _textController.selection;
     final cursorPosition = selection.baseOffset;
 
-    // Find the last @ mention before cursor
-    final textBeforeCursor = text.substring(0, cursorPosition);
-    final lastAtIndex = textBeforeCursor.lastIndexOf('@');
-
-    if (lastAtIndex != -1) {
-      // Check if there's a space after @ (meaning mention is complete)
-      final textAfterAt = textBeforeCursor.substring(lastAtIndex + 1);
-      if (textAfterAt.contains(' ')) {
-        // Mention is complete (space found), clear mention state
-        if (mounted) {
-          setState(() {
-            _mentionQuery = null;
-            _mentionStartPosition = null;
-          });
-        }
-        return;
-      }
-
-      // Extract the query after @ (can be empty if just '@')
-      final query = textAfterAt.toLowerCase();
-      debugPrint(
-        '[MentionMenu] Detected @ mention: query="$query", position=$lastAtIndex',
-      );
-      _mentionQuery = query;
-      _mentionStartPosition = lastAtIndex;
-
-      // Show autocomplete menu
-      _showMentionMenu();
-    } else {
-      // No @ found, clear mention state
+    if (cursorPosition < 0 || cursorPosition > text.length) {
       if (mounted) {
         setState(() {
           _mentionQuery = null;
           _mentionStartPosition = null;
         });
       }
+      return;
     }
+
+    final textBeforeCursor = text.substring(0, cursorPosition);
+    final lastAtIndex = textBeforeCursor.lastIndexOf('@');
+
+    if (lastAtIndex == -1) {
+      if (mounted) {
+        setState(() {
+          _mentionQuery = null;
+          _mentionStartPosition = null;
+        });
+      }
+      return;
+    }
+
+    if (lastAtIndex > 0 &&
+        !_isMentionBoundaryWhitespace(textBeforeCursor[lastAtIndex - 1])) {
+      if (mounted) {
+        setState(() {
+          _mentionQuery = null;
+          _mentionStartPosition = null;
+        });
+      }
+      return;
+    }
+
+    final rawQuery = textBeforeCursor.substring(lastAtIndex + 1);
+    if (rawQuery.contains(RegExp(r'\s'))) {
+      if (mounted) {
+        setState(() {
+          _mentionQuery = null;
+          _mentionStartPosition = null;
+        });
+      }
+      return;
+    }
+
+    final query = rawQuery.toLowerCase();
+    debugPrint(
+      '[MentionMenu] Detected @ mention: query="$query", position=$lastAtIndex',
+    );
+    _mentionQuery = query;
+    _mentionStartPosition = lastAtIndex;
+    _showMentionMenu();
   }
 
   void _showMentionMenu() {
@@ -303,19 +369,21 @@ class _TripThreadScreenState extends State<TripThreadScreen>
   }
 
   void _selectMention(TripParticipant participant) {
-    if (_mentionStartPosition == null || participant.user?.username == null) {
+    final username = participant.user?.username;
+    if (_mentionStartPosition == null ||
+        username == null ||
+        username.isEmpty) {
       _mentionQuery = null;
       _mentionStartPosition = null;
       return;
     }
 
-    final username = participant.user!.username!;
     final text = _textController.text;
-    final beforeAt = text.substring(0, _mentionStartPosition!);
+    final start = _mentionStartPosition!;
+    final beforeAt = text.substring(0, start);
     final afterCursor = text.substring(_textController.selection.baseOffset);
     final newText = '$beforeAt@$username $afterCursor';
-    final newCursorPosition =
-        _mentionStartPosition! + username.length + 2; // +2 for @ and space
+    final newCursorPosition = start + username.length + 2; // +2 for @ and space
 
     _textController.value = TextEditingValue(
       text: newText,
@@ -325,6 +393,25 @@ class _TripThreadScreenState extends State<TripThreadScreen>
     // Clear mention state
     _mentionQuery = null;
     _mentionStartPosition = null;
+  }
+
+  void _insertAllMention() {
+    if (_mentionStartPosition == null) return;
+    final text = _textController.text;
+    final beforeAt = text.substring(0, _mentionStartPosition!);
+    final afterCursor = text.substring(_textController.selection.baseOffset);
+    const token = '@all ';
+    final newText = '$beforeAt$token$afterCursor';
+    final newCursor = _mentionStartPosition! + token.length;
+    _textController.value = TextEditingValue(
+      text: newText,
+      selection: TextSelection.collapsed(
+        offset: newCursor.clamp(0, newText.length),
+      ),
+    );
+    _mentionQuery = null;
+    _mentionStartPosition = null;
+    if (mounted) setState(() {});
   }
 
   List<String> _extractTaggedUsernames(String text) {
@@ -354,13 +441,53 @@ class _TripThreadScreenState extends State<TripThreadScreen>
         _trip = trip;
         _isLoading = false;
       });
+      if (_mentionQuery != null) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) setState(() {});
+        });
+      }
 
       if (trip != null) {
         await tripProvider.loadCurrentTripEntries(widget.tripId);
         _syncEntryEngagementState();
+
+        final hl = widget.highlightEntryId;
+        if (hl != null && hl.isNotEmpty) {
+          final found = await tripProvider.loadUntilEntryPresent(
+            widget.tripId,
+            hl,
+          );
+          if (mounted) _syncEntryEngagementState();
+          if (mounted && !found) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text(
+                  'Jump target is older than the loaded history. Scroll up to load more.',
+                ),
+              ),
+            );
+          }
+        }
+
         if (mounted) {
           setState(() {
             _isLoadingEntries = false;
+          });
+        }
+
+        if (mounted) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (!mounted) return;
+            final hl2 = widget.highlightEntryId;
+            if (hl2 != null && hl2.isNotEmpty) {
+              _scrollHighlightedEntryIntoView(hl2);
+            } else {
+              _scrollThreadToBottom(animated: false);
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                if (!mounted) return;
+                _scrollThreadToBottom(animated: false);
+              });
+            }
           });
         }
       } else {
@@ -383,6 +510,86 @@ class _TripThreadScreenState extends State<TripThreadScreen>
     engagementProvider.setLikeStatusBatch({
       for (final entry in entries) entry.id: entry.hasLiked,
     });
+  }
+
+  void _onThreadScrollNearTop() {
+    if (!_scrollController.hasClients) return;
+    if (_scrollController.position.pixels > 180) return;
+    _maybeLoadOlderThreadEntries();
+  }
+
+  Future<void> _maybeLoadOlderThreadEntries() async {
+    if (!mounted || _pendingOlderPageLoad) return;
+    final tripProvider = context.read<TripProvider>();
+    if (!tripProvider.threadEntriesHasMoreOlder ||
+        tripProvider.isLoadingOlderThreadEntries) {
+      return;
+    }
+
+    _pendingOlderPageLoad = true;
+    final scroll = _scrollController;
+    final oldPixels = scroll.hasClients ? scroll.position.pixels : 0.0;
+    final oldMax = scroll.hasClients ? scroll.position.maxScrollExtent : 0.0;
+
+    await tripProvider.loadOlderThreadEntries(widget.tripId);
+
+    if (!mounted) {
+      _pendingOlderPageLoad = false;
+      return;
+    }
+
+    _syncEntryEngagementState();
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) {
+        _pendingOlderPageLoad = false;
+        return;
+      }
+      if (scroll.hasClients) {
+        final newMax = scroll.position.maxScrollExtent;
+        final delta = newMax - oldMax;
+        final target = (oldPixels + delta).clamp(0.0, newMax);
+        scroll.jumpTo(target);
+      }
+      _pendingOlderPageLoad = false;
+    });
+  }
+
+  void _scrollThreadToBottom({bool animated = true}) {
+    if (!_scrollController.hasClients) return;
+    final max = _scrollController.position.maxScrollExtent;
+    if (max <= 0) return;
+    if (animated) {
+      _scrollController.animateTo(
+        max,
+        duration: const Duration(milliseconds: 280),
+        curve: Curves.easeOutCubic,
+      );
+    } else {
+      _scrollController.jumpTo(max);
+    }
+  }
+
+  Future<void> _scrollHighlightedEntryIntoView(String entryId) async {
+    for (var attempt = 0; attempt < 8; attempt++) {
+      await WidgetsBinding.instance.endOfFrame;
+      if (!mounted) return;
+      final key = _highlightEntryKeys[entryId];
+      final ctx = key?.currentContext;
+      if (ctx != null && ctx.mounted) {
+        try {
+          await Scrollable.ensureVisible(
+            ctx,
+            duration: const Duration(milliseconds: 320),
+            curve: Curves.easeOutCubic,
+            alignment: 0.12,
+          );
+        } catch (_) {}
+        if (!mounted) return;
+        return;
+      }
+    }
+    _scrollThreadToBottom(animated: false);
   }
 
   Future<void> _addEntry() async {
@@ -1030,6 +1237,7 @@ class _TripThreadScreenState extends State<TripThreadScreen>
           onTap: () => FocusScope.of(context).unfocus(),
           child: Stack(
             key: _stackKey,
+            clipBehavior: Clip.none,
             children: [
               Column(
                 children: [
@@ -1195,17 +1403,22 @@ class _TripThreadScreenState extends State<TripThreadScreen>
 
     // Filter participants by query, excluding current user
     final query = _mentionQuery?.toLowerCase() ?? '';
-    final filtered = _tripParticipants.where((p) {
+    final pool = _mentionParticipantPool();
+    final filtered = pool.where((p) {
       if (p.userId == currentUserId) return false;
 
       if (query.isEmpty) return true;
 
       final username = p.user?.username?.toLowerCase() ?? '';
       final name = p.user?.name?.toLowerCase() ?? '';
-      return username.startsWith(query) || name.startsWith(query);
+      return username.contains(query) || name.contains(query);
     }).toList();
 
-    if (filtered.isEmpty) return const SizedBox.shrink();
+    final othersOnTrip = pool.where((p) => p.userId != currentUserId).length;
+    final showAllRow =
+        othersOnTrip > 0 && (query.isEmpty || query == 'all');
+
+    if (filtered.isEmpty && !showAllRow) return const SizedBox.shrink();
 
     final renderBox =
         _textFieldKey.currentContext?.findRenderObject() as RenderBox?;
@@ -1229,6 +1442,13 @@ class _TripThreadScreenState extends State<TripThreadScreen>
     final keyboardHeight = MediaQuery.of(context).viewInsets.bottom;
     final stackSize = stackRenderBox.size;
 
+    if (!stackSize.height.isFinite ||
+        !stackSize.width.isFinite ||
+        stackSize.height <= 0 ||
+        stackSize.width <= 0) {
+      return const SizedBox.shrink();
+    }
+
     final hasKeyboard = keyboardHeight > 0;
     final menuWidth = size.width
         .clamp(120.0, 400.0)
@@ -1250,17 +1470,30 @@ class _TripThreadScreenState extends State<TripThreadScreen>
 
     final spaceAbove = menuTop;
     final spaceBelow = stackSize.height - menuTop;
-    final availableHeight = hasKeyboard ? spaceAbove : spaceBelow;
+    var availableHeight = hasKeyboard ? spaceAbove : spaceBelow;
+    if (!availableHeight.isFinite || availableHeight < 56) {
+      availableHeight = (stackSize.height * 0.35).clamp(56.0, 280.0);
+    }
     const itemHeight = 56.0;
     final maxItems = (availableHeight / itemHeight).floor().clamp(1, 5);
-    final maxHeightCap = (stackSize.height * 0.7).clamp(36.0, 280.0).toDouble();
+    final maxUserSlots = (maxItems - (showAllRow ? 1 : 0)).clamp(0, maxItems);
+    final shownUsers = filtered.length > maxUserSlots
+        ? filtered.sublist(0, maxUserSlots)
+        : filtered;
+    final totalRows = (showAllRow ? 1 : 0) + shownUsers.length;
+    if (totalRows == 0) return const SizedBox.shrink();
+
+    final maxHeightCap =
+        (stackSize.height * 0.7).clamp(36.0, 280.0).toDouble();
     final minHeightCap = maxHeightCap < 44.0 ? maxHeightCap : 44.0;
-    final desiredHeight =
-        (filtered.length > maxItems ? maxItems : filtered.length) * itemHeight;
-    final menuHeight = desiredHeight.clamp(minHeightCap, maxHeightCap);
+    final desiredHeight = totalRows * itemHeight;
+    var menuHeight = desiredHeight.clamp(minHeightCap, maxHeightCap);
+    if (!menuHeight.isFinite || menuHeight <= 0) {
+      menuHeight = 200.0;
+    }
 
     debugPrint(
-      '[MentionMenu] Showing menu: query="$query", filtered=${filtered.length}, position=($menuLeft, $menuTop), width=$menuWidth, keyboard=$hasKeyboard',
+      '[MentionMenu] Showing menu: query="$query", users=${shownUsers.length}, allRow=$showAllRow, position=($menuLeft, $menuTop), width=$menuWidth, keyboard=$hasKeyboard',
     );
 
     return Positioned(
@@ -1294,9 +1527,44 @@ class _TripThreadScreenState extends State<TripThreadScreen>
           child: ListView.builder(
             shrinkWrap: true,
             padding: const EdgeInsets.symmetric(vertical: 4),
-            itemCount: filtered.length > maxItems ? maxItems : filtered.length,
+            itemCount: totalRows,
             itemBuilder: (context, index) {
-              final participant = filtered[index];
+              if (showAllRow && index == 0) {
+                return ListTile(
+                  dense: true,
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 0,
+                  ),
+                  leading: CircleAvatar(
+                    radius: 16,
+                    backgroundColor: Theme.of(context)
+                        .colorScheme
+                        .secondaryContainer,
+                    child: Icon(
+                      Icons.groups,
+                      size: 18,
+                      color: Theme.of(context)
+                          .colorScheme
+                          .onSecondaryContainer,
+                    ),
+                  ),
+                  title: const Text(
+                    'Everyone on this trip',
+                    style: TextStyle(fontSize: 14),
+                  ),
+                  subtitle: Text(
+                    '@all',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                  onTap: _insertAllMention,
+                );
+              }
+              final pi = showAllRow ? index - 1 : index;
+              final participant = shownUsers[pi];
               final user = participant.user;
               return ListTile(
                 dense: true,
@@ -1355,6 +1623,188 @@ class _TripThreadScreenState extends State<TripThreadScreen>
     return map;
   }
 
+  bool _canModerateThreadEntry(TripThreadEntry entry) {
+    final uid = context.read<AuthProvider>().currentUser?.id;
+    if (uid == null) return false;
+    if (entry.authorId == uid) return true;
+    final ownerId = _trip?.userId;
+    return ownerId != null && ownerId == uid;
+  }
+
+  /// Authors may edit text only within 15 minutes. Trip owner (non-author) may still edit for moderation.
+  bool _canEditThreadEntryText(TripThreadEntry entry) {
+    if (entry.type != ThreadEntryType.text) return false;
+    if (_trip?.status != TripStatus.ongoing) return false;
+    final uid = context.read<AuthProvider>().currentUser?.id;
+    if (uid == null) return false;
+    final isAuthor = entry.authorId == uid;
+    final isTripOwner = _trip?.userId == uid;
+    if (!isAuthor && !isTripOwner) return false;
+    if (isAuthor) {
+      if (DateTime.now().difference(entry.createdAt) >
+          const Duration(minutes: 15)) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  Widget _threadEntryActionSheetRow({
+    required BuildContext sheetCtx,
+    required IconData icon,
+    required String label,
+    required VoidCallback onTap,
+    Color? foregroundColor,
+  }) {
+    final color = foregroundColor ?? Theme.of(sheetCtx).colorScheme.onSurface;
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+          child: Row(
+            children: [
+              Icon(icon, color: color, size: 22),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Text(
+                  label,
+                  style: Theme.of(sheetCtx).textTheme.titleMedium?.copyWith(
+                        color: color,
+                        fontWeight: FontWeight.w500,
+                      ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _showThreadEntryActions(TripThreadEntry entry) async {
+    if (!mounted || _trip?.status != TripStatus.ongoing) return;
+    if (!_canModerateThreadEntry(entry)) return;
+
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (sheetCtx) {
+        final errorColor = Theme.of(sheetCtx).colorScheme.error;
+        return SafeArea(
+          child: Material(
+            color: Theme.of(sheetCtx).colorScheme.surface,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (_canEditThreadEntryText(entry))
+                    _threadEntryActionSheetRow(
+                      sheetCtx: sheetCtx,
+                      icon: Icons.edit_outlined,
+                      label: 'Edit text',
+                      onTap: () {
+                        Navigator.pop(sheetCtx);
+                        _showEditTextEntryDialog(entry);
+                      },
+                    ),
+                  _threadEntryActionSheetRow(
+                    sheetCtx: sheetCtx,
+                    icon: Icons.delete_outline,
+                    label: 'Delete entry',
+                    foregroundColor: errorColor,
+                    onTap: () {
+                      Navigator.pop(sheetCtx);
+                      _confirmDeleteThreadEntry(entry);
+                    },
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _showEditTextEntryDialog(TripThreadEntry entry) async {
+    FocusManager.instance.primaryFocus?.unfocus();
+    await Future<void>.delayed(const Duration(milliseconds: 50));
+    if (!mounted) return;
+
+    final text = await showDialog<String>(
+      context: context,
+      builder: (dialogCtx) => _EditThreadEntryDialog(
+        initialText: entry.contentText ?? '',
+      ),
+    );
+    if (!mounted || text == null) return;
+
+    final tripProvider = context.read<TripProvider>();
+    final success = await tripProvider.updateThreadEntryText(
+      tripId: widget.tripId,
+      entryId: entry.id,
+      contentText: text,
+    );
+    if (!mounted) return;
+    if (success) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Entry updated')));
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(tripProvider.error ?? 'Could not update entry')),
+      );
+    }
+  }
+
+  Future<void> _confirmDeleteThreadEntry(TripThreadEntry entry) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (dialogCtx) => AlertDialog(
+        title: const Text('Delete this entry?'),
+        content: const Text(
+          'This removes the entry from the thread and the trip map. '
+          'Media will be removed from storage when applicable.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogCtx, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: Theme.of(dialogCtx).colorScheme.error,
+            ),
+            onPressed: () => Navigator.pop(dialogCtx, true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (!mounted || confirm != true) return;
+
+    final tripProvider = context.read<TripProvider>();
+    final engagement = context.read<EngagementProvider>();
+    final success = await tripProvider.deleteThreadEntry(
+      tripId: widget.tripId,
+      entryId: entry.id,
+    );
+    if (!mounted) return;
+    if (success) {
+      engagement.clearEntity(entry.id);
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Entry deleted')));
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(tripProvider.error ?? 'Could not delete entry')),
+      );
+    }
+  }
+
   Widget _buildThreadEntry(TripThreadEntry entry) {
     final isCurrentUser =
         context.read<AuthProvider>().currentUser?.id == entry.authorId;
@@ -1367,7 +1817,13 @@ class _TripThreadScreenState extends State<TripThreadScreen>
         : entry.likeCount;
     final isToggling = engagementProvider.isToggling(entry.id);
 
-    return Dismissible(
+    GlobalKey? highlightKey;
+    final hid = widget.highlightEntryId;
+    if (hid != null && hid.isNotEmpty && hid == entry.id) {
+      highlightKey = _highlightEntryKeys[entry.id] ??= GlobalKey();
+    }
+
+    final tree = Dismissible(
       key: ValueKey('entry-reply-${entry.id}'),
       direction: DismissDirection.startToEnd,
       background: _buildReplySwipeBackground(),
@@ -1422,268 +1878,288 @@ class _TripThreadScreenState extends State<TripThreadScreen>
 
             // Entry content
             Expanded(
-              child: Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: isCurrentUser
-                      ? Theme.of(
-                          context,
-                        ).colorScheme.primary.withValues(alpha: 0.12)
-                      : (Theme.of(context).brightness == Brightness.dark
-                            ? Theme.of(
-                                context,
-                              ).colorScheme.onSurface.withValues(alpha: 0.06)
-                            : const Color(0xFFFAF9F6)),
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(
+              child: GestureDetector(
+                onLongPress:
+                    _trip?.status == TripStatus.ongoing &&
+                        _canModerateThreadEntry(entry)
+                    ? () => _showThreadEntryActions(entry)
+                    : null,
+                child: Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
                     color: isCurrentUser
                         ? Theme.of(
                             context,
-                          ).colorScheme.primary.withValues(alpha: 0.3)
+                          ).colorScheme.primary.withValues(alpha: 0.12)
                         : (Theme.of(context).brightness == Brightness.dark
                               ? Theme.of(
                                   context,
-                                ).colorScheme.onSurface.withValues(alpha: 0.18)
-                              : Theme.of(
-                                  context,
-                                ).colorScheme.onSurface.withValues(
-                                  alpha:
-                                      Theme.of(context).brightness ==
-                                          Brightness.dark
-                                      ? 0.18
-                                      : 0.10,
-                                )),
-                    width: 1.5,
-                  ),
-                  boxShadow: [
-                    BoxShadow(
+                                ).colorScheme.onSurface.withValues(alpha: 0.06)
+                              : const Color(0xFFFAF9F6)),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(
                       color: isCurrentUser
                           ? Theme.of(
                               context,
-                            ).colorScheme.primary.withValues(alpha: 0.1)
-                          : Colors.black.withValues(alpha: 0.04),
-                      blurRadius: 6,
-                      offset: const Offset(0, 2),
+                            ).colorScheme.primary.withValues(alpha: 0.3)
+                          : (Theme.of(context).brightness == Brightness.dark
+                                ? Theme.of(context).colorScheme.onSurface
+                                      .withValues(alpha: 0.18)
+                                : Theme.of(
+                                    context,
+                                  ).colorScheme.onSurface.withValues(
+                                    alpha:
+                                        Theme.of(context).brightness ==
+                                            Brightness.dark
+                                        ? 0.18
+                                        : 0.10,
+                                  )),
+                      width: 1.5,
                     ),
-                  ],
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Header (author name tappable → profile)
-                    Row(
-                      children: [
-                        Flexible(
-                          child: GestureDetector(
-                            onTap: () =>
-                                context.push('/profile/${entry.authorId}'),
+                    boxShadow: [
+                      BoxShadow(
+                        color: isCurrentUser
+                            ? Theme.of(
+                                context,
+                              ).colorScheme.primary.withValues(alpha: 0.1)
+                            : Colors.black.withValues(alpha: 0.04),
+                        blurRadius: 6,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Header (author name tappable → profile)
+                      Row(
+                        children: [
+                          Flexible(
+                            child: GestureDetector(
+                              onTap: () =>
+                                  context.push('/profile/${entry.authorId}'),
+                              child: Text(
+                                entry.author.name ?? 'User',
+                                style: Theme.of(context).textTheme.titleSmall
+                                    ?.copyWith(
+                                      fontWeight: FontWeight.w600,
+                                      color: isCurrentUser
+                                          ? Theme.of(
+                                              context,
+                                            ).colorScheme.primary
+                                          : Theme.of(
+                                              context,
+                                            ).colorScheme.onSurface,
+                                    ),
+                                overflow: TextOverflow.ellipsis,
+                                maxLines: 1,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          _buildEntryTypeIcon(entry.type),
+                          const SizedBox(width: 8),
+                          Flexible(
                             child: Text(
-                              entry.author.name ?? 'User',
-                              style: Theme.of(context).textTheme.titleSmall
+                              _formatDateTime(entry.createdAt),
+                              style: Theme.of(context).textTheme.bodySmall
                                   ?.copyWith(
-                                    fontWeight: FontWeight.w600,
                                     color: isCurrentUser
                                         ? Theme.of(context).colorScheme.primary
+                                              .withValues(alpha: 0.8)
                                         : Theme.of(
                                             context,
-                                          ).colorScheme.onSurface,
+                                          ).colorScheme.onSurfaceVariant,
+                                    fontWeight: FontWeight.w500,
                                   ),
                               overflow: TextOverflow.ellipsis,
                               maxLines: 1,
                             ),
                           ),
-                        ),
-                        const SizedBox(width: 8),
-                        _buildEntryTypeIcon(entry.type),
-                        const SizedBox(width: 8),
-                        Flexible(
-                          child: Text(
-                            _formatDateTime(entry.createdAt),
-                            style: Theme.of(context).textTheme.bodySmall
-                                ?.copyWith(
-                                  color: isCurrentUser
-                                      ? Theme.of(context).colorScheme.primary
-                                            .withValues(alpha: 0.8)
-                                      : Theme.of(
-                                          context,
-                                        ).colorScheme.onSurfaceVariant,
-                                  fontWeight: FontWeight.w500,
-                                ),
-                            overflow: TextOverflow.ellipsis,
-                            maxLines: 1,
+                          const SizedBox(width: 8),
+                          _buildThreadEntryLikeButton(
+                            entry,
+                            hasLiked: hasLiked,
+                            likeCount: likeCount,
+                            isToggling: isToggling,
                           ),
-                        ),
-                        const SizedBox(width: 8),
-                        _buildThreadEntryLikeButton(
-                          entry,
-                          hasLiked: hasLiked,
-                          likeCount: likeCount,
-                          isToggling: isToggling,
-                        ),
-                      ],
-                    ),
-
-                    const SizedBox(height: 8),
-
-                    // Content (with tappable @mentions; no separate chips to avoid duplicate)
-                    if (entry.contentText != null) ...[
-                      MentionText(
-                        text: entry.contentText!,
-                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          color: Theme.of(context).colorScheme.onSurface,
-                          height: 1.5,
-                        ),
-                        usernameToUserId: _usernameToUserIdFromTagged(
-                          entry.taggedUsers,
-                        ),
+                        ],
                       ),
-                      const SizedBox(height: 8),
-                    ],
 
-                    // Location card with theme colors
-                    if (entry.type == ThreadEntryType.location ||
-                        entry.locationName != null ||
-                        entry.place != null ||
-                        entry.gpsCoordinates != null)
-                      GestureDetector(
-                        onTap: () {
-                          if (entry.place != null) {
-                            context.push(
-                              '/trip/${widget.tripId}/map',
-                              extra: {
-                                'tripTitle': _trip?.title ?? 'Trip Map',
-                                'initialZoomLocation': entry.place,
-                              },
-                            );
-                          }
-                        },
-                        child: Container(
-                          margin: const EdgeInsets.only(top: 8),
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            color: Colors.red[50],
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(
-                              color: Colors.red[200]!,
-                              width: 1.5,
-                            ),
+                      const SizedBox(height: 8),
+
+                      // Content (with tappable @mentions; no separate chips to avoid duplicate)
+                      if (entry.contentText != null) ...[
+                        MentionText(
+                          text: entry.contentText!,
+                          style: Theme.of(context).textTheme.bodyMedium
+                              ?.copyWith(
+                                color: Theme.of(context).colorScheme.onSurface,
+                                height: 1.5,
+                              ),
+                          usernameToUserId: _usernameToUserIdFromTagged(
+                            entry.taggedUsers,
                           ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              // Place name and icon
-                              Row(
-                                children: [
-                                  Container(
-                                    padding: const EdgeInsets.all(8),
-                                    decoration: BoxDecoration(
-                                      color: Colors.red[100],
-                                      borderRadius: BorderRadius.circular(8),
+                        ),
+                        const SizedBox(height: 8),
+                      ],
+
+                      // Location card with theme colors
+                      if (entry.type == ThreadEntryType.location ||
+                          entry.locationName != null ||
+                          entry.place != null ||
+                          entry.gpsCoordinates != null)
+                        GestureDetector(
+                          onTap: () {
+                            if (entry.place != null) {
+                              context.push(
+                                '/trip/${widget.tripId}/map',
+                                extra: {
+                                  'tripTitle': _trip?.title ?? 'Trip Map',
+                                  'initialZoomLocation': entry.place,
+                                },
+                              );
+                            }
+                          },
+                          child: Container(
+                            margin: const EdgeInsets.only(top: 8),
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: Colors.red[50],
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(
+                                color: Colors.red[200]!,
+                                width: 1.5,
+                              ),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                // Place name and icon
+                                Row(
+                                  children: [
+                                    Container(
+                                      padding: const EdgeInsets.all(8),
+                                      decoration: BoxDecoration(
+                                        color: Colors.red[100],
+                                        borderRadius: BorderRadius.circular(8),
+                                      ),
+                                      child: Icon(
+                                        entry.type == ThreadEntryType.checkin
+                                            ? Icons.check_circle
+                                            : Icons.location_on,
+                                        size: 18,
+                                        color: Colors.red[700],
+                                      ),
                                     ),
-                                    child: Icon(
-                                      entry.type == ThreadEntryType.checkin
-                                          ? Icons.check_circle
-                                          : Icons.location_on,
-                                      size: 18,
-                                      color: Colors.red[700],
-                                    ),
-                                  ),
-                                  const SizedBox(width: 8),
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          entry.place?.name ??
-                                              entry.locationName ??
-                                              'Location',
-                                          style: TextStyle(
-                                            color: Colors.red[900],
-                                            fontWeight: FontWeight.w600,
-                                            fontSize: 14,
-                                          ),
-                                          overflow: TextOverflow.ellipsis,
-                                          maxLines: 2,
-                                        ),
-                                        if (entry.place?.address != null)
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
                                           Text(
-                                            entry.place!.address!,
+                                            entry.place?.name ??
+                                                entry.locationName ??
+                                                'Location',
                                             style: TextStyle(
-                                              color: Colors.red[700]!
-                                                  .withValues(alpha: 0.8),
-                                              fontSize: 12,
+                                              color: Colors.red[900],
+                                              fontWeight: FontWeight.w600,
+                                              fontSize: 14,
                                             ),
                                             overflow: TextOverflow.ellipsis,
                                             maxLines: 2,
                                           ),
-                                      ],
-                                    ),
-                                  ),
-                                  if (entry.place != null)
-                                    IconButton(
-                                      onPressed: () {
-                                        context.push(
-                                          '/trip/${widget.tripId}/map',
-                                          extra: {
-                                            'tripTitle':
-                                                _trip?.title ?? 'Trip Map',
-                                            'initialZoomLocation': entry.place,
-                                          },
-                                        );
-                                      },
-                                      icon: const Icon(
-                                        Icons.map_outlined,
-                                        size: 20,
-                                      ),
-                                      style: IconButton.styleFrom(
-                                        visualDensity: VisualDensity.compact,
-                                        padding: const EdgeInsets.all(8),
-                                        backgroundColor: Colors.red[100],
-                                        foregroundColor: Colors.red[700],
+                                          if (entry.place?.address != null)
+                                            Text(
+                                              entry.place!.address!,
+                                              style: TextStyle(
+                                                color: Colors.red[700]!
+                                                    .withValues(alpha: 0.8),
+                                                fontSize: 12,
+                                              ),
+                                              overflow: TextOverflow.ellipsis,
+                                              maxLines: 2,
+                                            ),
+                                        ],
                                       ),
                                     ),
-                                ],
-                              ),
-                              // GPS coordinates
-                              if ((entry.place?.lat != null &&
-                                      entry.place?.lng != null) ||
-                                  entry.gpsCoordinates != null) ...[
-                                const SizedBox(height: 8),
-                                Row(
-                                  children: [
-                                    Icon(
-                                      Icons.gps_fixed,
-                                      size: 12,
-                                      color: Colors.red[700]!.withValues(
-                                        alpha: 0.7,
-                                      ),
-                                    ),
-                                    const SizedBox(width: 4),
-                                    Text(
-                                      entry.place != null
-                                          ? '${entry.place!.lat.toStringAsFixed(4)}, ${entry.place!.lng.toStringAsFixed(4)}'
-                                          : '${entry.gpsCoordinates!.lat.toStringAsFixed(4)}, ${entry.gpsCoordinates!.lng.toStringAsFixed(4)}',
-                                      style: TextStyle(
-                                        color: Colors.red[700]!.withValues(
-                                          alpha: 0.8,
+                                    if (entry.place != null)
+                                      IconButton(
+                                        onPressed: () {
+                                          context.push(
+                                            '/trip/${widget.tripId}/map',
+                                            extra: {
+                                              'tripTitle':
+                                                  _trip?.title ?? 'Trip Map',
+                                              'initialZoomLocation':
+                                                  entry.place,
+                                            },
+                                          );
+                                        },
+                                        icon: const Icon(
+                                          Icons.map_outlined,
+                                          size: 20,
                                         ),
-                                        fontSize: 11,
-                                        fontFamily: 'monospace',
+                                        style: IconButton.styleFrom(
+                                          visualDensity: VisualDensity.compact,
+                                          padding: const EdgeInsets.all(8),
+                                          backgroundColor: Colors.red[100],
+                                          foregroundColor: Colors.red[700],
+                                        ),
                                       ),
-                                    ),
                                   ],
                                 ),
+                                // GPS coordinates
+                                if ((entry.place?.lat != null &&
+                                        entry.place?.lng != null) ||
+                                    entry.gpsCoordinates != null) ...[
+                                  const SizedBox(height: 8),
+                                  Row(
+                                    children: [
+                                      Icon(
+                                        Icons.gps_fixed,
+                                        size: 12,
+                                        color: Colors.red[700]!.withValues(
+                                          alpha: 0.7,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 4),
+                                      Expanded(
+                                        child: Text(
+                                          () {
+                                            final place = entry.place;
+                                            if (place != null) {
+                                              return '${place.lat.toStringAsFixed(4)}, ${place.lng.toStringAsFixed(4)}';
+                                            }
+                                            final g = entry.gpsCoordinates;
+                                            if (g != null) {
+                                              return '${g.lat.toStringAsFixed(4)}, ${g.lng.toStringAsFixed(4)}';
+                                            }
+                                            return '';
+                                          }(),
+                                          style: TextStyle(
+                                            color: Colors.red[700]!.withValues(
+                                              alpha: 0.8,
+                                            ),
+                                            fontSize: 11,
+                                            fontFamily: 'monospace',
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ],
                               ],
-                            ],
+                            ),
                           ),
                         ),
-                      ),
 
-                    // Media display
-                    if (entry.type == ThreadEntryType.media)
-                      _buildMediaPreview(entry),
-                  ],
+                      // Media display
+                      if (entry.type == ThreadEntryType.media)
+                        _buildMediaPreview(entry),
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -1691,6 +2167,11 @@ class _TripThreadScreenState extends State<TripThreadScreen>
         ),
       ),
     );
+
+    if (highlightKey != null) {
+      return KeyedSubtree(key: highlightKey, child: tree);
+    }
+    return tree;
   }
 
   Widget _buildMediaPreview(TripThreadEntry entry) {
@@ -1909,32 +2390,35 @@ class _TripThreadScreenState extends State<TripThreadScreen>
     );
   }
 
-  Widget _buildAddEntrySection() {
-    final mediaQuery = MediaQuery.of(context);
+  /// Max height for the bottom compose panel. When the keyboard is open, cap
+  /// aggressively so the thread list keeps most of the viewport (fixes entries
+  /// hidden behind keyboard + bottom overflow on location + comment).
+  double _composePanelMaxHeight(MediaQueryData mediaQuery) {
     final keyboardInset = mediaQuery.viewInsets.bottom;
     final screenHeight = mediaQuery.size.height;
     final safeVerticalPadding =
         mediaQuery.padding.top + mediaQuery.padding.bottom;
-    final availableHeight = screenHeight - safeVerticalPadding;
-
-    double maxHeight = screenHeight * 0.5;
+    final availableHeight = (screenHeight - safeVerticalPadding).clamp(
+      200.0,
+      screenHeight,
+    );
 
     if (keyboardInset > 0) {
-      final heightWithoutKeyboard = (availableHeight - keyboardInset).clamp(
-        availableHeight * 0.25,
-        availableHeight * 0.85,
-      );
-      maxHeight = heightWithoutKeyboard * 0.95;
-    } else {
-      maxHeight = maxHeight.clamp(
-        availableHeight * 0.35,
-        availableHeight * 0.6,
-      );
+      final aboveKeyboard = (availableHeight - keyboardInset).clamp(160.0, availableHeight);
+      // Leave ~55%+ of space above the keyboard for the thread list.
+      final cap = aboveKeyboard * 0.42;
+      return cap.clamp(140.0, 300.0);
     }
 
-    if (maxHeight <= 0 || maxHeight.isNaN) {
-      maxHeight = availableHeight * 0.5;
-    }
+    return (screenHeight * 0.48).clamp(
+      availableHeight * 0.32,
+      availableHeight * 0.55,
+    );
+  }
+
+  Widget _buildAddEntrySection() {
+    final mediaQuery = MediaQuery.of(context);
+    final maxHeight = _composePanelMaxHeight(mediaQuery);
 
     return Container(
       decoration: BoxDecoration(
@@ -1947,13 +2431,14 @@ class _TripThreadScreenState extends State<TripThreadScreen>
           ),
         ],
       ),
-      child: SafeArea(
-        top: false,
-        left: false,
-        right: false,
-        child: ConstrainedBox(
-          constraints: BoxConstraints(maxHeight: maxHeight),
-          child: SingleChildScrollView(
+      child: ConstrainedBox(
+        constraints: BoxConstraints(maxHeight: maxHeight),
+        child: SingleChildScrollView(
+          keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+          child: SafeArea(
+            top: false,
+            left: false,
+            right: false,
             child: Padding(
               padding: const EdgeInsets.all(16.0),
               child: Column(
@@ -2847,6 +3332,70 @@ class _TripThreadScreenState extends State<TripThreadScreen>
           .padLeft(2, '0');
       return '$minutes:$seconds';
     }
+  }
+}
+
+class _EditThreadEntryDialog extends StatefulWidget {
+  final String initialText;
+
+  const _EditThreadEntryDialog({required this.initialText});
+
+  @override
+  State<_EditThreadEntryDialog> createState() => _EditThreadEntryDialogState();
+}
+
+class _EditThreadEntryDialogState extends State<_EditThreadEntryDialog> {
+  late final TextEditingController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController(text: widget.initialText);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _save() {
+    final text = _controller.text.trim();
+    if (text.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Text cannot be empty')),
+      );
+      return;
+    }
+    Navigator.of(context).pop(text);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      scrollable: true,
+      title: const Text('Edit entry'),
+      content: TextField(
+        controller: _controller,
+        autofocus: true,
+        minLines: 3,
+        maxLines: 8,
+        maxLength: 1000,
+        decoration: const InputDecoration(
+          hintText: 'Update your message',
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: _save,
+          child: const Text('Save'),
+        ),
+      ],
+    );
   }
 }
 

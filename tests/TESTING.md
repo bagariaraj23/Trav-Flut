@@ -2,7 +2,65 @@
 
 This document provides comprehensive information about the testing strategy, setup, current coverage, and guidelines for the TripThread backend application.
 
-**Note**: This documentation covers backend API and service testing. For mobile app testing, see Flutter testing documentation.
+**Note**: This document is now the cross-application testing entry point for backend, scheduler, mobile, and `src/app/test` route-contract coverage.
+
+---
+
+## 2026 Cross-Application Test Expansion
+
+TripThread has a broad surface area: 70+ backend API routes, 25+ Flutter screens, a shared Prisma data model, a separate scheduler runtime, and multiple third-party integrations. The test strategy is therefore organized around **risk-based coverage**, not only file count.
+
+### Newly added / expanded suites in this pass
+
+| Area | Path | Purpose |
+|------|------|---------|
+| Backend unit | `tests/unit/auth.unit.test.ts` | Access/refresh token generation and verification, malformed-token handling, password hashing/comparison |
+| Backend unit | `tests/unit/validation-flows.unit.test.ts` | Auth, trip, and thread-entry schema behavior: normalization, date/destination constraints, type-specific thread requirements, patch text normalization |
+| Backend integration | `tests/integration/auth-flow.integration.test.ts` | Username login, invalid credentials, refresh-token rotation, current-device logout, OAuth complete-profile success, non-OAuth complete-profile rejection |
+| Backend integration | `tests/integration/trip-thread-flow.integration.test.ts` | Trip creation with destination places, conflict/status endpoints, participant current-trip lookup, thread text/media/location creation, pagination, edit/delete permissions, invalid-entry rejection |
+| Backend integration | `tests/integration/trip-leave.integration.test.ts` | Participant leave flow, participant count decrement, pending invite cleanup, optional own-entry purge, owner/ended-trip rejection |
+| API contract smoke | `src/app/test/api-route-contract.test.ts` | Filesystem-level guard that every `src/app/api/**/route.ts` exports at least one HTTP handler; also asserts the route inventory remains at 70+ routes |
+| Scheduler unit | `scheduler/tests/tripStatus.behavior.unit.test.ts` | Behavioral scheduler coverage: end-trip selection, final-post creation/skip behavior, ongoing transition filters, result counts, per-trip failure isolation |
+| Mobile provider | `mobile/test/providers/trip_provider_test.dart` | `TripProvider.leaveTrip` success/error behavior, state refresh, service argument propagation |
+
+### Current high-level coverage map
+
+| Functional area | Existing coverage | Added/expanded | Remaining priority |
+|-----------------|------------------|----------------|--------------------|
+| Auth | Signup integration; limited auth service coverage | AuthService token/hash unit tests; validation unit tests; login/refresh/logout/complete-profile route integration | Google/link Google; forgot/reset password route integration; logout-all route invariant |
+| Trips | Trip invites, concurrency, provider thread context | Leave-trip integration; create trip + conflict/status route integration; mobile provider leave flow | Update/get trip, cover updates, participants route matrix, invite UI/mobile coverage |
+| Thread entries | Pagination/context coverage in engagement-feed tests | Leave purge asserts participant entries are removed; text/media/location create, pagination, PATCH, DELETE, permission/error integration; validation unit tests | Thread entry context privacy matrix, tag notification assertions, media cleanup with Cloudinary mocked |
+| Final posts | Engagement/feed coverage for published posts | Scheduler final-post behavior | End route race/idempotency, draft edit/delete, publish validation |
+| Engagement | Strong likes/comments/shares suite | Route contract keeps all handlers visible | Rate limits, private-profile engagement matrix, larger pagination datasets |
+| Notifications | Unified notification integration tests | No change in this pass | Trip invite notification UX, unread-count edge cases, read-all idempotency |
+| Places/Mapbox | Limited | No change in this pass | Search/resolve caching, dedupe, external provider error handling |
+| Media/Cloudinary | Limited | No change in this pass | Signature, confirm, delete, quota race tests |
+| Scheduler | Weak call-only tests | Behavior-focused status/final-post tests | Jest/Vitest alignment, DB-backed scheduler integration, startup retry tests |
+| Mobile | Engagement widgets/providers/services; narrow trip provider tests | Leave-trip provider tests | Auth/feed/final-post/user/place providers; critical screens; service injection for HTTP tests |
+
+### End-to-end flow coverage targets
+
+Use this matrix to decide whether a PR has sufficient tests before approval.
+
+| Flow | Backend tests | Mobile tests | Scheduler tests | Approval expectation |
+|------|---------------|--------------|-----------------|---------------------|
+| Signup/login/refresh/logout | Unit + route integration | Provider/service + auth screen smoke | N/A | Required for auth changes |
+| Create trip → invite participant → accept/reject | Route integration + DB invariants | Provider + invitation screen/widget tests | N/A | Required for trip participant changes |
+| Ongoing trip → thread entries → edit/delete/purge | Route integration including permissions and media cleanup | Provider + trip thread widget/screen tests | N/A | Required for thread changes |
+| End trip → generate draft → edit → publish → feed | Route integration + finalizer unit tests | Final post provider/screen tests | Scheduler parity tests | Required for final-post changes |
+| Like/comment/share → notification/feed counters | Existing engagement suite + edge cases | Existing engagement widgets/providers | N/A | Required for engagement changes |
+| Share link → bridge → mobile deep link → post detail | Share route tests + web bridge contract | DeepLinkService + ShareLinkScreen tests | N/A | Required for share/deep-link changes |
+| Scheduler status transitions | DB integration and behavior unit tests | N/A | Scheduler unit/integration | Required for scheduler changes |
+| Places/media integrations | Mocked external-service integration tests | Service/provider tests | N/A | Required for Mapbox/Cloudinary changes |
+
+### Review and approval checkpoints
+
+1. **Test plan approval before large coverage branches**: describe target flows, directories touched, data factories/mocks, and expected runtime impact.
+2. **Route-level changes require route tests**: new/changed backend routes should include auth, validation, success, permission, and relevant persistence assertions.
+3. **Cross-runtime flows need both sides**: if a mobile screen depends on a backend contract, add or update backend route tests and mobile provider/service tests together.
+4. **Scheduler changes require parity review**: because scheduler final-post generation is inline and separate from `TripFinalizerService`, changes to final-post rules need scheduler tests too.
+5. **External integrations stay mocked in CI**: Cloudinary, Mapbox, SendGrid, Redis, and Google should be mocked or isolated unless explicitly running an opt-in live integration suite.
+6. **Approval bar**: mark a PR as ready only when tests pass locally/CI, docs are updated for new suites, and uncovered high-risk paths are called out explicitly.
 
 ---
 

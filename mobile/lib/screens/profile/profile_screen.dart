@@ -3,7 +3,11 @@ import 'package:provider/provider.dart';
 import 'package:tripthread/providers/auth_provider.dart';
 import 'package:tripthread/providers/user_provider.dart';
 import 'package:tripthread/providers/trip_provider.dart';
+import 'package:tripthread/providers/feed_provider.dart';
 import 'package:tripthread/models/user.dart';
+import 'package:tripthread/models/trip.dart';
+import 'package:tripthread/services/api_service.dart';
+import 'package:tripthread/utils/user_display_labels.dart';
 import 'package:go_router/go_router.dart';
 
 class ProfileScreen extends StatefulWidget {
@@ -16,6 +20,10 @@ class ProfileScreen extends StatefulWidget {
 }
 
 class _ProfileScreenState extends State<ProfileScreen> {
+  List<Trip> _profileTrips = [];
+  bool _profileTripsLoading = false;
+  String? _profileTripsError;
+
   @override
   void initState() {
     super.initState();
@@ -26,14 +34,34 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   // A single, reliable method to load all necessary data for the screen.
-  void _loadInitialData() {
+  Future<void> _loadInitialData() async {
     final authProvider = context.read<AuthProvider>();
     if (authProvider.currentUser != null) {
-      context.read<UserProvider>().loadProfileData(
+      await context.read<UserProvider>().loadProfileData(
         widget.userId,
         authProvider.currentUser!.id,
       );
+      await _loadProfileTrips();
     }
+  }
+
+  Future<void> _loadProfileTrips() async {
+    if (!mounted) return;
+    setState(() {
+      _profileTripsLoading = true;
+      _profileTripsError = null;
+    });
+    final res = await context.read<ApiService>().getTripsForUser(widget.userId);
+    if (!mounted) return;
+    setState(() {
+      _profileTripsLoading = false;
+      if (res.success && res.data != null) {
+        _profileTrips = res.data!;
+      } else {
+        _profileTrips = [];
+        _profileTripsError = res.error ?? 'Could not load trips';
+      }
+    });
   }
 
   // The refresh action now uses the same centralized method.
@@ -44,6 +72,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         widget.userId,
         authProvider.currentUser!.id,
       );
+      await _loadProfileTrips();
     }
   }
 
@@ -133,11 +162,45 @@ class _ProfileScreenState extends State<ProfileScreen> {
     // Force refresh of profile data to ensure UI is in sync (avatar, stats, trips section)
     if (success) {
       userProvider.invalidateUserCache(widget.userId);
+      if (mounted) {
+        await context.read<FeedProvider>().loadDiscoverTrips(refresh: true);
+      }
       await userProvider.loadProfileData(
         widget.userId,
         authProvider.currentUser!.id,
       );
+      await _loadProfileTrips();
     }
+  }
+
+  void _openAvatarFullScreen(BuildContext context, String imageUrl) {
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => Dialog(
+        backgroundColor: Colors.black,
+        insetPadding: EdgeInsets.zero,
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            Center(
+              child: InteractiveViewer(
+                minScale: 0.5,
+                maxScale: 4,
+                child: Image.network(imageUrl, fit: BoxFit.contain),
+              ),
+            ),
+            Positioned(
+              top: MediaQuery.of(ctx).padding.top + 8,
+              right: 8,
+              child: IconButton(
+                icon: const Icon(Icons.close, color: Colors.white, size: 28),
+                onPressed: () => Navigator.pop(ctx),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   @override
@@ -185,28 +248,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
         // debugPrint('[ProfileScreen] pendingRequests: ${}');
 
         return PopScope(
-          canPop: true,
+          canPop: false,
           onPopInvokedWithResult: (didPop, result) {
-            if (!didPop) {
-              if (context.canPop()) {
-                context.pop();
-              } else {
-                context.go('/home');
-              }
-            }
+            if (didPop) return;
+            context.go('/home', extra: {'explicitHome': true});
           },
           child: Scaffold(
             appBar: AppBar(
               title: Text(user.username ?? 'Profile'),
               leading: IconButton(
                 icon: const Icon(Icons.arrow_back),
-                onPressed: () {
-                  if (context.canPop()) {
-                    context.pop();
-                  } else {
-                    context.go('/home');
-                  }
-                },
+                onPressed: () =>
+                    context.go('/home', extra: {'explicitHome': true}),
               ),
               actions: _buildAppBarActions(
                 context,
@@ -323,15 +376,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
     ];
   }
 
-  /// Single character for avatar fallback (name > username > 'U').
   String _avatarInitial(User user) {
-    final name = user.name?.trim();
-    if (name != null && name.isNotEmpty) return name.substring(0, 1).toUpperCase();
-    final username = user.username?.trim();
-    if (username != null && username.isNotEmpty) {
-      return username.substring(0, 1).toUpperCase();
-    }
-    return 'U';
+    return userAvatarInitial(username: user.username, name: user.name);
   }
 
   /// Subtitle style for username and bio (smaller, muted; works in light and dark).
@@ -353,6 +399,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
   ) {
     final hasUsername =
         user.username != null && user.username!.trim().isNotEmpty;
+    final profilePrimary = userPrimaryLabel(
+      id: user.id,
+      username: user.username,
+      name: user.name,
+    );
+    final profileSecondary =
+        userSecondaryName(username: user.username, name: user.name);
     final hasBio = user.bio != null && user.bio!.trim().isNotEmpty;
     final bioText = hasBio ? user.bio!.trim() : '';
     // ~40 chars per line at bodySmall; clamp so short bios stay compact, long ones get space
@@ -379,30 +432,39 @@ class _ProfileScreenState extends State<ProfileScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // Profile photo
+          // Profile photo (tappable to enlarge when a photo exists)
           Center(
-            child: CircleAvatar(
-            radius: 48,
-            backgroundColor: Theme.of(context).colorScheme.primary,
-            backgroundImage: user.avatarUrl != null
-                ? NetworkImage(user.avatarUrl!)
-                : null,
-            child: user.avatarUrl == null
-                ? Text(
-                    _avatarInitial(user),
-                    style: TextStyle(
-                      fontSize: 28,
-                      fontWeight: FontWeight.bold,
-                      color: Theme.of(context).colorScheme.onPrimary,
-                    ),
-                  )
-                : null,
+            child: Material(
+              color: Colors.transparent,
+              child: InkWell(
+                customBorder: const CircleBorder(),
+                onTap: user.avatarUrl != null && user.avatarUrl!.isNotEmpty
+                    ? () => _openAvatarFullScreen(context, user.avatarUrl!)
+                    : null,
+                child: CircleAvatar(
+                  radius: 48,
+                  backgroundColor: Theme.of(context).colorScheme.primary,
+                  backgroundImage: user.avatarUrl != null
+                      ? NetworkImage(user.avatarUrl!)
+                      : null,
+                  child: user.avatarUrl == null
+                      ? Text(
+                          _avatarInitial(user),
+                          style: TextStyle(
+                            fontSize: 28,
+                            fontWeight: FontWeight.bold,
+                            color: Theme.of(context).colorScheme.onPrimary,
+                          ),
+                        )
+                      : null,
+                ),
+              ),
             ),
           ),
 
           const SizedBox(height: 20),
 
-          // Name and privacy indicator (prominent)
+          // @username (unique) first; optional display name second 
           Center(
             child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
@@ -410,9 +472,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             children: [
               Flexible(
                 child: Text(
-                  (user.name?.trim().isNotEmpty == true
-                      ? user.name!.trim()
-                      : (hasUsername ? '@${user.username!.trim()}' : 'User')),
+                  profilePrimary,
                   style: Theme.of(context).textTheme.headlineMedium?.copyWith(
                         fontWeight: FontWeight.w600,
                         color: Theme.of(context).colorScheme.onSurface,
@@ -434,11 +494,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
           ),
           ),
 
-          // Username
-          if (hasUsername) ...[
+          if (profileSecondary != null) ...[
             const SizedBox(height: 6),
             Text(
-              '@${user.username!.trim()}',
+              profileSecondary,
               style: subtitleStyle,
               overflow: TextOverflow.ellipsis,
               maxLines: 1,
@@ -754,22 +813,76 @@ class _ProfileScreenState extends State<ProfileScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            isOwnProfile ? 'Your Trips' : '${user.name}\'s Trips',
+            isOwnProfile
+                ? 'Your Trips'
+                : '${userPrimaryLabel(id: user.id, username: user.username, name: user.name)}\'s Trips',
             style: Theme.of(context).textTheme.headlineSmall,
           ),
           const SizedBox(height: 16),
-          const Center(
-            child: Column(
-              children: [
-                Icon(Icons.map_outlined, size: 48, color: Colors.grey),
-                SizedBox(height: 12),
-                Text(
-                  'No trips yet',
-                  style: TextStyle(fontSize: 16, color: Colors.grey),
+          if (_profileTripsLoading)
+            const Center(
+              child: Padding(
+                padding: EdgeInsets.all(24),
+                child: CircularProgressIndicator(),
+              ),
+            )
+          else if (_profileTripsError != null)
+            Center(
+              child: Text(
+                _profileTripsError!,
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.error,
+                  fontSize: 14,
                 ),
-              ],
+                textAlign: TextAlign.center,
+              ),
+            )
+          else if (_profileTrips.isEmpty)
+            const Center(
+              child: Column(
+                children: [
+                  Icon(Icons.map_outlined, size: 48, color: Colors.grey),
+                  SizedBox(height: 12),
+                  Text(
+                    'No trips yet',
+                    style: TextStyle(fontSize: 16, color: Colors.grey),
+                  ),
+                ],
+              ),
+            )
+          else
+            ListView.separated(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: _profileTrips.length,
+              separatorBuilder: (_, _) => const Divider(height: 1),
+              itemBuilder: (context, index) {
+                final trip = _profileTrips[index];
+                return ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: Icon(
+                    Icons.map_outlined,
+                    color: Theme.of(context).colorScheme.primary,
+                  ),
+                  title: Text(
+                    trip.title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  subtitle: Text(
+                    trip.status.name,
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () {
+                    context.push(
+                      '/trip/${trip.id}',
+                      extra: {'from': '/profile/${widget.userId}'},
+                    );
+                  },
+                );
+              },
             ),
-          ),
         ],
       ),
     );

@@ -185,6 +185,7 @@ export async function GET(request: NextRequest) {
           // Transform to response format
           const tripsResponse: TripResponse[] = trips.map((trip) => ({
             ...trip,
+            isFollowing: followedUserIds.includes(trip.userId),
             startDate: trip.startDate?.toISOString() || undefined,
             endDate: trip.endDate?.toISOString() || undefined,
             description: trip.description ?? undefined,

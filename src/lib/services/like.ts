@@ -26,14 +26,17 @@ export async function createLike(
   let isNewLike = true;
   let like: Awaited<ReturnType<typeof prisma.like.create>>;
   try {
-    like = await prisma.$transaction(async (tx) => {
-      const newLike = await tx.like.create({
-        data: { userId, entityType, entityId },
-      });
-      await incrementEntityCount(entityType, entityId, "likeCount", tx);
-      await invalidateEngagementCache("like", entityType, entityId);
-      return newLike;
-    });
+    like = await prisma.$transaction(
+      async (tx) => {
+        const newLike = await tx.like.create({
+          data: { userId, entityType, entityId },
+        });
+        await incrementEntityCount(entityType, entityId, "likeCount", tx);
+        return newLike;
+      },
+      { maxWait: 15_000, timeout: 20_000 }
+    );
+    await invalidateEngagementCache("like", entityType, entityId);
   } catch (error: any) {
     if (error?.code === "P2002") {
       // Idempotent like behavior under race: another request created the same like.
@@ -144,24 +147,31 @@ export async function deleteLike(
   entityType: EntityType,
   entityId: string
 ) {
-  return await prisma.$transaction(async (tx) => {
-    const like = await tx.like.findFirst({
-      where: { userId, entityType, entityId },
-    });
-    if (!like) {
-      return null;
-    }
+  const removed = await prisma.$transaction(
+    async (tx) => {
+      const like = await tx.like.findFirst({
+        where: { userId, entityType, entityId },
+      });
+      if (!like) {
+        return null;
+      }
 
-    await tx.like.delete({
-      where: { id: like.id },
-    });
+      await tx.like.delete({
+        where: { id: like.id },
+      });
 
-    await decrementEntityCount(entityType, entityId, "likeCount", tx);
+      await decrementEntityCount(entityType, entityId, "likeCount", tx);
 
+      return like;
+    },
+    { maxWait: 15_000, timeout: 20_000 }
+  );
+
+  if (removed) {
     await invalidateEngagementCache("like", entityType, entityId);
+  }
 
-    return like;
-  });
+  return removed;
 }
 
 export async function getLikesByEntity(

@@ -1,0 +1,64 @@
+# TripThread — local development databases (PostgreSQL only)
+#
+# The Next.js API runs on your host via `npm run dev` and connects to localhost.
+# Caching uses Upstash Redis REST (REDIS_REST_URL + REDIS_REST_TOKEN) when set in .env;
+# otherwise the app falls back to in-memory LRU cache — no Redis container required.
+#
+# Usage:
+#   docker compose -f docker-compose.dev.yml up -d
+#   npm run docker:start   # same, via scripts/docker-start.sh
+#
+# Compose reads `.env` in this directory for POSTGRES_* and POSTGRES_PORT overrides.
+
+name: tripthread
+
+services:
+  postgres-dev:
+    image: postgres:16-alpine
+    container_name: tripthread-db-dev
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-tripthread_dev}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_dev_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - tripthread-network
+
+  postgres-test:
+    image: postgres:16-alpine
+    container_name: tripthread-db-test
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: tripthread_test
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_test_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - tripthread-network
+
+volumes:
+  postgres_dev_data:
+    driver: local
+  postgres_test_data:
+    driver: local
+
+networks:
+  tripthread-network:
+    driver: bridge
