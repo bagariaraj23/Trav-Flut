@@ -65,6 +65,8 @@ services:
       - JWT_SECRET=${JWT_SECRET:-dev-jwt-secret-key-for-local-development}
       - JWT_REFRESH_SECRET=${JWT_REFRESH_SECRET:-dev-jwt-refresh-secret-key-for-local-development}
       - ENABLE_SCHEDULER=${ENABLE_SCHEDULER:-true}
+      - REDIS_REST_URL=${REDIS_REST_URL}
+      - REDIS_REST_TOKEN=${REDIS_REST_TOKEN}
       - CLOUDINARY_CLOUD_NAME=${CLOUDINARY_CLOUD_NAME}
       - CLOUDINARY_API_KEY=${CLOUDINARY_API_KEY}
       - CLOUDINARY_API_SECRET=${CLOUDINARY_API_SECRET}
