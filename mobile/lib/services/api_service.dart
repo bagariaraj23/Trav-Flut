@@ -2851,8 +2851,7 @@ class ApiService {
   ) async {
     try {
       final response = await _dio.delete(
-        '/chat/conversations/$conversationId/messages',
-        queryParameters: {'messageId': messageId},
+        '/chat/conversations/$conversationId/messages/$messageId',
       );
       if (response.data['success'] == true && response.data['data'] != null) {
         final m = ChatMessageModel.fromJson(response.data['data'] as Map<String, dynamic>);
@@ -2876,8 +2875,7 @@ class ApiService {
   }) async {
     try {
       final response = await _dio.patch(
-        '/chat/conversations/$conversationId/messages',
-        queryParameters: {'messageId': messageId},
+        '/chat/conversations/$conversationId/messages/$messageId',
         data: {'content': content},
       );
       if (response.data['success'] == true && response.data['data'] != null) {
@@ -2914,6 +2912,103 @@ class ApiService {
         return ApiResponse(success: true, data: c);
       }
       return ApiResponse(success: false, error: response.data['error'] ?? 'Failed to create');
+    } on DioException catch (e) {
+      return ApiResponse(
+        success: false,
+        error: e.response?.data['error'] ?? 'Network error',
+      );
+    } catch (e) {
+      return ApiResponse(success: false, error: 'An unexpected error occurred');
+    }
+  }
+
+  Future<ApiResponse<ChatConversationSummary>> updateGroupSettings(
+    String conversationId, {
+    String? name,
+    String? avatarUrl,
+  }) async {
+    try {
+      final body = <String, dynamic>{
+        if (name != null) 'name': name,
+        if (avatarUrl != null) 'avatarUrl': avatarUrl,
+      };
+      final response = await _dio.patch('/chat/conversations/$conversationId', data: body);
+      if (response.data['success'] == true && response.data['data'] != null) {
+        final c = ChatConversationSummary.fromJson(response.data['data'] as Map<String, dynamic>);
+        return ApiResponse(success: true, data: c);
+      }
+      return ApiResponse(success: false, error: response.data['error'] ?? 'Failed to update group');
+    } on DioException catch (e) {
+      return ApiResponse(
+        success: false,
+        error: e.response?.data['error'] ?? 'Network error',
+      );
+    } catch (e) {
+      return ApiResponse(success: false, error: 'An unexpected error occurred');
+    }
+  }
+
+  Future<ApiResponse<ChatConversationSummary>> addGroupParticipant(
+    String conversationId,
+    String userId,
+  ) async {
+    try {
+      final response = await _dio.post(
+        '/chat/conversations/$conversationId/participants',
+        data: {'userId': userId},
+      );
+      if (response.data['success'] == true && response.data['data'] != null) {
+        final c = ChatConversationSummary.fromJson(response.data['data'] as Map<String, dynamic>);
+        return ApiResponse(success: true, data: c);
+      }
+      return ApiResponse(success: false, error: response.data['error'] ?? 'Failed to add participant');
+    } on DioException catch (e) {
+      return ApiResponse(
+        success: false,
+        error: e.response?.data['error'] ?? 'Network error',
+      );
+    } catch (e) {
+      return ApiResponse(success: false, error: 'An unexpected error occurred');
+    }
+  }
+
+  Future<ApiResponse<ChatConversationSummary>> removeGroupParticipant(
+    String conversationId,
+    String userId,
+  ) async {
+    try {
+      final response = await _dio.delete(
+        '/chat/conversations/$conversationId/participants/$userId',
+      );
+      if (response.data['success'] == true && response.data['data'] != null) {
+        final c = ChatConversationSummary.fromJson(response.data['data'] as Map<String, dynamic>);
+        return ApiResponse(success: true, data: c);
+      }
+      return ApiResponse(success: false, error: response.data['error'] ?? 'Failed to remove participant');
+    } on DioException catch (e) {
+      return ApiResponse(
+        success: false,
+        error: e.response?.data['error'] ?? 'Network error',
+      );
+    } catch (e) {
+      return ApiResponse(success: false, error: 'An unexpected error occurred');
+    }
+  }
+
+  Future<ApiResponse<ChatConversationSummary>> promoteParticipantToAdmin(
+    String conversationId,
+    String userId,
+  ) async {
+    try {
+      final response = await _dio.patch(
+        '/chat/conversations/$conversationId/participants/$userId',
+        data: {'role': 'ADMIN'},
+      );
+      if (response.data['success'] == true && response.data['data'] != null) {
+        final c = ChatConversationSummary.fromJson(response.data['data'] as Map<String, dynamic>);
+        return ApiResponse(success: true, data: c);
+      }
+      return ApiResponse(success: false, error: response.data['error'] ?? 'Failed to promote participant');
     } on DioException catch (e) {
       return ApiResponse(
         success: false,

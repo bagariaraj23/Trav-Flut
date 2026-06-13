@@ -3,6 +3,7 @@ class ChatConversationSummary {
   final String type; // DM, GROUP, TRIP
   final String? tripId;
   final String? name;
+  final String? avatarUrl;
   final List<ChatParticipant> participants;
   final ChatMessagePreview? lastMessage;
   final int unreadCount;
@@ -15,6 +16,7 @@ class ChatConversationSummary {
     required this.type,
     this.tripId,
     this.name,
+    this.avatarUrl,
     required this.participants,
     this.lastMessage,
     required this.unreadCount,
@@ -29,6 +31,7 @@ class ChatConversationSummary {
       type: json['type'] as String,
       tripId: json['tripId'] as String?,
       name: json['name'] as String?,
+      avatarUrl: json['avatarUrl'] as String?,
       participants: (json['participants'] as List<dynamic>?)
               ?.map((e) => ChatParticipant.fromJson(e as Map<String, dynamic>))
               .toList() ??

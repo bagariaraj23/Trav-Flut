@@ -307,6 +307,66 @@ class ChatProvider with ChangeNotifier {
     _socketService.sendTyping(conversationId);
   }
 
+  Future<bool> updateGroupInfo(String conversationId, {String? name, String? avatarUrl}) async {
+    final res = await _apiService.updateGroupSettings(conversationId, name: name, avatarUrl: avatarUrl);
+    if (res.success && res.data != null) {
+      final idx = _conversations.indexWhere((c) => c.id == conversationId);
+      if (idx >= 0) {
+        _conversations[idx] = res.data!;
+      }
+      notifyListeners();
+      return true;
+    }
+    _error = res.error;
+    notifyListeners();
+    return false;
+  }
+
+  Future<bool> addParticipant(String conversationId, String userId) async {
+    final res = await _apiService.addGroupParticipant(conversationId, userId);
+    if (res.success && res.data != null) {
+      final idx = _conversations.indexWhere((c) => c.id == conversationId);
+      if (idx >= 0) {
+        _conversations[idx] = res.data!;
+      }
+      notifyListeners();
+      return true;
+    }
+    _error = res.error;
+    notifyListeners();
+    return false;
+  }
+
+  Future<bool> removeParticipant(String conversationId, String userId) async {
+    final res = await _apiService.removeGroupParticipant(conversationId, userId);
+    if (res.success && res.data != null) {
+      final idx = _conversations.indexWhere((c) => c.id == conversationId);
+      if (idx >= 0) {
+        _conversations[idx] = res.data!;
+      }
+      notifyListeners();
+      return true;
+    }
+    _error = res.error;
+    notifyListeners();
+    return false;
+  }
+
+  Future<bool> promoteAdmin(String conversationId, String userId) async {
+    final res = await _apiService.promoteParticipantToAdmin(conversationId, userId);
+    if (res.success && res.data != null) {
+      final idx = _conversations.indexWhere((c) => c.id == conversationId);
+      if (idx >= 0) {
+        _conversations[idx] = res.data!;
+      }
+      notifyListeners();
+      return true;
+    }
+    _error = res.error;
+    notifyListeners();
+    return false;
+  }
+
   void clearError() {
     _error = null;
     notifyListeners();

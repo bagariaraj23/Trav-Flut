@@ -1,26 +1,29 @@
 import { NextRequest, NextResponse } from "next/server";
 import { withAuth, withLogging, handleApiError } from "@/lib/middleware";
-import { getConversation, updateGroupDetails } from "@/lib/services/chat";
+import { editMessage, deleteMessage } from "@/lib/services/chat";
 import { ApiResponse } from "@/types/api";
 import { z } from "zod";
 
-const updateGroupSchema = z.object({
-  name: z.string().min(1).max(100).optional().nullable(),
-  avatarUrl: z.string().url().optional().nullable(),
+const editBodySchema = z.object({
+  content: z.string().min(1).max(512),
 });
 
-export async function GET(
+export async function PATCH(
   request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string; messageId: string }> }
 ) {
   return withLogging(async (req) => {
     return withAuth(req, async (authReq) => {
       try {
-        const { id } = await params;
+        const { id: conversationId, messageId } = await params;
         const userId = authReq.user!.userId;
-        const conversation = await getConversation(id, userId);
+        const body = await authReq.json();
+        const parsed = editBodySchema.parse(body);
+
+        const updated = await editMessage(conversationId, messageId, userId, parsed.content);
+
         return NextResponse.json<ApiResponse>(
-          { success: true, data: conversation },
+          { success: true, data: updated },
           { status: 200 }
         );
       } catch (error) {
@@ -30,25 +33,20 @@ export async function GET(
   })(request);
 }
 
-export async function PATCH(
+export async function DELETE(
   request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string; messageId: string }> }
 ) {
   return withLogging(async (req) => {
     return withAuth(req, async (authReq) => {
       try {
-        const { id } = await params;
+        const { id: conversationId, messageId } = await params;
         const userId = authReq.user!.userId;
-        const body = await authReq.json();
-        const parsed = updateGroupSchema.parse(body);
 
-        const updated = await updateGroupDetails(id, userId, {
-          name: parsed.name,
-          avatarUrl: parsed.avatarUrl,
-        });
+        const deleted = await deleteMessage(conversationId, messageId, userId);
 
         return NextResponse.json<ApiResponse>(
-          { success: true, data: updated },
+          { success: true, data: deleted },
           { status: 200 }
         );
       } catch (error) {

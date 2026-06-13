@@ -50,6 +50,7 @@ import 'package:tripthread/screens/post/post_detail_screen.dart';
 import 'package:tripthread/screens/chat/conversation_list_screen.dart';
 import 'package:tripthread/screens/chat/chat_screen.dart';
 import 'package:tripthread/screens/chat/new_conversation_screen.dart';
+import 'package:tripthread/screens/chat/group_settings_screen.dart';
 import 'package:tripthread/providers/chat_provider.dart';
 import 'package:tripthread/screens/share/share_link_screen.dart';
 import 'package:tripthread/utils/app_theme.dart';
@@ -700,6 +701,13 @@ class _TripThreadAppRouterState extends State<TripThreadAppRouter> {
             builder: (context, state) {
               final conversationId = state.pathParameters['conversationId']!;
               return ChatScreen(conversationId: conversationId);
+            },
+          ),
+          GoRoute(
+            path: '/chat/:conversationId/settings',
+            builder: (context, state) {
+              final conversationId = state.pathParameters['conversationId']!;
+              return GroupSettingsScreen(conversationId: conversationId);
             },
           ),
           GoRoute(

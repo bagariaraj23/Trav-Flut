@@ -7,6 +7,7 @@ import 'package:tripthread/models/chat_conversation.dart';
 import 'package:tripthread/providers/chat_provider.dart';
 import 'package:tripthread/providers/auth_provider.dart';
 import 'package:tripthread/utils/avatar_utils.dart';
+import 'package:tripthread/widgets/chat/chat_avatar.dart';
 
 class ConversationListScreen extends StatefulWidget {
   final String? tripId;
@@ -134,31 +135,29 @@ class _ConversationTile extends StatelessWidget {
     return ListTile(
       leading: CircleAvatar(
         backgroundColor: avatarColor,
-        backgroundImage: !isGroup &&
-                !isTrip &&
-                other.isNotEmpty &&
-                other.first.avatarUrl != null
-            ? CachedNetworkImageProvider(other.first.avatarUrl!)
-            : null,
-        child: isGroup
-            ? Text(
-                avatarInitial,
-                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
-              )
-            : isTrip
+        backgroundImage: (isGroup || isTrip)
+            ? (conversation.avatarUrl != null && conversation.avatarUrl!.isNotEmpty
+                ? CachedNetworkImageProvider(conversation.avatarUrl!)
+                : null)
+            : (other.isNotEmpty && other.first.avatarUrl != null
+                ? CachedNetworkImageProvider(other.first.avatarUrl!)
+                : null),
+        child: (isGroup || isTrip)
+            ? (conversation.avatarUrl == null || conversation.avatarUrl!.isEmpty
                 ? Text(
                     avatarInitial,
                     style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
                   )
-                : (other.isEmpty || other.first.avatarUrl == null
-                    ? Text(
-                        avatarInitial,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      )
-                    : null),
+                : null)
+            : (other.isEmpty || other.first.avatarUrl == null
+                ? Text(
+                    avatarInitial,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  )
+                : null),
       ),
       title: Row(
         children: [

@@ -70,6 +70,34 @@ async function wipeSeedUsers(prisma: AppPrismaClient): Promise<void> {
   }
 }
 
+async function wipeSeedChats(prisma: AppPrismaClient): Promise<void> {
+  const conversations = await prisma.conversation.findMany({
+    where: {
+      participants: {
+        some: {
+          user: {
+            email: { in: [...SEED_EMAILS] },
+          },
+        },
+      },
+    },
+  });
+
+  if (conversations.length > 0) {
+    const ids = conversations.map((c) => c.id);
+    await prisma.chatMessage.deleteMany({
+      where: { conversationId: { in: ids } },
+    });
+    await prisma.conversationParticipant.deleteMany({
+      where: { conversationId: { in: ids } },
+    });
+    await prisma.conversation.deleteMany({
+      where: { id: { in: ids } },
+    });
+    console.log(`Removed ${conversations.length} previous seed conversations.`);
+  }
+}
+
 async function seed(prisma: AppPrismaClient): Promise<void> {
   assertTestDatabaseUrl(process.env.DATABASE_URL, "Seed");
 
@@ -80,6 +108,8 @@ async function seed(prisma: AppPrismaClient): Promise<void> {
   } else {
     await wipeSeedTrips(prisma);
   }
+
+  await wipeSeedChats(prisma);
 
   const passwordHash = await bcrypt.hash(DEMO_PASSWORD, 12);
 
@@ -370,6 +400,70 @@ async function seed(prisma: AppPrismaClient): Promise<void> {
   });
 
   console.log("Thread entries & entry counts updated.");
+
+  // Seed DMs and Group Chat for Seed users
+  const dmAliceBob = await prisma.conversation.create({
+    data: {
+      type: "DM",
+      participants: {
+        create: [
+          { userId: alice.id, role: "MEMBER" },
+          { userId: bob.id, role: "MEMBER" },
+        ],
+      },
+    },
+  });
+
+  await prisma.chatMessage.createMany({
+    data: [
+      {
+        conversationId: dmAliceBob.id,
+        senderId: bob.id,
+        content: "Hey Alice, are you coming to Paris?",
+        createdAt: new Date(Date.now() - 3600 * 1000),
+      },
+      {
+        conversationId: dmAliceBob.id,
+        senderId: alice.id,
+        content: "Yes, I will be joining you soon!",
+        createdAt: new Date(Date.now() - 1800 * 1000),
+      },
+    ],
+  });
+
+  const groupConv = await prisma.conversation.create({
+    data: {
+      type: "GROUP",
+      name: "Paris Trip Crew",
+      avatarUrl: null,
+      participants: {
+        create: [
+          { userId: alice.id, role: "MEMBER" },
+          { userId: bob.id, role: "ADMIN" },
+          { userId: carol.id, role: "MEMBER" },
+        ],
+      },
+    },
+  });
+
+  await prisma.chatMessage.createMany({
+    data: [
+      {
+        conversationId: groupConv.id,
+        senderId: bob.id,
+        content: "Welcome everyone to the group!",
+        createdAt: new Date(Date.now() - 5000 * 1000),
+      },
+      {
+        conversationId: groupConv.id,
+        senderId: carol.id,
+        content: "Can't wait for our trip!",
+        createdAt: new Date(Date.now() - 4000 * 1000),
+      },
+    ],
+  });
+
+  console.log("DM and Group conversations seeded successfully.");
   console.log("");
   console.log("Done. Demo password for all seed users:", DEMO_PASSWORD);
   console.log("Emails:", SEED_EMAILS.join(", "));

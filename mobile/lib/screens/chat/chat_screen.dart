@@ -11,6 +11,7 @@ import 'package:tripthread/providers/chat_provider.dart';
 import 'package:tripthread/providers/auth_provider.dart';
 import 'package:tripthread/services/media_service.dart';
 import 'package:tripthread/utils/avatar_utils.dart';
+import 'package:tripthread/widgets/chat/chat_avatar.dart';
 
 class ChatScreen extends StatefulWidget {
   final String conversationId;
@@ -450,18 +451,186 @@ class _ChatScreenState extends State<ChatScreen> {
     }
   }
 
+  bool _shouldShowDateDivider(List<ChatMessageModel> messages, int index) {
+    if (index == messages.length - 1) {
+      return true;
+    }
+    final currentMsgDate = DateTime.parse(messages[index].createdAt).toLocal();
+    final olderMsgDate = DateTime.parse(messages[index + 1].createdAt).toLocal();
+    return currentMsgDate.year != olderMsgDate.year ||
+        currentMsgDate.month != olderMsgDate.month ||
+        currentMsgDate.day != olderMsgDate.day;
+  }
+
+  String _getDividerText(DateTime date) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final yesterday = today.subtract(const Duration(days: 1));
+    final msgDate = DateTime(date.year, date.month, date.day);
+
+    if (msgDate == today) {
+      return 'Today';
+    } else if (msgDate == yesterday) {
+      return 'Yesterday';
+    } else {
+      return DateFormat('MMMM d, yyyy').format(date);
+    }
+  }
+
+  Widget _buildDateDivider(DateTime date) {
+    return Center(
+      child: Container(
+        margin: const EdgeInsets.symmetric(vertical: 16),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.surfaceContainerHighest,
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Text(
+          _getDividerText(date),
+          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                fontWeight: FontWeight.bold,
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final currentUserId = context.watch<AuthProvider>().currentUser?.id ?? '';
+    final chat = context.watch<ChatProvider>();
+    final conversation = _currentConversation(chat);
+
+    PreferredSizeWidget buildAppBar() {
+      if (conversation == null) {
+        return AppBar(
+          title: const Text('Chat'),
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back),
+            onPressed: () => context.pop(),
+          ),
+        );
+      }
+
+      final other = conversation.participants
+          .where((p) => p.userId != currentUserId)
+          .toList();
+      final title = conversation.name ??
+          (conversation.type == 'DM' && other.isNotEmpty
+              ? (other.first.name ?? other.first.username ?? 'User')
+              : 'Conversation');
+
+      final isGroup = conversation.type == 'GROUP';
+      final isTrip = conversation.type == 'TRIP';
+      final otherDisplayName = other.isNotEmpty
+          ? (other.first.name ?? other.first.username ?? '')
+          : '';
+      final avatarLabel = isGroup
+          ? (conversation.name ?? 'Group')
+          : isTrip
+              ? 'Trip'
+              : otherDisplayName;
+      final avatarInitial = AvatarUtils.initialsFromName(avatarLabel);
+      final avatarColor = AvatarUtils.colorForKey(
+        isGroup || isTrip ? conversation.id : (other.isNotEmpty ? other.first.userId : ''),
+      );
+
+      return AppBar(
+        leadingWidth: 48,
+        title: InkWell(
+          onTap: () {
+            if (isGroup) {
+              context.push('/chat/${conversation.id}/settings');
+            } else if (other.isNotEmpty) {
+              context.push('/profile/${other.first.userId}');
+            }
+          },
+          borderRadius: BorderRadius.circular(8),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+            child: Row(
+              children: [
+                CircleAvatar(
+                  radius: 18,
+                  backgroundColor: avatarColor,
+                  backgroundImage: (isGroup || isTrip)
+                      ? (conversation.avatarUrl != null && conversation.avatarUrl!.isNotEmpty
+                          ? CachedNetworkImageProvider(conversation.avatarUrl!)
+                          : null)
+                      : (other.isNotEmpty && other.first.avatarUrl != null
+                          ? CachedNetworkImageProvider(other.first.avatarUrl!)
+                          : null),
+                  child: (isGroup || isTrip)
+                      ? (conversation.avatarUrl == null || conversation.avatarUrl!.isEmpty
+                          ? Text(
+                              avatarInitial,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.w700,
+                                fontSize: 14,
+                              ),
+                            )
+                          : null)
+                      : (other.isEmpty || other.first.avatarUrl == null
+                          ? Text(
+                              avatarInitial,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.w700,
+                                fontSize: 14,
+                              ),
+                            )
+                          : null),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(
+                        title,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      Text(
+                        isGroup
+                            ? '${conversation.participants.length} members'
+                            : isTrip
+                                ? 'Trip conversation'
+                                : '1:1 Chat',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                              fontSize: 11,
+                              color: Theme.of(context).colorScheme.onSurfaceVariant.withOpacity(0.8),
+                            ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        actions: isGroup
+            ? [
+                IconButton(
+                  icon: const Icon(Icons.info_outline),
+                  onPressed: () => context.push('/chat/${conversation.id}/settings'),
+                  tooltip: 'Group details',
+                ),
+              ]
+            : null,
+      );
+    }
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Chat'),
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
-          onPressed: () => context.pop(),
-        ),
-      ),
+      appBar: buildAppBar(),
       body: Column(
         children: [
           Expanded(
@@ -508,7 +677,8 @@ class _ChatScreenState extends State<ChatScreen> {
                             );
                           }
                           final msg = messages[index];
-                          return Dismissible(
+                          final showDateDivider = _shouldShowDateDivider(messages, index);
+                          final bubbleWidget = Dismissible(
                             key: ValueKey('chat_msg_${msg.id}'),
                             direction: DismissDirection.endToStart, // swipe left
                             confirmDismiss: (_) async {
@@ -534,11 +704,25 @@ class _ChatScreenState extends State<ChatScreen> {
                               onReplyTap: msg.replyTo != null
                                   ? () => _jumpToMessage(msg.replyTo!.id)
                                   : null,
-                              onLongPressAction: msg.senderId == currentUserId
+                              onLongPressAction: msg.senderId == currentUserId &&
+                                      DateTime.now().difference(DateTime.parse(msg.createdAt).toLocal()).inMinutes < 15
                                   ? () => _handleMessageActions(msg)
                                   : null,
+                              participants: conversation?.participants ?? const [],
                             ),
                           );
+
+                          if (showDateDivider) {
+                            final parsedDate = DateTime.parse(msg.createdAt).toLocal();
+                            return Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                _buildDateDivider(parsedDate),
+                                bubbleWidget,
+                              ],
+                            );
+                          }
+                          return bubbleWidget;
                         },
                       ),
                     ),
@@ -866,6 +1050,7 @@ class _MessageBubble extends StatelessWidget {
   final bool isHighlighted;
   final VoidCallback? onReplyTap;
   final VoidCallback? onLongPressAction;
+  final List<ChatParticipant> participants;
 
   const _MessageBubble({
     this.bubbleKey,
@@ -874,6 +1059,7 @@ class _MessageBubble extends StatelessWidget {
     this.isHighlighted = false,
     this.onReplyTap,
     this.onLongPressAction,
+    this.participants = const [],
   });
 
   @override
@@ -894,14 +1080,28 @@ class _MessageBubble extends StatelessWidget {
         decoration: BoxDecoration(
           color: isMe
               ? Theme.of(context).colorScheme.primaryContainer
-              : const Color(0xFF6D32A8),
-          borderRadius: BorderRadius.circular(16),
+              : Theme.of(context).colorScheme.surfaceContainerHighest,
           border: isHighlighted
               ? Border.all(
                   color: Theme.of(context).colorScheme.primary,
                   width: 2,
                 )
-              : null,
+              : (isMe
+                  ? null
+                  : Border.all(
+                      color: Theme.of(context).colorScheme.outlineVariant,
+                      width: 1,
+                    )),
+          boxShadow: isMe
+              ? null
+              : [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.04),
+                    blurRadius: 4,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+          borderRadius: BorderRadius.circular(16),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -934,6 +1134,9 @@ class _MessageBubble extends StatelessWidget {
                           style: Theme.of(context).textTheme.labelSmall?.copyWith(
                                 fontWeight: FontWeight.bold,
                                 fontSize: 11,
+                                color: isMe
+                                    ? Theme.of(context).colorScheme.onPrimaryContainer.withOpacity(0.9)
+                                    : Theme.of(context).colorScheme.onSurfaceVariant.withOpacity(0.9),
                               ),
                         ),
                         const SizedBox(height: 2),
@@ -941,6 +1144,9 @@ class _MessageBubble extends StatelessWidget {
                           message.replyTo!.content,
                           style: Theme.of(context).textTheme.bodySmall?.copyWith(
                                 fontSize: 12,
+                                color: isMe
+                                    ? Theme.of(context).colorScheme.onPrimaryContainer.withOpacity(0.8)
+                                    : Theme.of(context).colorScheme.onSurfaceVariant.withOpacity(0.8),
                               ),
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
@@ -954,13 +1160,21 @@ class _MessageBubble extends StatelessWidget {
                   'This message was deleted',
                   style: Theme.of(context).textTheme.bodyLarge?.copyWith(
                         fontStyle: FontStyle.italic,
-                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        color: isMe
+                            ? Theme.of(context).colorScheme.onPrimaryContainer.withOpacity(0.6)
+                            : Theme.of(context).colorScheme.onSurfaceVariant.withOpacity(0.6),
                       ),
                 )
               else if (message.content.isNotEmpty)
-                Text(
-                  message.content,
-                  style: Theme.of(context).textTheme.bodyLarge,
+                Text.rich(
+                  TextSpan(
+                    children: _buildMessageSpans(
+                      context,
+                      message.content,
+                      participants,
+                      isMe,
+                    ),
+                  ),
                 ),
               if (message.attachments.isNotEmpty && !isDeleted)
                 ...message.attachments.map((a) {
@@ -1004,13 +1218,28 @@ class _MessageBubble extends StatelessWidget {
                   }
                   return Padding(
                     padding: const EdgeInsets.only(top: 4),
-                    child: Text('[${a.type}]', style: Theme.of(context).textTheme.bodySmall),
+                    child: Text(
+                      '[${a.type}]',
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color: isMe
+                                ? Theme.of(context).colorScheme.onPrimaryContainer.withOpacity(0.8)
+                                : Theme.of(context).colorScheme.onSurfaceVariant.withOpacity(0.8),
+                          ),
+                    ),
                   );
                 }),
               const SizedBox(height: 4),
-              Text(
-                time,
-                style: Theme.of(context).textTheme.bodySmall,
+              Align(
+                alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
+                child: Text(
+                  time,
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        fontSize: 10,
+                        color: isMe
+                            ? Theme.of(context).colorScheme.onPrimaryContainer.withOpacity(0.7)
+                            : Theme.of(context).colorScheme.onSurfaceVariant.withOpacity(0.7),
+                      ),
+                ),
               ),
           ],
         ),
@@ -1062,5 +1291,80 @@ class _MessageBubble extends StatelessWidget {
     } catch (_) {
       return '';
     }
+  }
+
+  List<InlineSpan> _buildMessageSpans(
+    BuildContext context,
+    String content,
+    List<ChatParticipant> participants,
+    bool isMe,
+  ) {
+    final RegExp mentionRegExp = RegExp(r'@([a-zA-Z0-9_]+)');
+    final List<InlineSpan> spans = [];
+    final textStyle = Theme.of(context).textTheme.bodyLarge?.copyWith(
+          color: isMe
+              ? Theme.of(context).colorScheme.onPrimaryContainer
+              : Theme.of(context).colorScheme.onSurfaceVariant,
+        );
+    final mentionColor = isMe
+        ? Theme.of(context).colorScheme.onPrimaryContainer
+        : Theme.of(context).colorScheme.primary;
+    final mentionStyle = textStyle?.copyWith(
+          fontWeight: FontWeight.bold,
+          color: mentionColor,
+          decoration: TextDecoration.underline,
+        ) ??
+        TextStyle(
+          fontWeight: FontWeight.bold,
+          color: mentionColor,
+          decoration: TextDecoration.underline,
+        );
+
+    final matches = mentionRegExp.allMatches(content);
+    if (matches.isEmpty) {
+      spans.add(TextSpan(text: content, style: textStyle));
+      return spans;
+    }
+
+    int lastMatchEnd = 0;
+    for (final match in matches) {
+      final beforeText = content.substring(lastMatchEnd, match.start);
+      if (beforeText.isNotEmpty) {
+        spans.add(TextSpan(text: beforeText, style: textStyle));
+      }
+
+      final fullMention = match.group(0)!;
+      final username = match.group(1)!;
+
+      final participant = participants.firstWhere(
+        (p) => p.username?.trim().toLowerCase() == username.trim().toLowerCase(),
+        orElse: () => const ChatParticipant(id: '', userId: '', role: 'MEMBER', username: ''),
+      );
+
+      if (participant.userId.isNotEmpty) {
+        spans.add(
+          WidgetSpan(
+            alignment: PlaceholderAlignment.middle,
+            child: GestureDetector(
+              onTap: () => context.push('/profile/${participant.userId}'),
+              child: Text(
+                fullMention,
+                style: mentionStyle,
+              ),
+            ),
+          ),
+        );
+      } else {
+        spans.add(TextSpan(text: fullMention, style: textStyle));
+      }
+
+      lastMatchEnd = match.end;
+    }
+
+    if (lastMatchEnd < content.length) {
+      spans.add(TextSpan(text: content.substring(lastMatchEnd), style: textStyle));
+    }
+
+    return spans;
   }
 }

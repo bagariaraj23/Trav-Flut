@@ -5,7 +5,7 @@ import { publishChatEvent, type ChatMessagePayload } from '@/lib/chat-events'
 
 const DEFAULT_PAGE_SIZE = 30
 const MAX_PAGE_SIZE = 100
-const MAX_CONTENT_LENGTH = 64 * 1024 // 64KB for future E2E payload
+const MAX_CONTENT_LENGTH = 512 // Limit messages to 512 characters
 const MESSAGE_EDIT_DELETE_WINDOW_MS = 15 * 60 * 1000
 
 export type CreateConversationParams = {
@@ -20,6 +20,7 @@ export type ConversationSummary = {
   type: ConversationType
   tripId: string | null
   name: string | null
+  avatarUrl: string | null
   participants: Array<{
     id: string
     userId: string
@@ -124,6 +125,7 @@ export async function createConversation(
   // GROUP
   const allIds = Array.from(new Set([userId, ...participantIds]))
   if (allIds.length < 2) throw new ValidationError('Group must have at least 2 participants')
+  if (allIds.length > 16) throw new ValidationError('Group cannot have more than 16 participants')
   const conv = await prisma.conversation.create({
     data: {
       type: 'GROUP',
@@ -179,15 +181,18 @@ async function formatConversationSummary(
     type: conv.type,
     tripId: conv.tripId ?? null,
     name: conv.name ?? null,
-    participants: conv.participants.map((p: any) => ({
-      id: p.id,
-      userId: p.userId,
-      username: p.user.username,
-      name: p.user.name,
-      avatarUrl: p.user.avatarUrl,
-      role: p.role,
-      lastReadAt: p.lastReadAt ? toISODate(p.lastReadAt) : null,
-    })),
+    avatarUrl: conv.avatarUrl ?? null,
+    participants: conv.participants
+      .filter((p: any) => !p.leftAt)
+      .map((p: any) => ({
+        id: p.id,
+        userId: p.userId,
+        username: p.user.username,
+        name: p.user.name,
+        avatarUrl: p.user.avatarUrl,
+        role: p.role,
+        lastReadAt: p.lastReadAt ? toISODate(p.lastReadAt) : null,
+      })),
     lastMessage: lastMsg
       ? {
           id: lastMsg.id,
@@ -785,4 +790,162 @@ export async function markConversationRead(
     where: { conversationId, userId },
     data: { lastReadAt: new Date() },
   })
+}
+
+export async function updateGroupDetails(
+  conversationId: string,
+  userId: string,
+  data: { name?: string | null; avatarUrl?: string | null }
+): Promise<ConversationSummary> {
+  const conv = await prisma.conversation.findUnique({
+    where: { id: conversationId },
+    include: conversationListInclude,
+  })
+
+  if (!conv) throw new NotFoundError('Group not found')
+  if (conv.type !== 'GROUP') throw new ValidationError('Only groups details can be edited')
+
+  const participant = conv.participants.find((p) => p.userId === userId)
+  if (!participant) throw new AuthorizationError('Not a participant')
+  if (participant.role !== 'ADMIN') throw new AuthorizationError('Only admins can update group details')
+
+  const updated = await prisma.conversation.update({
+    where: { id: conversationId },
+    data: {
+      ...(data.name !== undefined && { name: data.name }),
+      ...(data.avatarUrl !== undefined && { avatarUrl: data.avatarUrl }),
+    },
+    include: conversationListInclude,
+  })
+
+  return await formatConversationSummary(updated, userId)
+}
+
+export async function addGroupParticipant(
+  conversationId: string,
+  adminUserId: string,
+  targetUserId: string
+): Promise<ConversationSummary> {
+  const conv = await prisma.conversation.findUnique({
+    where: { id: conversationId },
+    include: conversationListInclude,
+  })
+
+  if (!conv) throw new NotFoundError('Group not found')
+  if (conv.type !== 'GROUP') throw new ValidationError('Only group participants can be managed')
+
+  const adminParticipant = conv.participants.find((p) => p.userId === adminUserId)
+  if (!adminParticipant) throw new AuthorizationError('Not a participant')
+  if (adminParticipant.role !== 'ADMIN') throw new AuthorizationError('Only admins can add participants')
+
+  const existing = conv.participants.find((p) => p.userId === targetUserId)
+  if (existing && !existing.leftAt) {
+    throw new ValidationError('User is already a participant')
+  }
+
+  // 16-member limit check (active participants)
+  const activeCount = conv.participants.filter(p => !p.leftAt).length
+  if (activeCount >= 16) {
+    throw new ValidationError('Group has reached the maximum of 16 participants')
+  }
+
+  if (existing && existing.leftAt) {
+    await prisma.conversationParticipant.update({
+      where: { id: existing.id },
+      data: { leftAt: null, joinedAt: new Date(), role: 'MEMBER' },
+    })
+  } else {
+    await prisma.conversationParticipant.create({
+      data: {
+        conversationId,
+        userId: targetUserId,
+        role: 'MEMBER',
+      },
+    })
+  }
+
+  const updated = await prisma.conversation.findUnique({
+    where: { id: conversationId },
+    include: conversationListInclude,
+  })
+
+  return await formatConversationSummary(updated!, adminUserId)
+}
+
+export async function removeGroupParticipant(
+  conversationId: string,
+  adminUserId: string,
+  targetUserId: string
+): Promise<ConversationSummary> {
+  const conv = await prisma.conversation.findUnique({
+    where: { id: conversationId },
+    include: conversationListInclude,
+  })
+
+  if (!conv) throw new NotFoundError('Group not found')
+  if (conv.type !== 'GROUP') throw new ValidationError('Only group participants can be managed')
+
+  const adminParticipant = conv.participants.find((p) => p.userId === adminUserId)
+  if (!adminParticipant) throw new AuthorizationError('Not a participant')
+  if (adminParticipant.role !== 'ADMIN') throw new AuthorizationError('Only admins can remove participants')
+
+  const targetParticipant = conv.participants.find((p) => p.userId === targetUserId)
+  if (!targetParticipant || targetParticipant.leftAt) {
+    throw new ValidationError('User is not a participant')
+  }
+
+  if (targetUserId === adminUserId) {
+    throw new ValidationError('Admins cannot remove themselves')
+  }
+
+  await prisma.conversationParticipant.update({
+    where: { id: targetParticipant.id },
+    data: { leftAt: new Date() },
+  })
+
+  const updated = await prisma.conversation.findUnique({
+    where: { id: conversationId },
+    include: conversationListInclude,
+  })
+
+  return await formatConversationSummary(updated!, adminUserId)
+}
+
+export async function promoteToAdmin(
+  conversationId: string,
+  adminUserId: string,
+  targetUserId: string
+): Promise<ConversationSummary> {
+  const conv = await prisma.conversation.findUnique({
+    where: { id: conversationId },
+    include: conversationListInclude,
+  })
+
+  if (!conv) throw new NotFoundError('Group not found')
+  if (conv.type !== 'GROUP') throw new ValidationError('Only group participants can be managed')
+
+  const adminParticipant = conv.participants.find((p) => p.userId === adminUserId)
+  if (!adminParticipant) throw new AuthorizationError('Not a participant')
+  if (adminParticipant.role !== 'ADMIN') throw new AuthorizationError('Only admins can promote users')
+
+  const targetParticipant = conv.participants.find((p) => p.userId === targetUserId)
+  if (!targetParticipant || targetParticipant.leftAt) {
+    throw new ValidationError('User is not a participant')
+  }
+
+  if (targetParticipant.role === 'ADMIN') {
+    throw new ValidationError('User is already an admin')
+  }
+
+  await prisma.conversationParticipant.update({
+    where: { id: targetParticipant.id },
+    data: { role: 'ADMIN' },
+  })
+
+  const updated = await prisma.conversation.findUnique({
+    where: { id: conversationId },
+    include: conversationListInclude,
+  })
+
+  return await formatConversationSummary(updated!, adminUserId)
 }
