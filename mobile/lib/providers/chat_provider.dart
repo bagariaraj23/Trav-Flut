@@ -198,21 +198,50 @@ class ChatProvider with ChangeNotifier {
   String? getNextCursor(String conversationId) => _nextCursorByConversation[conversationId];
   bool hasMoreMessages(String conversationId) => _hasMoreByConversation[conversationId] ?? false;
 
+  /// Returns conversations scoped to a specific trip (filters from the full in-memory list).
+  List<ChatConversationSummary> getConversationsForTrip(String tripId) {
+    return _conversations.where((c) => c.tripId == tripId).toList();
+  }
+
   Future<void> loadConversations({String? tripId}) async {
     _loadingConversations = true;
     _error = null;
     notifyListeners();
+
     if (tripId != null) {
-      await createConversation(
-        type: 'TRIP',
-        participantIds: const [],
-        tripId: tripId,
+      // Only create if we don't already have a TRIP conversation for this trip in memory.
+      final alreadyExists = _conversations.any(
+        (c) => c.type == 'TRIP' && c.tripId == tripId,
       );
+      if (!alreadyExists) {
+        // Ignore errors here — if creation fails (e.g. not a participant) the
+        // subsequent fetch will return an empty list and surface the right state.
+        await createConversation(
+          type: 'TRIP',
+          participantIds: const [],
+          tripId: tripId,
+        );
+      }
     }
+
     final res = await _apiService.getChatConversations(tripId: tripId);
     _loadingConversations = false;
     if (res.success && res.data != null) {
-      _conversations = res.data!;
+      if (tripId != null) {
+        // Upsert: merge the trip-filtered results into the full list so that
+        // WS events for DMs/other groups still reach their conversations.
+        for (final fetched in res.data!) {
+          final idx = _conversations.indexWhere((c) => c.id == fetched.id);
+          if (idx >= 0) {
+            _conversations[idx] = fetched;
+          } else {
+            _conversations.add(fetched);
+          }
+        }
+      } else {
+        // Full refresh from the server — replace the entire list.
+        _conversations = res.data!;
+      }
     } else {
       _error = res.error;
     }
@@ -329,9 +358,16 @@ class ChatProvider with ChangeNotifier {
       tripId: tripId,
     );
     if (res.success && res.data != null) {
-      _conversations.insert(0, res.data!);
+      final conv = res.data!;
+      // Upsert: the backend may return an existing conversation (e.g. existing DM or TRIP).
+      final idx = _conversations.indexWhere((c) => c.id == conv.id);
+      if (idx >= 0) {
+        _conversations[idx] = conv;
+      } else {
+        _conversations.insert(0, conv);
+      }
       notifyListeners();
-      return res.data;
+      return conv;
     }
     _error = res.error;
     notifyListeners();
@@ -410,6 +446,24 @@ class ChatProvider with ChangeNotifier {
       if (idx >= 0) {
         _conversations[idx] = res.data!;
       }
+      notifyListeners();
+      return true;
+    }
+    _error = res.error;
+    notifyListeners();
+    return false;
+  }
+
+  /// Leaves a GROUP conversation. On success, removes all local state for
+  /// that conversation so the UI reflects the departure immediately.
+  Future<bool> leaveGroup(String conversationId) async {
+    final res = await _apiService.leaveGroupConversation(conversationId);
+    if (res.success) {
+      _conversations.removeWhere((c) => c.id == conversationId);
+      _messagesByConversation.remove(conversationId);
+      _nextCursorByConversation.remove(conversationId);
+      _hasMoreByConversation.remove(conversationId);
+      _loadingMessages.remove(conversationId);
       notifyListeners();
       return true;
     }

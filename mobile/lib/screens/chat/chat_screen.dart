@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
 import 'package:cached_network_image/cached_network_image.dart';
@@ -212,8 +213,11 @@ class _ChatScreenState extends State<ChatScreen> {
     return null;
   }
 
-  bool _isGroupConversation(ChatProvider chat) {
-    return _currentConversation(chat)?.type == 'GROUP';
+  /// Returns true for any multi-participant conversation (GROUP or TRIP),
+  /// enabling @mention autocomplete for all of them.
+  bool _isMultiParticipantConversation(ChatProvider chat) {
+    final type = _currentConversation(chat)?.type;
+    return type == 'GROUP' || type == 'TRIP';
   }
 
   void _updateMentionSuggestions({
@@ -221,7 +225,7 @@ class _ChatScreenState extends State<ChatScreen> {
     required ChatProvider chat,
     required String currentUserId,
   }) {
-    if (!_isGroupConversation(chat)) {
+    if (!_isMultiParticipantConversation(chat)) {
       if (_mentionSuggestions.isNotEmpty || _activeMentionQuery != null) {
         setState(() {
           _mentionSuggestions = [];
@@ -304,16 +308,21 @@ class _ChatScreenState extends State<ChatScreen> {
     final chat = context.read<ChatProvider>();
     bool found = chat.getMessages(widget.conversationId).any((m) => m.id == messageId);
 
-    while (!found && chat.hasMoreMessages(widget.conversationId)) {
+    // Cap the backward search at 5 pages (150 messages) to avoid excessive API calls.
+    // If the original message is older than that, show a graceful fallback.
+    const maxExtraPages = 5;
+    int pagesLoaded = 0;
+    while (!found && chat.hasMoreMessages(widget.conversationId) && pagesLoaded < maxExtraPages) {
       final ok = await chat.loadMessages(widget.conversationId, loadMore: true);
       if (!ok) break;
       found = chat.getMessages(widget.conversationId).any((m) => m.id == messageId);
+      pagesLoaded++;
     }
 
     if (!found || !mounted) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Original message not found in history')),
+          const SnackBar(content: Text('Original message is too far back in history')),
         );
       }
       return;
@@ -952,10 +961,13 @@ class _ChatScreenState extends State<ChatScreen> {
                   child: TextField(
                     controller: _textController,
                     enabled: !_uploadingMedia,
+                    maxLength: 512,
+                    maxLengthEnforcement: MaxLengthEnforcement.enforced,
                     decoration: const InputDecoration(
                       hintText: 'Message',
                       border: OutlineInputBorder(),
                       contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                      counterText: '',
                     ),
                     maxLines: 3,
                     minLines: 1,

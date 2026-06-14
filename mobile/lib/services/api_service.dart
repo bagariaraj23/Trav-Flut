@@ -3020,4 +3020,18 @@ class ApiService {
       return ApiResponse(success: false, error: 'An unexpected error occurred');
     }
   }
+
+  Future<ApiResponse<void>> leaveGroupConversation(String conversationId) async {
+    try {
+      await _dio.post('/chat/conversations/$conversationId/leave');
+      return const ApiResponse(success: true);
+    } on DioException catch (e) {
+      return ApiResponse(
+        success: false,
+        error: e.response?.data['error'] ?? 'Network error',
+      );
+    } catch (e) {
+      return ApiResponse(success: false, error: 'An unexpected error occurred');
+    }
+  }
 }

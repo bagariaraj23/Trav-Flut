@@ -707,7 +707,8 @@ export async function deleteMessage(
     where: { conversationId, leftAt: null },
     select: { userId: true },
   })
-  const recipientUserIds = participants.map((p) => p.userId)
+  // Exclude the deleter: their local state is already updated via the REST response.
+  const recipientUserIds = participants.map((p) => p.userId).filter((id) => id !== userId)
   publishChatEvent({
     event: 'message.deleted',
     conversationId,
@@ -1007,6 +1008,45 @@ export async function removeGroupParticipant(
   })
 
   return await formatConversationSummary(updated!, adminUserId)
+}
+
+/**
+ * Allows any active participant to voluntarily leave a GROUP conversation.
+ * Blocked if the user is the sole remaining admin and other members exist —
+ * they must promote another member to admin first.
+ */
+export async function leaveGroup(
+  conversationId: string,
+  userId: string
+): Promise<void> {
+  const conv = await prisma.conversation.findUnique({
+    where: { id: conversationId },
+    include: conversationListInclude,
+  })
+
+  if (!conv) throw new NotFoundError('Conversation not found')
+  if (conv.type !== 'GROUP') {
+    throw new ValidationError('Use the trip leave endpoint to leave a TRIP conversation')
+  }
+
+  const activeParticipants = conv.participants.filter((p) => !p.leftAt)
+  const participant = activeParticipants.find((p) => p.userId === userId)
+  if (!participant) throw new AuthorizationError('Not an active participant')
+
+  // Block the sole admin from leaving if other members would be left admin-less.
+  const activeAdmins = activeParticipants.filter((p) => p.role === 'ADMIN')
+  const isOnlyAdmin = participant.role === 'ADMIN' && activeAdmins.length === 1
+  const hasOtherMembers = activeParticipants.length > 1
+  if (isOnlyAdmin && hasOtherMembers) {
+    throw new ValidationError(
+      'You are the only admin. Promote another member to admin before leaving.'
+    )
+  }
+
+  await prisma.conversationParticipant.update({
+    where: { id: participant.id },
+    data: { leftAt: new Date() },
+  })
 }
 
 export async function promoteToAdmin(

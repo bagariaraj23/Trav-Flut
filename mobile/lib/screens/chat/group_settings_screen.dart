@@ -196,6 +196,61 @@ class _GroupSettingsScreenState extends State<GroupSettingsScreen> {
     );
   }
 
+  Future<void> _leaveGroup(ChatConversationSummary conversation, bool isViewerAdmin) async {
+    // Guard: sole admin cannot leave while other members remain.
+    final activeParticipants = conversation.participants;
+    final adminCount = activeParticipants.where((p) => p.role == 'ADMIN').length;
+    final isOnlyAdmin = isViewerAdmin && adminCount == 1 && activeParticipants.length > 1;
+
+    if (isOnlyAdmin) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Promote another member to admin before leaving the group.'),
+          ),
+        );
+      }
+      return;
+    }
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Leave Group'),
+        content: const Text('Are you sure you want to leave this group? You will need to be re-added by an admin.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: TextButton.styleFrom(
+              foregroundColor: Theme.of(context).colorScheme.error,
+            ),
+            child: const Text('Leave'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !mounted) return;
+
+    final chat = context.read<ChatProvider>();
+    final ok = await chat.leaveGroup(widget.conversationId);
+    if (!mounted) return;
+
+    if (ok) {
+      // Pop settings screen and the chat screen so the user lands on the conversations list.
+      context.pop();
+      context.pop();
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(chat.error ?? 'Failed to leave group')),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final currentUserId = context.watch<AuthProvider>().currentUser?.id ?? '';
@@ -435,7 +490,21 @@ class _GroupSettingsScreenState extends State<GroupSettingsScreen> {
                 );
               },
             ),
-            const SizedBox(height: 40),
+            const SizedBox(height: 24),
+            const Divider(),
+            const SizedBox(height: 8),
+            ListTile(
+              leading: Icon(
+                Icons.exit_to_app,
+                color: Theme.of(context).colorScheme.error,
+              ),
+              title: Text(
+                'Leave Group',
+                style: TextStyle(color: Theme.of(context).colorScheme.error),
+              ),
+              onTap: () => _leaveGroup(conversation, isViewerAdmin),
+            ),
+            const SizedBox(height: 24),
           ],
         ),
       ),

@@ -22,8 +22,18 @@ class _ConversationListScreenState extends State<ConversationListScreen> {
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      context.read<ChatProvider>().loadConversations(tripId: widget.tripId);
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted) return;
+      final chat = context.read<ChatProvider>();
+      await chat.loadConversations(tripId: widget.tripId);
+      if (!mounted || widget.tripId == null) return;
+      // For trip-scoped views, skip the list and go directly to the chat screen
+      // (the TRIP conversation was created/fetched above). Use pushReplacement so
+      // the back button from the chat screen returns to the trip detail, not here.
+      final tripConvs = chat.getConversationsForTrip(widget.tripId!);
+      if (tripConvs.length == 1) {
+        context.pushReplacement('/chat/${tripConvs.first.id}');
+      }
     });
   }
 
@@ -48,10 +58,15 @@ class _ConversationListScreenState extends State<ConversationListScreen> {
       ),
       body: Consumer<ChatProvider>(
         builder: (context, chat, _) {
-          if (chat.loadingConversations && chat.conversations.isEmpty) {
+          // Use trip-filtered list when scoped to a trip; full list otherwise.
+          final list = widget.tripId != null
+              ? chat.getConversationsForTrip(widget.tripId!)
+              : chat.conversations;
+
+          if (chat.loadingConversations && list.isEmpty) {
             return const Center(child: CircularProgressIndicator());
           }
-          if (chat.error != null && chat.conversations.isEmpty) {
+          if (chat.error != null && list.isEmpty) {
             return Center(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
@@ -66,7 +81,6 @@ class _ConversationListScreenState extends State<ConversationListScreen> {
               ),
             );
           }
-          final list = chat.conversations;
           if (list.isEmpty) {
             return const Center(
               child: Text('No conversations yet.\nStart a trip or message a friend.'),

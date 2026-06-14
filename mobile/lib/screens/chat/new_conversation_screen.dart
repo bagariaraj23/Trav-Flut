@@ -104,9 +104,9 @@ class _NewConversationScreenState extends State<NewConversationScreen> {
   }
 
   Future<void> _createGroupConversation() async {
-    if (_selectedUserIds.length < 2) {
+    if (_selectedUserIds.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Select at least 2 users to create a group')),
+        const SnackBar(content: Text('Select at least 1 user to create a group')),
       );
       return;
     }
@@ -190,7 +190,7 @@ class _NewConversationScreenState extends State<NewConversationScreen> {
                                 Align(
                                   alignment: Alignment.centerLeft,
                                   child: Text(
-                                    'Selected: ${_selectedUserIds.length} (min 2)',
+                                    'Selected: ${_selectedUserIds.length} (min 1)',
                                     style: Theme.of(context).textTheme.bodySmall,
                                   ),
                                 ),
