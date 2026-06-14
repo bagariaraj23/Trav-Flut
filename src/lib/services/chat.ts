@@ -1,7 +1,33 @@
 import type { ConversationType, Prisma } from '@prisma/client'
+import { v4 as uuid } from 'uuid'
 import { prisma } from '@/lib/prisma'
 import { NotFoundError, ValidationError, AuthorizationError } from '@/lib/errors'
 import { publishChatEvent, type ChatMessagePayload } from '@/lib/chat-events'
+import { LRUCache } from '@/lib/cache'
+
+// Participant list cache — used by sendMessage, editMessage, deleteMessage,
+// and the WS typing handler to avoid a DB round-trip on every hot-path call.
+// TTL: 30 s (participant membership changes are infrequent).
+const PARTICIPANT_CACHE_TTL_MS = 30_000
+const participantCache = new LRUCache<string, string[]>(2_000)
+
+export async function getCachedParticipantIds(conversationId: string): Promise<string[]> {
+  const cached = participantCache.get(conversationId)
+  if (cached !== undefined) return cached
+
+  const rows = await prisma.conversationParticipant.findMany({
+    where: { conversationId, leftAt: null },
+    select: { userId: true },
+  })
+  const ids = rows.map((r) => r.userId)
+  participantCache.set(conversationId, ids, PARTICIPANT_CACHE_TTL_MS)
+  return ids
+}
+
+/** Call this after any mutation that changes conversation membership. */
+export function invalidateParticipantCache(conversationId: string): void {
+  participantCache.delete(conversationId)
+}
 
 const DEFAULT_PAGE_SIZE = 30
 const MAX_PAGE_SIZE = 100
@@ -167,17 +193,17 @@ const conversationListInclude = {
   },
 } satisfies Prisma.ConversationInclude
 
-async function formatConversationSummary(
+/**
+ * Synchronously formats a single conversation summary.
+ * Requires the caller to pre-compute the unreadCount via batchFetchUnreadCounts.
+ */
+function formatConversationSummarySync(
   conv: any,
-  currentUserId: string
-): Promise<ConversationSummary> {
+  currentUserId: string,
+  unreadCount: number
+): ConversationSummary {
   const myParticipant = conv.participants.find((p: any) => p.userId === currentUserId)
   const lastMsg = conv.messages[0] ?? null
-  const unreadCount = myParticipant
-    ? myParticipant.lastReadAt
-      ? await countUnreadInConversation(conv.id, currentUserId, myParticipant.lastReadAt)
-      : await countAllUnreadFromOthers(conv.id, currentUserId)
-    : 0
   return {
     id: conv.id,
     type: conv.type,
@@ -203,40 +229,84 @@ async function formatConversationSummary(
           createdAt: toISODate(lastMsg.createdAt),
         }
       : null,
-    unreadCount: typeof unreadCount === 'number' ? unreadCount : 0,
+    unreadCount,
     lastReadAt: myParticipant?.lastReadAt ? toISODate(myParticipant.lastReadAt) : null,
     createdAt: toISODate(conv.createdAt),
     updatedAt: toISODate(conv.updatedAt),
   }
 }
 
-async function countUnreadInConversation(
-  conversationId: string,
-  userId: string,
-  lastReadAt: Date
-): Promise<number> {
-  const count = await prisma.chatMessage.count({
-    where: {
-      conversationId,
-      senderId: { not: userId },
-      createdAt: { gt: lastReadAt },
-      deletedAt: null,
-    },
-  })
-  return count
+/**
+ * Async wrapper for single-conversation use (e.g. getConversation, participant mutations).
+ * Falls back to a direct COUNT rather than a batch query since only 1 conversation is involved.
+ */
+async function formatConversationSummary(
+  conv: any,
+  currentUserId: string
+): Promise<ConversationSummary> {
+  const myParticipant = conv.participants.find((p: any) => p.userId === currentUserId)
+  let unreadCount = 0
+  if (myParticipant) {
+    if (myParticipant.lastReadAt) {
+      unreadCount = await prisma.chatMessage.count({
+        where: {
+          conversationId: conv.id,
+          senderId: { not: currentUserId },
+          createdAt: { gt: myParticipant.lastReadAt },
+          deletedAt: null,
+        },
+      })
+    } else {
+      unreadCount = await prisma.chatMessage.count({
+        where: {
+          conversationId: conv.id,
+          senderId: { not: currentUserId },
+          deletedAt: null,
+        },
+      })
+    }
+  }
+  return formatConversationSummarySync(conv, currentUserId, unreadCount)
 }
 
-async function countAllUnreadFromOthers(
-  conversationId: string,
-  userId: string
-): Promise<number> {
-  return prisma.chatMessage.count({
-    where: {
-      conversationId,
-      senderId: { not: userId },
-      deletedAt: null,
-    },
-  })
+/**
+ * Fetches all unread counts for a set of conversations in ONE SQL query,
+ * replacing the previous N+1 pattern (one COUNT per conversation).
+ *
+ * Returns a Map<conversationId, unreadCount>.
+ */
+async function batchFetchUnreadCounts(
+  conversationIds: string[],
+  userId: string,
+  participantsByConvId: Map<string, { lastReadAt: Date | null }>
+): Promise<Map<string, number>> {
+  if (conversationIds.length === 0) return new Map()
+
+  type UnreadRow = { conversation_id: string; unread_count: bigint }
+  const rows = await prisma.$queryRaw<UnreadRow[]>`
+    SELECT
+      m.conversation_id,
+      COUNT(m.id)::bigint AS unread_count
+    FROM chat_messages m
+    JOIN conversation_participants cp
+      ON cp.conversation_id = m.conversation_id
+     AND cp.user_id = ${userId}::uuid
+     AND cp.left_at IS NULL
+    WHERE m.conversation_id = ANY(${conversationIds}::uuid[])
+      AND m.sender_id != ${userId}::uuid
+      AND m.deleted_at IS NULL
+      AND (
+        cp.last_read_at IS NULL
+        OR m.created_at > cp.last_read_at
+      )
+    GROUP BY m.conversation_id
+  `
+
+  const result = new Map<string, number>()
+  for (const row of rows) {
+    result.set(row.conversation_id, Number(row.unread_count))
+  }
+  return result
 }
 
 async function touchConversation(conversationId: string): Promise<void> {
@@ -317,32 +387,47 @@ async function syncTripConversationParticipants(
   tripUserIds: string[]
 ): Promise<void> {
   const tripUserIdSet = new Set(tripUserIds)
+  const conversationId = conv.id
 
-  for (const tripUserId of tripUserIds) {
-    const existing = conv.participants.find((p) => p.userId === tripUserId)
-    if (!existing) {
-      await prisma.conversationParticipant.create({
-        data: {
-          conversationId: conv.id,
-          userId: tripUserId,
-          role: 'MEMBER',
-        },
-      })
-    } else if (existing.leftAt) {
-      await prisma.conversationParticipant.update({
-        where: { id: existing.id },
-        data: { leftAt: null, joinedAt: new Date() },
-      })
-    }
+  // 1. Add brand-new members in one batch insert.
+  const existingUserIds = new Set(conv.participants.map((p) => p.userId))
+  const newMemberIds = tripUserIds.filter((id) => !existingUserIds.has(id))
+  if (newMemberIds.length > 0) {
+    await prisma.conversationParticipant.createMany({
+      data: newMemberIds.map((userId) => ({
+        conversationId,
+        userId,
+        role: 'MEMBER' as const,
+      })),
+      skipDuplicates: true,
+    })
   }
 
-  for (const participant of conv.participants) {
-    if (!tripUserIdSet.has(participant.userId) && !participant.leftAt) {
-      await prisma.conversationParticipant.update({
-        where: { id: participant.id },
-        data: { leftAt: new Date() },
-      })
-    }
+  // 2. Re-join previously-departed members in one batch update.
+  const rejoinIds = conv.participants
+    .filter((p) => tripUserIdSet.has(p.userId) && p.leftAt !== null)
+    .map((p) => p.id)
+  if (rejoinIds.length > 0) {
+    await prisma.conversationParticipant.updateMany({
+      where: { id: { in: rejoinIds } },
+      data: { leftAt: null, joinedAt: new Date() },
+    })
+  }
+
+  // 3. Soft-remove participants no longer in the trip in one batch update.
+  const departedIds = conv.participants
+    .filter((p) => !tripUserIdSet.has(p.userId) && p.leftAt === null)
+    .map((p) => p.id)
+  if (departedIds.length > 0) {
+    await prisma.conversationParticipant.updateMany({
+      where: { id: { in: departedIds } },
+      data: { leftAt: new Date() },
+    })
+  }
+
+  // Any membership change invalidates the participant cache for this conversation.
+  if (newMemberIds.length > 0 || rejoinIds.length > 0 || departedIds.length > 0) {
+    invalidateParticipantCache(conversationId)
   }
 }
 
@@ -363,11 +448,22 @@ export async function listConversations(
     include: conversationListInclude,
   })
 
-  const summaries: ConversationSummary[] = []
+  if (list.length === 0) return []
+
+  // Build a map of conversationId → participant's lastReadAt for the batch query.
+  const participantsByConvId = new Map<string, { lastReadAt: Date | null }>()
   for (const conv of list) {
-    summaries.push(await formatConversationSummary(conv, userId))
+    const mine = conv.participants.find((p: any) => p.userId === userId)
+    participantsByConvId.set(conv.id, { lastReadAt: mine?.lastReadAt ?? null })
   }
-  return summaries
+
+  // Fetch all unread counts in ONE query instead of N COUNT queries.
+  const conversationIds = list.map((c) => c.id)
+  const unreadMap = await batchFetchUnreadCounts(conversationIds, userId, participantsByConvId)
+
+  return list.map((conv) =>
+    formatConversationSummarySync(conv, userId, unreadMap.get(conv.id) ?? 0)
+  )
 }
 
 export async function getConversation(
@@ -533,18 +629,21 @@ export async function sendMessage(
     throw new ValidationError('Message content too long')
   }
 
-  const participant = await prisma.conversationParticipant.findUnique({
-    where: {
-      conversationId_userId: { conversationId, userId },
-    },
-  })
-  if (!participant || participant.leftAt) throw new AuthorizationError('Not a participant')
+  // 1. Parallel: auth check + reply target validation (independent DB reads).
+  const [participant, replyTarget] = await Promise.all([
+    prisma.conversationParticipant.findUnique({
+      where: { conversationId_userId: { conversationId, userId } },
+    }),
+    replyToMessageId
+      ? prisma.chatMessage.findUnique({
+          where: { id: replyToMessageId },
+          select: { conversationId: true, deletedAt: true },
+        })
+      : Promise.resolve(null),
+  ])
 
+  if (!participant || participant.leftAt) throw new AuthorizationError('Not a participant')
   if (replyToMessageId) {
-    const replyTarget = await prisma.chatMessage.findUnique({
-      where: { id: replyToMessageId },
-      select: { conversationId: true, deletedAt: true },
-    })
     if (
       !replyTarget ||
       replyTarget.conversationId !== conversationId ||
@@ -554,37 +653,46 @@ export async function sendMessage(
     }
   }
 
-  const msg = await prisma.chatMessage.create({
-    data: {
-      conversationId,
-      senderId: userId,
-      content: content.trim() || '',
-      replyToMessageId: replyToMessageId ?? null,
-    },
-    include: messageInclude,
+  // 2. Pre-generate the message ID so we can link media in the same transaction
+  //    without a second SELECT (eliminates the re-fetch step for attachments).
+  const messageId = uuid()
+  const trimmedContent = content.trim()
+
+  const messageForPayload = await prisma.$transaction(async (tx) => {
+    const created = await tx.chatMessage.create({
+      data: {
+        id: messageId,
+        conversationId,
+        senderId: userId,
+        content: trimmedContent,
+        replyToMessageId: replyToMessageId ?? null,
+      },
+    })
+    if (attachmentMediaIds?.length) {
+      await tx.media.updateMany({
+        where: {
+          id: { in: attachmentMediaIds },
+          uploadedById: userId,
+          chatMessageId: null,
+        },
+        data: { chatMessageId: created.id },
+      })
+    }
+    // Fetch once inside the transaction to get fully resolved relations.
+    return tx.chatMessage.findUnique({
+      where: { id: created.id },
+      include: messageInclude,
+    })
   })
 
-  if (attachmentMediaIds?.length) {
-    await prisma.media.updateMany({
-      where: {
-        id: { in: attachmentMediaIds },
-        uploadedById: userId,
-        chatMessageId: null,
-      },
-      data: { chatMessageId: msg.id },
-    })
-  }
+  if (!messageForPayload) throw new ValidationError('Message creation failed unexpectedly')
 
-  const msgWithAttachments =
-    (attachmentMediaIds?.length ?? 0) > 0
-      ? await prisma.chatMessage.findUnique({
-          where: { id: msg.id },
-          include: messageInclude,
-        })
-      : msg
-  const messageForPayload = msgWithAttachments ?? msg
+  // 3. Touch the conversation timestamp in the background — it only affects sort
+  //    order and does not need to block the response.
+  touchConversation(conversationId).catch(console.error)
 
-  await touchConversation(conversationId)
+  // 4. Resolve recipient list from cache (avoids an extra DB round-trip).
+  const recipientUserIds = await getCachedParticipantIds(conversationId)
 
   const payload: ChatMessagePayload = {
     id: messageForPayload.id,
@@ -615,11 +723,6 @@ export async function sendMessage(
         }
       : null,
   }
-  const participants = await prisma.conversationParticipant.findMany({
-    where: { conversationId, leftAt: null },
-    select: { userId: true },
-  })
-  const recipientUserIds = participants.map((p) => p.userId)
   publishChatEvent({
     event: 'message.new',
     conversationId,
@@ -667,17 +770,18 @@ export async function deleteMessage(
   messageId: string,
   userId: string
 ): Promise<MessageWithMeta> {
-  const participant = await prisma.conversationParticipant.findUnique({
-    where: {
-      conversationId_userId: { conversationId, userId },
-    },
-  })
-  if (!participant || participant.leftAt) throw new AuthorizationError('Not a participant')
+  // Parallel: auth check + message fetch (independent reads).
+  const [participant, existing] = await Promise.all([
+    prisma.conversationParticipant.findUnique({
+      where: { conversationId_userId: { conversationId, userId } },
+    }),
+    prisma.chatMessage.findUnique({
+      where: { id: messageId },
+      include: messageInclude,
+    }),
+  ])
 
-  const existing = await prisma.chatMessage.findUnique({
-    where: { id: messageId },
-    include: messageInclude,
-  })
+  if (!participant || participant.leftAt) throw new AuthorizationError('Not a participant')
   if (!existing || existing.conversationId !== conversationId) {
     throw new NotFoundError('Message not found')
   }
@@ -701,14 +805,11 @@ export async function deleteMessage(
           include: messageInclude,
         })
 
-  await touchConversation(conversationId)
+  touchConversation(conversationId).catch(console.error)
 
-  const participants = await prisma.conversationParticipant.findMany({
-    where: { conversationId, leftAt: null },
-    select: { userId: true },
-  })
   // Exclude the deleter: their local state is already updated via the REST response.
-  const recipientUserIds = participants.map((p) => p.userId).filter((id) => id !== userId)
+  const allParticipantIds = await getCachedParticipantIds(conversationId)
+  const recipientUserIds = allParticipantIds.filter((id) => id !== userId)
   publishChatEvent({
     event: 'message.deleted',
     conversationId,
@@ -758,17 +859,18 @@ export async function editMessage(
   userId: string,
   content: string
 ): Promise<MessageWithMeta> {
-  const participant = await prisma.conversationParticipant.findUnique({
-    where: {
-      conversationId_userId: { conversationId, userId },
-    },
-  })
-  if (!participant || participant.leftAt) throw new AuthorizationError('Not a participant')
+  // Parallel: auth check + message fetch (independent reads).
+  const [participant, existing] = await Promise.all([
+    prisma.conversationParticipant.findUnique({
+      where: { conversationId_userId: { conversationId, userId } },
+    }),
+    prisma.chatMessage.findUnique({
+      where: { id: messageId },
+      include: messageInclude,
+    }),
+  ])
 
-  const existing = await prisma.chatMessage.findUnique({
-    where: { id: messageId },
-    include: messageInclude,
-  })
+  if (!participant || participant.leftAt) throw new AuthorizationError('Not a participant')
   if (!existing || existing.conversationId !== conversationId) {
     throw new NotFoundError('Message not found')
   }
@@ -794,13 +896,9 @@ export async function editMessage(
     include: messageInclude,
   })
 
-  await touchConversation(conversationId)
+  touchConversation(conversationId).catch(console.error)
 
-  const participants = await prisma.conversationParticipant.findMany({
-    where: { conversationId, leftAt: null },
-    select: { userId: true },
-  })
-  const recipientUserIds = participants.map((p) => p.userId)
+  const recipientUserIds = await getCachedParticipantIds(conversationId)
 
   const payload: ChatMessagePayload = {
     id: updated.id,
@@ -885,10 +983,24 @@ export async function markConversationRead(
   })
   if (!participant || participant.leftAt) return
 
+  const lastReadAt = new Date()
   await prisma.conversationParticipant.update({
     where: { id: participant.id },
-    data: { lastReadAt: new Date() },
+    data: { lastReadAt },
   })
+
+  // Notify other participants in real-time so senders can show "Seen".
+  const allParticipantIds = await getCachedParticipantIds(conversationId)
+  const recipientUserIds = allParticipantIds.filter((id) => id !== userId)
+  if (recipientUserIds.length > 0) {
+    publishChatEvent({
+      event: 'conversation.read',
+      conversationId,
+      userId,
+      lastReadAt: lastReadAt.toISOString(),
+      recipientUserIds,
+    })
+  }
 }
 
 export async function updateGroupDetails(
@@ -963,6 +1075,8 @@ export async function addGroupParticipant(
     })
   }
 
+  invalidateParticipantCache(conversationId)
+
   const updated = await prisma.conversation.findUnique({
     where: { id: conversationId },
     include: conversationListInclude,
@@ -1001,6 +1115,8 @@ export async function removeGroupParticipant(
     where: { id: targetParticipant.id },
     data: { leftAt: new Date() },
   })
+
+  invalidateParticipantCache(conversationId)
 
   const updated = await prisma.conversation.findUnique({
     where: { id: conversationId },
@@ -1047,6 +1163,8 @@ export async function leaveGroup(
     where: { id: participant.id },
     data: { leftAt: new Date() },
   })
+
+  invalidateParticipantCache(conversationId)
 }
 
 export async function promoteToAdmin(

@@ -11,6 +11,16 @@ class ChatMessageModel {
   final List<ChatMessageAttachment> attachments;
   final ChatMessagePreview? replyTo;
 
+  /// Client-only: true while the REST call is in-flight (optimistic insert).
+  final bool isPending;
+
+  /// Client-only: true when the REST call failed; allows tap-to-retry.
+  final bool isFailed;
+
+  /// Client-only: temp ID generated before the server assigns a real one.
+  /// Used to replace the pending bubble with the confirmed message.
+  final String? pendingId;
+
   const ChatMessageModel({
     required this.id,
     required this.conversationId,
@@ -23,7 +33,41 @@ class ChatMessageModel {
     required this.sender,
     required this.attachments,
     this.replyTo,
+    this.isPending = false,
+    this.isFailed = false,
+    this.pendingId,
   });
+
+  /// Creates a placeholder message shown immediately while the send is in-flight.
+  /// [replyTo] is optional — omitting it just means the reply preview won't
+  /// be visible on the optimistic bubble, which is fine since it will be
+  /// replaced by the confirmed message from the server shortly.
+  factory ChatMessageModel.optimistic({
+    required String pendingId,
+    required String conversationId,
+    required String senderId,
+    required String content,
+    required ChatMessageSender sender,
+    String? replyToMessageId,
+  }) {
+    final now = DateTime.now().toUtc().toIso8601String();
+    return ChatMessageModel(
+      id: pendingId,
+      conversationId: conversationId,
+      senderId: senderId,
+      content: content,
+      replyToMessageId: replyToMessageId,
+      deletedAt: null,
+      createdAt: now,
+      updatedAt: now,
+      sender: sender,
+      attachments: const [],
+      replyTo: null,
+      isPending: true,
+      isFailed: false,
+      pendingId: pendingId,
+    );
+  }
 
   factory ChatMessageModel.fromJson(Map<String, dynamic> json) {
     final senderId = (json['senderId'] as String?) ?? '';
@@ -51,13 +95,16 @@ class ChatMessageModel {
   }
 
   ChatMessageModel copyWith({
+    String? id,
     String? content,
     String? deletedAt,
     List<ChatMessageAttachment>? attachments,
     ChatMessagePreview? replyTo,
+    bool? isPending,
+    bool? isFailed,
   }) {
     return ChatMessageModel(
-      id: id,
+      id: id ?? this.id,
       conversationId: conversationId,
       senderId: senderId,
       content: content ?? this.content,
@@ -68,6 +115,9 @@ class ChatMessageModel {
       sender: sender,
       attachments: attachments ?? this.attachments,
       replyTo: replyTo ?? this.replyTo,
+      isPending: isPending ?? this.isPending,
+      isFailed: isFailed ?? this.isFailed,
+      pendingId: pendingId,
     );
   }
 }

@@ -429,7 +429,7 @@ class _ChatScreenState extends State<ChatScreen> {
         return;
       }
 
-      // Send message with reply and attachments
+      // Send message with reply and attachments (optimistic send)
       await chat.sendMessage(
         widget.conversationId,
         text,
@@ -547,6 +547,29 @@ class _ChatScreenState extends State<ChatScreen> {
         isGroup || isTrip ? conversation.id : (other.isNotEmpty ? other.first.userId : ''),
       );
 
+      // Presence subtitle for DM conversations.
+      String? presenceSubtitle;
+      if (conversation.type == 'DM' && other.isNotEmpty) {
+        final presence = context.read<ChatProvider>().getPresence(other.first.userId);
+        if (presence == 'online') {
+          presenceSubtitle = 'Online';
+        } else if (presence != null) {
+          final lastSeen = DateTime.tryParse(presence);
+          if (lastSeen != null) {
+            final diff = DateTime.now().difference(lastSeen);
+            if (diff.inMinutes < 1) {
+              presenceSubtitle = 'Last seen just now';
+            } else if (diff.inMinutes < 60) {
+              presenceSubtitle = 'Last seen ${diff.inMinutes}m ago';
+            } else if (diff.inHours < 24) {
+              presenceSubtitle = 'Last seen ${diff.inHours}h ago';
+            } else {
+              presenceSubtitle = 'Last seen ${diff.inDays}d ago';
+            }
+          }
+        }
+      }
+
       return AppBar(
         leadingWidth: 48,
         title: InkWell(
@@ -610,14 +633,17 @@ class _ChatScreenState extends State<ChatScreen> {
                         overflow: TextOverflow.ellipsis,
                       ),
                       Text(
-                        isGroup
-                            ? '${conversation.participants.length} members'
-                            : isTrip
-                                ? 'Trip conversation'
-                                : '1:1 Chat',
+                        presenceSubtitle ??
+                            (isGroup
+                                ? '${conversation.participants.length} members'
+                                : isTrip
+                                    ? 'Trip conversation'
+                                    : '1:1 Chat'),
                         style: Theme.of(context).textTheme.bodySmall?.copyWith(
                               fontSize: 11,
-                              color: Theme.of(context).colorScheme.onSurfaceVariant.withOpacity(0.8),
+                              color: presenceSubtitle == 'Online'
+                                  ? Theme.of(context).colorScheme.primary
+                                  : Theme.of(context).colorScheme.onSurfaceVariant.withOpacity(0.8),
                             ),
                       ),
                     ],
@@ -1242,16 +1268,48 @@ class _MessageBubble extends StatelessWidget {
                   );
                 }),
               const SizedBox(height: 4),
+              // Status row: timestamp + pending/failed icon + Seen label
               Align(
                 alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
-                child: Text(
-                  time,
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        fontSize: 10,
-                        color: isMe
-                            ? Theme.of(context).colorScheme.onPrimaryContainer.withOpacity(0.7)
-                            : Theme.of(context).colorScheme.onSurfaceVariant.withOpacity(0.7),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (isMe && message.isFailed)
+                      Padding(
+                        padding: const EdgeInsets.only(right: 4),
+                        child: Icon(
+                          Icons.error_outline,
+                          size: 12,
+                          color: Theme.of(context).colorScheme.error,
+                        ),
+                      )
+                    else if (isMe && message.isPending)
+                      Padding(
+                        padding: const EdgeInsets.only(right: 4),
+                        child: SizedBox(
+                          width: 10,
+                          height: 10,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 1.5,
+                            color: Theme.of(context)
+                                .colorScheme
+                                .onPrimaryContainer
+                                .withOpacity(0.7),
+                          ),
+                        ),
                       ),
+                    Text(
+                      time,
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            fontSize: 10,
+                            color: isMe
+                                ? Theme.of(context).colorScheme.onPrimaryContainer.withOpacity(0.7)
+                                : Theme.of(context).colorScheme.onSurfaceVariant.withOpacity(0.7),
+                          ),
+                    ),
+                    if (isMe && !message.isPending && !message.isFailed)
+                      _SeenIndicator(message: message, participants: participants),
+                  ],
                 ),
               ),
           ],
@@ -1286,7 +1344,7 @@ class _MessageBubble extends StatelessWidget {
           children: isMe
               ? [
                   Flexible(child: bubble),
-                  avatar,
+                  if (!message.isPending && !message.isFailed) avatar,
                 ]
               : [
                   avatar,
@@ -1379,5 +1437,43 @@ class _MessageBubble extends StatelessWidget {
     }
 
     return spans;
+  }
+}
+
+// Seen Indicator
+/// Shows "Seen" (DM) or "Seen by N" (group) next to my outgoing messages
+/// once at least one other participant has read past this message.
+class _SeenIndicator extends StatelessWidget {
+  final ChatMessageModel message;
+  final List<ChatParticipant> participants;
+
+  const _SeenIndicator({required this.message, required this.participants});
+
+  @override
+  Widget build(BuildContext context) {
+    final sentAt = DateTime.tryParse(message.createdAt);
+    if (sentAt == null) return const SizedBox.shrink();
+
+    // Count participants (excluding the sender) who have read at or after sentAt.
+    final seenBy = participants.where((p) {
+      if (p.userId == message.senderId) return false;
+      if (p.lastReadAt == null) return false;
+      final readAt = DateTime.tryParse(p.lastReadAt!);
+      return readAt != null && !readAt.isBefore(sentAt);
+    }).length;
+
+    if (seenBy == 0) return const SizedBox.shrink();
+
+    final label = participants.length <= 2 ? 'Seen' : 'Seen by $seenBy';
+    return Padding(
+      padding: const EdgeInsets.only(left: 4),
+      child: Text(
+        label,
+        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+              fontSize: 10,
+              color: Theme.of(context).colorScheme.primary.withOpacity(0.85),
+            ),
+      ),
+    );
   }
 }

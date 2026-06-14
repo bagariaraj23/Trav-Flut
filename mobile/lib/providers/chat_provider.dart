@@ -1,11 +1,14 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
+import 'package:uuid/uuid.dart';
 import 'package:tripthread/models/chat_conversation.dart';
 import 'package:tripthread/models/chat_message.dart' hide ChatMessagePreview;
 import 'package:tripthread/services/api_service.dart';
 import 'package:tripthread/services/chat_socket_service.dart';
 import 'package:tripthread/services/storage_service.dart';
+
+const _uuid = Uuid();
 
 class ChatProvider with ChangeNotifier {
   final ApiService _apiService;
@@ -25,11 +28,18 @@ class ChatProvider with ChangeNotifier {
   DateTime? _lastTypingSentAt;
   static const _typingThrottleMs = 250;
 
+  /// userId -> 'online' | ISO-8601 last-seen timestamp
+  final Map<String, String> _presenceByUser = {};
+
   String? _currentUserId;
 
   List<ChatConversationSummary> get conversations => List.unmodifiable(_conversations);
   String? get error => _error;
   bool get loadingConversations => _loadingConversations;
+
+  /// Returns 'online' or an ISO-8601 string representing the last time the
+  /// user was online. Returns null if presence is unknown.
+  String? getPresence(String userId) => _presenceByUser[userId];
 
   ChatProvider({
     required ApiService apiService,
@@ -48,6 +58,8 @@ class ChatProvider with ChangeNotifier {
       _error = msg;
       notifyListeners();
     };
+    _socketService.onConversationRead = _onConversationRead;
+    _socketService.onPresenceUpdate = _onPresenceUpdate;
     // Socket is opened from [onAuthSignedIn] / [connectSocket] so it does not race token restore or [resetConnection].
   }
 
@@ -150,6 +162,35 @@ class ChatProvider with ChangeNotifier {
               )
             : m)
         .toList();
+    notifyListeners();
+  }
+
+  void _onConversationRead(String conversationId, String userId, String lastReadAt) {
+    // Update the participant's lastReadAt in the local conversation so the
+    // "Seen" indicator reflects reality without a REST round-trip.
+    final idx = _conversations.indexWhere((c) => c.id == conversationId);
+    if (idx < 0) return;
+    final conv = _conversations[idx];
+    final updatedParticipants = conv.participants.map((p) {
+      if (p.userId == userId) {
+        return ChatParticipant(
+          id: p.id,
+          userId: p.userId,
+          role: p.role,
+          username: p.username,
+          name: p.name,
+          avatarUrl: p.avatarUrl,
+          lastReadAt: lastReadAt,
+        );
+      }
+      return p;
+    }).toList();
+    _conversations[idx] = conv.copyWith(participants: updatedParticipants);
+    notifyListeners();
+  }
+
+  void _onPresenceUpdate(String userId, String status, String lastSeen) {
+    _presenceByUser[userId] = status == 'online' ? 'online' : lastSeen;
     notifyListeners();
   }
 
@@ -272,21 +313,109 @@ class ChatProvider with ChangeNotifier {
     return false;
   }
 
-  Future<bool> sendMessage(String conversationId, String content,
-      {String? replyToMessageId, List<String>? attachmentMediaIds}) async {
+  Future<bool> sendMessage(
+    String conversationId,
+    String content, {
+    String? replyToMessageId,
+    List<String>? attachmentMediaIds,
+    // replyToPreview reserved for future pass-through; not displayed on the
+    // optimistic bubble to avoid the dual ChatMessagePreview type conflict.
+  }) async {
+    // 1. Immediately show a pending bubble so the UX feels instant.
+    final pendingId = _uuid.v4();
+    final currentConv = _conversations.firstWhere(
+      (c) => c.id == conversationId,
+      orElse: () => _conversations.first,
+    );
+    final meSender = currentConv.participants
+        .where((p) => p.userId == _currentUserId)
+        .map((p) => ChatMessageSender(
+              id: p.userId,
+              username: p.username,
+              name: p.name,
+              avatarUrl: p.avatarUrl,
+            ))
+        .firstOrNull;
+
+    if (meSender != null && attachmentMediaIds == null) {
+      // Only show optimistic bubble for text-only messages (attachment upload
+      // already shows its own progress indicator).
+      final pending = ChatMessageModel.optimistic(
+        pendingId: pendingId,
+        conversationId: conversationId,
+        senderId: _currentUserId ?? '',
+        content: content,
+        sender: meSender,
+        replyToMessageId: replyToMessageId,
+      );
+      final existing = _messagesByConversation[conversationId] ?? [];
+      _messagesByConversation[conversationId] = [pending, ...existing];
+      _refreshConversationOnMessage(conversationId, pending);
+      notifyListeners();
+    }
+
+    // 2. Fire the REST call.
     final res = await _apiService.sendChatMessage(
       conversationId,
       content: content,
       replyToMessageId: replyToMessageId,
       attachmentMediaIds: attachmentMediaIds,
     );
+
     if (res.success && res.data != null) {
-      _onMessageNew(conversationId, res.data!);
+      final confirmed = res.data!;
+      final list = _messagesByConversation[conversationId] ?? [];
+      // Replace the pending bubble with the confirmed message (same position).
+      final pendingIdx = list.indexWhere((m) => m.pendingId == pendingId);
+      if (pendingIdx >= 0) {
+        final updated = List<ChatMessageModel>.from(list);
+        updated[pendingIdx] = confirmed;
+        _messagesByConversation[conversationId] = updated;
+      } else {
+        // Fallback: WS may have already inserted the confirmed message;
+        // deduplicate via _onMessageNew.
+        _onMessageNew(conversationId, confirmed);
+        return true;
+      }
+      notifyListeners();
       return true;
+    }
+
+    // 3. Mark the pending bubble as failed so the user can retry.
+    final list = _messagesByConversation[conversationId] ?? [];
+    final pendingIdx = list.indexWhere((m) => m.pendingId == pendingId);
+    if (pendingIdx >= 0) {
+      final updated = List<ChatMessageModel>.from(list);
+      updated[pendingIdx] =
+          updated[pendingIdx].copyWith(isPending: false, isFailed: true);
+      _messagesByConversation[conversationId] = updated;
     }
     _error = res.error;
     notifyListeners();
     return false;
+  }
+
+  /// Retries a failed optimistic message by pendingId.
+  Future<bool> retrySend(
+    String conversationId,
+    String pendingId,
+    String content, {
+    String? replyToMessageId,
+  }) async {
+    // Reset to pending state first, then call sendMessage normally.
+    final list = _messagesByConversation[conversationId] ?? [];
+    final idx = list.indexWhere((m) => m.pendingId == pendingId);
+    if (idx >= 0) {
+      final updated = List<ChatMessageModel>.from(list);
+      updated[idx] = updated[idx].copyWith(isPending: true, isFailed: false);
+      _messagesByConversation[conversationId] = updated;
+      notifyListeners();
+    }
+    return sendMessage(
+      conversationId,
+      content,
+      replyToMessageId: replyToMessageId,
+    );
   }
 
   Future<bool> deleteMessage(String conversationId, String messageId) async {

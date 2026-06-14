@@ -26,6 +26,22 @@ export type ChatEventPayload =
       recipientUserIds: string[]
     }
   | { event: 'typing'; conversationId: string; userId: string; until: string; recipientUserIds: string[] }
+  | {
+      /** Broadcast when a participant calls markRead so senders can show "Seen" in real-time. */
+      event: 'conversation.read'
+      conversationId: string
+      userId: string       // who read
+      lastReadAt: string   // ISO timestamp
+      recipientUserIds: string[]
+    }
+  | {
+      /** Broadcast on WS connect/disconnect so participants can show Online/Last-seen. */
+      event: 'presence.update'
+      userId: string
+      status: 'online' | 'offline'
+      lastSeen: string     // ISO timestamp
+      recipientUserIds: string[]
+    }
 
 export type ChatMessagePayload = {
   id: string
