@@ -113,6 +113,7 @@ class AppTheme {
           fontWeight: FontWeight.normal,
           color: textPrimary,
           fontFamily: 'Inter',
+          textBaseline: TextBaseline.alphabetic,
           inherit: false,
         ),
         bodyMedium: TextStyle(
@@ -120,6 +121,7 @@ class AppTheme {
           fontWeight: FontWeight.normal,
           color: textSecondary,
           fontFamily: 'Inter',
+          textBaseline: TextBaseline.alphabetic,
           inherit: false,
         ),
         bodySmall: TextStyle(
@@ -127,6 +129,7 @@ class AppTheme {
           fontWeight: FontWeight.normal,
           color: textTertiary,
           fontFamily: 'Inter',
+          textBaseline: TextBaseline.alphabetic,
           inherit: false,
         ),
       ),
@@ -432,6 +435,7 @@ class AppTheme {
           fontWeight: FontWeight.normal,
           color: darkTextPrimary,
           fontFamily: 'Inter',
+          textBaseline: TextBaseline.alphabetic,
           inherit: false,
         ),
         bodyMedium: TextStyle(
@@ -439,6 +443,7 @@ class AppTheme {
           fontWeight: FontWeight.normal,
           color: darkTextSecondary,
           fontFamily: 'Inter',
+          textBaseline: TextBaseline.alphabetic,
           inherit: false,
         ),
         bodySmall: TextStyle(
@@ -446,6 +451,7 @@ class AppTheme {
           fontWeight: FontWeight.normal,
           color: darkTextTertiary,
           fontFamily: 'Inter',
+          textBaseline: TextBaseline.alphabetic,
           inherit: false,
         ),
       ),
