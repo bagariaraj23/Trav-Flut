@@ -282,29 +282,42 @@ async function batchFetchUnreadCounts(
 ): Promise<Map<string, number>> {
   if (conversationIds.length === 0) return new Map()
 
-  type UnreadRow = { conversation_id: string; unread_count: bigint }
-  const rows = await prisma.$queryRaw<UnreadRow[]>`
+  // Column names in this DB are camelCase — they must be double-quoted in raw SQL.
+  // IDs are stored as TEXT (not the native UUID type), so no ::uuid casts.
+  // $queryRawUnsafe is used because tagged-template $queryRaw cannot spread a
+  // JS array into an ANY(ARRAY[...]) placeholder.
+  type UnreadRow = { conversationId: string; unread_count: bigint }
+
+  // $1 = userId, $2 = userId (senderId exclusion), $3…$N = conversationIds
+  const idPlaceholders = conversationIds.map((_, i) => `$${i + 3}`).join(', ')
+  const sql = `
     SELECT
-      m.conversation_id,
+      m."conversationId",
       COUNT(m.id)::bigint AS unread_count
     FROM chat_messages m
     JOIN conversation_participants cp
-      ON cp.conversation_id = m.conversation_id
-     AND cp.user_id = ${userId}::uuid
-     AND cp.left_at IS NULL
-    WHERE m.conversation_id = ANY(${conversationIds}::uuid[])
-      AND m.sender_id != ${userId}::uuid
-      AND m.deleted_at IS NULL
+      ON cp."conversationId" = m."conversationId"
+     AND cp."userId" = $1
+     AND cp."leftAt" IS NULL
+    WHERE m."conversationId" = ANY(ARRAY[${idPlaceholders}])
+      AND m."senderId" != $2
+      AND m."deletedAt" IS NULL
       AND (
-        cp.last_read_at IS NULL
-        OR m.created_at > cp.last_read_at
+        cp."lastReadAt" IS NULL
+        OR m."createdAt" > cp."lastReadAt"
       )
-    GROUP BY m.conversation_id
+    GROUP BY m."conversationId"
   `
+  const rows = await prisma.$queryRawUnsafe<UnreadRow[]>(
+    sql,
+    userId,
+    userId,
+    ...conversationIds
+  )
 
   const result = new Map<string, number>()
   for (const row of rows) {
-    result.set(row.conversation_id, Number(row.unread_count))
+    result.set(row.conversationId, Number(row.unread_count))
   }
   return result
 }

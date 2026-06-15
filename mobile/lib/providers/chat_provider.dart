@@ -89,6 +89,32 @@ class ChatProvider with ChangeNotifier {
 
   void _onMessageNew(String conversationId, ChatMessageModel message) {
     final list = _messagesByConversation[conversationId] ?? [];
+
+    // If a pending optimistic bubble already exists for this confirmed message
+    // (identified by matching senderId + content + pending state), replace it
+    // in-place rather than inserting a duplicate. This prevents the race where
+    // the WebSocket delivers the confirmed message before the REST response
+    // has a chance to swap out the pending bubble, which would leave both a
+    // pending and a confirmed entry with different ids in the list — later
+    // causing the REST handler to produce two entries with the same server id
+    // and a GlobalKey conflict in the ListView.
+    final pendingIdx = list.indexWhere(
+      (m) =>
+          m.isPending &&
+          m.senderId == message.senderId &&
+          m.content == message.content &&
+          m.conversationId == message.conversationId,
+    );
+    if (pendingIdx >= 0) {
+      final updated = List<ChatMessageModel>.from(list);
+      updated[pendingIdx] = message;
+      _messagesByConversation[conversationId] = updated;
+      _refreshConversationOnMessage(conversationId, message);
+      notifyListeners();
+      return;
+    }
+
+    // Standard deduplication by server-assigned id.
     final existingIndex = list.indexWhere((m) => m.id == message.id);
     if (existingIndex >= 0) {
       final updated = [...list];
@@ -323,11 +349,8 @@ class ChatProvider with ChangeNotifier {
   }) async {
     // 1. Immediately show a pending bubble so the UX feels instant.
     final pendingId = _uuid.v4();
-    final currentConv = _conversations.firstWhere(
-      (c) => c.id == conversationId,
-      orElse: () => _conversations.first,
-    );
-    final meSender = currentConv.participants
+    final currentConv = _conversations.where((c) => c.id == conversationId).firstOrNull;
+    final meSender = currentConv?.participants
         .where((p) => p.userId == _currentUserId)
         .map((p) => ChatMessageSender(
               id: p.userId,
@@ -370,9 +393,15 @@ class ChatProvider with ChangeNotifier {
       if (pendingIdx >= 0) {
         final updated = List<ChatMessageModel>.from(list);
         updated[pendingIdx] = confirmed;
-        _messagesByConversation[conversationId] = updated;
+        // Deduplicate: the WebSocket may have already inserted the confirmed
+        // message before this REST response arrived, creating two entries
+        // with the same server-assigned id. Keep only the first occurrence
+        // (newest-first ordering) to prevent GlobalKey conflicts in the UI.
+        final seen = <String>{};
+        _messagesByConversation[conversationId] =
+            updated.where((m) => seen.add(m.id)).toList();
       } else {
-        // Fallback: WS may have already inserted the confirmed message;
+        // Fallback: WS already inserted the confirmed message;
         // deduplicate via _onMessageNew.
         _onMessageNew(conversationId, confirmed);
         return true;
@@ -604,5 +633,20 @@ class ChatProvider with ChangeNotifier {
   void clearError() {
     _error = null;
     notifyListeners();
+  }
+
+  // These thin wrappers expose private handlers to unit tests without leaking
+  // them in the public provider API.
+
+  @visibleForTesting
+  void handleConversationReadForTest(
+      String conversationId, String userId, String lastReadAt) {
+    _onConversationRead(conversationId, userId, lastReadAt);
+  }
+
+  @visibleForTesting
+  void handlePresenceUpdateForTest(
+      String userId, String status, String lastSeen) {
+    _onPresenceUpdate(userId, status, lastSeen);
   }
 }

@@ -24,6 +24,16 @@ class GroupSettingsScreen extends StatefulWidget {
 class _GroupSettingsScreenState extends State<GroupSettingsScreen> {
   bool _uploadingAvatar = false;
 
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted) return;
+      final chat = context.read<ChatProvider>();
+      await chat.ensureConversationLoaded(widget.conversationId);
+    });
+  }
+
   ChatConversationSummary? _currentConversation(ChatProvider chat) {
     for (final c in chat.conversations) {
       if (c.id == widget.conversationId) return c;
@@ -294,6 +304,7 @@ class _GroupSettingsScreenState extends State<GroupSettingsScreen> {
             const SizedBox(height: 24),
             Center(
               child: Stack(
+                clipBehavior: Clip.none,
                 children: [
                   CircleAvatar(
                     radius: 60,
@@ -440,10 +451,12 @@ class _GroupSettingsScreenState extends State<GroupSettingsScreen> {
                     isMe ? 'You' : pDisplayName,
                     style: const TextStyle(fontWeight: FontWeight.w600),
                   ),
-                  subtitle: Text(
-                    '@${participant.username}',
-                    style: Theme.of(context).textTheme.bodySmall,
-                  ),
+                  subtitle: participant.username != null
+                      ? Text(
+                          '@${participant.username}',
+                          style: Theme.of(context).textTheme.bodySmall,
+                        )
+                      : null,
                   trailing: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
