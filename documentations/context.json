@@ -4,8 +4,9 @@
         "workspacePath": "/Users/rajbagaria/Desktop/Bolt-Travello/Flut/project",
         "generatedAt": "2026-06-13",
         "description": "Travel-focused social platform where users create trips, post thread entries (text/media/location/check-ins), and generate/publish final trip posts.",
-        "lastPRReviewed": "PR #44 — Full stack Dockerization: PostgreSQL (dev/test), Next.js API server, and background scheduler containerized under a single compose network; documentation updated in DOCKER_SETUP.md and QUICKSTART.md.",
+        "lastPRReviewed": "PR #48 — Realtime Chat Messaging System: Trip-scoped, 1:1, and group conversations, message editing and soft deletion, participant management, Cloudinary attachments, active typing indicators, and complete Flutter integration.",
         "recentProductionPRs": [
+            "https://github.com/bagariaraj23/Trav-Flut/pull/48",
             "https://github.com/bagariaraj23/Trav-Flut/pull/44",
             "https://github.com/bagariaraj23/Trav-Flut/pull/47",
             "https://github.com/bagariaraj23/Trav-Flut/pull/46",
@@ -26,6 +27,7 @@
             "auth": "JWT access + refresh tokens; login supports email OR username",
             "cache": "Two-tier cache (in-memory + Upstash Redis)",
             "media": "Cloudinary signed direct upload flow",
+            "realtime": "WebSocket Server (ws on custom server.cjs) + in-process shared event bus",
             "retry": "Exponential backoff utility (src/lib/retry.ts) for Cloudinary + Mapbox calls",
             "monitoring": "PerformanceMonitor timer instrumentation + ErrorTracker on all API endpoints"
         },
@@ -36,7 +38,8 @@
             "network": "Dio with token refresh interceptors + retry with exponential backoff",
             "svgRendering": "flutter_svg for branded TripThread logo assets",
             "secureStorage": "flutter_secure_storage",
-            "mapping": "Mapbox (mapbox_maps_flutter) + geolocator/geocoding"
+            "mapping": "Mapbox (mapbox_maps_flutter) + geolocator/geocoding",
+            "chat": "WebSocketChannel real-time sync with ChatSocketService + ChatProvider provider"
         },
         "scheduler": {
             "type": "Independent cron-executable Node.js TypeScript service",
@@ -49,7 +52,7 @@
             "containers": [
                 "postgres-dev (development database on port 5432)",
                 "postgres-test (test database on port 5433)",
-                "backend (Next.js server on port 3000)",
+                "backend (Next.js server + WebSockets on port 3000)",
                 "scheduler (standalone scheduler looping hourly)"
             ],
             "entrypoint": "scripts/docker-entrypoint.sh resolves DB readiness, runs migrations, starts Next.js",
@@ -79,7 +82,10 @@
             "PasswordReset",
             "JWTRefreshToken",
             "OAuthAccount",
-            "SecurityEvent"
+            "SecurityEvent",
+            "Conversation",
+            "ConversationParticipant",
+            "ChatMessage"
         ],
         "importantEnums": [
             "TripStatus",
@@ -89,7 +95,9 @@
             "EntityType",
             "NotificationType",
             "PlaceType",
-            "PlaceSource"
+            "PlaceSource",
+            "ConversationType",
+            "ConversationParticipantRole"
         ],
         "notableSchemaTraits": [
             "Trip has status lifecycle: UPCOMING -> ONGOING -> ENDED",
@@ -98,7 +106,9 @@
             "Place model supports external IDs and coordinate index",
             "Soft-delete style fields exist on User (deletedAt/deleteMeta)",
             "Media model supports Cloudinary integration with quota tracking",
-            "Notification model supports unified notifications (likes, comments, follows, mentions)"
+            "Notification model supports unified notifications (likes, comments, follows, mentions)",
+            "Conversation model supports DM, GROUP, and TRIP type rooms with dynamic participants and leftAt validation",
+            "ChatMessage model supports content, soft deletion with deletedAt, and message replyTo hierarchy"
         ]
     },
     "backendApi": {
@@ -113,7 +123,8 @@
             "feed/discover",
             "follow",
             "likes/comments/shares (POST /shares shareSource: SYSTEM_SHEET default, no shareCount bump; IN_APP_DM bumps for future DM)",
-            "notifications"
+            "notifications",
+            "chat (real-time WebSockets on /chat + REST endpoints under /api/chat)"
         ],
         "keyTripFlow": {
             "createTrip": "POST /trips",
@@ -228,6 +239,55 @@
                 "path": "/comments/entity/[entityType]/[entityId]",
                 "methods": [
                     "GET"
+                ]
+            },
+            {
+                "path": "/chat/conversations",
+                "methods": [
+                    "GET",
+                    "POST"
+                ]
+            },
+            {
+                "path": "/chat/conversations/[id]",
+                "methods": [
+                    "GET",
+                    "PATCH"
+                ]
+            },
+            {
+                "path": "/chat/conversations/[id]/messages",
+                "methods": [
+                    "GET",
+                    "POST",
+                    "DELETE",
+                    "PATCH"
+                ]
+            },
+            {
+                "path": "/chat/conversations/[id]/messages/[messageId]",
+                "methods": [
+                    "PATCH",
+                    "DELETE"
+                ]
+            },
+            {
+                "path": "/chat/conversations/[id]/participants",
+                "methods": [
+                    "POST"
+                ]
+            },
+            {
+                "path": "/chat/conversations/[id]/participants/[userId]",
+                "methods": [
+                    "DELETE",
+                    "PATCH"
+                ]
+            },
+            {
+                "path": "/chat/conversations/[id]/read",
+                "methods": [
+                    "PATCH"
                 ]
             },
             {
@@ -600,9 +660,12 @@
             "src/lib/place.ts",
             "src/lib/cloudinary.ts",
             "src/lib/mapProviders/mapbox.ts",
-            "src/lib/prisma.ts"
+            "src/lib/prisma.ts",
+            "src/lib/chat-events.ts",
+            "src/lib/chat-ws.ts"
         ],
         "services": [
+            "src/lib/services/chat.ts",
             "src/lib/services/comment.ts",
             "src/lib/services/email.ts",
             "src/lib/services/engagement-utils.ts",
@@ -624,7 +687,9 @@
             "Comment/Like services create notification records asynchronously (COMMENT_LIKE for comment likes)",
             "Notification service merges follow requests with engagement notifications using opaque cursor pagination",
             "withAuth invalidates tokens issued before user.updatedAt",
-            "Rate limits support fixed-window and sliding-window logic (fixed window currently used)"
+            "Rate limits support fixed-window and sliding-window logic (fixed window currently used)",
+            "Real-time Chat: uses global.chatEventBus in server.cjs to bridge REST message actions with WebSocket clients",
+            "Typing indicators are broadcast in-process to other participants via WebSocket Server"
         ]
     },
     "externalIntegrations": {
@@ -699,9 +764,9 @@
     },
     "mobileApp": {
         "entrypoint": "mobile/lib/main.dart",
-        "screenCount": 26,
-        "providerCount": 9,
-        "serviceCount": 12,
+        "screenCount": 30,
+        "providerCount": 10,
+        "serviceCount": 13,
         "screens": [
             "screens/auth/complete_profile_screen.dart",
             "screens/auth/forgot_password_screen.dart",
@@ -710,6 +775,10 @@
             "screens/auth/reset_password_success_screen.dart",
             "screens/auth/reset_success_screen.dart",
             "screens/auth/signup_screen.dart",
+            "screens/chat/chat_screen.dart",
+            "screens/chat/conversation_list_screen.dart",
+            "screens/chat/group_settings_screen.dart",
+            "screens/chat/new_conversation_screen.dart",
             "screens/discover/discover_tab.dart",
             "screens/engagement/comments_screen.dart",
             "screens/engagement/liked_by_screen.dart",
@@ -733,6 +802,7 @@
         ],
         "providers": [
             "providers/auth_provider.dart",
+            "providers/chat_provider.dart",
             "providers/comment_provider.dart",
             "providers/engagement_provider.dart",
             "providers/feed_provider.dart",
@@ -744,6 +814,7 @@
         ],
         "services": [
             "services/api_service.dart",
+            "services/chat_socket_service.dart",
             "services/comment_service.dart",
             "services/connectivity_service.dart",
             "services/deep_link_service.dart",
@@ -765,6 +836,12 @@
                 "/trip/:tripId/map",
                 "/trip/:tripId/participants",
                 "/trip/:tripId/final-post"
+            ],
+            "chatRoutes": [
+                "/chat",
+                "/chat/new",
+                "/chat/:conversationId",
+                "/chat/:conversationId/settings"
             ],
             "deepLinkRoutes": [
                 "/share/:shareToken → ShareLinkScreen (resolves token → /post/TRIP_FINAL_POST/:id)",
@@ -889,7 +966,8 @@
             "unit": [
                 "tests/unit/auth.unit.test.ts",
                 "tests/unit/validation-flows.unit.test.ts",
-                "tests/unit/cache.unit.test.ts"
+                "tests/unit/cache.unit.test.ts",
+                "tests/unit/chat.unit.test.ts"
             ],
             "integration": [
                 "tests/integration/auth-flow.integration.test.ts",
@@ -903,7 +981,9 @@
                 "tests/integration/tripInvitation.integration.test.ts",
                 "tests/integration/followRequests.integration.test.ts",
                 "tests/integration/concurrency.tripInvite.test.ts",
-                "tests/integration/stress.concurrent.test.ts"
+                "tests/integration/stress.concurrent.test.ts",
+                "tests/integration/chat.integration.test.ts",
+                "tests/integration/chat-routes.integration.test.ts"
             ],
             "routeContract": [
                 "src/app/test/api-route-contract.test.ts"
@@ -915,9 +995,10 @@
             ]
         },
         "mobileSuites": {
-            "testFileCount": 16,
+            "testFileCount": 18,
             "notablePaths": [
-                "mobile/test/providers/trip_provider_test.dart",
+                "mobile/test/providers/chat_provider_test.dart",
+                "mobile/test/widgets/chat_avatar_test.dart",
                 "mobile/test/providers/engagement_provider_test.dart",
                 "mobile/test/providers/comment_provider_test.dart",
                 "mobile/test/widgets/like_button_test.dart",
@@ -930,8 +1011,8 @@
             "nodeVersion": "20.19.4",
             "testDatabase": "tripthread_test",
             "results": {
-                "testFiles": 19,
-                "testsPassed": 97,
+                "testFiles": 22,
+                "testsPassed": 127,
                 "testsFailed": 0
             },
             "reportPath": "coverage/",
@@ -1515,6 +1596,18 @@
     "prTracking": {
         "merged": [
             {
+                "number": 48,
+                "title": "Realtime Chat Messaging System",
+                "merged_at": "2026-06-13",
+                "url": "https://github.com/bagariaraj23/Trav-Flut/pull/48",
+                "keyFeatures": [
+                    "Backend: models/schema for Conversations, ConversationParticipants, and ChatMessages; WebSocket ws server integration inside custom server.cjs wrapper; in-process event bus for real-time delivery and active typing indicators.",
+                    "APIs: REST endpoints for listing, creating conversations, sending, editing, soft deleting messages, read receipts, and promoting/removing participants.",
+                    "Mobile: GoRouter configuration for chat routes; ConversationListScreen, ChatScreen, GroupSettingsScreen, and NewConversationScreen; ChatSocketService and ChatProvider integration.",
+                    "Tests: unit/integration test suites for message handling, participant roles, and socket communication."
+                ]
+            },
+            {
                 "number": 47,
                 "title": "update test package to fix deployment",
                 "merged_at": "2026-06-13",
@@ -1998,12 +2091,12 @@
         ]
     },
     "implementationStatus": {
-        "overallCompletion": "92%",
-        "completedFeatures": 61,
+        "overallCompletion": "95%",
+        "completedFeatures": 62,
         "inProgressFeatures": 1,
         "plannedFeatures": 3,
-        "totalPRs": 47,
-        "mergedPRs": 43,
+        "totalPRs": 48,
+        "mergedPRs": 44,
         "openPRs": 3,
         "raceConditionFixes": {
             "total": 17,
@@ -2017,9 +2110,9 @@
             ]
         },
         "testingCoverage": {
-            "backend": "Good — 97 Vitest tests passing (19 files); v8 coverage 51% statements / 52% lines overall",
-            "mobile": "Partial — 16 Flutter test files; engagement widgets/providers covered; trip leave provider added in PR #45",
-            "integration": "Good — auth, trips, thread, leave, engagement, notifications, invites, concurrency",
+            "backend": "Good — 127 Vitest tests passing (22 files); v8 coverage 51% statements / 52% lines overall",
+            "mobile": "Partial — 18 Flutter test files (incl. chat provider + ChatAvatar widget); engagement widgets/providers covered",
+            "integration": "Good — auth, trips, thread, leave, engagement, notifications, invites, concurrency, chat",
             "scheduler": "Partial — behavioral unit tests; DB integration tests exist but scheduler source still low line coverage",
             "reportPath": "coverage/index.html",
             "lastRun": "2026-06-13",

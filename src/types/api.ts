@@ -187,7 +187,7 @@ export interface TripFinalPostResponse {
 export interface MediaResponse {
   id: string;
   url: string;
-  type: "IMAGE" | "VIDEO";
+  type: "IMAGE" | "VIDEO" | "AUDIO" | "GIF";
   filename?: string | null;
   size?: number | null;
   uploadedById: string;

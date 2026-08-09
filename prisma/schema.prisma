@@ -41,6 +41,8 @@ model User {
   shares                   Share[]           @relation("UserShares")
   sentNotifications        Notification[]    @relation("NotificationActor")
   receivedNotifications    Notification[]    @relation("NotificationRecipient")
+  conversationParticipants ConversationParticipant[]
+  sentChatMessages         ChatMessage[]     @relation("ChatMessageSender")
 
   @@map("users")
 }
@@ -195,7 +197,8 @@ model Trip {
   endLocationId   String?
   endLocation     Place?  @relation("TripEndLocation", fields: [endLocationId], references: [id])
 
-  placeVisits PlaceOnTrip[]
+  placeVisits   PlaceOnTrip[]
+  conversation  Conversation?  @relation("TripConversation")
 
   // Optional precomputed map center/bounds (can be derived server-side)
   centerLat  Float?
@@ -367,14 +370,86 @@ model Media {
   processingStatus MediaProcessingStatus @default(COMPLETED)
   uploadedById     String
   tripId           String?
+  chatMessageId    String?
   createdAt        DateTime              @default(now())
 
   uploadedBy    User              @relation(fields: [uploadedById], references: [id], onDelete: Cascade)
   trip          Trip?             @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  chatMessage   ChatMessage?      @relation(fields: [chatMessageId], references: [id], onDelete: SetNull)
   threadEntries TripThreadEntry[]
   tripCover     Trip[]            @relation("TripCoverMedia")
 
+  @@index([chatMessageId])
   @@map("media")
+}
+
+// ---- Chat ----
+enum ConversationType {
+  DM
+  GROUP
+  TRIP
+}
+
+enum ConversationParticipantRole {
+  MEMBER
+  ADMIN
+}
+
+model Conversation {
+  id        String             @id @default(uuid())
+  type      ConversationType
+  tripId    String?            @unique
+  name      String?
+  avatarUrl String?
+  createdAt DateTime           @default(now())
+  updatedAt DateTime           @updatedAt
+
+  trip         Trip?                    @relation("TripConversation", fields: [tripId], references: [id], onDelete: Cascade)
+  participants ConversationParticipant[]
+  messages     ChatMessage[]
+
+  @@index([tripId])
+  @@index([type])
+  @@map("conversations")
+}
+
+model ConversationParticipant {
+  id             String                    @id @default(uuid())
+  conversationId String
+  userId         String
+  role           ConversationParticipantRole @default(MEMBER)
+  joinedAt       DateTime                 @default(now())
+  lastReadAt     DateTime?
+  leftAt        DateTime?
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([conversationId, userId])
+  @@index([userId])
+  @@index([userId, lastReadAt])
+  @@map("conversation_participants")
+}
+
+model ChatMessage {
+  id               String    @id @default(uuid())
+  conversationId   String
+  senderId         String
+  content          String    @db.Text
+  replyToMessageId String?
+  deletedAt        DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  conversation   Conversation  @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  sender         User          @relation("ChatMessageSender", fields: [senderId], references: [id], onDelete: Cascade)
+  replyTo        ChatMessage?  @relation("ChatMessageReplies", fields: [replyToMessageId], references: [id], onDelete: SetNull)
+  replies        ChatMessage[] @relation("ChatMessageReplies")
+  attachments    Media[]
+
+  @@index([conversationId, createdAt(sort: Desc)])
+  @@index([senderId])
+  @@map("chat_messages")
 }
 
 enum MediaProcessingStatus {
@@ -443,6 +518,8 @@ enum ThreadEntryType {
 enum MediaType {
   IMAGE
   VIDEO
+  AUDIO
+  GIF
 }
 
 enum TripJoinRequestStatus {

@@ -58,6 +58,7 @@ dependencies:
   # Connectivity
   connectivity_plus: ^7.0.0
   jwt_decoder: ^2.0.1
+  web_socket_channel: ^3.0.1
 
   # Deep Links
   app_links: ^7.0.0
@@ -71,6 +72,7 @@ dependencies:
   google_sign_in: ^6.2.2
   http_parser: ^4.1.2 
   crypto: ^3.0.7
+  uuid: ^4.5.1
 
 dev_dependencies:
   flutter_test:

@@ -37,6 +37,8 @@ const CLOUDINARY_UPLOAD_FOLDER =
 const ALLOWED_FORMATS_BY_RESOURCE_TYPE: Record<string, string[]> = {
   image: ["jpeg", "jpg", "png", "gif"],
   video: ["mp4", "mov", "avi"],
+  raw: ["mp3", "wav", "m4a", "ogg", "aac"],
+  auto: ["jpg", "jpeg", "png", "gif", "mp4", "mov", "avi", "mp3", "wav", "m4a"],
 };
 
 const USER_STORAGE_QUOTA_BYTES =
@@ -93,7 +95,8 @@ export type MediaUploadUsage =
   | "trip_cover"
   | "thread_entry"
   | "general"
-  | "chat";
+  | "chat"
+  | "group_avatar";
 
 interface UploadSignatureArgs {
   filename: string;
@@ -115,6 +118,7 @@ interface ConfirmUploadArgs {
   height?: number;
   duration?: number;
   tripId?: string;
+  chatMessageId?: string;
   usage?: MediaUploadUsage;
 }
 
@@ -240,13 +244,23 @@ export class CloudinaryService {
     }
 
     const resourceTypeKey = data.resource_type.toLowerCase();
-    const formatLower = data.format.toLowerCase();
     const allowedFormats = ALLOWED_FORMATS_BY_RESOURCE_TYPE[resourceTypeKey];
 
-    if (!allowedFormats || !allowedFormats.includes(formatLower)) {
+    const formatForCheck = data.format?.toLowerCase() ?? "";
+    if (!allowedFormats || !allowedFormats.includes(formatForCheck)) {
       throw new ValidationError(
-        `Unsupported media format: ${resourceTypeKey}/${formatLower}`
+        `Unsupported media format: ${resourceTypeKey}/${formatForCheck}`
       );
+    }
+
+    const resourceUpper = data.resource_type.toUpperCase();
+    let mediaType: MediaType;
+    if (resourceUpper === "VIDEO") mediaType = MediaType.VIDEO;
+    else if (resourceUpper === "RAW" || resourceUpper === "AUDIO") mediaType = MediaType.AUDIO;
+    else if (formatForCheck === "gif" || resourceUpper === "IMAGE") {
+      mediaType = formatForCheck === "gif" ? MediaType.GIF : MediaType.IMAGE;
+    } else {
+      mediaType = MediaType.IMAGE;
     }
 
     const mimeOverrides: Record<string, string> = {
@@ -259,12 +273,7 @@ export class CloudinaryService {
       avi: "video/avi",
     };
 
-    const expectedMime = mimeOverrides[formatLower] ?? mimeType.toLowerCase();
-
-    const mediaType =
-      data.resource_type.toUpperCase() === "VIDEO"
-        ? MediaType.VIDEO
-        : MediaType.IMAGE;
+    const expectedMime = mimeOverrides[formatForCheck] ?? mimeType.toLowerCase();
 
     // Verify reported mime type using magic number
     let verificationPassed = false;
@@ -345,6 +354,31 @@ export class CloudinaryService {
       }
     }
 
+    if (data.chatMessageId) {
+      const msg = await prisma.chatMessage.findUnique({
+        where: { id: data.chatMessageId },
+        select: {
+          id: true,
+          conversation: {
+            select: {
+              participants: {
+                where: { userId },
+                select: { userId: true },
+              },
+            },
+          },
+        },
+      });
+      if (
+        !msg ||
+        !msg.conversation.participants.some((p) => p.userId === userId)
+      ) {
+        throw new ValidationError(
+          "Chat message not found or you are not a participant"
+        );
+      }
+    }
+
     const media = await prisma.media.create({
       data: {
         url: data.secure_url,
@@ -358,6 +392,7 @@ export class CloudinaryService {
         processingStatus: "COMPLETED",
         uploadedById: userId,
         tripId: data.tripId ?? null,
+        chatMessageId: data.chatMessageId ?? null,
       } as any,
     });
 

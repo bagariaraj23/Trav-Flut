@@ -10,6 +10,7 @@ const mediaUsageEnum = z.enum([
   "thread_entry",
   "general",
   "chat",
+  "group_avatar",
 ]);
 
 const confirmSchema = z.object({
@@ -24,6 +25,7 @@ const confirmSchema = z.object({
   height: z.number().positive().optional(),
   duration: z.number().positive().optional(),
   tripId: z.string().uuid().optional(),
+  chatMessageId: z.string().uuid().optional(),
   usage: mediaUsageEnum.default("general"),
 });
 
@@ -31,7 +33,7 @@ async function handler(request: AuthenticatedRequest) {
   try {
     const body = await request.json();
 
-    const { tripId, usage, ...cloudinaryPayload } = confirmSchema.parse(body);
+    const { tripId, chatMessageId, usage, ...cloudinaryPayload } = confirmSchema.parse(body);
 
     if (tripId) {
       const trip = await prisma.trip.findFirst({
@@ -58,6 +60,7 @@ async function handler(request: AuthenticatedRequest) {
       {
         ...cloudinaryPayload,
         tripId,
+        chatMessageId,
         usage,
       },
       request.user!.userId

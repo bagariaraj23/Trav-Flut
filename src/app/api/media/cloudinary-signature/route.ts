@@ -10,6 +10,7 @@ const mediaUsageEnum = z.enum([
   "thread_entry",
   "general",
   "chat",
+  "group_avatar",
 ]);
 
 const signatureSchema = z.object({

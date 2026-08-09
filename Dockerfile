@@ -22,7 +22,7 @@ RUN npx prisma generate
 ENV DATABASE_URL="postgresql://postgres:postgres@localhost:5432/placeholder"
 ENV JWT_SECRET="placeholder"
 ENV MAPBOX_ACCESS_TOKEN="placeholder"
-RUN npm run build
+RUN npm run build && node scripts/build-server.mjs
 
 # Make docker-entrypoint executable
 RUN chmod +x ./scripts/docker-entrypoint.sh
