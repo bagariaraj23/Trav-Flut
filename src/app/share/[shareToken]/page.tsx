@@ -6,7 +6,7 @@ import { useParams } from "next/navigation";
 /**
  * Public landing page for shared links (https://…/share/{token}).
  * Attempts to open the native app via custom URL schemes; falls back to manual “Open in app” links.
- * Configure Universal Links / App Links on this host for one-tap opens when the app is installed.
+ * Configure Universal Links / App Links on this host (see public/.well-known/) for one-tap opens when installed.
  */
 export default function ShareBridgePage() {
   const params = useParams();
@@ -39,14 +39,25 @@ export default function ShareBridgePage() {
   return (
     <main style={{ padding: 24, maxWidth: 480, fontFamily: "system-ui, sans-serif" }}>
       <h1 style={{ fontSize: "1.25rem" }}>TripThread</h1>
-      <p>Opening the app…</p>
+      <p>Opening the TripThread app…</p>
       {showFallback && (
         <div style={{ marginTop: 24 }}>
           <p style={{ color: "#555" }}>
-            If nothing happened, open the link in the TripThread app:
+            If the app did not open, tap below. Install TripThread if you do not have it yet.
           </p>
-          <p style={{ marginTop: 12 }}>
-            <a href={`tripthread://share/${encoded}`} style={{ color: "#1565c0" }}>
+          <p style={{ marginTop: 16 }}>
+            <a
+              href={`tripthread://share/${encoded}`}
+              style={{
+                display: "inline-block",
+                padding: "12px 16px",
+                background: "#1565c0",
+                color: "#fff",
+                textDecoration: "none",
+                borderRadius: 8,
+                fontWeight: 600,
+              }}
+            >
               Open in TripThread
             </a>
           </p>

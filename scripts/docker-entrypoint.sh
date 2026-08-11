@@ -19,10 +19,15 @@ else
   echo "WARNING: DATABASE_URL is not set. Skipping database readiness check."
 fi
 
-# Apply migrations / push schema
+# Apply schema (safe default). Destructive reset only when explicitly opted in.
 echo "Applying database schema changes..."
-npx prisma db push --accept-data-loss
+if [ "${ALLOW_DATA_LOSS:-0}" = "1" ]; then
+  echo "WARNING: ALLOW_DATA_LOSS=1 — running prisma db push --accept-data-loss"
+  npx prisma db push --accept-data-loss
+else
+  npx prisma db push
+fi
 
 # Execute the CMD (passed to docker run / compose)
-echo "Starting Next.js application..."
+echo "Starting Next.js application (server.cjs: REST + WebSocket /chat)..."
 exec "$@"

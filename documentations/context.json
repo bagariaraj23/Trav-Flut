@@ -2,15 +2,15 @@
     "project": {
         "name": "TripThread",
         "workspacePath": "/Users/rajbagaria/Desktop/Bolt-Travello/Flut/project",
-        "generatedAt": "2026-06-13",
-        "description": "Travel-focused social platform where users create trips, post thread entries (text/media/location/check-ins), and generate/publish final trip posts.",
-        "lastPRReviewed": "PR #48 — Realtime Chat Messaging System: Trip-scoped, 1:1, and group conversations, message editing and soft deletion, participant management, Cloudinary attachments, active typing indicators, and complete Flutter integration.",
+        "generatedAt": "2026-08-11",
+        "description": "Travel-focused social platform where users create trips, post thread entries (text/media/location/check-ins), generate/publish final trip posts, and chat via 1:1 DMs, groups, and trip-scoped rooms (realtime WebSocket).",
+        "lastPRReviewed": "In progress: fix/share-links-docker-followups \u2014 share deep-link fixes + Docker WS/docs follow-ups (after PR #48 DM merge).",
         "recentProductionPRs": [
             "https://github.com/bagariaraj23/Trav-Flut/pull/48",
-            "https://github.com/bagariaraj23/Trav-Flut/pull/44",
             "https://github.com/bagariaraj23/Trav-Flut/pull/47",
             "https://github.com/bagariaraj23/Trav-Flut/pull/46",
             "https://github.com/bagariaraj23/Trav-Flut/pull/45",
+            "https://github.com/bagariaraj23/Trav-Flut/pull/44",
             "https://github.com/bagariaraj23/Trav-Flut/pull/43",
             "https://github.com/bagariaraj23/Trav-Flut/pull/42",
             "https://github.com/bagariaraj23/Trav-Flut/pull/41",
@@ -48,15 +48,28 @@
             "redisDependency": "None"
         },
         "dockerization": {
-            "type": "Full-stack containerized local environments via Docker Compose",
+            "type": "Full-stack containerized local environments via Docker Compose (PR #44)",
+            "status": "Merged; DM/chat covered for single-node local stack",
+            "pr": 44,
+            "url": "https://github.com/bagariaraj23/Trav-Flut/pull/44",
             "containers": [
                 "postgres-dev (development database on port 5432)",
                 "postgres-test (test database on port 5433)",
-                "backend (Next.js server + WebSockets on port 3000)",
+                "backend (server.cjs: Next.js REST + WebSocket /chat on port 3000)",
                 "scheduler (standalone scheduler looping hourly)"
             ],
-            "entrypoint": "scripts/docker-entrypoint.sh resolves DB readiness, runs migrations, starts Next.js",
-            "hybridMode": "docker-compose.dev.yml launches only Postgres containers for host-based Next.js development"
+            "entrypoint": "scripts/docker-entrypoint.sh waits for DB, runs `prisma db push --accept-data-loss` (local only \u2014 do NOT use accept-data-loss on Neon prod), then starts CMD",
+            "hybridMode": "docker-compose.dev.yml launches only Postgres containers for host-based Next.js development",
+            "chatCoverage": {
+                "dockerfileBuild": "npm run build && node scripts/build-server.mjs \u2192 dist/chat-ws.cjs",
+                "composeStart": "npm run start \u2192 server.cjs with /chat upgrade",
+                "gaps": [
+                    "DOCKER_SETUP.md should document WebSocket /chat and that next:dev/start:next are WS-less",
+                    "Multi-replica chat needs Redis Pub/Sub (Upstash REST cannot Pub/Sub); keep replicas=1",
+                    "Compose does not set SHARE_LINK_BASE_URL",
+                    "No WebSocket healthcheck in compose"
+                ]
+            }
         }
     },
     "database": {
@@ -122,14 +135,14 @@
             "media",
             "feed/discover",
             "follow",
-            "likes/comments/shares (POST /shares shareSource: SYSTEM_SHEET default, no shareCount bump; IN_APP_DM bumps for future DM)",
+            "likes/comments/shares (POST /shares shareSource: SYSTEM_SHEET default, no shareCount bump; IN_APP_DM increments \u2014 wire from chat share UI; Universal Links still ops-only)",
             "notifications",
-            "chat (real-time WebSockets on /chat + REST endpoints under /api/chat)"
+            "chat (merged PR #48: REST /api/chat + WS /chat on server.cjs; DM/GROUP/TRIP; single-node event bus; rate-limit + Redis Pub/Sub + offline push deferred)"
         ],
         "keyTripFlow": {
             "createTrip": "POST /trips",
             "threadEntries": "POST /trips/[id]/entries; GET cursor-paginated page { items, hasMoreOlder, nextOlderCursor } (limit default 30); GET /trips/[id]/entries/[entryId]/context returns a centered window around the target entry for deep-link jumps; DELETE/PATCH /trips/[id]/entries/[entryId] (PATCH: author text edit within 15m, owner may moderate later); shared purge in threadEntryPurge.ts",
-            "participantLeave": "POST /trips/[id]/leave { removeMyData: boolean } — non-owner participant leaves; optional purge of author's entries (ONGOING only) now uses bulk cleanup path for scalability",
+            "participantLeave": "POST /trips/[id]/leave { removeMyData: boolean } \u2014 non-owner participant leaves; optional purge of author's entries (ONGOING only) now uses bulk cleanup path for scalability",
             "endTripAndGenerateFinalPost": "POST /trips/[id]/end (transactionally marks ENDED + generates final post)",
             "finalPostDraftEdit": "GET/PUT/DELETE /trips/[id]/final-post (DELETE owner-only; removes post + engagement)",
             "publishFinalPost": "POST /trips/[id]/publish",
@@ -844,7 +857,7 @@
                 "/chat/:conversationId/settings"
             ],
             "deepLinkRoutes": [
-                "/share/:shareToken → ShareLinkScreen (resolves token → /post/TRIP_FINAL_POST/:id)",
+                "/share/:shareToken \u2192 ShareLinkScreen (resolves token \u2192 /post/TRIP_FINAL_POST/:id)",
                 "tripthread://share/{token} | https://{SHARE_LINK_HOST}/share/{token}"
             ]
         }
@@ -1028,7 +1041,7 @@
                 "linesFraction": "1608/3100"
             },
             "highCoverageAreas": [
-                "src/lib/services (comment, like, notification, share) ~75–88%",
+                "src/lib/services (comment, like, notification, share) ~75\u201388%",
                 "src/lib/validation.ts ~80%",
                 "tests/integration helpers ~92%",
                 "src/lib/auth/permissions.ts ~60%"
@@ -1050,7 +1063,27 @@
             "npm run test:coverage",
             "npm run test:scheduler",
             "cd mobile && flutter test test/providers/trip_provider_test.dart"
-        ]
+        ],
+        "coverageGapsAfterPr45And48": [
+            "Google OAuth / link-Google flows",
+            "Forgot/reset password + logout-all invariants",
+            "Places/Mapbox search/cache/error paths",
+            "Media Cloudinary signature/confirm/delete/quota races",
+            "Final-post end-trip race/idempotency + publish validation",
+            "Share bridge + deep-link / Universal Links contract tests",
+            "Broader Flutter providers (auth/feed/final-post) and screen smoke"
+        ],
+        "chatCoverage": {
+            "backend": [
+                "tests/unit/chat.unit.test.ts",
+                "tests/integration/chat.integration.test.ts",
+                "tests/integration/chat-routes.integration.test.ts"
+            ],
+            "mobile": [
+                "mobile/test/providers/chat_provider_test.dart",
+                "mobile/test/widgets/chat_avatar_test.dart"
+            ]
+        }
     },
     "knownContextFromProductBrief": {
         "idea": "Trip-specific social platform for documenting ongoing journey moments and auto-generating final shareable content at trip end.",
@@ -1598,13 +1631,21 @@
             {
                 "number": 48,
                 "title": "Realtime Chat Messaging System",
-                "merged_at": "2026-06-13",
+                "merged_at": "2026-08-09",
                 "url": "https://github.com/bagariaraj23/Trav-Flut/pull/48",
                 "keyFeatures": [
                     "Backend: models/schema for Conversations, ConversationParticipants, and ChatMessages; WebSocket ws server integration inside custom server.cjs wrapper; in-process event bus for real-time delivery and active typing indicators.",
                     "APIs: REST endpoints for listing, creating conversations, sending, editing, soft deleting messages, read receipts, and promoting/removing participants.",
                     "Mobile: GoRouter configuration for chat routes; ConversationListScreen, ChatScreen, GroupSettingsScreen, and NewConversationScreen; ChatSocketService and ChatProvider integration.",
-                    "Tests: unit/integration test suites for message handling, participant roles, and socket communication."
+                    "Tests: unit/integration test suites for message handling, participant roles, and socket communication.",
+                    "Production: custom server.cjs hosts REST + WS /chat; Flutter AppConfig derives wss from API_BASE_URL"
+                ],
+                "state": "merged",
+                "productionNotes": [
+                    "Railway Build/Start updated for server.cjs + prebuilt dist/chat-ws.cjs",
+                    "Neon migrate deploy required for chat tables",
+                    "Replicas must stay 1 until Redis Pub/Sub",
+                    "Deferred: chat rate limits, JWT-in-query WS auth, offline push, @mention notifications"
                 ]
             },
             {
@@ -1647,8 +1688,26 @@
                 ]
             },
             {
+                "number": 44,
+                "title": "Dockerize application (Compose + Dockerfiles)",
+                "merged_at": "2026-05-15",
+                "url": "https://github.com/bagariaraj23/Trav-Flut/pull/44",
+                "keyFeatures": [
+                    "Root Dockerfile (Node 20) + scheduler/Dockerfile",
+                    "docker-compose.yml: postgres-dev, postgres-test, backend, scheduler",
+                    "docker-compose.dev.yml hybrid Postgres-only mode",
+                    "scripts/docker-entrypoint.sh DB wait + prisma db push; docker-start/stop/reset helpers",
+                    "DOCKER_SETUP.md / QUICKSTART documentation"
+                ],
+                "followUpsAfterPr48": [
+                    "Document WebSocket /chat requirement in DOCKER_SETUP.md",
+                    "Compose already uses npm run start (WS-capable) after feat-dm merge",
+                    "Replace accept-data-loss entrypoint for any non-local use with migrate deploy"
+                ]
+            },
+            {
                 "number": 43,
-                "title": "Prod fixes — discover, thread CRUD/pagination, shares, @all, QA thread UI",
+                "title": "Prod fixes \u2014 discover, thread CRUD/pagination, shares, @all, QA thread UI",
                 "merged_at": "2026-05-15",
                 "url": "https://github.com/bagariaraj23/Trav-Flut/pull/43",
                 "keyFeatures": [
@@ -1659,7 +1718,7 @@
                     "tripTagResolution: @all + trip-member-only TAG notifications on entries and comments",
                     "permissions: trip participants can view/like thread + final post on private trips",
                     "share/like: longer Prisma tx timeouts; SYSTEM_SHEET vs IN_APP_DM shareCount; Redis del non-fatal",
-                    "Final post: DELETE; owner ⋮ Edit/Delete on feed + post detail; feed tap → trip detail",
+                    "Final post: DELETE; owner \u22ee Edit/Delete on feed + post detail; feed tap \u2192 trip detail",
                     "Shares: /share/[token] bridge; tripthread:// + SHARE_LINK_BASE_URL",
                     "Post-testing: per-action invite/follow loaders; tripInvitation private-profile rules; auth_error_messages"
                 ],
@@ -1670,7 +1729,7 @@
             },
             {
                 "number": 42,
-                "title": "Build fixes — Prisma transaction client types",
+                "title": "Build fixes \u2014 Prisma transaction client types",
                 "merged_at": "2026-02-24",
                 "url": "https://github.com/bagariaraj23/Trav-Flut/pull/42",
                 "keyFeatures": [
@@ -1682,7 +1741,7 @@
             },
             {
                 "number": 41,
-                "title": "Prod fixes — trip invitations, FOLLOW notifications, profile UX",
+                "title": "Prod fixes \u2014 trip invitations, FOLLOW notifications, profile UX",
                 "merged_at": "2026-02-24",
                 "url": "https://github.com/bagariaraj23/Trav-Flut/pull/41",
                 "keyFeatures": [
@@ -1694,7 +1753,7 @@
             },
             {
                 "number": 40,
-                "title": "Prod fixes — settings privacy, trip cover, follow-requests back, scheduler",
+                "title": "Prod fixes \u2014 settings privacy, trip cover, follow-requests back, scheduler",
                 "merged_at": "2026-02-23",
                 "url": "https://github.com/bagariaraj23/Trav-Flut/pull/40",
                 "keyFeatures": [
@@ -1706,7 +1765,7 @@
             },
             {
                 "number": 39,
-                "title": "Scheduler fixes — DB connection retry",
+                "title": "Scheduler fixes \u2014 DB connection retry",
                 "merged_at": "2026-02-23",
                 "url": "https://github.com/bagariaraj23/Trav-Flut/pull/39",
                 "keyFeatures": [
@@ -1715,7 +1774,7 @@
             },
             {
                 "number": 37,
-                "title": "Feat notification — unified notifications + thread engagement",
+                "title": "Feat notification \u2014 unified notifications + thread engagement",
                 "merged_at": "2026-02-22",
                 "url": "https://github.com/bagariaraj23/Trav-Flut/pull/37",
                 "keyFeatures": [
@@ -2076,7 +2135,7 @@
                 "created_at": "2026-02-15",
                 "keyFeatures": [
                     "Username login (email or username)",
-                    "Username normalization (Unicode lookalike → ASCII)",
+                    "Username normalization (Unicode lookalike \u2192 ASCII)",
                     "Thread screen auto-open for ongoing trips",
                     "Floating bubble navigation button (draggable, position persists)",
                     "Enhanced logout (per-device and all-device)",
@@ -2091,12 +2150,12 @@
         ]
     },
     "implementationStatus": {
-        "overallCompletion": "95%",
+        "overallCompletion": "96%",
         "completedFeatures": 62,
         "inProgressFeatures": 1,
         "plannedFeatures": 3,
         "totalPRs": 48,
-        "mergedPRs": 44,
+        "mergedPRs": 45,
         "openPRs": 3,
         "raceConditionFixes": {
             "total": 17,
@@ -2110,14 +2169,16 @@
             ]
         },
         "testingCoverage": {
-            "backend": "Good — 127 Vitest tests passing (22 files); v8 coverage 51% statements / 52% lines overall",
-            "mobile": "Partial — 18 Flutter test files (incl. chat provider + ChatAvatar widget); engagement widgets/providers covered",
-            "integration": "Good — auth, trips, thread, leave, engagement, notifications, invites, concurrency, chat",
-            "scheduler": "Partial — behavioral unit tests; DB integration tests exist but scheduler source still low line coverage",
+            "backend": "Good \u2014 127 Vitest tests passing (22 files); v8 coverage 51% statements / 52% lines overall",
+            "mobile": "Partial \u2014 18 Flutter test files (incl. chat provider + ChatAvatar widget); engagement widgets/providers covered",
+            "integration": "Good \u2014 auth, trips, thread, leave, engagement, notifications, invites, concurrency, chat",
+            "scheduler": "Partial \u2014 behavioral unit tests; DB integration tests exist but scheduler source still low line coverage",
             "reportPath": "coverage/index.html",
             "lastRun": "2026-06-13",
-            "notes": "See tests/TESTING.md and context.json testing section for suite inventory; run npm run test:coverage on Node 20+ with tripthread_test DB. Do not add platform-specific Rolldown bindings (e.g. @rolldown/binding-darwin-arm64) to root dependencies — breaks Railway Linux deploys (fixed in PR #47)."
-        }
+            "notes": "See tests/TESTING.md and context.json testing section for suite inventory; run npm run test:coverage on Node 20+ with tripthread_test DB. Do not add platform-specific Rolldown bindings (e.g. @rolldown/binding-darwin-arm64) to root dependencies \u2014 breaks Railway Linux deploys (fixed in PR #47)."
+        },
+        "lastMergedFeature": "PR #48 Realtime Chat / DM (merged main 2026-08-09)",
+        "notes": "DM feature complete for single-node production. Remaining work clustered in nextFeaturePipeline: test expansion, docker docs follow-ups, prod perf/gaps, trip share Universal Links."
     },
     "hotspotsForFurtherDeepDive": [
         "src/app/api/trips/[id]/entries/route.ts",
@@ -2132,6 +2193,181 @@
         "src/lib/prisma.ts",
         "src/lib/services/engagement-utils.ts",
         "src/lib/services/tripTagResolution.ts",
-        "src/lib/auth/permissions.ts"
-    ]
+        "src/lib/auth/permissions.ts",
+        "src/lib/services/chat.ts",
+        "src/lib/chat-ws.ts",
+        "server.cjs",
+        "src/app/share/[shareToken]/page.tsx",
+        "mobile/lib/services/share_service.dart"
+    ],
+    "productionOps": {
+        "hosting": {
+            "backend": "Railway (Railpack) \u2014 Singapore region",
+            "scheduler": "Railway separate service",
+            "database": "Neon Postgres 17 \u2014 branches production + development (ap-southeast-1)",
+            "cacheRateLimit": "Upstash Redis REST (not used for chat pub/sub)",
+            "media": "Cloudinary",
+            "maps": "Mapbox"
+        },
+        "railwayBackend": {
+            "buildCommand": "npm run build && node scripts/build-server.mjs",
+            "startCommand": "NODE_ENV=production node server.cjs",
+            "watchPaths": [
+                "/src/**",
+                "/prisma/**",
+                "/server.cjs",
+                "/lib/**",
+                "/scripts/build-server.mjs",
+                "/package.json",
+                "/package-lock.json"
+            ],
+            "replicas": 1,
+            "notes": [
+                "Must use server.cjs for WebSocket /chat \u2014 next start has no chat",
+                "Keep replicas=1 until Redis TCP Pub/Sub for chat events",
+                "Apply Neon schema with prisma migrate deploy (prefer over db push --accept-data-loss)"
+            ]
+        },
+        "chatProductionChecklist": [
+            "Neon migrations 20260303000000_add_chat_conversations_messages + 20260613173812_add_conversation_avatar_url",
+            "Confirm deploy logs contain WebSocket chat endpoint",
+            "Distribute Flutter build with PRODUCTION_API_BASE_URL (WS derived as wss://same-host/chat)",
+            "Scheduler: no chat changes required"
+        ],
+        "observedLogGaps": {
+            "sources": [
+                "Logs/Post-Wayanad.json",
+                "Logs/chikmagalur_logs.json"
+            ],
+            "patterns": [
+                "Recurring prisma:error PostgreSQL connection Closed (Neon idle/cold reconnect)",
+                "Slow GET /api/users/me (~8s) and get_trip_by_id / GET /trips/:id (~7\u20138s)",
+                "Slow POST /api/auth/refresh-token (~1s)",
+                "No share-link or chat failures in these pre-PR#48 windows"
+            ]
+        },
+        "shareLinks": {
+            "bridge": "/share/[token] via same server.cjs host",
+            "wellKnown": [
+                "public/.well-known/apple-app-site-association (replace TEAMID)",
+                "public/.well-known/assetlinks.json (replace REPLACE_WITH_SHA256)"
+            ],
+            "mobileEnv": "SHARE_LINK_BASE_URL must equal public Next origin",
+            "androidHost": "tripthread-backend-production.up.railway.app (AndroidManifest App Links)",
+            "iosApplinks": "applinks:tripthread-backend-production.up.railway.app"
+        }
+    },
+    "nextFeaturePipeline": {
+        "updatedAt": "2026-08-09",
+        "priorityOrder": [
+            {
+                "id": "test-suite-completeness",
+                "title": "Comprehensive test suite expansion",
+                "basis": [
+                    "PR #45",
+                    "PR #47",
+                    "PR #48 chat tests",
+                    "tests/TESTING.md"
+                ],
+                "status": "partial",
+                "notes": "PR #45 added auth/trip-thread/leave, route contract, scheduler behavior, mobile leaveTrip. PR #48 added chat unit/integration/routes + Flutter chat tests (~127 Vitest passing at last coverage). Still thin: Google OAuth, password reset, places/Mapbox, media/Cloudinary quota races, final-post end idempotency, share deep-link E2E, broader mobile providers/screens."
+            },
+            {
+                "id": "dockerization-followups",
+                "title": "Dockerization completeness (post PR #44 + #48)",
+                "basis": [
+                    "PR #44",
+                    "PR #48"
+                ],
+                "status": "addressed-in-share-links-pr",
+                "notes": "Documented WS /chat in DOCKER_SETUP/QUICKSTART; entrypoint drops accept-data-loss by default (ALLOW_DATA_LOSS=1 opt-in); compose SHARE_LINK_BASE_URL + /api/health healthcheck."
+            },
+            {
+                "id": "prod-gaps-optimizations",
+                "title": "Production gaps & infra optimizations",
+                "basis": [
+                    "IDENTIFIED_ISSUES_AND_FIX_PLANS.md",
+                    "infra_scalability_analysis.md",
+                    "Logs/Post-Wayanad.json",
+                    "Logs/chikmagalur_logs.json"
+                ],
+                "status": "open",
+                "highlights": [
+                    "Cloudinary upload presets + transformed delivery URLs",
+                    "Speed up /users/me and trip GET (indexes, lean queries, cache stampede lock)",
+                    "Neon connection resilience (already partial reconnect)",
+                    "Open product issues: trip dates/timezone (#6/#7/#8), continue/replace (#11), thread realtime (#15)",
+                    "Partial: logout-all (#9), share Universal Links ops (#32), avatar quirks (#19/#33)"
+                ]
+            },
+            {
+                "id": "trip-link-share",
+                "title": "Trip / final-post share links (broken UX in production)",
+                "basis": [
+                    "Issue 32",
+                    "PR #43 deferredFollowUps"
+                ],
+                "status": "code-fixed-ops-remaining",
+                "notes": "GoRouter allows /share logged-out; login?from= resume; DeepLinkService single init; Android App Links intent + iOS Associated Domains; public/.well-known templates; Docker SHARE_LINK_BASE_URL + safer entrypoint + healthcheck. Remaining ops: fill TEAMID/SHA-256, set mobile SHARE_LINK_BASE_URL, redistribute APK. IN_APP_DM share UI still deferred.",
+                "prBranch": "fix/share-links-docker-followups"
+            }
+        ],
+        "openProductIssuesFromRajasthanDoc": [
+            {
+                "number": 6,
+                "title": "Extend trip end date",
+                "status": "Open"
+            },
+            {
+                "number": 7,
+                "title": "Optional / dynamic trip dates",
+                "status": "Open"
+            },
+            {
+                "number": 8,
+                "title": "Start/end time & timezone for scheduler",
+                "status": "Open"
+            },
+            {
+                "number": 9,
+                "title": "Logout all devices",
+                "status": "Partially addressed"
+            },
+            {
+                "number": 11,
+                "title": "Continue & Replace trip",
+                "status": "Open"
+            },
+            {
+                "number": 14,
+                "title": "Location/check-in in-place edit",
+                "status": "Partial"
+            },
+            {
+                "number": 15,
+                "title": "Realtime thread entry updates",
+                "status": "Open"
+            },
+            {
+                "number": 19,
+                "title": "Google avatar sometimes missing",
+                "status": "Open"
+            },
+            {
+                "number": 32,
+                "title": "Share link Universal Links / SHARE_LINK_BASE_URL",
+                "status": "Partial (code done; fill well-known certs + SHARE_LINK_BASE_URL)"
+            },
+            {
+                "number": 33,
+                "title": "Profile picture randomly deleted",
+                "status": "Partially addressed"
+            },
+            {
+                "number": 37,
+                "title": "Deep reply threading",
+                "status": "Partial"
+            }
+        ]
+    }
 }

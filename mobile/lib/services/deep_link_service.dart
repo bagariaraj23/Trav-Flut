@@ -11,12 +11,18 @@ class DeepLinkService {
   StreamSubscription? _subscription;
   GoRouter? _router;
   final AppLinks _appLinks = AppLinks();
+  bool _initialized = false;
 
   void setRouter(GoRouter router) {
     _router = router;
   }
 
+  /// Idempotent: safe to call once after the router is ready.
   Future<void> initialize() async {
+    if (_initialized) {
+      return;
+    }
+    _initialized = true;
     try {
       // Handle initial link if app was launched from a link
       final initialLink = await _appLinks.getInitialLink();
@@ -38,6 +44,7 @@ class DeepLinkService {
         },
       );
     } catch (e) {
+      _initialized = false;
       debugPrint('[DeepLinkService] Error initializing deep links: $e');
     }
   }
@@ -109,5 +116,7 @@ class DeepLinkService {
 
   void dispose() {
     _subscription?.cancel();
+    _subscription = null;
+    _initialized = false;
   }
 }

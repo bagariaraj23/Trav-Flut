@@ -74,10 +74,21 @@ services:
       - SENDGRID_API_KEY=${SENDGRID_API_KEY}
       - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
       - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
+      - SHARE_LINK_BASE_URL=${SHARE_LINK_BASE_URL:-http://localhost:3000}
     depends_on:
       postgres-dev:
         condition: service_healthy
     command: ["npm", "run", "start"]
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "node -e \"fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\"",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
     networks:
       - tripthread-network
 

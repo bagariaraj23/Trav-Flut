@@ -15,8 +15,19 @@ When running the full stack (`npm run docker:up`), the following services are sp
 |---------|-------------|-----------------|---------|
 | `postgres-dev` | `5432` | `5432` | Development Database (`tripthread_dev`) |
 | `postgres-test` | `5433` | `5432` | Integration Test Database (`tripthread_test`) |
-| `backend` | `3000` | `3000` | Next.js API server (`http://localhost:3000`) |
+| `backend` | `3000` | `3000` | `server.cjs`: Next.js REST (`/api`) + WebSocket chat (`/chat`) + share bridge (`/share`) |
 | `scheduler` | N/A | N/A | Trip status transitioning background service |
+
+### Backend runtime (chat + share)
+* Full-stack Compose uses `npm run start` → **`server.cjs`** (not bare `next start`).
+* REST: `http://localhost:3000/api/...`
+* Health: `http://localhost:3000/api/health` (Compose healthcheck probes this; it does **not** verify WebSocket).
+* Chat WebSocket: `ws://localhost:3000/chat` — confirm in logs: `WebSocket chat endpoint: …/chat`.
+* Share bridge + Universal Link files: `http://localhost:3000/share/{token}`, `/.well-known/apple-app-site-association`, `/.well-known/assetlinks.json`.
+* Mobile against Docker: set `API_BASE_URL` and `SHARE_LINK_BASE_URL` to the same host (emulator: `http://10.0.2.2:3000`).
+
+### Schema apply on container start
+`scripts/docker-entrypoint.sh` runs `prisma db push` **without** `--accept-data-loss` by default. To allow destructive local resets set `ALLOW_DATA_LOSS=1`. Prefer `npm run docker:reset` to wipe volumes.
 
 ### Internal container networking
 Inside the Docker bridge network, services talk to each other using the service names as hostnames:

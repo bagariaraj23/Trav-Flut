@@ -41,12 +41,26 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
-            <!-- Deep link for password reset -->
+            <!-- Custom scheme deep links (password reset, share, etc.) -->
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="tripthread" />
+            </intent-filter>
+            <!--
+              HTTPS App Links for share URLs.
+              Host must match SHARE_LINK_BASE_URL (same Next/Railway origin that serves /share and /.well-known/assetlinks.json).
+              Fill Android SHA-256 in public/.well-known/assetlinks.json before autoVerify succeeds.
+            -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data
+                    android:scheme="https"
+                    android:host="tripthread-backend-production.up.railway.app"
+                    android:pathPrefix="/share" />
             </intent-filter>
         </activity>
         <!-- Don't delete the meta-data below.

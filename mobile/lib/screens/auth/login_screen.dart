@@ -22,6 +22,29 @@ class _LoginScreenState extends State<LoginScreen> {
   final _passwordController = TextEditingController();
   bool _obscurePassword = true;
 
+  /// Safe in-app path from `?from=` (share resume, etc.).
+  String? get _resumePath {
+    final from = GoRouterState.of(context).uri.queryParameters['from'];
+    if (from == null || from.isEmpty) return null;
+    if (!from.startsWith('/') || from.startsWith('//') || from.contains('://')) {
+      return null;
+    }
+    return from;
+  }
+
+  void _goAfterAuth(AuthProvider authProvider) {
+    if (authProvider.requiresProfileCompletion) {
+      context.go('/complete-profile');
+      return;
+    }
+    final resume = _resumePath;
+    if (resume != null) {
+      context.go(resume);
+      return;
+    }
+    context.go('/home');
+  }
+
   @override
   void dispose() {
     _emailController.dispose();
@@ -48,7 +71,7 @@ class _LoginScreenState extends State<LoginScreen> {
       'LoginScreen: login success = $success, isAuthenticated = ${authProvider.isAuthenticated}',
     );
     if (success && mounted) {
-      context.go('/home');
+      _goAfterAuth(authProvider);
     } else if (mounted) {
       // Persist inline error; do not auto-dismiss via SnackBar
       authProvider.markErrorAsShown();
@@ -215,11 +238,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                   if (!context.mounted) return;
                                   final a = context.read<AuthProvider>();
                                   if (a.isAuthenticated) {
-                                    if (a.requiresProfileCompletion) {
-                                      context.go('/complete-profile');
-                                    } else {
-                                      context.go('/home');
-                                    }
+                                    _goAfterAuth(a);
                                   }
                                 },
                           icon: const Icon(Icons.refresh),
@@ -335,12 +354,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                 if (!mounted) return;
                                 switch (result) {
                                   case GoogleSignInSuccess():
-                                    if (authProvider
-                                        .requiresProfileCompletion) {
-                                      context.go('/complete-profile');
-                                    } else {
-                                      context.go('/home');
-                                    }
+                                    _goAfterAuth(authProvider);
                                     break;
                                   case GoogleSignInFailure():
                                     authProvider.markErrorAsShown();

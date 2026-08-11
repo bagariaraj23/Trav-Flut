@@ -31,11 +31,27 @@ class SharedEntity {
   });
 
   factory SharedEntity.fromJson(Map<String, dynamic> json) {
+    final share = json['share'];
+    if (share is! Map<String, dynamic>) {
+      throw AppException('Share data missing or invalid');
+    }
+    final entityType = share['entityType'] as String?;
+    final entityId = share['entityId'] as String?;
+    if (entityType == null ||
+        entityType.isEmpty ||
+        entityId == null ||
+        entityId.isEmpty) {
+      throw AppException('Share target is missing');
+    }
+    final entity = json['entity'];
+    final entityData = entity is Map<String, dynamic>
+        ? entity
+        : <String, dynamic>{};
     return SharedEntity(
-      entityType: json['share']['entityType'] as String,
-      entityId: json['share']['entityId'] as String,
-      entityData: json['entity'] as Map<String, dynamic>,
-      shareData: json['share'] as Map<String, dynamic>,
+      entityType: entityType,
+      entityId: entityId,
+      entityData: entityData,
+      shareData: share,
     );
   }
 }

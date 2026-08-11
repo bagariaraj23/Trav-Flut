@@ -29,6 +29,7 @@ Run the database, Next.js API, and the scheduler services completely containeriz
 
 4. **Verify the server:**
    Open [http://localhost:3000/api/health](http://localhost:3000/api/health) in your browser. You should receive a status check showing the API is connected to the database.
+   Backend logs should also show `WebSocket chat endpoint: ws://localhost:3000/chat` (`server.cjs`). Share bridge: [http://localhost:3000/share/test](http://localhost:3000/share/test).
 
 5. **Stop the stack:**
    ```bash
