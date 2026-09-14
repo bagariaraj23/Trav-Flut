@@ -75,10 +75,13 @@ services:
       - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
       - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
       - SHARE_LINK_BASE_URL=${SHARE_LINK_BASE_URL:-http://localhost:3000}
+      # Opt-in only for destructive local prisma db push: ALLOW_DATA_LOSS=1
+      - ALLOW_DATA_LOSS=${ALLOW_DATA_LOSS:-0}
     depends_on:
       postgres-dev:
         condition: service_healthy
-    command: ["npm", "run", "start"]
+    # Image already ran build-server.mjs; match Railway Start (no esbuild at runtime)
+    command: ["node", "server.cjs"]
     healthcheck:
       test:
         [

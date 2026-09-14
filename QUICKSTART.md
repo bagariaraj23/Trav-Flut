@@ -78,11 +78,12 @@ Ideal when you are modifying database schemas, writing integration tests, or deb
    npm run db:seed
    ```
 
-7. **Run Next.js dev server:**
+7. **Run the API + chat server on the host:**
    ```bash
    npm run dev
    ```
-   Open [http://localhost:3000](http://localhost:3000).
+   This starts `server.cjs` (REST + `ws://localhost:3000/chat`). Do **not** use `npm run next:dev` for the mobile app — that process has no WebSocket upgrade.
+   Open [http://localhost:3000/api/health](http://localhost:3000/api/health).
 
 8. **Stop databases:**
    ```bash

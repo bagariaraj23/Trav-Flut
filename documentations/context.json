@@ -2,9 +2,9 @@
     "project": {
         "name": "TripThread",
         "workspacePath": "/Users/rajbagaria/Desktop/Bolt-Travello/Flut/project",
-        "generatedAt": "2026-08-11",
+        "generatedAt": "2026-09-14",
         "description": "Travel-focused social platform where users create trips, post thread entries (text/media/location/check-ins), generate/publish final trip posts, and chat via 1:1 DMs, groups, and trip-scoped rooms (realtime WebSocket).",
-        "lastPRReviewed": "In progress: fix/share-links-docker-followups \u2014 share deep-link fixes + Docker WS/docs follow-ups (after PR #48 DM merge).",
+        "lastPRReviewed": "Branch fix/share-links-docker-followups \u2014 share deep-link fixes + Docker WS/share follow-ups after PR #48.",
         "recentProductionPRs": [
             "https://github.com/bagariaraj23/Trav-Flut/pull/48",
             "https://github.com/bagariaraj23/Trav-Flut/pull/47",
@@ -49,7 +49,7 @@
         },
         "dockerization": {
             "type": "Full-stack containerized local environments via Docker Compose (PR #44)",
-            "status": "Merged; DM/chat covered for single-node local stack",
+            "status": "Local full-stack complete for chat+share (PR #44 + share-links follow-up). Production remains Railpack, not this Dockerfile.",
             "pr": 44,
             "url": "https://github.com/bagariaraj23/Trav-Flut/pull/44",
             "containers": [
@@ -58,16 +58,17 @@
                 "backend (server.cjs: Next.js REST + WebSocket /chat on port 3000)",
                 "scheduler (standalone scheduler looping hourly)"
             ],
-            "entrypoint": "scripts/docker-entrypoint.sh waits for DB, runs `prisma db push --accept-data-loss` (local only \u2014 do NOT use accept-data-loss on Neon prod), then starts CMD",
+            "entrypoint": "scripts/docker-entrypoint.sh waits for DB, runs prisma db push (ALLOW_DATA_LOSS=1 required for --accept-data-loss), then exec CMD (node server.cjs).",
             "hybridMode": "docker-compose.dev.yml launches only Postgres containers for host-based Next.js development",
             "chatCoverage": {
-                "dockerfileBuild": "npm run build && node scripts/build-server.mjs \u2192 dist/chat-ws.cjs",
-                "composeStart": "npm run start \u2192 server.cjs with /chat upgrade",
-                "gaps": [
-                    "DOCKER_SETUP.md should document WebSocket /chat and that next:dev/start:next are WS-less",
-                    "Multi-replica chat needs Redis Pub/Sub (Upstash REST cannot Pub/Sub); keep replicas=1",
-                    "Compose does not set SHARE_LINK_BASE_URL",
-                    "No WebSocket healthcheck in compose"
+                "dockerfileBuild": "npm run build && node scripts/build-server.mjs \u2192 dist/chat-ws.cjs at image build",
+                "composeStart": "node server.cjs (WS /chat); Dockerfile CMD matches Railway Start",
+                "share": "SHARE_LINK_BASE_URL passed to backend; /.well-known and /share served by same process",
+                "healthcheck": "HTTP GET /api/health (does not probe WebSocket)",
+                "remaining": [
+                    "Flutter app is not containerized (by design; testers get Firebase APK)",
+                    "Chat realtime stays single-container: Redis Pub/Sub still required before scaling replicas",
+                    "Compose HTTP healthcheck does not verify /chat WebSocket upgrade"
                 ]
             }
         }
@@ -2178,7 +2179,7 @@
             "notes": "See tests/TESTING.md and context.json testing section for suite inventory; run npm run test:coverage on Node 20+ with tripthread_test DB. Do not add platform-specific Rolldown bindings (e.g. @rolldown/binding-darwin-arm64) to root dependencies \u2014 breaks Railway Linux deploys (fixed in PR #47)."
         },
         "lastMergedFeature": "PR #48 Realtime Chat / DM (merged main 2026-08-09)",
-        "notes": "DM feature complete for single-node production. Remaining work clustered in nextFeaturePipeline: test expansion, docker docs follow-ups, prod perf/gaps, trip share Universal Links."
+        "notes": "DM complete for single-node. Share deep-link code in fix/share-links-docker-followups; Universal Links ops still needed. Docker local stack aligned with server.cjs. Next deferred: prod API query optimization, then test-suite expansion."
     },
     "hotspotsForFurtherDeepDive": [
         "src/app/api/trips/[id]/entries/route.ts",
@@ -2247,18 +2248,21 @@
             ]
         },
         "shareLinks": {
+            "exampleShareLinkBaseUrl": "https://tripthread-backend-production.up.railway.app",
             "bridge": "/share/[token] via same server.cjs host",
             "wellKnown": [
-                "public/.well-known/apple-app-site-association (replace TEAMID)",
-                "public/.well-known/assetlinks.json (replace REPLACE_WITH_SHA256)"
+                "public/.well-known/apple-app-site-association (replace TEAMID with Apple Developer Team ID)",
+                "public/.well-known/assetlinks.json (replace REPLACE_WITH_SHA256 with Play App Signing cert fingerprint)"
             ],
-            "mobileEnv": "SHARE_LINK_BASE_URL must equal public Next origin",
+            "mobileEnv": "SHARE_LINK_BASE_URL must equal public Next origin (no /api suffix)",
             "androidHost": "tripthread-backend-production.up.railway.app (AndroidManifest App Links)",
-            "iosApplinks": "applinks:tripthread-backend-production.up.railway.app"
+            "iosApplinks": "applinks:tripthread-backend-production.up.railway.app",
+            "bundleId": "com.example.tripthread (placeholder until store IDs change)",
+            "deferred": "IN_APP_DM shareSource wiring from chat UI"
         }
     },
     "nextFeaturePipeline": {
-        "updatedAt": "2026-08-09",
+        "updatedAt": "2026-09-14",
         "priorityOrder": [
             {
                 "id": "test-suite-completeness",
@@ -2269,8 +2273,8 @@
                     "PR #48 chat tests",
                     "tests/TESTING.md"
                 ],
-                "status": "partial",
-                "notes": "PR #45 added auth/trip-thread/leave, route contract, scheduler behavior, mobile leaveTrip. PR #48 added chat unit/integration/routes + Flutter chat tests (~127 Vitest passing at last coverage). Still thin: Google OAuth, password reset, places/Mapbox, media/Cloudinary quota races, final-post end idempotency, share deep-link E2E, broader mobile providers/screens."
+                "status": "deferred-adequate-for-now",
+                "notes": "PR #45/#47/#48 coverage is sufficient for now. Expand later (Google OAuth, places/media races, share E2E)."
             },
             {
                 "id": "dockerization-followups",
@@ -2279,8 +2283,8 @@
                     "PR #44",
                     "PR #48"
                 ],
-                "status": "addressed-in-share-links-pr",
-                "notes": "Documented WS /chat in DOCKER_SETUP/QUICKSTART; entrypoint drops accept-data-loss by default (ALLOW_DATA_LOSS=1 opt-in); compose SHARE_LINK_BASE_URL + /api/health healthcheck."
+                "status": "complete-for-local-stack",
+                "notes": "WS /chat documented; Dockerfile CMD node server.cjs; no esbuild at container start; entrypoint without accept-data-loss by default; SHARE_LINK_BASE_URL + /api/health healthcheck. Not remaining: Flutter-in-Docker. Scale-out chat still needs Redis Pub/Sub outside Docker scope."
             },
             {
                 "id": "prod-gaps-optimizations",
@@ -2291,14 +2295,15 @@
                     "Logs/Post-Wayanad.json",
                     "Logs/chikmagalur_logs.json"
                 ],
-                "status": "open",
+                "status": "deferred",
                 "highlights": [
                     "Cloudinary upload presets + transformed delivery URLs",
                     "Speed up /users/me and trip GET (indexes, lean queries, cache stampede lock)",
                     "Neon connection resilience (already partial reconnect)",
                     "Open product issues: trip dates/timezone (#6/#7/#8), continue/replace (#11), thread realtime (#15)",
                     "Partial: logout-all (#9), share Universal Links ops (#32), avatar quirks (#19/#33)"
-                ]
+                ],
+                "notes": "Pick up later: /users/me and trip GET query/index work, Cloudinary presets, Neon reconnect, Rajasthan product issues except share (this PR)."
             },
             {
                 "id": "trip-link-share",
@@ -2307,8 +2312,8 @@
                     "Issue 32",
                     "PR #43 deferredFollowUps"
                 ],
-                "status": "code-fixed-ops-remaining",
-                "notes": "GoRouter allows /share logged-out; login?from= resume; DeepLinkService single init; Android App Links intent + iOS Associated Domains; public/.well-known templates; Docker SHARE_LINK_BASE_URL + safer entrypoint + healthcheck. Remaining ops: fill TEAMID/SHA-256, set mobile SHARE_LINK_BASE_URL, redistribute APK. IN_APP_DM share UI still deferred.",
+                "status": "code-complete-ops-remaining",
+                "notes": "GoRouter allows /share logged-out; login?from= resume; DeepLinkService single init; Android App Links + iOS Associated Domains; well-known templates. Ops: set SHARE_LINK_BASE_URL, fill TEAMID/SHA-256, redistribute APK. IN_APP_DM share UI deferred. Prod API slowness and test-suite expansion deferred.",
                 "prBranch": "fix/share-links-docker-followups"
             }
         ],
@@ -2356,7 +2361,7 @@
             {
                 "number": 32,
                 "title": "Share link Universal Links / SHARE_LINK_BASE_URL",
-                "status": "Partial (code done; fill well-known certs + SHARE_LINK_BASE_URL)"
+                "status": "Code in share-links PR; ops remaining (SHARE_LINK_BASE_URL + TEAMID/SHA-256 + APK)"
             },
             {
                 "number": 33,

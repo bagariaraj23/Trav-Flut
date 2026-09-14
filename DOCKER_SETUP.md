@@ -19,7 +19,7 @@ When running the full stack (`npm run docker:up`), the following services are sp
 | `scheduler` | N/A | N/A | Trip status transitioning background service |
 
 ### Backend runtime (chat + share)
-* Full-stack Compose uses `npm run start` → **`server.cjs`** (not bare `next start`).
+* Full-stack Compose starts **`node server.cjs`** (the image already ran `build-server.mjs`; same as Railway Start). Do not use bare `next start`.
 * REST: `http://localhost:3000/api/...`
 * Health: `http://localhost:3000/api/health` (Compose healthcheck probes this; it does **not** verify WebSocket).
 * Chat WebSocket: `ws://localhost:3000/chat` — confirm in logs: `WebSocket chat endpoint: …/chat`.

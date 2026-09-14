@@ -29,9 +29,12 @@ RUN chmod +x ./scripts/docker-entrypoint.sh
 
 ENV NODE_ENV=production
 ENV PORT=3000
+ENV HOST="0.0.0.0"
 ENV HOSTNAME="0.0.0.0"
 
 EXPOSE 3000
 
-# Use startup script to handle db readiness and migration before starting Next.js
+# Use startup script to handle db readiness and schema apply before starting the app.
+# Chat WS bundle is produced at image build (`scripts/build-server.mjs`); do not re-run esbuild at start.
 ENTRYPOINT ["/bin/bash", "./scripts/docker-entrypoint.sh"]
+CMD ["node", "server.cjs"]

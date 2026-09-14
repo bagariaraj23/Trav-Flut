@@ -1,6 +1,7 @@
 # TripThread — local development databases (PostgreSQL only)
 #
-# The Next.js API runs on your host via `npm run dev` and connects to localhost.
+# The API runs on your host via `npm run dev` (`server.cjs`: REST + WebSocket /chat on :3000).
+# Do not use `npm run next:dev` if you need chat — that process has no /chat upgrade.
 # Caching uses Upstash Redis REST (REDIS_REST_URL + REDIS_REST_TOKEN) when set in .env;
 # otherwise the app falls back to in-memory LRU cache — no Redis container required.
 #
