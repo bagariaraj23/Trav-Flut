@@ -495,12 +495,15 @@ class _TripThreadAppRouterState extends State<TripThreadAppRouter> {
             return null;
           }
 
-          // Redirect to login if not authenticated and not on auth pages
-          if (!isLoggedIn &&
-              location != '/login' &&
-              location != '/signup' &&
-              location != '/forgot-password' &&
-              !location.startsWith('/reset-password')) {
+          final isShareLink = location.startsWith('/share/');
+          final isAuthPage = location == '/login' ||
+              location == '/signup' ||
+              location == '/forgot-password' ||
+              location.startsWith('/reset-password');
+
+          // Redirect to login if not authenticated and not on auth/share pages.
+          // Share links must stay reachable logged-out so the token is not dropped.
+          if (!isLoggedIn && !isAuthPage && !isShareLink) {
             debugPrint('[GoRouter] Not logged in, redirecting to /login');
             return '/login';
           }
@@ -509,9 +512,11 @@ class _TripThreadAppRouterState extends State<TripThreadAppRouter> {
               authProvider.requiresProfileCompletion;
 
           // Authenticated but profile incomplete: must complete profile before home
+          // (allow share resolve so public posts still open; private will error in-screen)
           if (isLoggedIn &&
               requiresProfileCompletion &&
-              location != '/complete-profile') {
+              location != '/complete-profile' &&
+              !isShareLink) {
             debugPrint(
               '[GoRouter] Profile incomplete, redirecting to /complete-profile',
             );
@@ -527,15 +532,19 @@ class _TripThreadAppRouterState extends State<TripThreadAppRouter> {
             return '/home';
           }
 
-          // Redirect to home (or complete-profile) if authenticated and on auth pages
-          // (HomeScreen will handle ongoing trip redirect after tripProvider.initialize())
-          if (isLoggedIn &&
-              (location == '/login' ||
-                  location == '/signup' ||
-                  location == '/forgot-password' ||
-                  location.startsWith('/reset-password'))) {
+          // Redirect to home (or complete-profile / resume `from`) if authenticated on auth pages
+          if (isLoggedIn && isAuthPage) {
             if (requiresProfileCompletion) {
               return '/complete-profile';
+            }
+
+            final from = state.uri.queryParameters['from'];
+            if (from != null &&
+                from.startsWith('/') &&
+                !from.startsWith('//') &&
+                !from.contains('://')) {
+              debugPrint('[GoRouter] Already logged in, resuming $from');
+              return from;
             }
 
             debugPrint('[GoRouter] Already logged in, redirecting to /home');
@@ -768,10 +777,11 @@ class _TripThreadAppRouterState extends State<TripThreadAppRouter> {
 
   @override
   Widget build(BuildContext context) {
-    // Use the existing router instance; it must be non-null after didChangeDependencies
+    // Use the existing router instance; it must be non-null after didChangeDependencies.
+    // DeepLinkService.initialize() runs once when the router is created — do not
+    // re-subscribe on every rebuild.
     final router = _router!;
     _deepLinkService?.setRouter(router);
-    _deepLinkService?.initialize();
 
     return MaterialApp.router(
       title: 'TripThread',

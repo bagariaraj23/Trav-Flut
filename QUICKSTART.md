@@ -29,6 +29,7 @@ Run the database, Next.js API, and the scheduler services completely containeriz
 
 4. **Verify the server:**
    Open [http://localhost:3000/api/health](http://localhost:3000/api/health) in your browser. You should receive a status check showing the API is connected to the database.
+   Backend logs should also show `WebSocket chat endpoint: ws://localhost:3000/chat` (`server.cjs`). Share bridge: [http://localhost:3000/share/test](http://localhost:3000/share/test).
 
 5. **Stop the stack:**
    ```bash
@@ -77,11 +78,12 @@ Ideal when you are modifying database schemas, writing integration tests, or deb
    npm run db:seed
    ```
 
-7. **Run Next.js dev server:**
+7. **Run the API + chat server on the host:**
    ```bash
    npm run dev
    ```
-   Open [http://localhost:3000](http://localhost:3000).
+   This starts `server.cjs` (REST + `ws://localhost:3000/chat`). Do **not** use `npm run next:dev` for the mobile app — that process has no WebSocket upgrade.
+   Open [http://localhost:3000/api/health](http://localhost:3000/api/health).
 
 8. **Stop databases:**
    ```bash

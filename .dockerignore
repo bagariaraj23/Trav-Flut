@@ -16,4 +16,8 @@ temp
 .env.local
 .env.test
 .env.production
+IDENTIFIED_ISSUES_AND_FIX_PLANS.md
+personal_documentations
+PR_docs
+Logs
 .DS_Store
