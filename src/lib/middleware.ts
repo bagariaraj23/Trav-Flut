@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { AuthService } from "./auth";
-import { AppError, AuthenticationError } from "./errors";
+import { AppError, AuthenticationError, UnsettledBalanceError } from "./errors";
 import { prisma } from "./prisma";
 import { PerformanceMonitor, ErrorTracker } from "./monitoring";
 
@@ -166,14 +166,19 @@ export function handleApiError(error: unknown, context?: {
     }
   }
 
-  return NextResponse.json(
-    {
-      success: false,
-      error: appError.message,
-      ...(process.env.NODE_ENV === "development" && { stack: appError.stack }),
-    },
-    { status: appError.statusCode }
-  );
+  const body: Record<string, unknown> = {
+    success: false,
+    error: appError.message,
+  };
+  if (error instanceof UnsettledBalanceError) {
+    body.code = error.code;
+    body.meta = { netMinor: error.netMinor };
+  }
+  if (process.env.NODE_ENV === "development") {
+    body.stack = appError.stack;
+  }
+
+  return NextResponse.json(body, { status: appError.statusCode });
 }
 
 // Security headers middleware

@@ -25,7 +25,7 @@ describe("Next.js API route contracts", () => {
   it("keeps every src/app/api route.ts file backed by at least one HTTP method export", () => {
     const routeFiles = collectRouteFiles(API_ROOT);
 
-    expect(routeFiles.length).toBeGreaterThanOrEqual(70);
+    expect(routeFiles.length).toBeGreaterThanOrEqual(85);
 
     const missingHandlers = routeFiles
       .map((file) => ({

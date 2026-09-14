@@ -14,6 +14,7 @@ import 'package:tripthread/services/storage_service.dart';
 import 'package:tripthread/services/token_refresh_manager.dart';
 import 'package:tripthread/config/app_config.dart';
 import 'package:tripthread/utils/error_handler.dart';
+import 'package:tripthread/utils/unsettled_balance.dart';
 import 'package:flutter/foundation.dart';
 
 class ApiService {
@@ -2514,12 +2515,14 @@ class ApiService {
 
       if (!response.data['success']) {
         throw Exception(
-          response.data['error'] ?? 'Failed to remove participant',
+          kickErrorFrom(response.data, 'Failed to remove participant'),
         );
       }
     } on DioException catch (e) {
       debugPrint('[ApiService] Remove participant DioException: ${e.message}');
-      throw Exception(e.response?.data['error'] ?? 'Network error occurred');
+      throw Exception(
+        kickErrorFrom(e.response?.data, 'Network error occurred'),
+      );
     } catch (e) {
       debugPrint('[ApiService] Remove participant unexpected error: $e');
       throw Exception('An unexpected error occurred');

@@ -8,6 +8,7 @@ import 'package:tripthread/models/trip_join_request.dart';
 import 'package:tripthread/services/storage_service.dart';
 import 'package:tripthread/config/app_config.dart';
 import 'package:tripthread/services/token_refresh_manager.dart';
+import 'package:tripthread/utils/unsettled_balance.dart';
 import 'dart:convert'; // Added for jsonEncode
 
 class TripService {
@@ -596,13 +597,12 @@ class TripService {
       }
       return ApiResponse<void>(
         success: false,
-        error: response.data['error']?.toString() ?? 'Failed to leave trip',
+        error: leaveErrorFrom(response.data, 'Failed to leave trip'),
       );
     } on DioException catch (e) {
       return ApiResponse<void>(
         success: false,
-        error: e.response?.data['error']?.toString() ??
-            'Network error occurred',
+        error: leaveErrorFrom(e.response?.data, 'Network error occurred'),
       );
     } catch (e) {
       return ApiResponse<void>(

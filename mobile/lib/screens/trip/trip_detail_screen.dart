@@ -288,6 +288,20 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
                       context.push('/chat?tripId=${widget.tripId}');
                     },
                   ),
+                if (_trip != null && _isOwnerOrParticipant())
+                  IconButton(
+                    icon: const Icon(Icons.currency_rupee),
+                    tooltip: 'Expenses',
+                    onPressed: () {
+                      context.push(
+                        '/trip/${widget.tripId}/thread',
+                        extra: {
+                          'from': '/trip/${widget.tripId}',
+                          'pane': 'money',
+                        },
+                      );
+                    },
+                  ),
                 if (_trip != null &&
                     _trip!.status == TripStatus.ongoing &&
                     _isOwnerOrParticipant())
@@ -747,6 +761,20 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
               ElevatedButton.icon(
                 onPressed: () {
                   context.push(
+                    '/trip/${widget.tripId}/thread',
+                    extra: {
+                      'from': '/trip/${widget.tripId}',
+                      'pane': 'money',
+                    },
+                  );
+                },
+                icon: const Icon(Icons.currency_rupee),
+                label: const Text('Expenses'),
+              ),
+              const SizedBox(height: 8),
+              ElevatedButton.icon(
+                onPressed: () {
+                  context.push(
                     '/trip/${widget.tripId}/participants',
                     extra: {'from': '/trip/${widget.tripId}'},
                   );
@@ -821,6 +849,20 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
               ],
             ] else if (_trip!.status == TripStatus.ended) ...[
               if (_isOwnerOrParticipant()) ...[
+                ElevatedButton.icon(
+                  onPressed: () {
+                    context.push(
+                      '/trip/${widget.tripId}/thread',
+                      extra: {
+                        'from': '/trip/${widget.tripId}',
+                        'pane': 'money',
+                      },
+                    );
+                  },
+                  icon: const Icon(Icons.currency_rupee),
+                  label: const Text('Expenses'),
+                ),
+                const SizedBox(height: 8),
                 ElevatedButton.icon(
                   onPressed: () {
                     context.push(

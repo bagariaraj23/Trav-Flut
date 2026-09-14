@@ -275,3 +275,131 @@ export interface MapPlaceResponse {
   notes?: string | null;
   createdAt?: string;
 }
+
+export type ExpenseCategory =
+  | "FOOD"
+  | "STAY"
+  | "TRANSPORT"
+  | "ACTIVITIES"
+  | "SHOPPING"
+  | "OTHER";
+
+export type ExpenseSplitMethod = "EQUAL" | "EXACT" | "PERCENT" | "SHARES";
+
+export type TripSettlementStatus =
+  | "PAID"
+  | "PENDING"
+  | "COMPLETED"
+  | "FAILED"
+  | "CANCELLED"
+  | "DISPUTED";
+
+export interface ExpenseUserSummary {
+  id: string;
+  email: string;
+  username?: string | null;
+  name?: string | null;
+  avatarUrl?: string | null;
+  bio?: string | null;
+  isPrivate: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface TripExpenseShareResponse {
+  userId: string;
+  shareMinor: number;
+  weight?: number | null;
+  user: ExpenseUserSummary;
+}
+
+export interface TripExpenseResponse {
+  id: string;
+  tripId: string;
+  createdById: string;
+  payerId: string;
+  title: string;
+  category: ExpenseCategory;
+  amountMinor: number;
+  currency: string;
+  splitMethod: ExpenseSplitMethod;
+  note?: string | null;
+  createdAt: string;
+  createdBy: ExpenseUserSummary;
+  payer: ExpenseUserSummary;
+  shares: TripExpenseShareResponse[];
+}
+
+export interface TripExpenseListResponse {
+  items: TripExpenseResponse[];
+  page: number;
+  limit: number;
+  total: number;
+  hasNext: boolean;
+}
+
+export interface ExpenseMemberBalance {
+  userId: string;
+  name?: string | null;
+  username?: string | null;
+  avatarUrl?: string | null;
+  netMinor: number;
+  paidMinor: number;
+  owedMinor: number;
+}
+
+export interface OpenTransferResponse {
+  fromUserId: string;
+  toUserId: string;
+  amountMinor: number;
+  canMarkPaid: boolean;
+}
+
+export interface RecordedSettlementResponse {
+  id: string;
+  fromUserId: string;
+  toUserId: string;
+  amountMinor: number;
+  status: TripSettlementStatus;
+  createdAt: string;
+  fromUser?: ExpenseUserSummary;
+  toUser?: ExpenseUserSummary;
+  canUndo?: boolean;
+}
+
+export interface PairwiseBalanceResponse {
+  otherUserId: string;
+  netMinor: number;
+  sharedCount: number;
+  youOweMinor: number;
+  theyOweMinor: number;
+}
+
+export interface ExpenseSummaryResponse {
+  currency: string;
+  totalSpendMinor: number;
+  myNetMinor: number;
+  members: ExpenseMemberBalance[];
+  openTransfers: OpenTransferResponse[];
+  recordedSettlements: RecordedSettlementResponse[];
+  pairwise: PairwiseBalanceResponse[];
+}
+
+export interface CreateExpenseRequest {
+  title: string;
+  category: ExpenseCategory;
+  amountMinor: number;
+  payerId: string;
+  splitMethod: ExpenseSplitMethod;
+  memberIds: string[];
+  shares?: { userId: string; shareMinor: number }[];
+  percentBps?: { userId: string; bps: number }[];
+  weights?: { userId: string; weight: number }[];
+  note?: string | null;
+}
+
+export interface CreateSettlementRequest {
+  fromUserId: string;
+  toUserId: string;
+  amountMinor: number;
+}

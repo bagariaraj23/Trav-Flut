@@ -8,6 +8,8 @@ import {
   cleanupThreadEntryMedia,
   purgeAuthorThreadEntriesWithClient,
 } from "@/lib/services/threadEntryPurge";
+import { assertMemberZeroNetOnTrip } from "@/lib/services/expense";
+import { UnsettledBalanceError } from "@/lib/errors";
 
 export async function POST(
   request: NextRequest,
@@ -76,6 +78,22 @@ export async function POST(
         },
         { status: 400 }
       );
+    }
+
+    try {
+      await assertMemberZeroNetOnTrip(tripId, userId);
+    } catch (error) {
+      if (error instanceof UnsettledBalanceError) {
+        return NextResponse.json<ApiResponse>(
+          {
+            success: false,
+            error: error.message,
+            meta: { code: error.code, netMinor: error.netMinor },
+          },
+          { status: 409 }
+        );
+      }
+      throw error;
     }
 
     const mediaCleanups: { mediaId: string | null; mediaPublicId: string | null }[] =

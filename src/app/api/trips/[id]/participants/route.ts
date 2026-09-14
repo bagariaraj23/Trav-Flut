@@ -3,6 +3,8 @@ import { prisma } from "@/lib/prisma";
 import { AuthService } from "@/lib/auth";
 import { addParticipantSchema } from "@/lib/validation";
 import { ApiResponse, TripParticipantResponse } from "@/types/api";
+import { assertMemberZeroNetOnTrip } from "@/lib/services/expense";
+import { UnsettledBalanceError } from "@/lib/errors";
 
 // Add participant to trip
 export async function POST(
@@ -274,6 +276,22 @@ export async function DELETE(
         },
         { status: 400 }
       );
+    }
+
+    try {
+      await assertMemberZeroNetOnTrip(tripId, userIdToRemove);
+    } catch (error) {
+      if (error instanceof UnsettledBalanceError) {
+        return NextResponse.json<ApiResponse>(
+          {
+            success: false,
+            error: error.message,
+            meta: { code: error.code, netMinor: error.netMinor },
+          },
+          { status: 409 }
+        );
+      }
+      throw error;
     }
     // Remove participant, delete any pending TripJoinRequest, and decrement participantCount in a transaction
     await prisma.$transaction([
