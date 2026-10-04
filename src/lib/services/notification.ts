@@ -352,6 +352,7 @@ export async function markNotificationRead(
 /**
  * Get unread engagement notification count for badge.
  * Does not include follow requests (handled separately).
+ * Deleted actors are excluded so the badge matches the notification list.
  */
 export async function getUnreadNotificationCount(recipientId: string): Promise<number> {
   return getOrSet(
@@ -361,6 +362,7 @@ export async function getUnreadNotificationCount(recipientId: string): Promise<n
         where: {
           recipientId,
           readAt: null,
+          actor: { deletedAt: null },
         },
       }),
     UNREAD_COUNT_TTL_MS
