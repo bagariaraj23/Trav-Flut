@@ -75,7 +75,7 @@ model Notification {
   actor       User             @relation("NotificationActor", fields: [actorId], references: [id], onDelete: Cascade)
   recipient   User             @relation("NotificationRecipient", fields: [recipientId], references: [id], onDelete: Cascade)
 
-  @@index([recipientId, createdAt])
+  @@index([recipientId, createdAt(sort: Desc), id(sort: Desc)])
   @@index([recipientId, readAt])
   @@map("notifications")
 }
@@ -142,6 +142,7 @@ model Follow {
   follower   User     @relation("Follower", fields: [followerId], references: [id], onDelete: Cascade)
 
   @@unique([followerId, followeeId])
+  @@index([followeeId])
   @@map("follows")
 }
 
@@ -156,6 +157,7 @@ model FollowRequest {
   follower   User                @relation("SentFollowRequests", fields: [followerId], references: [id], onDelete: Cascade)
 
   @@unique([followerId, followeeId])
+  @@index([followeeId, status, createdAt(sort: Desc)])
   @@map("follow_requests")
 }
 
@@ -221,6 +223,9 @@ model Trip {
   boundSwLat Float?
   boundSwLng Float?
 
+  @@index([userId, status])
+  @@index([status, endDate])
+  @@index([status, startDate])
   @@map("trips")
 }
 
@@ -234,6 +239,7 @@ model TripParticipant {
   user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([tripId, userId])
+  @@index([userId])
   @@map("trip_participants")
 }
 
@@ -260,6 +266,8 @@ model TripThreadEntry {
   // Shares
   placeShares PlaceShare[]
 
+  @@index([tripId, createdAt(sort: Desc), id(sort: Desc)])
+  @@index([authorId, createdAt(sort: Desc)])
   @@map("trip_thread_entries")
 }
 
@@ -367,6 +375,7 @@ model TripFinalPost {
   commentCount     Int              @default(0)
   shareCount       Int              @default(0)
 
+  @@index([isPublished, createdAt(sort: Desc), id(sort: Desc)])
   @@map("trip_final_posts")
 }
 
@@ -393,6 +402,7 @@ model Media {
   tripCover     Trip[]            @relation("TripCoverMedia")
 
   @@index([chatMessageId])
+  @@index([uploadedById, createdAt(sort: Desc)])
   @@map("media")
 }
 
@@ -659,7 +669,7 @@ model Like {
 
   @@unique([userId, entityType, entityId])
   @@index([entityType, entityId, createdAt])
-  @@index([userId])
+  @@index([userId, createdAt(sort: Desc)])
 }
 
 model Comment {
@@ -677,7 +687,7 @@ model Comment {
   replies         Comment[]  @relation("CommentReplies")
 
   @@index([entityType, entityId, createdAt])
-  @@index([parentCommentId])
+  @@index([parentCommentId, createdAt(sort: Desc)])
   @@index([userId])
 }
 
