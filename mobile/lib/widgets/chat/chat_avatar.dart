@@ -52,14 +52,14 @@ class ChatAvatar extends StatelessWidget {
 
   Color _getAvatarColor(String initial) {
     final colors = [
-      Colors.blue.shade700,
-      Colors.indigo.shade700,
-      Colors.teal.shade700,
-      Colors.green.shade700,
-      Colors.orange.shade800,
-      Colors.red.shade700,
-      Colors.pink.shade700,
-      Colors.purple.shade700,
+      const Color(0xFFC2692A),
+      const Color(0xFF5C7F67),
+      const Color(0xFF7B5EA7),
+      const Color(0xFF4A7FA5),
+      const Color(0xFFB45309),
+      const Color(0xFF78716C),
+      const Color(0xFF9A3412),
+      const Color(0xFF44403C),
     ];
     final index = initial.isEmpty ? 0 : initial.codeUnitAt(0) % colors.length;
     return colors[index];

@@ -4,6 +4,7 @@ import 'package:tripthread/models/expense.dart';
 import 'package:tripthread/providers/auth_provider.dart';
 import 'package:tripthread/providers/expense_provider.dart';
 import 'package:tripthread/screens/trip/add_expense_sheet.dart';
+import 'package:tripthread/utils/app_layout.dart';
 import 'package:tripthread/utils/money.dart';
 import 'package:tripthread/utils/user_display_labels.dart';
 
@@ -65,7 +66,9 @@ class _TripMoneyPaneState extends State<TripMoneyPane> {
   @override
   Widget build(BuildContext context) {
     final currentUserId = context.read<AuthProvider>().currentUser?.id;
-    return Consumer<ExpenseProvider>(
+    return AppLayout.reading(
+      context: context,
+      child: Consumer<ExpenseProvider>(
       builder: (context, provider, _) {
         if (provider.isLoading && provider.summary == null) {
           return const Center(child: CircularProgressIndicator());
@@ -288,6 +291,7 @@ class _TripMoneyPaneState extends State<TripMoneyPane> {
           ],
         );
       },
+      ),
     );
   }
 }
