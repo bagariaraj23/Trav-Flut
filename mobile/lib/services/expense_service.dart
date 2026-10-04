@@ -81,9 +81,16 @@ class ExpenseService {
     return fallback;
   }
 
-  Future<ApiResponse<ExpenseListPage>> listExpenses(String tripId) async {
+  Future<ApiResponse<ExpenseListPage>> listExpenses(
+    String tripId, {
+    int page = 1,
+    int limit = 100,
+  }) async {
     try {
-      final response = await _dio.get('/trips/$tripId/expenses');
+      final response = await _dio.get(
+        '/trips/$tripId/expenses',
+        queryParameters: {'page': page, 'limit': limit},
+      );
       return ApiResponse<ExpenseListPage>.fromJson(
         response.data,
         (json) => ExpenseListPage.fromJson(json as Map<String, dynamic>),

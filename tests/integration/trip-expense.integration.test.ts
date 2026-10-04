@@ -212,6 +212,45 @@ describe("Trip expense ledger", () => {
     expect(undone.status).toBe(200);
   });
 
+  it("records only one settlement when mark-paid is submitted twice at once", async () => {
+    const owner = await createUser({ email: "race-owner@test.com" });
+    const member = await createUser({ email: "race-member@test.com" });
+    const trip = await createTrip({ userId: owner.id, status: TripStatus.ONGOING });
+    await addParticipant(trip.id, member.id);
+    const memberToken = await getAuthToken(member);
+
+    await createExpenseRoute(
+      authRequest(`http://localhost/api/trips/${trip.id}/expenses`, "POST", memberToken, {
+        title: "Dinner",
+        category: "FOOD",
+        amountMinor: 20000,
+        payerId: member.id,
+        splitMethod: "EQUAL",
+        memberIds: [member.id, owner.id],
+      }),
+      { params: Promise.resolve({ id: trip.id }) }
+    );
+
+    const body = {
+      fromUserId: owner.id,
+      toUserId: member.id,
+      amountMinor: 10000,
+    };
+    const [first, second] = await Promise.all([
+      createSettlementRoute(
+        authRequest(`http://localhost/api/trips/${trip.id}/settlements`, "POST", memberToken, body),
+        { params: Promise.resolve({ id: trip.id }) }
+      ),
+      createSettlementRoute(
+        authRequest(`http://localhost/api/trips/${trip.id}/settlements`, "POST", memberToken, body),
+        { params: Promise.resolve({ id: trip.id }) }
+      ),
+    ]);
+
+    expect([first.status, second.status].sort()).toEqual([201, 409]);
+    expect(await prisma.tripSettlement.count({ where: { tripId: trip.id } })).toBe(1);
+  });
+
   it("blocks leave and kick while net is non-zero, then allows leave after delete", async () => {
     const owner = await createUser({ email: "leave-exp-owner@test.com" });
     const member = await createUser({ email: "leave-exp-member@test.com" });

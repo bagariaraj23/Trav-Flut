@@ -402,44 +402,47 @@ export async function recordSettlement(params: {
     throw new ValidationError("Amount is out of range");
   }
 
-  const nets = await computeMemberNets(tripId, Array.from(members));
-  const fromNet = nets.get(fromUserId)?.netMinor ?? 0;
-  const toNet = nets.get(toUserId)?.netMinor ?? 0;
-  const maxPayable = Math.min(-fromNet, toNet);
-  if (maxPayable <= 0 || amountMinor > maxPayable) {
-    throw new ConflictError("This transfer is no longer valid; refresh settle-up");
-  }
+  const created = await prisma.$transaction(async (tx) => {
+    await lockTripRow(tx, tripId);
+    const nets = await computeMemberNets(tripId, Array.from(members), tx);
+    const fromNet = nets.get(fromUserId)?.netMinor ?? 0;
+    const toNet = nets.get(toUserId)?.netMinor ?? 0;
+    const maxPayable = Math.min(-fromNet, toNet);
+    if (maxPayable <= 0 || amountMinor > maxPayable) {
+      throw new ConflictError("This transfer is no longer valid; refresh settle-up");
+    }
 
-  const open = simplifyDebts(
-    Array.from(nets.values()).map((n) => ({
-      userId: n.userId,
-      netMinor: n.netMinor,
-    }))
-  );
-  const matchesSuggestion = open.some(
-    (t) =>
-      t.fromUserId === fromUserId &&
-      t.toUserId === toUserId &&
-      t.amountMinor === amountMinor
-  );
-  if (!matchesSuggestion) {
-    throw new ConflictError("This transfer is no longer valid; refresh settle-up");
-  }
+    const open = simplifyDebts(
+      Array.from(nets.values()).map((n) => ({
+        userId: n.userId,
+        netMinor: n.netMinor,
+      }))
+    );
+    const matchesSuggestion = open.some(
+      (t) =>
+        t.fromUserId === fromUserId &&
+        t.toUserId === toUserId &&
+        t.amountMinor === amountMinor
+    );
+    if (!matchesSuggestion) {
+      throw new ConflictError("This transfer is no longer valid; refresh settle-up");
+    }
 
-  const created = await prisma.tripSettlement.create({
-    data: {
-      tripId,
-      fromUserId,
-      toUserId,
-      amountMinor,
-      currency: trip.expenseCurrency || DEFAULT_EXPENSE_CURRENCY,
-      status: TripSettlementStatus.PAID,
-      recordedById: actorId,
-    },
-    include: {
-      fromUser: { select: USER_PUBLIC_SELECT },
-      toUser: { select: USER_PUBLIC_SELECT },
-    },
+    return tx.tripSettlement.create({
+      data: {
+        tripId,
+        fromUserId,
+        toUserId,
+        amountMinor,
+        currency: trip.expenseCurrency || DEFAULT_EXPENSE_CURRENCY,
+        status: TripSettlementStatus.PAID,
+        recordedById: actorId,
+      },
+      include: {
+        fromUser: { select: USER_PUBLIC_SELECT },
+        toUser: { select: USER_PUBLIC_SELECT },
+      },
+    });
   });
 
   return {
@@ -464,18 +467,27 @@ export async function undoSettlement(params: {
   if (!trip) throw new NotFoundError("Trip not found");
   assertTripMember(trip, actorId);
 
-  const settlement = await prisma.tripSettlement.findFirst({
-    where: { id: settlementId, tripId },
-  });
-  if (!settlement) throw new NotFoundError("Settlement not found");
-
   const isOwner = trip.userId === actorId;
-  if (settlement.toUserId !== actorId && !isOwner) {
-    throw new AuthorizationError("Only the payee or trip owner can undo this");
-  }
 
-  await prisma.tripSettlement.delete({ where: { id: settlementId } });
+  await prisma.$transaction(async (tx) => {
+    await lockTripRow(tx, tripId);
+    const settlement = await tx.tripSettlement.findFirst({
+      where: { id: settlementId, tripId },
+    });
+    if (!settlement) throw new NotFoundError("Settlement not found");
+    if (settlement.toUserId !== actorId && !isOwner) {
+      throw new AuthorizationError("Only the payee or trip owner can undo this");
+    }
+    await tx.tripSettlement.delete({ where: { id: settlementId } });
+  });
   return { id: settlementId, deleted: true };
+}
+
+async function lockTripRow(tx: PrismaTransactionClient, tripId: string) {
+  const locked = await tx.$queryRaw<Array<{ id: string }>>`
+    SELECT id FROM trips WHERE id = ${tripId} FOR UPDATE
+  `;
+  if (locked.length === 0) throw new NotFoundError("Trip not found");
 }
 
 export async function updateExpenseSettings(params: {

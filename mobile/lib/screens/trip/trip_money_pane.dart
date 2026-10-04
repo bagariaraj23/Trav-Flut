@@ -21,8 +21,26 @@ class _TripMoneyPaneState extends State<TripMoneyPane> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      context.read<ExpenseProvider>().load(widget.tripId);
+      _reload();
     });
+  }
+
+  Future<void> _reload() async {
+    final provider = context.read<ExpenseProvider>();
+    final ok = await provider.load(widget.tripId);
+    if (!mounted || ok || provider.summary == null) return;
+    _showError(provider.error);
+  }
+
+  Future<void> _runAction(Future<bool> Function() action) async {
+    final ok = await action();
+    if (!mounted || ok) return;
+    _showError(context.read<ExpenseProvider>().error);
+  }
+
+  void _showError(String? message) {
+    final text = (message == null || message.isEmpty) ? 'Something went wrong' : message;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));
   }
 
   String _name(ExpenseSummary summary, String userId) {
@@ -105,7 +123,7 @@ class _TripMoneyPaneState extends State<TripMoneyPane> {
         return Stack(
           children: [
             RefreshIndicator(
-              onRefresh: () => provider.load(widget.tripId),
+              onRefresh: _reload,
               child: ListView(
                 padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
                 children: [
@@ -161,7 +179,7 @@ class _TripMoneyPaneState extends State<TripMoneyPane> {
                           ),
                           trailing: t.canMarkPaid
                               ? FilledButton(
-                                  onPressed: () => provider.markPaid(t),
+                                  onPressed: () => _runAction(() => provider.markPaid(t)),
                                   child: const Text('Mark as paid'),
                                 )
                               : Text(
@@ -183,7 +201,9 @@ class _TripMoneyPaneState extends State<TripMoneyPane> {
                         trailing: s.canUndo
                             ? IconButton(
                                 icon: const Icon(Icons.undo, size: 20),
-                                onPressed: () => provider.undoSettlement(s.id),
+                                onPressed: () => _runAction(
+                                  () => provider.undoSettlement(s.id),
+                                ),
                               )
                             : null,
                       );
@@ -263,8 +283,8 @@ class _TripMoneyPaneState extends State<TripMoneyPane> {
                                         ],
                                       ),
                                     );
-                                    if (confirm == true) {
-                                      await provider.deleteExpense(e.id);
+                                    if (confirm == true && context.mounted) {
+                                      await _runAction(() => provider.deleteExpense(e.id));
                                     }
                                   },
                                 ),

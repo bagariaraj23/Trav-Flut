@@ -27,7 +27,11 @@ class MockExpenseService extends ExpenseService {
   }
 
   @override
-  Future<ApiResponse<ExpenseListPage>> listExpenses(String tripId) async {
+  Future<ApiResponse<ExpenseListPage>> listExpenses(
+    String tripId, {
+    int page = 1,
+    int limit = 100,
+  }) async {
     return const ApiResponse(
       success: true,
       data: ExpenseListPage(
@@ -89,4 +93,76 @@ void main() {
     expect(find.text('No open payments.'), findsOneWidget);
     expect(find.text('Add expense'), findsOneWidget);
   });
+
+  testWidgets('Mark as paid failure is shown when a summary is already loaded',
+      (tester) async {
+    final expenseProvider = ExpenseProvider(
+      expenseService: _FailingSettlementService(),
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MultiProvider(
+          providers: [
+            ChangeNotifierProvider<AuthProvider>.value(
+              value: MockAuthProvider(),
+            ),
+            ChangeNotifierProvider<ExpenseProvider>.value(
+              value: expenseProvider,
+            ),
+          ],
+          child: const Scaffold(
+            body: TripMoneyPane(tripId: 'trip-1'),
+          ),
+        ),
+      ),
+    );
+
+    await tester.pump();
+    await tester.pump();
+
+    await tester.tap(find.text('Mark as paid'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+
+    expect(find.text('This transfer is no longer valid'), findsOneWidget);
+  });
+}
+
+class _FailingSettlementService extends MockExpenseService {
+  @override
+  Future<ApiResponse<ExpenseSummary>> getSummary(String tripId) async {
+    return const ApiResponse(
+      success: true,
+      data: ExpenseSummary(
+        currency: 'INR',
+        totalSpendMinor: 10000,
+        myNetMinor: 10000,
+        members: [],
+        openTransfers: [
+          OpenTransfer(
+            fromUserId: 'them',
+            toUserId: 'me',
+            amountMinor: 10000,
+            canMarkPaid: true,
+          ),
+        ],
+        recordedSettlements: [],
+        pairwise: [],
+      ),
+    );
+  }
+
+  @override
+  Future<ApiResponse<RecordedSettlement>> markPaid({
+    required String tripId,
+    required String fromUserId,
+    required String toUserId,
+    required int amountMinor,
+  }) async {
+    return const ApiResponse(
+      success: false,
+      error: 'This transfer is no longer valid',
+    );
+  }
 }
