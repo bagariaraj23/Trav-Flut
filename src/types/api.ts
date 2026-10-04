@@ -76,6 +76,8 @@ export interface PaginatedResponse<T> {
   limit: number;
   total: number;
   hasNext: boolean;
+  /** Keyset cursor for the next page. Null when there is no next page. */
+  nextCursor?: string | null;
 }
 
 // Trip Types

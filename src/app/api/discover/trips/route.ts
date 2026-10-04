@@ -107,46 +107,43 @@ export async function GET(request: NextRequest) {
             JSON.stringify(whereClause, null, 2)
           );
 
-          // Get total count for pagination
-          console.log(`[API] GET /discover/trips - Getting total count`);
-          const totalCount = await prisma.trip.count({
-            where: whereClause,
-          });
+          // Count and page in parallel. Engagement sort still runs on this page.
+          console.log(`[API] GET /discover/trips - Fetching page and total`);
+          const [totalCount, trips] = await Promise.all([
+            prisma.trip.count({
+              where: whereClause,
+            }),
+            prisma.trip.findMany({
+              where: whereClause,
+              include: {
+                user: {
+                  select: {
+                    id: true,
+                    email: true,
+                    username: true,
+                    name: true,
+                    avatarUrl: true,
+                    bio: true,
+                    isPrivate: true,
+                    createdAt: true,
+                    updatedAt: true,
+                  },
+                },
+                coverMedia: true,
+                _count: {
+                  select: {
+                    threadEntries: true,
+                    media: true,
+                    participants: true,
+                  },
+                },
+              },
+              // Note: We'll sort in memory to prioritize followed users and engagement
+              skip: offset,
+              take: limitNum,
+            }),
+          ]);
           console.log(`[API] GET /discover/trips - Total count: ${totalCount}`);
-
-          // Get trips with user details and counts
-          console.log(
-            `[API] GET /discover/trips - Fetching trips with offset: ${offset}, limit: ${limitNum}`
-          );
-          const trips = await prisma.trip.findMany({
-            where: whereClause,
-            include: {
-              user: {
-                select: {
-                  id: true,
-                  email: true,
-                  username: true,
-                  name: true,
-                  avatarUrl: true,
-                  bio: true,
-                  isPrivate: true,
-                  createdAt: true,
-                  updatedAt: true,
-                },
-              },
-              coverMedia: true,
-              _count: {
-                select: {
-                  threadEntries: true,
-                  media: true,
-                  participants: true,
-                },
-              },
-            },
-            // Note: We'll sort in memory to prioritize followed users and engagement
-            skip: offset,
-            take: limitNum,
-          });
 
           console.log(
             `[API] GET /discover/trips - Found ${trips.length} trips`
