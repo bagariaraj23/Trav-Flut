@@ -5,9 +5,13 @@ import 'package:tripthread/providers/trip_provider.dart';
 import 'package:tripthread/providers/auth_provider.dart';
 import 'package:tripthread/models/trip.dart';
 import 'package:tripthread/models/user.dart';
+import 'package:google_fonts/google_fonts.dart';
+import 'package:tripthread/utils/app_layout.dart';
+import 'package:tripthread/utils/app_theme.dart';
 import 'package:tripthread/utils/cloudinary_utils.dart';
 import 'package:tripthread/widgets/loading_button.dart';
 import 'package:tripthread/widgets/mention_text.dart';
+import 'package:tripthread/widgets/trip_cover_placeholder.dart';
 import 'package:tripthread/services/media_service.dart';
 
 class TripDetailScreen extends StatefulWidget {
@@ -123,14 +127,15 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
                 titlePadding: const EdgeInsets.only(
                   left: 16,
                   right: 16,
-                  bottom: 16,
+                  bottom: 72,
                 ),
                 title: Text(
                   _trip?.title ?? 'Trip Not Found',
-                  style: const TextStyle(
+                  style: GoogleFonts.playfairDisplay(
                     color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                    shadows: [
+                    fontWeight: FontWeight.w600,
+                    fontSize: 18,
+                    shadows: const [
                       Shadow(
                         offset: Offset(0, 1),
                         blurRadius: 3,
@@ -176,6 +181,36 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
                               ),
                             ),
                           ),
+                          if (_trip != null)
+                            Positioned(
+                              left: 16,
+                              top: MediaQuery.of(context).padding.top + 12,
+                              child: _buildStatusBadge(_trip!.status),
+                            ),
+                          if (_trip != null)
+                            Positioned(
+                              left: 16,
+                              right: 16,
+                              bottom: 12,
+                              child: Wrap(
+                                spacing: 8,
+                                runSpacing: 8,
+                                children: [
+                                  _glassChip(
+                                    Icons.calendar_today,
+                                    _formatDateRange(
+                                      _trip!.startDate,
+                                      _trip!.endDate,
+                                    ),
+                                  ),
+                                  if (_trip!.destinations.isNotEmpty)
+                                    _glassChip(
+                                      Icons.place,
+                                      _trip!.destinations.join(' → '),
+                                    ),
+                                ],
+                              ),
+                            ),
                         ],
                       ),
                     ),
@@ -362,7 +397,8 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
               )
             else
               SliverToBoxAdapter(
-                child: Padding(
+                child: AppLayout.reading(
+                  context: context,
                   padding: const EdgeInsets.all(16),
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
@@ -384,20 +420,12 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
   }
 
   Widget _buildDefaultCover() {
-    return Container(
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [
-            Theme.of(context).colorScheme.primary,
-            Theme.of(context).colorScheme.primary.withValues(alpha: 0.8),
-          ],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-      ),
-      child: const Center(
-        child: Icon(Icons.travel_explore, size: 80, color: Colors.white),
-      ),
+    return TripCoverPlaceholder(
+      title: _trip?.title,
+      destination: _trip != null && _trip!.destinations.isNotEmpty
+          ? _trip!.destinations.first
+          : null,
+      iconSize: 64,
     );
   }
 
@@ -559,6 +587,99 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
                 if (_trip!.mood != null) _buildMoodChip(_trip!.mood!),
               ],
             ),
+            if (_trip!.user != null) ...[
+              const SizedBox(height: 14),
+              InkWell(
+                onTap: () => context.push('/profile/${_trip!.user!.id}'),
+                child: Row(
+                  children: [
+                    CircleAvatar(
+                      radius: 18,
+                      backgroundColor: AppTheme.muted,
+                      backgroundImage: _trip!.user!.avatarUrl != null
+                          ? NetworkImage(_trip!.user!.avatarUrl!)
+                          : null,
+                      child: _trip!.user!.avatarUrl == null
+                          ? Text(
+                              (_trip!.user!.name ?? 'U')
+                                  .substring(0, 1)
+                                  .toUpperCase(),
+                              style: const TextStyle(
+                                color: AppTheme.ink,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            )
+                          : null,
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            _trip!.user!.name ?? _trip!.user!.username ?? 'Traveller',
+                            style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                                  fontWeight: FontWeight.w600,
+                                  color: Theme.of(context).colorScheme.onSurface,
+                                ),
+                          ),
+                          if (_trip!.user!.username != null)
+                            Text(
+                              '@${_trip!.user!.username}',
+                              style: Theme.of(context).textTheme.bodySmall,
+                            ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+            if ((_trip!.participants ?? []).isNotEmpty) ...[
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  SizedBox(
+                    height: 28,
+                    width: ((_trip!.participants!.length.clamp(1, 5)) * 18.0) + 10,
+                    child: Stack(
+                      children: [
+                        for (var i = 0; i < _trip!.participants!.length.clamp(0, 5); i++)
+                          Positioned(
+                            left: i * 18,
+                            child: CircleAvatar(
+                              radius: 14,
+                              backgroundColor: Theme.of(context).colorScheme.surface,
+                              child: CircleAvatar(
+                                radius: 12,
+                                backgroundColor: AppTheme.muted,
+                                backgroundImage: _trip!.participants![i].user?.avatarUrl != null
+                                    ? NetworkImage(_trip!.participants![i].user!.avatarUrl!)
+                                    : null,
+                                child: _trip!.participants![i].user?.avatarUrl == null
+                                    ? Text(
+                                        (_trip!.participants![i].user?.name ?? 'U')
+                                            .substring(0, 1)
+                                            .toUpperCase(),
+                                        style: const TextStyle(fontSize: 10, color: AppTheme.ink),
+                                      )
+                                    : null,
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      '${_trip!.participantCount} ${_trip!.participantCount == 1 ? 'traveller' : 'travellers'} · ${_trip!.entryCount} ${_trip!.entryCount == 1 ? 'update' : 'updates'}',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  ),
+                ],
+              ),
+            ],
 
             const SizedBox(height: 12),
 
@@ -751,9 +872,6 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
               },
               icon: const Icon(Icons.map),
               label: const Text('View Trip Map'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Theme.of(context).colorScheme.secondary,
-              ),
             ),
             const SizedBox(height: 8),
             if (_trip!.status == TripStatus.upcoming &&
@@ -1000,7 +1118,7 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
 
   Widget _buildThreadEntryPreview(TripThreadEntry entry) {
     final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
+    final scheme = theme.colorScheme;
     final mediaUrl = entry.media?.url;
     final hasMedia =
         entry.type == ThreadEntryType.media &&
@@ -1009,13 +1127,9 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
 
     final String? previewUrl = hasMedia ? mediaUrl : null;
 
-    final cardColor = isDark
-        ? theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.65)
-        : const Color(0xFF12161D);
-    final primaryTextColor = isDark
-        ? theme.colorScheme.onSurface
-        : Colors.white;
-    final secondaryTextColor = primaryTextColor.withValues(alpha: 0.7);
+    final cardColor = scheme.surfaceContainerHighest;
+    final primaryTextColor = scheme.onSurface;
+    final secondaryTextColor = scheme.onSurfaceVariant;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -1024,18 +1138,8 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
         color: cardColor,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: isDark
-              ? theme.dividerColor.withValues(alpha: 0.35)
-              : Colors.white.withValues(alpha: 0.08),
+          color: scheme.outline.withValues(alpha: 0.45),
         ),
-        boxShadow: [
-          if (!isDark)
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.35),
-              blurRadius: 14,
-              offset: const Offset(0, 6),
-            ),
-        ],
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1176,22 +1280,47 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
     );
   }
 
+  Widget _glassChip(IconData icon, String label) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.22),
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 14, color: Colors.white),
+          const SizedBox(width: 6),
+          Flexible(
+            child: Text(
+              label,
+              style: const TextStyle(color: Colors.white, fontSize: 12),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildStatusBadge(TripStatus status) {
     Color color;
     String label;
 
     switch (status) {
       case TripStatus.upcoming:
-        color = Colors.orange;
+        color = AppTheme.upcoming;
         label = 'Upcoming';
         break;
       case TripStatus.ongoing:
-        color = Colors.green;
-        label = 'Ongoing';
+        color = AppTheme.live;
+        label = 'Live';
         break;
       case TripStatus.ended:
-        color = Colors.blue;
-        label = 'Completed';
+        color = AppTheme.ended;
+        label = 'Ended';
         break;
     }
 

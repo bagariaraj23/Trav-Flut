@@ -7,6 +7,8 @@ import 'package:tripthread/providers/feed_provider.dart';
 import 'package:tripthread/models/user.dart';
 import 'package:tripthread/models/trip.dart';
 import 'package:tripthread/services/api_service.dart';
+import 'package:tripthread/utils/app_layout.dart';
+import 'package:tripthread/utils/app_theme.dart';
 import 'package:tripthread/utils/user_display_labels.dart';
 import 'package:go_router/go_router.dart';
 
@@ -269,7 +271,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 tripProvider.pendingTripInvitations, // Add trip invitations
               ),
             ),
-            body: RefreshIndicator(
+            body: AppLayout.reading(
+              context: context,
+              child: RefreshIndicator(
               onRefresh: _refreshProfile,
               child: SingleChildScrollView(
                 physics: const AlwaysScrollableScrollPhysics(),
@@ -291,6 +295,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   ],
                 ),
               ),
+            ),
             ),
           ),
         );
@@ -421,13 +426,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       decoration: BoxDecoration(
         color: Theme.of(context).colorScheme.surface,
         borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 2),
-          ),
-        ],
+        border: Border.all(color: Theme.of(context).colorScheme.outlineVariant),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -437,26 +436,31 @@ class _ProfileScreenState extends State<ProfileScreen> {
             child: Material(
               color: Colors.transparent,
               child: InkWell(
-                customBorder: const CircleBorder(),
+                customBorder: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(20),
+                ),
                 onTap: user.avatarUrl != null && user.avatarUrl!.isNotEmpty
                     ? () => _openAvatarFullScreen(context, user.avatarUrl!)
                     : null,
-                child: CircleAvatar(
-                  radius: 48,
-                  backgroundColor: Theme.of(context).colorScheme.primary,
-                  backgroundImage: user.avatarUrl != null
-                      ? NetworkImage(user.avatarUrl!)
-                      : null,
-                  child: user.avatarUrl == null
-                      ? Text(
-                          _avatarInitial(user),
-                          style: TextStyle(
-                            fontSize: 28,
-                            fontWeight: FontWeight.bold,
-                            color: Theme.of(context).colorScheme.onPrimary,
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(20),
+                  child: Container(
+                    width: 96,
+                    height: 96,
+                    color: AppTheme.muted,
+                    child: user.avatarUrl != null && user.avatarUrl!.isNotEmpty
+                        ? Image.network(user.avatarUrl!, fit: BoxFit.cover)
+                        : Center(
+                            child: Text(
+                              _avatarInitial(user),
+                              style: const TextStyle(
+                                fontSize: 28,
+                                fontWeight: FontWeight.bold,
+                                color: AppTheme.ink,
+                              ),
+                            ),
                           ),
-                        )
-                      : null,
+                  ),
                 ),
               ),
             ),
@@ -801,13 +805,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
       decoration: BoxDecoration(
         color: Theme.of(context).colorScheme.surface,
         borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 2),
-          ),
-        ],
+        border: Border.all(
+          color: Theme.of(context).colorScheme.outlineVariant,
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,

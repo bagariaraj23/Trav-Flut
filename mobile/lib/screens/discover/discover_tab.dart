@@ -6,7 +6,10 @@ import 'package:tripthread/providers/feed_provider.dart';
 import 'package:tripthread/providers/auth_provider.dart';
 import 'package:tripthread/models/trip.dart';
 import 'package:go_router/go_router.dart';
+import 'package:tripthread/utils/app_layout.dart';
+import 'package:tripthread/utils/app_theme.dart';
 import 'package:tripthread/utils/cloudinary_utils.dart';
+import 'package:tripthread/widgets/trip_cover_placeholder.dart';
 
 class DiscoverTab extends StatefulWidget {
   const DiscoverTab({super.key});
@@ -194,7 +197,9 @@ class _DiscoverTabState extends State<DiscoverTab> {
         title: const Text('Discover'),
         elevation: 0,
       ),
-      body: SafeArea(
+      body: AppLayout.reading(
+        context: context,
+        child: SafeArea(
         child: Column(
           children: [
             Padding(
@@ -303,7 +308,8 @@ class _DiscoverTabState extends State<DiscoverTab> {
             ),
           ],
         ),
-      ),
+        ),
+        ),
     );
   }
 
@@ -652,45 +658,12 @@ class _DiscoverTabState extends State<DiscoverTab> {
   }
 
   Widget _buildTripPlaceholder(BuildContext context, Trip trip) {
-    return Container(
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [
-            Theme.of(context).colorScheme.primary,
-            Theme.of(context).colorScheme.primary.withValues(alpha: 0.7),
-          ],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-      ),
-      child: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(Icons.travel_explore, size: 24, color: Colors.white),
-            const SizedBox(height: 4),
-            Flexible(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 6),
-                child: Text(
-                  trip.destinations.isNotEmpty
-                      ? trip.destinations.first
-                      : 'Unknown',
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 10,
-                    fontWeight: FontWeight.bold,
-                  ),
-                  textAlign: TextAlign.center,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
+    return TripCoverPlaceholder(
+      title: trip.title,
+      destination:
+          trip.destinations.isNotEmpty ? trip.destinations.first : null,
+      iconSize: 28,
+      compact: true,
     );
   }
 
@@ -700,16 +673,16 @@ class _DiscoverTabState extends State<DiscoverTab> {
 
     switch (status) {
       case TripStatus.upcoming:
-        color = Colors.orange;
-        label = 'Soon';
+        color = AppTheme.upcoming;
+        label = 'Upcoming';
         break;
       case TripStatus.ongoing:
-        color = Colors.green;
+        color = AppTheme.live;
         label = 'Live';
         break;
       case TripStatus.ended:
-        color = Colors.blue;
-        label = 'Done';
+        color = AppTheme.ended;
+        label = 'Ended';
         break;
     }
 
