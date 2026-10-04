@@ -30,6 +30,25 @@ function delay(ms: number): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+/**
+ * Wait only when another worker may be filling this key.
+ * A dead Redis (circuit open, or this process failed to take the lock)
+ * must not sit through the retry delays.
+ */
+export function shouldWaitForPeerCacheFill(input: {
+    redisConfigured: boolean;
+    acquiredLock: boolean;
+    circuitOpen: boolean;
+    lockAttemptFailed: boolean;
+}): boolean {
+    return (
+        input.redisConfigured &&
+        !input.acquiredLock &&
+        !input.circuitOpen &&
+        !input.lockAttemptFailed
+    );
+}
+
 async function readRedisValue<T>(key: string, ttl: number): Promise<T | undefined> {
     if (!redis || isRedisCircuitOpen()) return undefined;
     try {
@@ -100,6 +119,7 @@ export async function getOrSet<T>(
     const flight = (async () => {
         const lockKey = `cache-lock:${key}`;
         let locked = false;
+        let lockAttemptFailed = false;
         if (redis && !isRedisCircuitOpen()) {
             try {
                 const acquired = await withRedisDeadline(() =>
@@ -108,10 +128,18 @@ export async function getOrSet<T>(
                 locked = acquired === "OK";
             } catch {
                 locked = false;
+                lockAttemptFailed = true;
             }
         }
 
-        if (!locked && redis) {
+        if (
+            shouldWaitForPeerCacheFill({
+                redisConfigured: redis != null,
+                acquiredLock: locked,
+                circuitOpen: isRedisCircuitOpen(),
+                lockAttemptFailed,
+            })
+        ) {
             for (let attempt = 0; attempt < 5; attempt++) {
                 await delay(80 * (attempt + 1));
                 const retried = await readRedisValue<T>(key, ttl);

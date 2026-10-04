@@ -28,6 +28,8 @@ class FeedProvider extends ChangeNotifier {
   int _discoverTripsPage = 1;
   bool _hasMoreDiscoverTrips = true;
   Future<void>? _discoverRefreshInFlight;
+  String? _discoverRefreshKey;
+  int _discoverRequestGeneration = 0;
 
   // Getters
   List<TripFinalPost> get homeFeedPosts => _homeFeedPosts;
@@ -185,25 +187,38 @@ class FeedProvider extends ChangeNotifier {
     String? status,
     String? mood,
   }) {
-    if (refresh && _discoverRefreshInFlight != null) {
+    final key = '${status ?? ''}|${mood ?? ''}';
+    if (refresh &&
+        _discoverRefreshInFlight != null &&
+        _discoverRefreshKey == key) {
       return _discoverRefreshInFlight!;
     }
+
+    final generation = ++_discoverRequestGeneration;
     final run = _loadDiscoverTrips(
       refresh: refresh,
       status: status,
       mood: mood,
+      generation: generation,
     );
     if (!refresh) return run;
-    _discoverRefreshInFlight = run.whenComplete(() {
-      _discoverRefreshInFlight = null;
+
+    _discoverRefreshKey = key;
+    final tracked = run.whenComplete(() {
+      if (_discoverRequestGeneration == generation) {
+        _discoverRefreshInFlight = null;
+        _discoverRefreshKey = null;
+      }
     });
-    return _discoverRefreshInFlight!;
+    _discoverRefreshInFlight = tracked;
+    return tracked;
   }
 
   Future<void> _loadDiscoverTrips({
     bool refresh = false,
     String? status,
     String? mood,
+    required int generation,
   }) async {
     try {
       if (refresh) {
@@ -238,6 +253,8 @@ class FeedProvider extends ChangeNotifier {
       debugPrint(
         '[FeedProvider] Discover trips API response: success=${response.success}, error=${response.error}',
       );
+
+      if (generation != _discoverRequestGeneration) return;
 
       if (response.success && response.data != null) {
         final data = response.data!;
@@ -295,18 +312,22 @@ class FeedProvider extends ChangeNotifier {
           '[FeedProvider] Discover trips updated: ${_discoverTrips.length} trips, hasNext: $_hasMoreDiscoverTrips, page: $_discoverTripsPage',
         );
       } else {
+        if (generation != _discoverRequestGeneration) return;
         _discoverTripsError = response.error ?? 'Failed to load discover trips';
         debugPrint(
           '[FeedProvider] Discover trips failed: $_discoverTripsError',
         );
       }
     } catch (e) {
+      if (generation != _discoverRequestGeneration) return;
       _discoverTripsError = 'An unexpected error occurred: $e';
       debugPrint('[FeedProvider] Load discover trips error: $e');
       debugPrint('[FeedProvider] Stack trace: ${StackTrace.current}');
     } finally {
-      _isDiscoverTripsLoading = false;
-      notifyListeners();
+      if (generation == _discoverRequestGeneration) {
+        _isDiscoverTripsLoading = false;
+        notifyListeners();
+      }
     }
   }
 
@@ -327,6 +348,7 @@ class FeedProvider extends ChangeNotifier {
     debugPrint('[FeedProvider] Resetting home feed');
     _homeFeedPosts.clear();
     _homeFeedPage = 1;
+    _homeFeedCursor = null;
     _hasMoreHomeFeedPosts = true;
     _homeFeedError = null;
     notifyListeners();
@@ -345,6 +367,8 @@ class FeedProvider extends ChangeNotifier {
     debugPrint('[FeedProvider] Clearing all feed data');
     _homeFeedPosts.clear();
     _discoverTrips.clear();
+    _homeFeedPage = 1;
+    _homeFeedCursor = null;
     _homeFeedError = null;
     _discoverTripsError = null;
     notifyListeners();
