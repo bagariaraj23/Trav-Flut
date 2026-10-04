@@ -14,6 +14,7 @@ class ExpenseProvider extends ChangeNotifier {
   bool _isLoading = false;
   bool _isSaving = false;
   String? _error;
+  int _loadGeneration = 0;
 
   ExpenseSummary? get summary => _summary;
   List<TripExpense> get expenses => List.unmodifiable(_expenses);
@@ -21,27 +22,81 @@ class ExpenseProvider extends ChangeNotifier {
   bool get isSaving => _isSaving;
   String? get error => _error;
 
-  Future<void> load(String tripId) async {
+  Future<bool> load(String tripId) async {
+    final generation = ++_loadGeneration;
+    final tripChanged = _tripId != tripId;
     _tripId = tripId;
+    if (tripChanged) {
+      _summary = null;
+      _expenses = [];
+    }
     _isLoading = true;
     _error = null;
     notifyListeners();
     try {
-      final summaryRes = await _service.getSummary(tripId);
-      final listRes = await _service.listExpenses(tripId);
+      final summaryFuture = _service.getSummary(tripId);
+      final firstPageFuture = _service.listExpenses(tripId, page: 1);
+      final summaryRes = await summaryFuture;
+      final firstPage = await firstPageFuture;
+      if (!_isCurrentLoad(generation)) return true;
+
       if (!summaryRes.success || summaryRes.data == null) {
-        _error = summaryRes.error ?? 'Failed to load money summary';
-      } else if (!listRes.success || listRes.data == null) {
-        _error = listRes.error ?? 'Failed to load expenses';
-      } else {
-        _summary = summaryRes.data;
-        _expenses = listRes.data!.items;
+        _failLoad(
+          tripChanged: tripChanged,
+          message: summaryRes.error ?? 'Failed to load money summary',
+        );
+        return false;
       }
+      if (!firstPage.success || firstPage.data == null) {
+        _failLoad(
+          tripChanged: tripChanged,
+          message: firstPage.error ?? 'Failed to load expenses',
+        );
+        return false;
+      }
+
+      final items = <TripExpense>[...firstPage.data!.items];
+      var page = 1;
+      var hasNext = firstPage.data!.hasNext && firstPage.data!.items.isNotEmpty;
+      while (hasNext && page < 100) {
+        page += 1;
+        final listRes = await _service.listExpenses(tripId, page: page);
+        if (!_isCurrentLoad(generation)) return true;
+        if (!listRes.success || listRes.data == null) {
+          _failLoad(
+            tripChanged: tripChanged,
+            message: listRes.error ?? 'Failed to load expenses',
+          );
+          return false;
+        }
+        items.addAll(listRes.data!.items);
+        hasNext = listRes.data!.hasNext && listRes.data!.items.isNotEmpty;
+      }
+
+      if (!_isCurrentLoad(generation)) return true;
+      _summary = summaryRes.data;
+      _expenses = items;
+      _error = null;
+      return true;
     } catch (e) {
-      _error = e.toString();
+      if (!_isCurrentLoad(generation)) return true;
+      _failLoad(tripChanged: tripChanged, message: e.toString());
+      return false;
     } finally {
-      _isLoading = false;
-      notifyListeners();
+      if (_isCurrentLoad(generation)) {
+        _isLoading = false;
+        notifyListeners();
+      }
+    }
+  }
+
+  bool _isCurrentLoad(int generation) => generation == _loadGeneration;
+
+  void _failLoad({required bool tripChanged, required String message}) {
+    _error = message;
+    if (tripChanged) {
+      _summary = null;
+      _expenses = [];
     }
   }
 
@@ -53,26 +108,29 @@ class ExpenseProvider extends ChangeNotifier {
     notifyListeners();
     final res = await _service.createExpense(tripId, request);
     _isSaving = false;
+    if (_tripId != tripId) {
+      notifyListeners();
+      return res.success;
+    }
     if (!res.success) {
       _error = res.error ?? 'Failed to add expense';
       notifyListeners();
       return false;
     }
-    await load(tripId);
-    return true;
+    return load(tripId);
   }
 
   Future<bool> deleteExpense(String expenseId) async {
     final tripId = _tripId;
     if (tripId == null) return false;
     final res = await _service.deleteExpense(tripId, expenseId);
+    if (_tripId != tripId) return res.success;
     if (!res.success) {
-      _error = res.error;
+      _error = res.error ?? 'Failed to delete expense';
       notifyListeners();
       return false;
     }
-    await load(tripId);
-    return true;
+    return load(tripId);
   }
 
   Future<bool> markPaid(OpenTransfer transfer) async {
@@ -84,32 +142,35 @@ class ExpenseProvider extends ChangeNotifier {
       toUserId: transfer.toUserId,
       amountMinor: transfer.amountMinor,
     );
+    if (_tripId != tripId) return res.success;
     if (!res.success) {
-      _error = res.error;
+      _error = res.error ?? 'Failed to mark as paid';
       notifyListeners();
       return false;
     }
-    await load(tripId);
-    return true;
+    return load(tripId);
   }
 
   Future<bool> undoSettlement(String settlementId) async {
     final tripId = _tripId;
     if (tripId == null) return false;
     final res = await _service.undoSettlement(tripId, settlementId);
+    if (_tripId != tripId) return res.success;
     if (!res.success) {
-      _error = res.error;
+      _error = res.error ?? 'Failed to undo settlement';
       notifyListeners();
       return false;
     }
-    await load(tripId);
-    return true;
+    return load(tripId);
   }
 
   void clear() {
+    _loadGeneration++;
     _tripId = null;
     _summary = null;
     _expenses = [];
+    _isLoading = false;
+    _isSaving = false;
     _error = null;
     notifyListeners();
   }
