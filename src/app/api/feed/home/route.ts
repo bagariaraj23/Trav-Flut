@@ -16,6 +16,7 @@ import {
 import { PerformanceMonitor, ErrorTracker } from "@/lib/monitoring";
 import { checkLikeStatus } from "@/lib/services/like";
 import { EntityType } from "@prisma/client";
+import { omitHiddenTripSpend } from "@/lib/tripSpendVisibility";
 
 // Get home feed (final posts from followed users and public profiles)
 export async function GET(request: NextRequest) {
@@ -174,7 +175,7 @@ export async function GET(request: NextRequest) {
             commentCount: post.commentCount,
             shareCount: post.shareCount,
             hasLiked: likeStatusMap[post.id] || false,
-            trip: {
+            trip: omitHiddenTripSpend({
               ...post.trip,
               startDate: post.trip.startDate?.toISOString() || undefined,
               endDate: post.trip.endDate?.toISOString() || undefined,
@@ -195,7 +196,7 @@ export async function GET(request: NextRequest) {
                     updatedAt: post.trip.user.updatedAt.toISOString(),
                   }
                 : undefined,
-            },
+            }, post.trip.userId === currentUserId),
           }));
 
           const hasNext = offset + limitNum < totalCount;

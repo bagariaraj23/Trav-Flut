@@ -281,19 +281,25 @@ export async function deleteExpense(params: {
     throw new AuthorizationError("Only the creator or trip owner can delete this expense");
   }
 
-    await prisma.$transaction(async (tx) => {
-      await tx.tripExpense.update({
-        where: { id: expenseId },
-        data: { deletedAt: new Date() },
-      });
-      await tx.trip.update({
-        where: { id: tripId },
-        data: { totalSpendMinor: { decrement: expense.amountMinor } },
-      });
+  await prisma.$transaction(async (tx) => {
+    await lockTripRow(tx, tripId);
+    const live = await tx.tripExpense.findFirst({
+      where: { id: expenseId, tripId, deletedAt: null },
     });
+    if (!live) throw new NotFoundError("Expense not found");
 
-    return { id: expenseId, deleted: true };
-  }
+    await tx.tripExpense.update({
+      where: { id: expenseId },
+      data: { deletedAt: new Date() },
+    });
+    await tx.trip.update({
+      where: { id: tripId },
+      data: { totalSpendMinor: { decrement: live.amountMinor } },
+    });
+  });
+
+  return { id: expenseId, deleted: true };
+}
 
 export async function getExpenseSummary(params: {
   tripId: string;

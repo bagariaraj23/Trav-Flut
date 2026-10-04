@@ -27,6 +27,16 @@ describe("splitEqual", () => {
   it("supports a solo split", () => {
     expect(splitEqual(150000, ["me"])).toEqual([{ userId: "me", shareMinor: 150000 }]);
   });
+
+  it("rejects an empty split and a non-positive amount", () => {
+    expect(() => splitEqual(100, [])).toThrow("At least one person");
+    expect(() => splitEqual(0, ["a"])).toThrow("positive integer");
+    expect(() => splitEqual(1.5, ["a"])).toThrow("positive integer");
+  });
+
+  it("dedupes the same person before dividing", () => {
+    expect(splitEqual(100, ["a", "a"])).toEqual([{ userId: "a", shareMinor: 100 }]);
+  });
 });
 
 describe("splitExact", () => {
@@ -37,6 +47,21 @@ describe("splitExact", () => {
       { userId: "u3", shareMinor: 93600 },
     ]);
     expect(shares.reduce((s, r) => s + r.shareMinor, 0)).toBe(178000);
+  });
+
+  it("rejects a duplicate person and a negative share", () => {
+    expect(() =>
+      splitExact(100, [
+        { userId: "a", shareMinor: 40 },
+        { userId: "a", shareMinor: 60 },
+      ])
+    ).toThrow("Duplicate user");
+    expect(() =>
+      splitExact(100, [
+        { userId: "a", shareMinor: 150 },
+        { userId: "b", shareMinor: -50 },
+      ])
+    ).toThrow("non-negative");
   });
 
   it("rejects when shares do not sum to total", () => {
@@ -79,6 +104,18 @@ describe("splitByWeights", () => {
     expect(shares.reduce((s, r) => s + r.shareMinor, 0)).toBe(1000);
     const byId = Object.fromEntries(shares.map((s) => [s.userId, s.shareMinor]));
     expect(byId.c).toBe(500);
+  });
+
+  it("rejects a zero total weight and a duplicate person", () => {
+    expect(() => splitByWeights(100, [{ userId: "a", weight: 0 }])).toThrow(
+      "Total weight"
+    );
+    expect(() =>
+      splitByWeights(100, [
+        { userId: "a", weight: 1 },
+        { userId: "a", weight: 1 },
+      ])
+    ).toThrow("Duplicate user");
   });
 });
 
