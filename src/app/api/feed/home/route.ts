@@ -21,7 +21,7 @@ import { EntityType, Prisma } from "@prisma/client";
 // Get home feed (final posts from followed users and public profiles)
 export async function GET(request: NextRequest) {
   const loggedHandler = withLogging(async (req) => {
-    return withRateLimit(req, async (rateLimitedReq) => {
+    return withRateLimit(req, "read_hot", async (rateLimitedReq) => {
       return withAuth(rateLimitedReq, async (authenticatedReq) => {
         const endTimer =
           PerformanceMonitor.getInstance().startTimer("get_home_feed");

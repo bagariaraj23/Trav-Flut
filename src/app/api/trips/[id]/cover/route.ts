@@ -6,6 +6,7 @@ import {
   AuthenticatedRequest,
   handleApiError,
 } from "@/lib/middleware";
+import { enforcePresetRateLimit } from "@/lib/rateLimit";
 import { ApiResponse, MediaResponse } from "@/types/api";
 
 const updateCoverSchema = z.object({
@@ -157,6 +158,8 @@ export async function PATCH(
   request: NextRequest,
   context: { params: Promise<{ id: string }> }
 ) {
+  const limited = await enforcePresetRateLimit(request, "write");
+  if (limited) return limited;
   const params = await context.params;
   return withAuth(request, (authRequest) => handler(authRequest, { params: Promise.resolve(params) }));
 }

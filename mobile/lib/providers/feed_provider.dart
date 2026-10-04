@@ -27,6 +27,7 @@ class FeedProvider extends ChangeNotifier {
   String? _discoverTripsError;
   int _discoverTripsPage = 1;
   bool _hasMoreDiscoverTrips = true;
+  Future<void>? _discoverRefreshInFlight;
 
   // Getters
   List<TripFinalPost> get homeFeedPosts => _homeFeedPosts;
@@ -180,6 +181,26 @@ class FeedProvider extends ChangeNotifier {
 
   // Discover Trips Methods
   Future<void> loadDiscoverTrips({
+    bool refresh = false,
+    String? status,
+    String? mood,
+  }) {
+    if (refresh && _discoverRefreshInFlight != null) {
+      return _discoverRefreshInFlight!;
+    }
+    final run = _loadDiscoverTrips(
+      refresh: refresh,
+      status: status,
+      mood: mood,
+    );
+    if (!refresh) return run;
+    _discoverRefreshInFlight = run.whenComplete(() {
+      _discoverRefreshInFlight = null;
+    });
+    return _discoverRefreshInFlight!;
+  }
+
+  Future<void> _loadDiscoverTrips({
     bool refresh = false,
     String? status,
     String? mood,

@@ -4,7 +4,17 @@ import { resetUpstashRateLimit, getUpstashRateLimitStatus } from "@/lib/cache";
 
 export const dynamic = "force-dynamic";
 
+function productionLocked() {
+  return NextResponse.json(
+    { success: false, error: "Not found" },
+    { status: 404 }
+  );
+}
+
 export async function GET() {
+  if (process.env.NODE_ENV === "production") {
+    return productionLocked();
+  }
   try {
     const diagnostics = await diagnoseRedisConnection();
     const testResult = await testRedisCommand();
@@ -29,6 +39,9 @@ export async function GET() {
 }
 
 export async function POST(request: NextRequest) {
+  if (process.env.NODE_ENV === "production") {
+    return productionLocked();
+  }
   try {
     const { action } = await request.json().catch(() => ({}));
     

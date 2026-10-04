@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { AuthService } from "@/lib/auth";
 import { paginationSchema } from "@/lib/validation";
@@ -14,7 +15,7 @@ import { PerformanceMonitor, ErrorTracker } from "@/lib/monitoring";
 // Get discoverable trips (ongoing and completed trips from followed users and public profiles)
 export async function GET(request: NextRequest) {
   const loggedHandler = withLogging(async (req) => {
-    return withRateLimit(req, async (rateLimitedReq) => {
+    return withRateLimit(req, "read_hot", async (rateLimitedReq) => {
       return withAuth(rateLimitedReq, async (authenticatedReq) => {
         const endTimer =
           PerformanceMonitor.getInstance().startTimer("get_discover_trips");
@@ -107,77 +108,99 @@ export async function GET(request: NextRequest) {
             JSON.stringify(whereClause, null, 2)
           );
 
-          // Count and page in parallel. Engagement sort still runs on this page.
+          // Rank in SQL: followed authors, denormalized engagement, ongoing, then recency.
           console.log(`[API] GET /discover/trips - Fetching page and total`);
-          const [totalCount, trips] = await Promise.all([
-            prisma.trip.count({
-              where: whereClause,
-            }),
-            prisma.trip.findMany({
-              where: whereClause,
-              include: {
-                user: {
-                  select: {
-                    id: true,
-                    email: true,
-                    username: true,
-                    name: true,
-                    avatarUrl: true,
-                    bio: true,
-                    isPrivate: true,
-                    createdAt: true,
-                    updatedAt: true,
-                  },
-                },
-                coverMedia: true,
-                _count: {
-                  select: {
-                    threadEntries: true,
-                    media: true,
-                    participants: true,
-                  },
-                },
-              },
-              // Note: We'll sort in memory to prioritize followed users and engagement
-              skip: offset,
-              take: limitNum,
-            }),
+          const statusSql = status
+            ? Prisma.sql`t.status = ${status}::"TripStatus"`
+            : Prisma.sql`t.status IN ('ONGOING'::"TripStatus", 'ENDED'::"TripStatus")`;
+          const moodSql = mood
+            ? Prisma.sql`AND t.mood = ${mood}::"TripMood"`
+            : Prisma.empty;
+          const audienceSql =
+            followedUserIds.length > 0
+              ? Prisma.sql`(t."userId" IN (${Prisma.join(followedUserIds)}) OR u."isPrivate" = false)`
+              : Prisma.sql`u."isPrivate" = false`;
+          const followedRank =
+            followedUserIds.length > 0
+              ? Prisma.sql`CASE WHEN t."userId" IN (${Prisma.join(followedUserIds)}) THEN 0 ELSE 1 END`
+              : Prisma.sql`1`;
+
+          const [totalRows, rankedIds] = await Promise.all([
+            prisma.$queryRaw<Array<{ count: bigint }>>`
+              SELECT COUNT(*)::bigint AS count
+              FROM trips t
+              INNER JOIN users u ON u.id = t."userId"
+              WHERE t."userId" <> ${currentUserId}
+                AND ${statusSql}
+                ${moodSql}
+                AND ${audienceSql}
+            `,
+            prisma.$queryRaw<Array<{ id: string }>>`
+              SELECT t.id
+              FROM trips t
+              INNER JOIN users u ON u.id = t."userId"
+              WHERE t."userId" <> ${currentUserId}
+                AND ${statusSql}
+                ${moodSql}
+                AND ${audienceSql}
+              ORDER BY
+                ${followedRank},
+                (t."entryCount" + t."participantCount") DESC,
+                CASE WHEN t.status = 'ONGOING' THEN 0 ELSE 1 END,
+                t."updatedAt" DESC
+              LIMIT ${limitNum}
+              OFFSET ${offset}
+            `,
           ]);
+          const totalCount = Number(totalRows[0]?.count ?? 0);
+          const orderedIds = rankedIds.map((row) => row.id);
           console.log(`[API] GET /discover/trips - Total count: ${totalCount}`);
+
+          const tripRows =
+            orderedIds.length === 0
+              ? []
+              : await prisma.trip.findMany({
+                  where: { id: { in: orderedIds } },
+                  include: {
+                    user: {
+                      select: {
+                        id: true,
+                        email: true,
+                        username: true,
+                        name: true,
+                        avatarUrl: true,
+                        bio: true,
+                        isPrivate: true,
+                        createdAt: true,
+                        updatedAt: true,
+                      },
+                    },
+                    coverMedia: {
+                      select: {
+                        id: true,
+                        url: true,
+                        publicId: true,
+                        type: true,
+                        filename: true,
+                        size: true,
+                        width: true,
+                        height: true,
+                        duration: true,
+                        uploadedById: true,
+                        tripId: true,
+                        createdAt: true,
+                      },
+                    },
+                  },
+                });
+          const tripById = new Map(tripRows.map((trip) => [trip.id, trip]));
+          const trips = orderedIds
+            .map((id) => tripById.get(id))
+            .filter((trip): trip is (typeof tripRows)[number] => trip != null);
 
           console.log(
             `[API] GET /discover/trips - Found ${trips.length} trips`
           );
-
-          // Sort trips: followed users first, then by engagement (participants, media, entries)
-          trips.sort((a, b) => {
-            // 1. Prioritize trips from followed users
-            const aIsFollowed = followedUserIds.includes(a.userId);
-            const bIsFollowed = followedUserIds.includes(b.userId);
-            if (aIsFollowed && !bIsFollowed) return -1;
-            if (!aIsFollowed && bIsFollowed) return 1;
-
-            // 2. Then by engagement: participants + media + entries
-            const aEngagement = 
-              (a._count?.participants ?? 0) + 
-              (a._count?.media ?? 0) + 
-              (a._count?.threadEntries ?? 0);
-            const bEngagement = 
-              (b._count?.participants ?? 0) + 
-              (b._count?.media ?? 0) + 
-              (b._count?.threadEntries ?? 0);
-            const engagementDiff = bEngagement - aEngagement;
-            if (engagementDiff !== 0) return engagementDiff;
-
-            // 3. Then by status (ongoing before ended)
-            if (a.status !== b.status) {
-              if (a.status === "ONGOING") return -1;
-              if (b.status === "ONGOING") return 1;
-            }
-
-            // 4. Finally by updated date
-            return b.updatedAt.getTime() - a.updatedAt.getTime();
-          });
 
           // Transform to response format
           const tripsResponse: TripResponse[] = trips.map((trip) => ({

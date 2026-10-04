@@ -9,6 +9,7 @@ import 'package:tripthread/models/trip.dart';
 import 'package:tripthread/services/api_service.dart';
 import 'package:tripthread/utils/app_layout.dart';
 import 'package:tripthread/utils/app_theme.dart';
+import 'package:tripthread/utils/cloudinary_utils.dart';
 import 'package:tripthread/utils/user_display_labels.dart';
 import 'package:go_router/go_router.dart';
 
@@ -188,7 +189,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
               child: InteractiveViewer(
                 minScale: 0.5,
                 maxScale: 4,
-                child: Image.network(imageUrl, fit: BoxFit.contain),
+                child: Image.network(
+                  buildOptimizedImageUrl(imageUrl, width: 1600),
+                  fit: BoxFit.contain,
+                ),
               ),
             ),
             Positioned(

@@ -18,6 +18,7 @@ class FinalPostEditScreen extends StatefulWidget {
 
 class _FinalPostEditScreenState extends State<FinalPostEditScreen> {
   Trip? _trip;
+  List<TripThreadEntry> _threadEntries = const [];
   bool _isTripLoading = true;
   String? _tripError;
   final TextEditingController _summaryController = TextEditingController();
@@ -53,11 +54,12 @@ class _FinalPostEditScreenState extends State<FinalPostEditScreen> {
       final trip = response.data!;
       final authId = context.read<AuthProvider>().currentUser?.id;
       final isOwner = authId != null && trip.userId == authId;
-      if (mounted) {
-        context.read<FinalPostProvider>().setTripOwner(isOwner);
-      }
+      final entries = await _loadAllThreadEntries(tripService);
+      if (!mounted) return;
+      context.read<FinalPostProvider>().setTripOwner(isOwner);
       setState(() {
         _trip = trip;
+        _threadEntries = entries;
         _isTripLoading = false;
         _tripError = null;
       });
@@ -93,8 +95,26 @@ class _FinalPostEditScreenState extends State<FinalPostEditScreen> {
     );
   }
 
+  Future<List<TripThreadEntry>> _loadAllThreadEntries(TripService tripService) async {
+    final collected = <TripThreadEntry>[];
+    String? cursor;
+    for (var page = 0; page < 20; page++) {
+      final response = await tripService.getThreadEntries(
+        widget.tripId,
+        limit: 50,
+        olderThanCursor: cursor,
+      );
+      if (!response.success || response.data == null) break;
+      collected.addAll(response.data!.items);
+      final next = response.data!.nextOlderCursor;
+      if (!response.data!.hasMoreOlder || next == null || next.isEmpty) break;
+      cursor = next;
+    }
+    return collected;
+  }
+
   List<Media> get _mediaItems {
-    final entries = _trip?.threadEntries ?? [];
+    final entries = _threadEntries;
     final items = entries
         .map((entry) => entry.media)
         .whereType<Media>()

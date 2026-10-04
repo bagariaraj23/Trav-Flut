@@ -4,6 +4,7 @@ import { ZodError } from "zod";
 import { prisma } from "@/lib/prisma";
 import { AuthService } from "@/lib/auth";
 import { patchThreadEntryTextSchema } from "@/lib/validation";
+import { enforcePresetRateLimit } from "@/lib/rateLimit";
 import { ApiResponse, TripThreadEntryResponse, PlaceResponse } from "@/types/api";
 import { serializePlace } from "@/lib/place";
 import { checkLikeStatus } from "@/lib/services/like";
@@ -122,6 +123,8 @@ export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ id: string; entryId: string }> }
 ) {
+  const limited = await enforcePresetRateLimit(request, "write");
+  if (limited) return limited;
   try {
     const auth = parseAuth(request);
     if (auth instanceof NextResponse) return auth;
@@ -188,6 +191,8 @@ export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ id: string; entryId: string }> }
 ) {
+  const limited = await enforcePresetRateLimit(request, "write");
+  if (limited) return limited;
   try {
     const auth = parseAuth(request);
     if (auth instanceof NextResponse) return auth;

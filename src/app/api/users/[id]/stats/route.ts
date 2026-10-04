@@ -16,7 +16,7 @@ export async function GET(
 ) {
   const { id } = await params;
   const loggedHandler = withLogging(async (req: NextRequest) => {
-    return withRateLimit(req, async (rateLimitedReq: NextRequest) => {
+    return withRateLimit(req, "read_hot", async (rateLimitedReq: NextRequest) => {
       return withAuth(
         rateLimitedReq,
         async (authenticatedReq: AuthenticatedRequest) => {
@@ -26,20 +26,17 @@ export async function GET(
           try {
             const userId = id;
 
-            // Get follower count
-            const followerCount = await prisma.follow.count({
-              where: { followeeId: userId },
-            });
-
-            // Get following count
-            const followingCount = await prisma.follow.count({
-              where: { followerId: userId },
-            });
-
-            // Get trip count
-            const tripCount = await prisma.trip.count({
-              where: { userId: userId },
-            });
+            const [followerCount, followingCount, tripCount] = await Promise.all([
+              prisma.follow.count({
+                where: { followeeId: userId },
+              }),
+              prisma.follow.count({
+                where: { followerId: userId },
+              }),
+              prisma.trip.count({
+                where: { userId: userId },
+              }),
+            ]);
 
             const stats: UserStats = {
               tripCount,

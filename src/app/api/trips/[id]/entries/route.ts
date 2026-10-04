@@ -13,6 +13,7 @@ import { serializePlace } from "@/lib/place";
 import { checkLikeStatus } from "@/lib/services/like";
 import { createNotification } from "@/lib/services/notification";
 import { EntityType, Prisma } from "@prisma/client";
+import { enforcePresetRateLimit } from "@/lib/rateLimit";
 import { canViewEntity } from "@/lib/auth/permissions";
 import { resolveTaggedUserIdsForTripThread } from "@/lib/services/tripTagResolution";
 
@@ -122,6 +123,8 @@ export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const limited = await enforcePresetRateLimit(request, "write");
+  if (limited) return limited;
   try {
     const { id } = await params;
     const tripId = id;

@@ -270,59 +270,67 @@ export async function getSharesByUser(
 
   const result = paginateResults(shares, limit);
 
-  const itemsWithEntity = await Promise.all(
-    result.items.map(async (share) => {
-      let entityPreview: any = null;
-      if (share.entityType === "TRIP_FINAL_POST") {
-        const post = await prisma.tripFinalPost.findUnique({
-          where: { id: share.entityId },
+  const postIds = result.items
+    .filter((share) => share.entityType === "TRIP_FINAL_POST")
+    .map((share) => share.entityId);
+  const entryIds = result.items
+    .filter((share) => share.entityType === "TRIP_THREAD_ENTRY")
+    .map((share) => share.entityId);
+  const commentIds = result.items
+    .filter((share) => share.entityType === "COMMENT")
+    .map((share) => share.entityId);
+
+  const [posts, entries, comments] = await Promise.all([
+    postIds.length
+      ? prisma.tripFinalPost.findMany({
+          where: { id: { in: postIds } },
           select: {
             id: true,
             summaryText: true,
-            trip: {
-              select: {
-                id: true,
-                title: true,
-              },
-            },
+            trip: { select: { id: true, title: true } },
           },
-        });
-        entityPreview = post;
-      } else if (share.entityType === "TRIP_THREAD_ENTRY") {
-        const entry = await prisma.tripThreadEntry.findUnique({
-          where: { id: share.entityId },
+        })
+      : Promise.resolve([]),
+    entryIds.length
+      ? prisma.tripThreadEntry.findMany({
+          where: { id: { in: entryIds } },
           select: {
             id: true,
             contentText: true,
-            trip: {
-              select: {
-                id: true,
-                title: true,
-              },
-            },
+            trip: { select: { id: true, title: true } },
           },
-        });
-        entityPreview = entry;
-      } else if (share.entityType === "COMMENT") {
-        const comment = await prisma.comment.findUnique({
-          where: { id: share.entityId },
+        })
+      : Promise.resolve([]),
+    commentIds.length
+      ? prisma.comment.findMany({
+          where: { id: { in: commentIds } },
           select: {
             id: true,
             contentText: true,
-            user: {
-              select: USER_MINIMAL_SELECT,
-            },
+            user: { select: USER_MINIMAL_SELECT },
           },
-        });
-        entityPreview = comment;
-      }
+        })
+      : Promise.resolve([]),
+  ]);
 
-      return {
-        ...share,
-        entityPreview,
-      };
-    })
-  );
+  const postById = new Map(posts.map((post) => [post.id, post]));
+  const entryById = new Map(entries.map((entry) => [entry.id, entry]));
+  const commentById = new Map(comments.map((comment) => [comment.id, comment]));
+
+  const itemsWithEntity = result.items.map((share) => {
+    let entityPreview: (typeof posts)[number] | (typeof entries)[number] | (typeof comments)[number] | null = null;
+    if (share.entityType === "TRIP_FINAL_POST") {
+      entityPreview = postById.get(share.entityId) ?? null;
+    } else if (share.entityType === "TRIP_THREAD_ENTRY") {
+      entityPreview = entryById.get(share.entityId) ?? null;
+    } else if (share.entityType === "COMMENT") {
+      entityPreview = commentById.get(share.entityId) ?? null;
+    }
+    return {
+      ...share,
+      entityPreview,
+    };
+  });
 
   return {
     ...result,

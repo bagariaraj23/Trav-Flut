@@ -79,10 +79,6 @@ class _HomeScreenState extends State<HomeScreen> {
 
       // Load pending follow requests and unread notification count to update notification badge
       if (!mounted) return;
-      context.read<UserProvider>().loadPendingFollowRequests();
-      debugPrint(
-        '[HomeScreen] Loading pending follow requests for notifications',
-      );
       final userProvider = context.read<UserProvider>();
       userProvider.loadPendingFollowRequests();
       userProvider.loadUnreadNotificationCount();
@@ -151,12 +147,6 @@ class _HomeScreenState extends State<HomeScreen> {
             setState(() {
               _currentIndex = index;
             });
-            if (index == 2) {
-              WidgetsBinding.instance.addPostFrameCallback((_) {
-                if (!context.mounted) return;
-                context.read<FeedProvider>().loadDiscoverTrips(refresh: true);
-              });
-            }
           },
           type: BottomNavigationBarType.fixed,
           items: const [
