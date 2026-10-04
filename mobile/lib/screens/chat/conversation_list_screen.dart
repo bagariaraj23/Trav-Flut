@@ -82,8 +82,45 @@ class _ConversationListScreenState extends State<ConversationListScreen> {
             );
           }
           if (list.isEmpty) {
-            return const Center(
-              child: Text('No conversations yet.\nStart a trip or message a friend.'),
+            final scheme = Theme.of(context).colorScheme;
+            return Center(
+              child: Padding(
+                padding: const EdgeInsets.all(32),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      Icons.chat_bubble_outline,
+                      size: 48,
+                      color: scheme.onSurfaceVariant,
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      'No conversations yet',
+                      style: Theme.of(context).textTheme.titleMedium,
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      widget.tripId == null
+                          ? 'Start a trip chat or message a friend.'
+                          : 'Trip chat will appear once you are a participant.',
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                            color: scheme.onSurfaceVariant,
+                          ),
+                      textAlign: TextAlign.center,
+                    ),
+                    if (widget.tripId == null) ...[
+                      const SizedBox(height: 20),
+                      FilledButton.icon(
+                        onPressed: () => context.push('/chat/new'),
+                        icon: const Icon(Icons.add_comment),
+                        label: const Text('New chat'),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
             );
           }
           return RefreshIndicator(

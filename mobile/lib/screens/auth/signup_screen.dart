@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:form_field_validator/form_field_validator.dart';
 import 'package:tripthread/providers/auth_provider.dart';
 import 'package:tripthread/services/google_sign_in_service.dart';
+import 'package:tripthread/utils/app_layout.dart';
 import 'package:tripthread/utils/validators.dart';
 import 'package:tripthread/widgets/custom_text_field.dart';
 import 'package:tripthread/widgets/loading_button.dart';
@@ -60,6 +61,7 @@ class _SignupScreenState extends State<SignupScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final spacing = AppLayout.authSpacing(context);
     return PopScope(
       canPop: true,
       onPopInvokedWithResult: (didPop, result) {
@@ -67,20 +69,24 @@ class _SignupScreenState extends State<SignupScreen> {
       },
       child: Scaffold(
         body: SafeArea(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.all(24.0),
+          child: Align(
+            alignment: Alignment.topCenter,
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 420),
+              child: SingleChildScrollView(
+            padding: EdgeInsets.all(spacing.pagePadding),
             child: Form(
               key: _formKey,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  const SizedBox(height: 40),
+                  SizedBox(height: spacing.top),
 
                   // Logo and Title
                   Column(
                     children: [
-                      const TripThreadLogo(size: 64),
-                      const SizedBox(height: 24),
+                      TripThreadLogo(size: spacing.logo),
+                      SizedBox(height: spacing.afterLogo),
                       Text(
                         'Create account',
                         style: Theme.of(context).textTheme.displaySmall,
@@ -95,7 +101,7 @@ class _SignupScreenState extends State<SignupScreen> {
                     ],
                   ),
 
-                  const SizedBox(height: 48),
+                  SizedBox(height: spacing.beforeFields),
 
                   // Name Field
                   CustomTextField(
@@ -125,6 +131,7 @@ class _SignupScreenState extends State<SignupScreen> {
                     controller: _usernameController,
                     label: 'Username',
                     prefixIcon: Icons.alternate_email,
+                    collapseSelectionOnTap: true,
                     validator: (value) {
                       final normalized =
                           Validators.normalizeUsernameToAscii(value?.trim() ?? '');
@@ -412,7 +419,7 @@ class _SignupScreenState extends State<SignupScreen> {
                     },
                   ),
 
-                  const SizedBox(height: 24),
+                  SizedBox(height: spacing.section),
 
                   // Login Link
                   Row(
@@ -435,13 +442,15 @@ class _SignupScreenState extends State<SignupScreen> {
                     ],
                   ),
 
-                  const SizedBox(height: 40),
+                  SizedBox(height: spacing.bottom),
                 ],
               ),
             ),
           ),
+              ),
+            ),
+          ),
         ),
-      ),
     );
   }
 }

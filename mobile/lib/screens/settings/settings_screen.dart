@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
 import 'package:tripthread/providers/auth_provider.dart';
 import 'package:tripthread/services/google_sign_in_service.dart';
+import 'package:tripthread/utils/app_layout.dart';
 import 'package:tripthread/widgets/logout_dialog.dart';
 
 class SettingsScreen extends StatelessWidget {
@@ -96,18 +97,20 @@ class SettingsScreen extends StatelessWidget {
                 },
               ),
             ),
-            body: ListView(
+            body: AppLayout.reading(
+              context: context,
+              child: ListView(
               children: [
                 const SizedBox(height: 16),
-                const Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 16),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
                   child: Text(
-                    'Linked accounts',
-                    style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w500,
-                      color: Colors.grey,
-                    ),
+                    'LINKED ACCOUNTS',
+                    style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                          letterSpacing: 1.1,
+                          fontSize: 11,
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        ),
                   ),
                 ),
                 _buildSettingsTile(
@@ -187,15 +190,15 @@ class SettingsScreen extends StatelessWidget {
                   },
                 ),
                 const Divider(),
-                const Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 16),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
                   child: Text(
-                    'Account',
-                    style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w500,
-                      color: Colors.grey,
-                    ),
+                    'ACCOUNT',
+                    style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                          letterSpacing: 1.1,
+                          fontSize: 11,
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        ),
                   ),
                 ),
                 Padding(
@@ -443,6 +446,7 @@ class SettingsScreen extends StatelessWidget {
                   },
                 ),
               ],
+            ),
             ),
           ),
         );

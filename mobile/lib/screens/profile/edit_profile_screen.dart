@@ -312,6 +312,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                   controller: _usernameController,
                   label: 'Username',
                   prefixIcon: Icons.alternate_email,
+                  collapseSelectionOnTap: true,
                   validator: (value) {
                     final normalized =
                         Validators.normalizeUsernameToAscii(value?.trim() ?? '');
