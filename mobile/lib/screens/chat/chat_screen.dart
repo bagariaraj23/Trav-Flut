@@ -1296,7 +1296,7 @@ class _MessageBubble extends StatelessWidget {
                             strokeWidth: 1.5,
                             color: Theme.of(context)
                                 .colorScheme
-                                .onPrimaryContainer
+                                .onPrimary
                                 .withOpacity(0.7),
                           ),
                         ),
@@ -1474,7 +1474,7 @@ class _SeenIndicator extends StatelessWidget {
         label,
         style: Theme.of(context).textTheme.bodySmall?.copyWith(
               fontSize: 10,
-              color: Theme.of(context).colorScheme.primary.withOpacity(0.85),
+              color: Theme.of(context).colorScheme.onPrimary.withOpacity(0.85),
             ),
       ),
     );

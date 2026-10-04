@@ -8,6 +8,7 @@ import 'package:tripthread/models/user.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:tripthread/utils/app_layout.dart';
 import 'package:tripthread/utils/app_theme.dart';
+import 'package:tripthread/utils/user_display_labels.dart';
 import 'package:tripthread/utils/cloudinary_utils.dart';
 import 'package:tripthread/widgets/loading_button.dart';
 import 'package:tripthread/widgets/mention_text.dart';
@@ -601,9 +602,7 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
                           : null,
                       child: _trip!.user!.avatarUrl == null
                           ? Text(
-                              (_trip!.user!.name ?? 'U')
-                                  .substring(0, 1)
-                                  .toUpperCase(),
+                              userAvatarInitial(name: _trip!.user!.name),
                               style: const TextStyle(
                                 color: AppTheme.ink,
                                 fontWeight: FontWeight.w600,
@@ -658,9 +657,7 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
                                     : null,
                                 child: _trip!.participants![i].user?.avatarUrl == null
                                     ? Text(
-                                        (_trip!.participants![i].user?.name ?? 'U')
-                                            .substring(0, 1)
-                                            .toUpperCase(),
+                                        userAvatarInitial(name: _trip!.participants![i].user?.name),
                                         style: const TextStyle(fontSize: 10, color: AppTheme.ink),
                                       )
                                     : null,
