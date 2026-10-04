@@ -9,6 +9,15 @@ export interface GoogleTokenPayload {
   sub: string;
 }
 
+const GOOGLE_VERIFY_TIMEOUT_MS = 2500;
+
+export class GoogleVerifyTimeoutError extends Error {
+  constructor() {
+    super("Google token verification timed out");
+    this.name = "GoogleVerifyTimeoutError";
+  }
+}
+
 /**
  * Verify a Google ID token and return the payload (email, name, picture, sub).
  * Returns null if the token is invalid or expired.
@@ -22,10 +31,24 @@ export async function verifyGoogleIdToken(
   }
   try {
     const client = new OAuth2Client(clientId);
-    const ticket = await client.verifyIdToken({
-      idToken,
-      audience: clientId,
-    });
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let ticket;
+    try {
+      ticket = await Promise.race([
+        client.verifyIdToken({
+          idToken,
+          audience: clientId,
+        }),
+        new Promise<never>((_, reject) => {
+          timer = setTimeout(
+            () => reject(new GoogleVerifyTimeoutError()),
+            GOOGLE_VERIFY_TIMEOUT_MS
+          );
+        }),
+      ]);
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
     const payload = ticket.getPayload();
     if (!payload || !payload.email) {
       return null;
@@ -37,6 +60,9 @@ export async function verifyGoogleIdToken(
       sub: payload.sub,
     };
   } catch (error) {
+    if (error instanceof GoogleVerifyTimeoutError) {
+      throw error;
+    }
     console.error("[GoogleAuth] verifyIdToken error:", error);
     return null;
   }

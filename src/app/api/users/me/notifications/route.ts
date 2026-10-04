@@ -10,7 +10,7 @@ import { ApiResponse } from "@/types/api";
  */
 export async function GET(request: NextRequest) {
   return withLogging(async (req) => {
-    return withRateLimit(req, async (rateLimitedReq) => {
+    return withRateLimit(req, "read_hot", async (rateLimitedReq) => {
       return withAuth(rateLimitedReq, async (authenticatedReq) => {
         try {
           const userId = authenticatedReq.user!.userId;

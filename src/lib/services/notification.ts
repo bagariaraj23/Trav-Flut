@@ -1,5 +1,16 @@
 import type { EntityType, NotificationType, Prisma } from '@prisma/client'
 import { prisma } from '../prisma'
+import { getOrSet, invalidateCachedKey } from '../redis'
+
+const UNREAD_COUNT_TTL_MS = 20_000
+
+function unreadCountCacheKey(recipientId: string): string {
+  return `notif:unread:${recipientId}`
+}
+
+async function invalidateUnreadCount(recipientId: string): Promise<void> {
+  await invalidateCachedKey(unreadCountCacheKey(recipientId))
+}
 
 export type CreateNotificationParams = {
   type: 'LIKE' | 'COMMENT_LIKE' | 'COMMENT' | 'COMMENT_REPLY' | 'TAG' | 'FOLLOW'
@@ -152,7 +163,9 @@ export async function createNotification(params: CreateNotificationParams) {
     ...(metadata != null && { metadata: metadata as Prisma.InputJsonValue })
   }
 
-  return prisma.notification.create({ data })
+  const created = await prisma.notification.create({ data })
+  await invalidateUnreadCount(recipientId)
+  return created
 }
 
 /**
@@ -307,6 +320,7 @@ export async function markAllNotificationsRead(recipientId: string): Promise<num
     },
     data: { readAt: new Date() }
   })
+  await invalidateUnreadCount(recipientId)
   return result.count
 }
 
@@ -331,6 +345,7 @@ export async function markNotificationRead(
     where: { id: notificationId },
     data: { readAt: new Date() },
   })
+  await invalidateUnreadCount(recipientId)
   return 'marked'
 }
 
@@ -339,11 +354,15 @@ export async function markNotificationRead(
  * Does not include follow requests (handled separately).
  */
 export async function getUnreadNotificationCount(recipientId: string): Promise<number> {
-  return prisma.notification.count({
-    where: {
-      recipientId,
-      readAt: null,
-      actor: { deletedAt: null }
-    }
-  })
+  return getOrSet(
+    unreadCountCacheKey(recipientId),
+    () =>
+      prisma.notification.count({
+        where: {
+          recipientId,
+          readAt: null,
+        },
+      }),
+    UNREAD_COUNT_TTL_MS
+  )
 }

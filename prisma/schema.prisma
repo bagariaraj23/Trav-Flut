@@ -224,6 +224,7 @@ model Trip {
   boundSwLng Float?
 
   @@index([userId, status])
+  @@index([userId, createdAt(sort: Desc)])
   @@index([status, endDate])
   @@index([status, startDate])
   @@map("trips")
@@ -402,6 +403,7 @@ model Media {
   tripCover     Trip[]            @relation("TripCoverMedia")
 
   @@index([chatMessageId])
+  @@index([tripId])
   @@index([uploadedById, createdAt(sort: Desc)])
   @@map("media")
 }
@@ -433,6 +435,7 @@ model Conversation {
 
   @@index([tripId])
   @@index([type])
+  @@index([updatedAt(sort: Desc)])
   @@map("conversations")
 }
 
@@ -495,6 +498,7 @@ model TripJoinRequest {
   trip       Trip                  @relation(fields: [tripId], references: [id], onDelete: Cascade)
 
   @@unique([tripId, receiverId])
+  @@index([receiverId, status])
   @@map("trip_join_requests")
 }
 

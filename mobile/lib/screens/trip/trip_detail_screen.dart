@@ -9,6 +9,7 @@ import 'package:tripthread/utils/cloudinary_utils.dart';
 import 'package:tripthread/widgets/loading_button.dart';
 import 'package:tripthread/widgets/mention_text.dart';
 import 'package:tripthread/services/media_service.dart';
+import 'package:tripthread/services/trip_service.dart';
 
 class TripDetailScreen extends StatefulWidget {
   final String tripId;
@@ -21,6 +22,7 @@ class TripDetailScreen extends StatefulWidget {
 
 class _TripDetailScreenState extends State<TripDetailScreen> {
   Trip? _trip;
+  List<TripThreadEntry> _previewEntries = const [];
   bool _isLoading = true;
   MediaService? _mediaService;
   bool _isUpdatingCover = false;
@@ -40,11 +42,20 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
 
   Future<void> _loadTrip() async {
     final tripProvider = context.read<TripProvider>();
+    final tripService = context.read<TripService>();
     final trip = await tripProvider.getTrip(widget.tripId);
+    var preview = const <TripThreadEntry>[];
+    if (trip != null) {
+      final page = await tripService.getThreadEntries(widget.tripId, limit: 3);
+      if (page.success && page.data != null) {
+        preview = page.data!.items;
+      }
+    }
 
     if (mounted) {
       setState(() {
         _trip = trip;
+        _previewEntries = preview;
         _isLoading = false;
       });
     }
@@ -916,7 +927,7 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
   }
 
   Widget _buildThreadSection() {
-    final entries = _trip!.threadEntries ?? [];
+    final entries = _previewEntries;
 
     return Card(
       child: Padding(

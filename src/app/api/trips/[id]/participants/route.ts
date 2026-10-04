@@ -5,12 +5,15 @@ import { addParticipantSchema } from "@/lib/validation";
 import { ApiResponse, TripParticipantResponse } from "@/types/api";
 import { assertMemberZeroNetOnTrip } from "@/lib/services/expense";
 import { UnsettledBalanceError } from "@/lib/errors";
+import { enforcePresetRateLimit } from "@/lib/rateLimit";
 
 // Add participant to trip
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const limited = await enforcePresetRateLimit(request, "write");
+  if (limited) return limited;
   try {
     const { id } = await params;
     const tripId = id;
@@ -210,6 +213,8 @@ export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const limited = await enforcePresetRateLimit(request, "write");
+  if (limited) return limited;
   try {
     const { id } = await params;
     const tripId = id;
@@ -336,6 +341,8 @@ export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const limited = await enforcePresetRateLimit(request, "read_hot");
+  if (limited) return limited;
   try {
     const { id } = await params;
     const tripId = id;

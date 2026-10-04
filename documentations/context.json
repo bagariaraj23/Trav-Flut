@@ -4,7 +4,7 @@
         "workspacePath": "/Users/rajbagaria/Desktop/Bolt-Travello/Flut/project",
         "generatedAt": "2026-10-04",
         "description": "Travel-focused social platform where users create trips, post thread entries (text/media/location/check-ins), generate/publish final trip posts, track a private trip expense ledger, and chat via 1:1 DMs, groups, and trip-scoped rooms (realtime WebSocket).",
-        "lastPRReviewed": "Open stack, not merged: PR #50 trip expense ledger (draft, feat-expenses-split \u2192 main), PR #51 Warm theme polish (draft, feat-ui-warm-polish \u2192 feat-expenses-split), branch feat-api-db-optimizations (indexes + home-feed cursor, stacked on feat-ui-warm-polish). PR #49 share/Docker follow-ups remain the latest merge on main. Universal Links ops (TEAMID/SHA-256 + SHARE_LINK_BASE_URL) still remaining.",
+        "lastPRReviewed": "Open stack, not merged: PR #50 trip expense ledger (draft, feat-expenses-split \u2192 main), PR #51 Warm theme polish (draft, feat-ui-warm-polish \u2192 feat-expenses-split), PR #52 API/DB optimizations (draft, feat-api-db-optimizations \u2192 feat-ui-warm-polish). PR #49 share/Docker follow-ups remain the latest merge on main. Universal Links ops (TEAMID/SHA-256 + SHARE_LINK_BASE_URL) still remaining. Cloudinary upload presets must exist in the dashboard (tripthread_thread_image, cover, video, avatar) before signed uploads that include upload_preset succeed.",
         "recentProductionPRs": [
             "https://github.com/bagariaraj23/Trav-Flut/pull/49",
             "https://github.com/bagariaraj23/Trav-Flut/pull/48",
@@ -132,7 +132,7 @@
             "Conversation model supports DM, GROUP, and TRIP type rooms with dynamic participants and leftAt validation",
             "ChatMessage model supports content, soft deletion with deletedAt, and message replyTo hierarchy",
             "Trip expense ledger (PR #50, not merged): TripExpense soft-delete, TripExpenseShare, TripSettlement; money stored as integer minor units; one expenseCurrency per trip frozen after the first live expense; nets recomputed from live expenses plus PAID/COMPLETED settlements",
-            "Hot-path indexes (branch feat-api-db-optimizations, migration 20261004153000_add_hot_path_query_indexes): trip threads (tripId+createdAt+id, authorId+createdAt), published final posts (isPublished+createdAt+id), notifications (recipientId+createdAt+id), follows/follow requests, trip status+dates, participant userId, likes by user, comment replies, media by uploader"
+            "Hot-path indexes (PR #52): migration 20261004153000_add_hot_path_query_indexes plus 20261004180000_add_remaining_hot_path_indexes (trips userId+createdAt, media tripId, trip_join_requests receiverId+status, conversations updatedAt). Earlier slice covers trip threads, published final posts, notifications, follows, trip status+dates, participant userId, likes, comment replies, media by uploader"
         ]
     },
     "backendApi": {
@@ -2261,18 +2261,17 @@
         "completedFeatures": 62,
         "inProgressFeatures": 3,
         "plannedFeatures": 2,
-        "totalPRs": 51,
+        "totalPRs": 52,
         "mergedPRs": 46,
-        "openPRs": 5,
+        "openPRs": 6,
         "raceConditionFixes": {
             "total": 17,
-            "fixed": 14,
-            "remaining": 3,
-            "status": "82% secure",
+            "fixed": 15,
+            "remaining": 2,
+            "status": "88% secure",
             "remainingIssues": [
                 "Final post generation race condition (end trip route)",
-                "Media quota tracking race condition",
-                "Cache stampede in getOrSet function"
+                "Media quota tracking race condition"
             ]
         },
         "testingCoverage": {
@@ -2285,7 +2284,7 @@
             "notes": "See tests/TESTING.md and context.json testing section for suite inventory; run npm run test:coverage on Node 20+ with tripthread_test DB. Do not add platform-specific Rolldown bindings (e.g. @rolldown/binding-darwin-arm64) to root dependencies \u2014 breaks Railway Linux deploys (fixed in PR #47)."
         },
         "lastMergedFeature": "PR #49 Share deep links + Docker chat/share follow-ups (merged 2026-09-14, ca8fc88)",
-        "notes": "main is still PR #49. Open stack above main: PR #50 expense ledger, PR #51 Warm theme polish, then branch feat-api-db-optimizations (hot-path indexes, home-feed cursor, discover count in parallel). GET /users/me and notification listing were already narrow and cursor-based. Still deferred from infra_scalability_analysis.md: Cloudinary upload presets, getOrSet cache-stampede lock, and external API timeout tuning. Universal Links ops remain.",
+        "notes": "main is still PR #49. Open stack above main: PR #50 expense ledger, PR #51 Warm theme polish, PR #52 API/DB optimizations (Redis timeout and circuit breaker, getOrSet stampede lock, hot-path indexes, discover SQL order, lean trip list, trip GET without embedded thread, stats in parallel, unread badge cache, batched share previews, places resolve lock, Mapbox/Google timeouts, rate-limit presets, Cloudinary preset names, orphan-media script, home fetch dedupe). Cloudinary dashboard presets are still an ops prerequisite. Universal Links ops remain.",
         "mainBranchStable": true,
         "activeStack": [
             {
@@ -2299,10 +2298,10 @@
                 "base": "feat-expenses-split"
             },
             {
-                "pr": null,
+                "pr": 52,
                 "branch": "feat-api-db-optimizations",
                 "base": "feat-ui-warm-polish",
-                "notes": "Pushed to origin. GitHub pull request was not opened because gh is not logged in on this machine. Compare: https://github.com/bagariaraj23/Trav-Flut/compare/feat-ui-warm-polish...feat-api-db-optimizations"
+                "notes": "https://github.com/bagariaraj23/Trav-Flut/pull/52"
             }
         ]
     },
@@ -2425,14 +2424,14 @@
                 ],
                 "status": "in-progress-on-stack",
                 "highlights": [
-                    "Done on feat-api-db-optimizations: hot-path indexes; home feed keyset cursor + nextCursor; no per-post _count on the feed; discover count and page in parallel",
-                    "Already in place before that branch: GET /users/me narrow select; notification list is cursor-based",
-                    "Still deferred: Cloudinary upload presets + transformed delivery URLs; getOrSet cache-stampede lock; external API timeouts",
+                    "PR #52: Redis rate-limit timeout and circuit breaker; getOrSet stampede lock; additive indexes; home-feed cursor; discover SQL order without live _count; lean trip list; GET /trips/[id] metadata only; stats counts in parallel; unread badge cached 20s without actor join; share previews batched; places resolve deduped and locked; Mapbox 2s and Google verify 2.5s timeouts; read_hot/media_upload/chat_message/write presets; Cloudinary preset names on the signature; opt-in orphan-media script; home follow/discover/stats fetch dedupe",
+                    "GET /users/me stays a narrow select and no longer returns the password hash",
+                    "Cloudinary dashboard presets (tripthread_thread_image, cover, video, avatar) are still created outside the app",
                     "Neon connection resilience (already partial reconnect)",
                     "Open product issues: trip dates/timezone (#6/#7/#8), continue/replace (#11), thread realtime (#15)",
                     "Partial: logout-all (#9), share Universal Links ops (#32), avatar quirks (#19/#33)"
                 ],
-                "notes": "Query/index slice is on branch feat-api-db-optimizations (stacked on feat-ui-warm-polish). Apply migration 20261004153000_add_hot_path_query_indexes before relying on the new indexes. Cloudinary presets and the Redis stampede lock are not in this branch.",
+                "notes": "PR #52 on feat-api-db-optimizations (stacked on feat-ui-warm-polish). Apply migrations 20261004153000_add_hot_path_query_indexes and 20261004180000_add_remaining_hot_path_indexes before relying on the new indexes. Create the Cloudinary upload presets in the dashboard before uploads that send upload_preset. Orphan media cleanup is opt-in: npm run cleanup:orphan-media, then the same command with --apply.",
                 "branch": "feat-api-db-optimizations"
             },
             {

@@ -1,8 +1,7 @@
-import { cacheGetJson, cacheSetJson } from "@/lib/cache";
 import { redis, memoryCache } from "@/lib/redis";
+import { isRedisCircuitOpen, withRedisDeadline } from "@/lib/redisGuard";
 import { NextRequest, NextResponse } from "next/server";
 import { ApiResponse } from "@/types/api";
-import { RateLimitError } from "./errors";
 
 /**
  * Rate limit configuration
@@ -135,6 +134,38 @@ export const RATE_LIMIT_PRESETS: Record<string, RateLimitConfig> = {
     keyPrefix: "rl:places",
     logEvent: false,
   },
+
+  // Hot reads: looser than writes so feed/discover stay usable.
+  read_hot: {
+    maxRequests: 240,
+    windowMs: 60 * 1000,
+    keyPrefix: "rl:read_hot",
+    logEvent: false,
+  },
+
+  // Direct uploads (signature, confirm, delete).
+  media_upload: {
+    maxRequests: 20,
+    windowMs: 60 * 1000,
+    keyPrefix: "rl:media",
+    logEvent: true,
+  },
+
+  // Chat message sends.
+  chat_message: {
+    maxRequests: 30,
+    windowMs: 60 * 1000,
+    keyPrefix: "rl:chat",
+    logEvent: false,
+  },
+
+  // Mutations that previously had no limiter.
+  write: {
+    maxRequests: 60,
+    windowMs: 60 * 1000,
+    keyPrefix: "rl:write",
+    logEvent: false,
+  },
 };
 
 /**
@@ -186,28 +217,22 @@ export async function checkSlidingWindowRateLimit(
   let timestamps: number[] = [];
   let count: number;
 
-  if (redis) {
+  if (redis && !isRedisCircuitOpen()) {
     // Use Redis Sorted Set for distributed sliding window
     try {
-      // Remove old timestamps outside the window
-      await redis.zremrangebyscore(key, 0, windowStart);
-
-      // Get count of requests in current window
-      count = await redis.zcard(key);
-
-      // Get all timestamps for calculating reset time
-      const members = await redis.zrange<string[]>(key, 0, -1);
-      timestamps = members.map((m: string) => parseFloat(m));
-
-      // If allowed, add current timestamp
-      if (count < config.maxRequests) {
-        // Upstash Redis zadd signature: zadd(key, { score: number, member: string })
-        await redis.zadd(key, { score: now, member: now.toString() });
-        // Set expiration on the key (cleanup old keys)
-        await redis.pexpire(key, config.windowMs + 60000); // Extra minute for safety
-        count++;
-        timestamps.push(now);
-      }
+      timestamps = await withRedisDeadline(async () => {
+        await redis!.zremrangebyscore(key, 0, windowStart);
+        const current = await redis!.zcard(key);
+        const members = await redis!.zrange<string[]>(key, 0, -1);
+        const windowTimestamps = members.map((m: string) => parseFloat(m));
+        if (current < config.maxRequests) {
+          await redis!.zadd(key, { score: now, member: now.toString() });
+          await redis!.pexpire(key, config.windowMs + 60000);
+          windowTimestamps.push(now);
+        }
+        return windowTimestamps;
+      });
+      count = timestamps.length;
     } catch (error) {
       // Fallback to memory cache if Redis fails
       console.warn(
@@ -307,60 +332,66 @@ export async function checkRateLimit(
 
   let count: number;
 
-  if (redis) {
-    // Use Redis for distributed rate limiting
+  if (redis && !isRedisCircuitOpen()) {
     try {
-      const result = await redis.incr(key);
-      if (result === 1) {
-        // First request in this window, set expiration
-        await redis.pexpire(key, config.windowMs);
-      }
-      count = result;
+      count = await withRedisDeadline(async () => {
+        const result = await redis!.incr(key);
+        if (result === 1) {
+          await redis!.pexpire(key, config.windowMs);
+        }
+        return result;
+      });
     } catch (error) {
-      // Fallback to memory cache if Redis fails
       console.warn(
         "[RateLimit] Redis error, falling back to memory cache:",
         error
       );
-      const cached = memoryCache.get(key) as {
-        count: number;
-        resetTime: number;
-      } | null;
-      if (cached && cached.resetTime > now) {
-        count = cached.count + 1;
-        memoryCache.set(
-          key,
-          { count, resetTime: cached.resetTime },
-          config.windowMs
-        );
-      } else {
-        count = 1;
-        memoryCache.set(key, { count, resetTime: resetAt }, config.windowMs);
-      }
+      count = bumpMemoryFixedWindow(key, now, resetAt, config.windowMs);
     }
   } else {
-    // Use memory cache as fallback
-    const cached = memoryCache.get(key) as {
-      count: number;
-      resetTime: number;
-    } | null;
-    if (cached && cached.resetTime > now) {
-      count = cached.count + 1;
-      memoryCache.set(
-        key,
-        { count, resetTime: cached.resetTime },
-        config.windowMs
-      );
-    } else {
-      count = 1;
-      memoryCache.set(key, { count, resetTime: resetAt }, config.windowMs);
-    }
+    count = bumpMemoryFixedWindow(key, now, resetAt, config.windowMs);
   }
 
   const remaining = Math.max(0, config.maxRequests - count);
   const allowed = count <= config.maxRequests;
 
   return { allowed, remaining, resetAt, count };
+}
+
+function bumpMemoryFixedWindow(
+  key: string,
+  now: number,
+  resetAt: number,
+  windowMs: number
+): number {
+  const cached = memoryCache.get(key) as {
+    count: number;
+    resetTime: number;
+  } | null;
+  if (cached && cached.resetTime > now) {
+    const count = cached.count + 1;
+    memoryCache.set(key, { count, resetTime: cached.resetTime }, windowMs);
+    return count;
+  }
+  memoryCache.set(key, { count: 1, resetTime: resetAt }, windowMs);
+  return 1;
+}
+
+/**
+ * Apply a named preset and return a 429 response when the caller is over the limit.
+ * Returns null when the request may proceed. Used by write routes that are not
+ * wrapped in withRateLimit.
+ */
+export async function enforcePresetRateLimit(
+  request: NextRequest,
+  preset: keyof typeof RATE_LIMIT_PRESETS
+): Promise<NextResponse<ApiResponse> | null> {
+  const config = RATE_LIMIT_PRESETS[preset] ?? RATE_LIMIT_PRESETS.general;
+  const result = await checkRateLimit(config, getRequestIdentifier(request));
+  if (!result.allowed) {
+    return createRateLimitResponse(config, result);
+  }
+  return null;
 }
 
 /**

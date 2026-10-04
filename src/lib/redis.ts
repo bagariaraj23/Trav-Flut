@@ -1,6 +1,7 @@
 import { Redis } from '@upstash/redis';
 import { ENV } from '@/env';
 import { LRUCache } from './cache';
+import { isRedisCircuitOpen, withRedisDeadline } from './redisGuard';
 
 // Constants
 const HOUR_IN_MS = 3600000; // 1 hour in milliseconds
@@ -23,49 +24,126 @@ export const redis = ENV.REDIS_REST_URL && ENV.REDIS_REST_TOKEN
 // Initialize memory cache
 export const memoryCache = new LRUCache<string, unknown>(DEFAULT_MAX_SIZE);
 
+const inflightGets = new Map<string, Promise<unknown>>();
+
+function delay(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function readRedisValue<T>(key: string, ttl: number): Promise<T | undefined> {
+    if (!redis || isRedisCircuitOpen()) return undefined;
+    try {
+        const cachedValue = await withRedisDeadline(() => redis!.get<RedisValue<T>>(key));
+        if (cachedValue && cachedValue.timestamp + ttl > Date.now()) {
+            return cachedValue.data;
+        }
+    } catch {
+        return undefined;
+    }
+    return undefined;
+}
+
+async function writeRedisValue<T>(key: string, value: T, ttl: number): Promise<void> {
+    if (!redis || isRedisCircuitOpen() || value === undefined || value === null) return;
+    const redisValue: RedisValue<T> = {
+        data: value,
+        timestamp: Date.now(),
+    };
+    try {
+        await withRedisDeadline(() =>
+            redis!.set(key, redisValue, { ex: Math.max(1, Math.floor(ttl / 1000)) })
+        );
+    } catch {
+        // Memory cache still holds the value for this instance.
+    }
+}
+
 /**
- * Multi-level caching utility that combines in-memory LRU cache with Redis
- * for distributed caching across serverless functions.
+ * Drop a cached key from memory and Redis. Used when a short-lived badge
+ * must refresh before its TTL (notification unread count).
+ */
+export async function invalidateCachedKey(key: string): Promise<void> {
+    memoryCache.delete(key);
+    if (!redis || isRedisCircuitOpen()) return;
+    try {
+        await withRedisDeadline(() => redis!.del(key));
+    } catch {
+        // The key expires on its own TTL.
+    }
+}
+
+/**
+ * Multi-level cache. A single in-process flight plus a short Redis SET NX
+ * lock keeps concurrent misses from stampeding the getter.
  */
 export async function getOrSet<T>(
     key: string,
     getter: () => Promise<T>,
     ttl: number = DEFAULT_CACHE_TTL
 ): Promise<T> {
-    // Try memory cache first
     const memValue = memoryCache.get(key) as T | undefined;
     if (memValue !== undefined) {
         return memValue;
     }
 
-    if (redis) {
-        // Try Redis cache next
-        const cachedValue = await redis.get<RedisValue<T>>(key);
-
-        if (cachedValue && cachedValue.timestamp + ttl > Date.now()) {
-            // Cache hit - update memory cache and return
-            memoryCache.set(key, cachedValue.data, ttl);
-            return cachedValue.data;
-        }
+    const cached = await readRedisValue<T>(key, ttl);
+    if (cached !== undefined) {
+        memoryCache.set(key, cached, ttl);
+        return cached;
     }
 
-    // Cache miss - fetch fresh value
-    const value = await getter();
-
-    // Update both caches
-    if (value !== undefined && value !== null) {
-        const redisValue: RedisValue<T> = {
-            data: value,
-            timestamp: Date.now()
-        };
-
-        if (redis) {
-            await redis.set(key, redisValue, { ex: Math.floor(ttl / 1000) });
-        }
-        memoryCache.set(key, value, ttl);
+    const existing = inflightGets.get(key) as Promise<T> | undefined;
+    if (existing) {
+        return existing;
     }
 
-    return value;
+    const flight = (async () => {
+        const lockKey = `cache-lock:${key}`;
+        let locked = false;
+        if (redis && !isRedisCircuitOpen()) {
+            try {
+                const acquired = await withRedisDeadline(() =>
+                    redis!.set(lockKey, "1", { nx: true, px: 8000 })
+                );
+                locked = acquired === "OK";
+            } catch {
+                locked = false;
+            }
+        }
+
+        if (!locked && redis) {
+            for (let attempt = 0; attempt < 5; attempt++) {
+                await delay(80 * (attempt + 1));
+                const retried = await readRedisValue<T>(key, ttl);
+                if (retried !== undefined) {
+                    memoryCache.set(key, retried, ttl);
+                    return retried;
+                }
+            }
+        }
+
+        const value = await getter();
+        if (value !== undefined && value !== null) {
+            memoryCache.set(key, value, ttl);
+            await writeRedisValue(key, value, ttl);
+        }
+
+        if (locked && redis) {
+            try {
+                await redis.del(lockKey);
+            } catch {
+                // Lock TTL releases it.
+            }
+        }
+        return value;
+    })();
+
+    inflightGets.set(key, flight);
+    try {
+        return await flight;
+    } finally {
+        inflightGets.delete(key);
+    }
 }
 
 /**

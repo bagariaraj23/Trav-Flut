@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { z } from "zod";
 import { ok, badRequest, serverError } from "@/lib/response-helpers";
-import { AuthenticatedRequest, withAuth, withLogging } from "@/lib/middleware";
+import { AuthenticatedRequest, withAuth, withLogging, withRateLimit } from "@/lib/middleware";
 import { prisma } from "@/lib/prisma";
 import { CloudinaryService } from "@/lib/cloudinary";
 
@@ -114,6 +114,8 @@ async function handler(request: AuthenticatedRequest) {
 
 export async function POST(request: NextRequest) {
   return withLogging(async (req) => {
-    return withAuth(req, handler);
+    return withRateLimit(req, "media_upload", async (limited) => {
+      return withAuth(limited, handler);
+    });
   })(request);
 }
