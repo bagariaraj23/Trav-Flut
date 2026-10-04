@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { AuthService } from "@/lib/auth";
 import { ApiResponse, TripResponse } from "@/types/api";
 import { TripStatus } from "@prisma/client";
+import { omitHiddenTripSpend } from "@/lib/tripSpendVisibility";
 
 /**
  * Trips visible on a user's profile: trips they own or joined as participant.
@@ -113,7 +114,20 @@ export async function GET(
       take: 50,
     });
 
-    const tripsResponse: TripResponse[] = trips.map((trip) => ({
+    const memberRows =
+      trips.length === 0
+        ? []
+        : await prisma.tripParticipant.findMany({
+            where: {
+              userId: viewerId,
+              tripId: { in: trips.map((trip) => trip.id) },
+            },
+            select: { tripId: true },
+          });
+    const memberTripIds = new Set(memberRows.map((row) => row.tripId));
+
+    const tripsResponse: TripResponse[] = trips.map((trip) =>
+      omitHiddenTripSpend({
       ...trip,
       startDate: trip.startDate?.toISOString() ?? undefined,
       endDate: trip.endDate?.toISOString() ?? undefined,
@@ -143,7 +157,7 @@ export async function GET(
             createdAt: trip.coverMedia.createdAt.toISOString(),
           }
         : undefined,
-    }));
+    }, trip.userId === viewerId || memberTripIds.has(trip.id)));
 
     return NextResponse.json<ApiResponse<TripResponse[]>>({
       success: true,

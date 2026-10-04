@@ -310,6 +310,53 @@ describe("Trip expense ledger", () => {
     expect(leaveOk.status).toBe(200);
   });
 
+  it("decrements trip spend once when the same expense is deleted twice", async () => {
+    const owner = await createUser({ email: "del-twice-owner@test.com" });
+    const trip = await createTrip({ userId: owner.id, status: TripStatus.ONGOING });
+    const token = await getAuthToken(owner);
+
+    const created = await json(
+      await createExpenseRoute(
+        authRequest(`http://localhost/api/trips/${trip.id}/expenses`, "POST", token, {
+          title: "Dinner",
+          category: "FOOD",
+          amountMinor: 8000,
+          payerId: owner.id,
+          splitMethod: "EQUAL",
+          memberIds: [owner.id],
+        }),
+        { params: Promise.resolve({ id: trip.id }) }
+      )
+    );
+    const expenseId = created.data.id as string;
+    const deleteOnce = () =>
+      deleteExpenseRoute(
+        authRequest(
+          `http://localhost/api/trips/${trip.id}/expenses/${expenseId}`,
+          "DELETE",
+          token
+        ),
+        { params: Promise.resolve({ id: trip.id, expenseId }) }
+      );
+
+    const [first, second] = await Promise.all([deleteOnce(), deleteOnce()]);
+    expect([first.status, second.status].sort()).toEqual([200, 404]);
+
+    const again = await deleteOnce();
+    expect(again.status).toBe(404);
+
+    const stored = await prisma.trip.findUnique({
+      where: { id: trip.id },
+      select: { totalSpendMinor: true },
+    });
+    expect(stored?.totalSpendMinor).toBe(0);
+    expect(
+      await prisma.tripExpense.count({
+        where: { id: expenseId, deletedAt: null },
+      })
+    ).toBe(0);
+  });
+
   it("freezes currency after the first live expense", async () => {
     const owner = await createUser({ email: "fx-owner@test.com" });
     const trip = await createTrip({ userId: owner.id, status: TripStatus.UPCOMING });

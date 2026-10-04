@@ -11,6 +11,7 @@ import {
   handleApiError,
 } from "@/lib/middleware";
 import { PerformanceMonitor, ErrorTracker } from "@/lib/monitoring";
+import { omitHiddenTripSpend } from "@/lib/tripSpendVisibility";
 
 // Get discoverable trips (ongoing and completed trips from followed users and public profiles)
 export async function GET(request: NextRequest) {
@@ -203,7 +204,7 @@ export async function GET(request: NextRequest) {
           );
 
           // Transform to response format
-          const tripsResponse: TripResponse[] = trips.map((trip) => ({
+          const tripsResponse: TripResponse[] = trips.map((trip) => omitHiddenTripSpend({
             ...trip,
             isFollowing: followedUserIds.includes(trip.userId),
             startDate: trip.startDate?.toISOString() || undefined,
@@ -237,7 +238,7 @@ export async function GET(request: NextRequest) {
                   createdAt: trip.coverMedia.createdAt.toISOString(),
                 }
               : undefined,
-          }));
+          }, false));
 
           const hasNext = offset + limitNum < totalCount;
           console.log(`[API] GET /discover/trips - Has next: ${hasNext}`);
