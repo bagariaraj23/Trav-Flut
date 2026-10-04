@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { withAuth, withLogging, handleApiError } from "@/lib/middleware";
+import { withAuth, withLogging, withRateLimit, handleApiError } from "@/lib/middleware";
 import { deleteMessage, editMessage, getMessages, sendMessage } from "@/lib/services/chat";
 import { ApiResponse } from "@/types/api";
 import { z, ZodError } from "zod";
@@ -42,7 +42,8 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   return withLogging(async (req) => {
-    return withAuth(req, async (authReq) => {
+    return withRateLimit(req, "chat_message", async (limited) => {
+    return withAuth(limited, async (authReq) => {
       try {
         const { id } = await params;
         const userId = authReq.user!.userId;
@@ -66,6 +67,7 @@ export async function POST(
         }
         return handleApiError(error);
       }
+    });
     });
   })(request);
 }

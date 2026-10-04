@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { ZodError } from "zod";
 import { withAuth, withLogging, handleApiError } from "@/lib/middleware";
+import { enforcePresetRateLimit } from "@/lib/rateLimit";
 import { createExpenseSchema, paginationSchema } from "@/lib/validation";
 import { ApiResponse, TripExpenseListResponse, TripExpenseResponse } from "@/types/api";
 import { createExpense, listExpenses } from "@/lib/services/expense";
@@ -49,6 +50,8 @@ export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const limited = await enforcePresetRateLimit(request, "write");
+  if (limited) return limited;
   return withLogging(async (req) => {
     return withAuth(req, async (authReq) => {
       try {

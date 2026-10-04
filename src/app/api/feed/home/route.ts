@@ -15,12 +15,13 @@ import {
 } from "@/lib/middleware";
 import { PerformanceMonitor, ErrorTracker } from "@/lib/monitoring";
 import { checkLikeStatus } from "@/lib/services/like";
-import { EntityType } from "@prisma/client";
+import { decodeFeedCursor, encodeFeedCursor } from "@/lib/feedCursor";
+import { EntityType, Prisma } from "@prisma/client";
 
 // Get home feed (final posts from followed users and public profiles)
 export async function GET(request: NextRequest) {
   const loggedHandler = withLogging(async (req) => {
-    return withRateLimit(req, async (rateLimitedReq) => {
+    return withRateLimit(req, "read_hot", async (rateLimitedReq) => {
       return withAuth(rateLimitedReq, async (authenticatedReq) => {
         const endTimer =
           PerformanceMonitor.getInstance().startTimer("get_home_feed");
@@ -41,8 +42,22 @@ export async function GET(request: NextRequest) {
           });
 
           const { page: pageNum, limit: limitNum } = paginationData;
-          const offset = (pageNum - 1) * limitNum;
-          console.log(`[API] GET /feed/home - Offset: ${offset}`);
+          const cursorParam = searchParams.get("cursor");
+          let feedCursor: { createdAt: Date; id: string } | null = null;
+          if (cursorParam) {
+            try {
+              feedCursor = decodeFeedCursor(cursorParam);
+            } catch {
+              return NextResponse.json<ApiResponse>(
+                { success: false, error: "Invalid cursor" },
+                { status: 400 }
+              );
+            }
+          }
+          const offset = feedCursor ? 0 : (pageNum - 1) * limitNum;
+          console.log(
+            `[API] GET /feed/home - Offset: ${offset}, cursor: ${feedCursor ? "yes" : "no"}`
+          );
 
           // Get list of users that current user is following
           console.log(
@@ -94,49 +109,61 @@ export async function GET(request: NextRequest) {
             JSON.stringify(whereClause, null, 2)
           );
 
-          // Get total count for pagination
-          console.log(`[API] GET /feed/home - Getting total count`);
-          const totalCount = await prisma.tripFinalPost.count({
-            where: whereClause,
-          });
-          console.log(`[API] GET /feed/home - Total count: ${totalCount}`);
-
-          // Get final posts with trip and user details
-          console.log(
-            `[API] GET /feed/home - Fetching final posts with offset: ${offset}, limit: ${limitNum}`
-          );
-          const finalPosts = await prisma.tripFinalPost.findMany({
-            where: whereClause,
-            include: {
-              trip: {
-                include: {
-                  user: {
-                    select: {
-                      id: true,
-                      email: true,
-                      username: true,
-                      name: true,
-                      avatarUrl: true,
-                      bio: true,
-                      isPrivate: true,
-                      createdAt: true,
-                      updatedAt: true,
-                    },
+          const cursorWhere: Prisma.TripFinalPostWhereInput = feedCursor
+            ? {
+                AND: [
+                  whereClause,
+                  {
+                    OR: [
+                      { createdAt: { lt: feedCursor.createdAt } },
+                      {
+                        AND: [
+                          { createdAt: feedCursor.createdAt },
+                          { id: { lt: feedCursor.id } },
+                        ],
+                      },
+                    ],
                   },
-                  _count: {
-                    select: {
-                      threadEntries: true,
-                      media: true,
-                      participants: true,
+                ],
+              }
+            : whereClause;
+
+          // Count the full feed in parallel with the page. The page itself
+          // uses keyset pagination when a cursor is present so OFFSET does not
+          // grow with the feed. Trip entry/participant totals are the
+          // denormalized columns, not per-row _count queries.
+          console.log(`[API] GET /feed/home - Fetching page and total`);
+          const [totalCount, rows] = await Promise.all([
+            prisma.tripFinalPost.count({ where: whereClause }),
+            prisma.tripFinalPost.findMany({
+              where: cursorWhere,
+              include: {
+                trip: {
+                  include: {
+                    user: {
+                      select: {
+                        id: true,
+                        email: true,
+                        username: true,
+                        name: true,
+                        avatarUrl: true,
+                        bio: true,
+                        isPrivate: true,
+                        createdAt: true,
+                        updatedAt: true,
+                      },
                     },
                   },
                 },
               },
-            },
-            orderBy: [{ createdAt: "desc" }, { trip: { updatedAt: "desc" } }],
-            skip: offset,
-            take: limitNum,
-          });
+              orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+              skip: offset,
+              take: limitNum + 1,
+            }),
+          ]);
+          console.log(`[API] GET /feed/home - Total count: ${totalCount}`);
+          const hasNext = rows.length > limitNum;
+          const finalPosts = hasNext ? rows.slice(0, limitNum) : rows;
 
           console.log(
             `[API] GET /feed/home - Found ${finalPosts.length} final posts`
@@ -198,8 +225,8 @@ export async function GET(request: NextRequest) {
             },
           }));
 
-          const hasNext = offset + limitNum < totalCount;
           console.log(`[API] GET /feed/home - Has next: ${hasNext}`);
+          const lastPost = finalPostsResponse[finalPostsResponse.length - 1];
 
           const response: PaginatedResponse<TripFinalPostResponse> = {
             items: finalPostsResponse,
@@ -207,6 +234,10 @@ export async function GET(request: NextRequest) {
             limit: limitNum,
             total: totalCount,
             hasNext,
+            nextCursor:
+              hasNext && lastPost
+                ? encodeFeedCursor(new Date(lastPost.createdAt), lastPost.id)
+                : null,
           };
 
           console.log(

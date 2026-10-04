@@ -23,7 +23,7 @@ export async function GET(
   { params }: { params: Promise<{ entityType: string; entityId: string }> }
 ) {
   return withLogging(async (req) => {
-    return withRateLimit(req, async (rateLimitedReq) => {
+    return withRateLimit(req, "read_hot", async (rateLimitedReq) => {
       return withAuth(rateLimitedReq, async (authenticatedReq) => {
         try {
           const userId = authenticatedReq.user!.userId;

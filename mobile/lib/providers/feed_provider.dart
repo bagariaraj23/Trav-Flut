@@ -18,6 +18,7 @@ class FeedProvider extends ChangeNotifier {
   bool _isHomeFeedLoading = false;
   String? _homeFeedError;
   int _homeFeedPage = 1;
+  String? _homeFeedCursor;
   bool _hasMoreHomeFeedPosts = true;
 
   // Discover Trips State
@@ -26,6 +27,7 @@ class FeedProvider extends ChangeNotifier {
   String? _discoverTripsError;
   int _discoverTripsPage = 1;
   bool _hasMoreDiscoverTrips = true;
+  Future<void>? _discoverRefreshInFlight;
 
   // Getters
   List<TripFinalPost> get homeFeedPosts => _homeFeedPosts;
@@ -61,6 +63,7 @@ class FeedProvider extends ChangeNotifier {
       }
       if (refresh) {
         _homeFeedPage = 1;
+        _homeFeedCursor = null;
         _homeFeedPosts.clear();
         _hasMoreHomeFeedPosts = true;
         _homeFeedError = null;
@@ -78,9 +81,11 @@ class FeedProvider extends ChangeNotifier {
       debugPrint(
         '[FeedProvider] Loading home feed, page: $_homeFeedPage, limit: 20',
       );
+      final cursorForRequest = refresh ? null : _homeFeedCursor;
       final response = await _apiService.getHomeFeed(
         page: _homeFeedPage,
         limit: 20,
+        cursor: cursorForRequest,
       );
 
       debugPrint(
@@ -145,7 +150,13 @@ class FeedProvider extends ChangeNotifier {
 
         _homeFeedPosts.addAll(posts);
         _hasMoreHomeFeedPosts = hasNext && posts.isNotEmpty;
-        _homeFeedPage++;
+        final nextCursor = data['nextCursor'];
+        if (nextCursor is String && nextCursor.isNotEmpty) {
+          _homeFeedCursor = nextCursor;
+        } else {
+          _homeFeedCursor = null;
+          _homeFeedPage++;
+        }
         _homeFeedError = null;
 
         debugPrint(
@@ -170,6 +181,26 @@ class FeedProvider extends ChangeNotifier {
 
   // Discover Trips Methods
   Future<void> loadDiscoverTrips({
+    bool refresh = false,
+    String? status,
+    String? mood,
+  }) {
+    if (refresh && _discoverRefreshInFlight != null) {
+      return _discoverRefreshInFlight!;
+    }
+    final run = _loadDiscoverTrips(
+      refresh: refresh,
+      status: status,
+      mood: mood,
+    );
+    if (!refresh) return run;
+    _discoverRefreshInFlight = run.whenComplete(() {
+      _discoverRefreshInFlight = null;
+    });
+    return _discoverRefreshInFlight!;
+  }
+
+  Future<void> _loadDiscoverTrips({
     bool refresh = false,
     String? status,
     String? mood,
