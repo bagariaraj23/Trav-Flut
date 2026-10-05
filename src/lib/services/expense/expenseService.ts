@@ -570,7 +570,7 @@ export async function assertUserHasNoUnsettledTrips(userId: string): Promise<voi
   for (const t of owned) trips.set(t.id, t);
   for (const p of participating) trips.set(p.trip.id, p.trip);
 
-  for (const trip of trips.values()) {
+  for (const trip of Array.from(trips.values())) {
     const memberIds = Array.from(tripMemberUserIds(trip));
     await assertZeroNet(trip.id, userId, memberIds);
   }
