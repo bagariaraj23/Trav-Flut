@@ -110,8 +110,11 @@ void main() {
       await tester.tap(find.byType(LikeButton));
       await tester.pump();
 
-      // Should show loading indicator
       expect(find.byType(CircularProgressIndicator), findsOneWidget);
+
+      // The mock waits 100ms and the like animation runs 300ms. Drain both
+      // after the assertion so the test does not finish with a pending timer.
+      await tester.pumpAndSettle();
     });
 
     testWidgets('should format count correctly', (tester) async {
