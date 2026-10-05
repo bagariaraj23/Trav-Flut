@@ -68,7 +68,7 @@ export async function computeMemberNets(
     if (to) to.settInMinor += s.amountMinor;
   }
 
-  for (const row of map.values()) {
+  for (const row of Array.from(map.values())) {
     // Debtor (fromUser) paying a creditor (toUser) reduces the debt:
     // payer net rises, payee net falls. That is +settOut − settIn.
     row.netMinor =
@@ -80,7 +80,7 @@ export async function computeMemberNets(
 
 export function netsSumToZero(nets: Iterable<MemberNet>): boolean {
   let sum = 0;
-  for (const row of nets) sum += row.netMinor;
+  for (const row of Array.from(nets)) sum += row.netMinor;
   return sum === 0;
 }
 

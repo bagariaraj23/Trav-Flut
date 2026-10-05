@@ -59,7 +59,7 @@ export async function computePairwise(
       bumpDebt(share.userId, expense.payerId, share.shareMinor);
     }
     if (people.has(viewerId)) {
-      for (const other of people) {
+      for (const other of Array.from(people)) {
         if (other === viewerId) continue;
         sharedCount.set(other, (sharedCount.get(other) ?? 0) + 1);
       }
