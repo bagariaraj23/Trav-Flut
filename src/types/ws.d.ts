@@ -6,9 +6,12 @@ declare module "ws" {
     readyState: number;
     send(data: string | Buffer | ArrayBufferView): void;
     close(code?: number, reason?: string): void;
+    ping(): void;
+    terminate(): void;
     on(event: "message", cb: (data: Buffer | string) => void): this;
     on(event: "close", cb: () => void): this;
     on(event: "error", cb: (err: Error) => void): this;
+    on(event: "pong", cb: () => void): this;
   }
   export class WebSocketServer {
     constructor(options?: { noServer?: boolean });
