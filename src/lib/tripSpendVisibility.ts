@@ -10,16 +10,20 @@ export function tripSpendVisibleToViewer(options: {
   return options.viewerIsMember || options.spendVisibleOnDiscover === true;
 }
 
-export function omitHiddenTripSpend<
-  T extends {
-    totalSpendMinor?: number;
-    spendVisibleOnDiscover?: boolean | null;
-  },
->(trip: T, viewerIsMember: boolean): T {
+type TripSpendFields = {
+  totalSpendMinor?: number;
+  spendVisibleOnDiscover?: boolean | null;
+};
+
+export function omitHiddenTripSpend<T extends object>(
+  trip: T,
+  viewerIsMember: boolean
+): T {
+  const spend = trip as T & TripSpendFields;
   if (
     tripSpendVisibleToViewer({
       viewerIsMember,
-      spendVisibleOnDiscover: trip.spendVisibleOnDiscover,
+      spendVisibleOnDiscover: spend.spendVisibleOnDiscover,
     })
   ) {
     return trip;
@@ -27,7 +31,7 @@ export function omitHiddenTripSpend<
   if (!Object.prototype.hasOwnProperty.call(trip, "totalSpendMinor")) {
     return trip;
   }
-  const copy = { ...trip };
+  const copy: T & TripSpendFields = { ...spend };
   delete copy.totalSpendMinor;
   return copy;
 }

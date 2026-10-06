@@ -1,5 +1,5 @@
-import fs from "fs";
-import path from "path";
+import * as fs from "fs";
+import * as path from "path";
 import { describe, expect, it } from "vitest";
 
 const API_ROOT = path.resolve(process.cwd(), "src/app/api");
