@@ -37,6 +37,7 @@ class _AddExpenseSheetState extends State<AddExpenseSheet> {
   final Map<String, TextEditingController> _exactControllers = {};
   final Map<String, TextEditingController> _percentControllers = {};
   final Map<String, TextEditingController> _weightControllers = {};
+  String? _formError;
 
   @override
   void initState() {
@@ -47,10 +48,21 @@ class _AddExpenseSheetState extends State<AddExpenseSheet> {
         : widget.summary.members.first.userId;
     _selectedIds = widget.summary.members.map((m) => m.userId).toSet();
     for (final m in widget.summary.members) {
-      _exactControllers[m.userId] = TextEditingController();
-      _percentControllers[m.userId] = TextEditingController();
-      _weightControllers[m.userId] = TextEditingController(text: '1');
+      _exactControllers[m.userId] = TextEditingController()
+        ..addListener(_onSplitInputsChanged);
+      _percentControllers[m.userId] = TextEditingController()
+        ..addListener(_onSplitInputsChanged);
+      _weightControllers[m.userId] = TextEditingController(text: '1')
+        ..addListener(_onSplitInputsChanged);
     }
+    _amountController.addListener(_onSplitInputsChanged);
+  }
+
+  void _onSplitInputsChanged() {
+    if (!mounted) return;
+    setState(() {
+      _formError = _splitBalanceError();
+    });
   }
 
   @override
@@ -76,47 +88,117 @@ class _AddExpenseSheetState extends State<AddExpenseSheet> {
   String _label(ExpenseMemberBalance m) =>
       userPrimaryLabel(id: m.userId, username: m.username, name: m.name);
 
-  String? _validate() {
-    if (_titleController.text.trim().isEmpty) return 'Add a title';
+  String _money(int minor) =>
+      formatMoneyMinor(minor, currency: widget.summary.currency);
+
+  /// Live split balance hint (null when balanced / not applicable yet).
+  String? _splitBalanceError() {
     final amount = parseRupees(_amountController.text);
-    if (amount == null || amount <= 0) return 'Enter a valid amount';
-    if (_selectedIds.isEmpty) return 'Select at least one person';
+    if (amount == null || amount <= 0) return null;
+    if (_selectedIds.isEmpty) return null;
     final minor = rupeesToMinor(amount);
+
     if (_splitMethod == 'EXACT') {
       var sum = 0;
+      var filled = 0;
       for (final m in _selectedMembers) {
         final v = parseRupees(_exactControllers[m.userId]!.text);
-        if (v == null) return 'Fill every exact share';
+        if (v == null) continue;
+        filled++;
         sum += rupeesToMinor(v);
       }
-      if (sum != minor) {
-        return 'Exact shares must add up to ${formatMoneyMinor(minor, currency: widget.summary.currency)}';
+      if (filled == 0) return null;
+      final diff = sum - minor;
+      if (diff == 0) return null;
+      if (diff < 0) {
+        return 'Shares are short by ${_money(-diff)}. '
+            'Entered ${_money(sum)} of ${_money(minor)}.';
+      }
+      return 'Shares exceed the total by ${_money(diff)}. '
+          'Entered ${_money(sum)} of ${_money(minor)}.';
+    }
+
+    if (_splitMethod == 'PERCENT') {
+      var bps = 0;
+      var filled = 0;
+      for (final m in _selectedMembers) {
+        final v = double.tryParse(_percentControllers[m.userId]!.text.trim());
+        if (v == null) continue;
+        filled++;
+        bps += (v * 100).round();
+      }
+      if (filled == 0) return null;
+      final entered = bps / 100.0;
+      final diffBps = bps - 10000;
+      if (diffBps == 0) return null;
+      if (diffBps < 0) {
+        final short = (-diffBps / 100.0).toStringAsFixed(
+          (-diffBps) % 100 == 0 ? 0 : 2,
+        );
+        return 'Percentages are short by $short%. '
+            'Entered ${entered.toStringAsFixed(entered % 1 == 0 ? 0 : 2)}% of 100%.';
+      }
+      final over = (diffBps / 100.0).toStringAsFixed(
+        diffBps % 100 == 0 ? 0 : 2,
+      );
+      return 'Percentages exceed 100% by $over%. '
+          'Entered ${entered.toStringAsFixed(entered % 1 == 0 ? 0 : 2)}%.';
+    }
+
+    if (_splitMethod == 'SHARES') {
+      var w = 0;
+      var filled = 0;
+      for (final m in _selectedMembers) {
+        final v = int.tryParse(_weightControllers[m.userId]!.text.trim());
+        if (v == null) continue;
+        filled++;
+        if (v < 0) {
+          return 'Share weights cannot be negative.';
+        }
+        w += v;
+      }
+      if (filled == 0) return null;
+      if (w <= 0) return 'Total shares must be greater than zero.';
+    }
+
+    return null;
+  }
+
+  String? _validate() {
+    if (_amountController.text.trim().isEmpty) return 'Enter an amount';
+    final amount = parseRupees(_amountController.text);
+    if (amount == null || amount <= 0) return 'Enter a valid amount';
+    if (_titleController.text.trim().isEmpty) return 'Add a reason / title';
+    if (_selectedIds.isEmpty) return 'Select at least one person';
+
+    if (_splitMethod == 'EXACT') {
+      for (final m in _selectedMembers) {
+        if (parseRupees(_exactControllers[m.userId]!.text) == null) {
+          return 'Fill every exact share';
+        }
       }
     }
     if (_splitMethod == 'PERCENT') {
-      var bps = 0;
       for (final m in _selectedMembers) {
-        final v = double.tryParse(_percentControllers[m.userId]!.text.trim());
-        if (v == null) return 'Fill every percentage';
-        bps += (v * 100).round();
+        if (double.tryParse(_percentControllers[m.userId]!.text.trim()) == null) {
+          return 'Fill every percentage';
+        }
       }
-      if (bps != 10000) return 'Percentages must add up to 100';
     }
     if (_splitMethod == 'SHARES') {
-      var w = 0;
       for (final m in _selectedMembers) {
         final v = int.tryParse(_weightControllers[m.userId]!.text.trim());
         if (v == null || v < 0) return 'Fill every share weight';
-        w += v;
       }
-      if (w <= 0) return 'Total shares must be greater than zero';
     }
-    return null;
+
+    return _splitBalanceError();
   }
 
   Future<void> _submit() async {
     final error = _validate();
     if (error != null) {
+      setState(() => _formError = error);
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error)));
       return;
     }
@@ -131,7 +213,8 @@ class _AddExpenseSheetState extends State<AddExpenseSheet> {
           .map(
             (m) => {
               'userId': m.userId,
-              'shareMinor': rupeesToMinor(parseRupees(_exactControllers[m.userId]!.text)!),
+              'shareMinor':
+                  rupeesToMinor(parseRupees(_exactControllers[m.userId]!.text)!),
             },
           )
           .toList();
@@ -140,7 +223,8 @@ class _AddExpenseSheetState extends State<AddExpenseSheet> {
           .map(
             (m) => {
               'userId': m.userId,
-              'bps': (double.parse(_percentControllers[m.userId]!.text.trim()) * 100)
+              'bps': (double.parse(_percentControllers[m.userId]!.text.trim()) *
+                      100)
                   .round(),
             },
           )
@@ -167,7 +251,9 @@ class _AddExpenseSheetState extends State<AddExpenseSheet> {
             shares: shares,
             percentBps: percentBps,
             weights: weights,
-            note: _noteController.text.trim().isEmpty ? null : _noteController.text.trim(),
+            note: _noteController.text.trim().isEmpty
+                ? null
+                : _noteController.text.trim(),
           ),
         );
     if (!mounted) return;
@@ -175,15 +261,48 @@ class _AddExpenseSheetState extends State<AddExpenseSheet> {
       Navigator.of(context).pop(true);
     } else {
       final err = context.read<ExpenseProvider>().error;
+      setState(() => _formError = err ?? 'Could not save expense');
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(err ?? 'Could not save expense')),
       );
     }
   }
 
+  Widget _errorBanner(BuildContext context) {
+    if (_formError == null) return const SizedBox.shrink();
+    final scheme = Theme.of(context).colorScheme;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Material(
+        color: scheme.errorContainer,
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(Icons.error_outline, color: scheme.onErrorContainer, size: 20),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  _formError!,
+                  style: TextStyle(
+                    color: scheme.onErrorContainer,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final currency = widget.summary.currency;
+    final canSave = _formError == null;
     return Padding(
       padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
       child: SafeArea(
@@ -206,38 +325,54 @@ class _AddExpenseSheetState extends State<AddExpenseSheet> {
               ),
               Text('Add expense', style: Theme.of(context).textTheme.titleLarge),
               const SizedBox(height: 12),
-              TextField(
-                controller: _titleController,
-                decoration: const InputDecoration(
-                  labelText: 'Title',
-                  hintText: 'Car rental, Airbnb, dinner…',
-                ),
-                textCapitalization: TextCapitalization.sentences,
-              ),
-              const SizedBox(height: 8),
+              _errorBanner(context),
+              // 1. Amount
               TextField(
                 controller: _amountController,
-                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                keyboardType:
+                    const TextInputType.numberWithOptions(decimal: true),
                 decoration: InputDecoration(
                   labelText: 'Amount (${currencySymbol(currency).trim()})',
                   hintText: '1500 or 51.54',
                 ),
               ),
               const SizedBox(height: 8),
+              // 2. Reason / title
+              TextField(
+                controller: _titleController,
+                decoration: const InputDecoration(
+                  labelText: 'Reason',
+                  hintText: 'Car rental, Airbnb, dinner…',
+                ),
+                textCapitalization: TextCapitalization.sentences,
+              ),
+              const SizedBox(height: 8),
+              // 3. Category
               DropdownButtonFormField<String>(
                 value: _category,
                 decoration: const InputDecoration(labelText: 'Category'),
                 items: _categories
-                    .map((c) => DropdownMenuItem(value: c, child: Text(categoryLabel(c))))
+                    .map(
+                      (c) => DropdownMenuItem(
+                        value: c,
+                        child: Text(categoryLabel(c)),
+                      ),
+                    )
                     .toList(),
                 onChanged: (v) => setState(() => _category = v ?? _category),
               ),
               const SizedBox(height: 8),
+              // 4. Rest
               DropdownButtonFormField<String>(
                 value: _payerId,
                 decoration: const InputDecoration(labelText: 'Who paid'),
                 items: widget.summary.members
-                    .map((m) => DropdownMenuItem(value: m.userId, child: Text(_label(m))))
+                    .map(
+                      (m) => DropdownMenuItem(
+                        value: m.userId,
+                        child: Text(_label(m)),
+                      ),
+                    )
                     .toList(),
                 onChanged: (v) => setState(() => _payerId = v ?? _payerId),
               ),
@@ -257,6 +392,7 @@ class _AddExpenseSheetState extends State<AddExpenseSheet> {
                         } else {
                           _selectedIds.remove(m.userId);
                         }
+                        _formError = _splitBalanceError();
                       });
                     },
                   );
@@ -275,7 +411,10 @@ class _AddExpenseSheetState extends State<AddExpenseSheet> {
                                 ? '%'
                                 : 'Shares'),
                     selected: _splitMethod == method,
-                    onSelected: (_) => setState(() => _splitMethod = method),
+                    onSelected: (_) => setState(() {
+                      _splitMethod = method;
+                      _formError = _splitBalanceError();
+                    }),
                   );
                 }).toList(),
               ),
@@ -286,7 +425,8 @@ class _AddExpenseSheetState extends State<AddExpenseSheet> {
                     padding: const EdgeInsets.only(bottom: 8),
                     child: TextField(
                       controller: _exactControllers[m.userId],
-                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      keyboardType:
+                          const TextInputType.numberWithOptions(decimal: true),
                       decoration: InputDecoration(labelText: _label(m)),
                     ),
                   ),
@@ -299,7 +439,8 @@ class _AddExpenseSheetState extends State<AddExpenseSheet> {
                     padding: const EdgeInsets.only(bottom: 8),
                     child: TextField(
                       controller: _percentControllers[m.userId],
-                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      keyboardType:
+                          const TextInputType.numberWithOptions(decimal: true),
                       decoration: InputDecoration(labelText: '${_label(m)} %'),
                     ),
                   ),
@@ -313,7 +454,8 @@ class _AddExpenseSheetState extends State<AddExpenseSheet> {
                     child: TextField(
                       controller: _weightControllers[m.userId],
                       keyboardType: TextInputType.number,
-                      decoration: InputDecoration(labelText: '${_label(m)} shares'),
+                      decoration:
+                          InputDecoration(labelText: '${_label(m)} shares'),
                     ),
                   ),
                 ),
@@ -329,7 +471,8 @@ class _AddExpenseSheetState extends State<AddExpenseSheet> {
                   return SizedBox(
                     width: double.infinity,
                     child: FilledButton(
-                      onPressed: provider.isSaving ? null : _submit,
+                      onPressed:
+                          provider.isSaving || !canSave ? null : _submit,
                       child: provider.isSaving
                           ? const SizedBox(
                               width: 18,

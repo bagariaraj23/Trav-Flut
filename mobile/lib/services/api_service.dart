@@ -2488,7 +2488,22 @@ class ApiService {
 
       if (response.data['success'] && response.data['data'] != null) {
         final participants = response.data['data'] as List<dynamic>;
-        return participants.map((p) => TripParticipant.fromJson(p)).toList();
+        final parsed = <TripParticipant>[];
+        for (final p in participants) {
+          try {
+            parsed.add(
+              TripParticipant.fromJson(p as Map<String, dynamic>),
+            );
+          } catch (err) {
+            debugPrint(
+              '[ApiService] Skipping unreadable participant: $err data=$p',
+            );
+          }
+        }
+        debugPrint(
+          '[ApiService] Get participants parsed ${parsed.length}/${participants.length}',
+        );
+        return parsed;
       } else {
         throw Exception(response.data['error'] ?? 'Failed to get participants');
       }

@@ -1123,18 +1123,28 @@ class _TripThreadScreenState extends State<TripThreadScreen>
     return resolvedMedia;
   }
 
+  /// Leaves the thread without calling [context.pop] from a PopScope callback
+  /// (that re-enters the navigator while locked and throws `!_debugLocked`).
+  void _leaveThread({String? fallback}) {
+    if (!mounted) return;
+    final extra = GoRouterState.of(context).extra;
+    final from = (extra is Map && extra['from'] != null)
+        ? extra['from'] as String
+        : (fallback ?? '/trip/${widget.tripId}');
+    context.go(
+      from,
+      extra: from == '/home' ? {'explicitHome': true} : null,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
       return PopScope(
-        canPop: false, // Prevent system from handling back gesture
+        canPop: false,
         onPopInvokedWithResult: (didPop, result) {
-          // Always handle navigation ourselves
-          if (context.canPop()) {
-            context.pop();
-          } else {
-            context.go('/home', extra: {'explicitHome': true});
-          }
+          if (didPop) return;
+          _leaveThread(fallback: '/home');
         },
         child: const Scaffold(body: Center(child: CircularProgressIndicator())),
       );
@@ -1142,14 +1152,10 @@ class _TripThreadScreenState extends State<TripThreadScreen>
 
     if (_trip == null) {
       return PopScope(
-        canPop: false, // Prevent system from handling back gesture
+        canPop: false,
         onPopInvokedWithResult: (didPop, result) {
-          // Always handle navigation ourselves
-          if (context.canPop()) {
-            context.pop();
-          } else {
-            context.go('/home', extra: {'explicitHome': true});
-          }
+          if (didPop) return;
+          _leaveThread(fallback: '/home');
         },
         child: Scaffold(
           appBar: AppBar(title: const Text('Trip Thread')),
@@ -1165,21 +1171,10 @@ class _TripThreadScreenState extends State<TripThreadScreen>
         _trip!.status == TripStatus.ongoing && isMember;
 
     return PopScope(
-      canPop: false, // Prevent system from handling back gesture
+      canPop: false,
       onPopInvokedWithResult: (didPop, result) {
-        // Always handle navigation ourselves
-        if (context.canPop()) {
-          context.pop();
-        } else {
-          final extra = GoRouterState.of(context).extra;
-          final from = (extra is Map && extra['from'] != null)
-              ? extra['from'] as String
-              : '/trip/${widget.tripId}';
-          context.go(
-            from,
-            extra: from == '/home' ? {'explicitHome': true} : null,
-          );
-        }
+        if (didPop) return;
+        _leaveThread();
       },
       child: Scaffold(
         resizeToAvoidBottomInset: true,
@@ -1190,20 +1185,7 @@ class _TripThreadScreenState extends State<TripThreadScreen>
           elevation: 2,
           leading: IconButton(
             icon: const Icon(Icons.arrow_back, color: Colors.white),
-            onPressed: () {
-              if (context.canPop()) {
-                context.pop();
-              } else {
-                final extra = GoRouterState.of(context).extra;
-                final from = (extra is Map && extra['from'] != null)
-                    ? extra['from'] as String
-                    : '/trip/${widget.tripId}';
-                context.go(
-                  from,
-                  extra: from == '/home' ? {'explicitHome': true} : null,
-                );
-              }
-            },
+            onPressed: _leaveThread,
           ),
           actions: [
             if (isMember)

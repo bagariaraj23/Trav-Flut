@@ -283,6 +283,17 @@ export async function deleteExpense(params: {
 
   await prisma.$transaction(async (tx) => {
     await lockTripRow(tx, tripId);
+
+    const paidSettlement = await tx.tripSettlement.findFirst({
+      where: { tripId, status: TripSettlementStatus.PAID },
+      select: { id: true },
+    });
+    if (paidSettlement) {
+      throw new ConflictError(
+        "Expenses are locked after a settlement is recorded and cannot be deleted."
+      );
+    }
+
     const live = await tx.tripExpense.findFirst({
       where: { id: expenseId, tripId, deletedAt: null },
     });
@@ -378,7 +389,7 @@ export async function getExpenseSummary(params: {
       createdAt: s.createdAt.toISOString(),
       fromUser: serializeUser(s.fromUser),
       toUser: serializeUser(s.toUser),
-      canUndo: s.toUserId === actorId || trip.userId === actorId,
+      canUndo: false,
     })),
     pairwise,
   };
@@ -468,25 +479,13 @@ export async function undoSettlement(params: {
   settlementId: string;
   actorId: string;
 }) {
-  const { tripId, settlementId, actorId } = params;
+  const { tripId, actorId } = params;
   const trip = await loadTripForMembers(tripId);
   if (!trip) throw new NotFoundError("Trip not found");
   assertTripMember(trip, actorId);
 
-  const isOwner = trip.userId === actorId;
-
-  await prisma.$transaction(async (tx) => {
-    await lockTripRow(tx, tripId);
-    const settlement = await tx.tripSettlement.findFirst({
-      where: { id: settlementId, tripId },
-    });
-    if (!settlement) throw new NotFoundError("Settlement not found");
-    if (settlement.toUserId !== actorId && !isOwner) {
-      throw new AuthorizationError("Only the payee or trip owner can undo this");
-    }
-    await tx.tripSettlement.delete({ where: { id: settlementId } });
-  });
-  return { id: settlementId, deleted: true };
+  // Settlements are final once recorded — no revert.
+  throw new ConflictError("Settlements cannot be undone once marked as paid");
 }
 
 async function lockTripRow(tx: PrismaTransactionClient, tripId: string) {

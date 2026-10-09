@@ -416,42 +416,83 @@ export async function GET(
       }
     }
 
-    // Get participants
+    const userSelect = {
+      id: true,
+      email: true,
+      username: true,
+      name: true,
+      avatarUrl: true,
+      bio: true,
+      isPrivate: true,
+      createdAt: true,
+      updatedAt: true,
+    } as const;
+
+    // Owner is stored on trips.userId and is often NOT in trip_participants.
+    // Include them first so "Current Participants" always shows the trip owner.
+    const tripWithOwner = await prisma.trip.findUnique({
+      where: { id: tripId },
+      select: {
+        id: true,
+        userId: true,
+        createdAt: true,
+        user: { select: userSelect },
+      },
+    });
+
     const participants = await prisma.tripParticipant.findMany({
       where: { tripId },
       include: {
-        user: {
-          select: {
-            id: true,
-            email: true,
-            username: true,
-            name: true,
-            avatarUrl: true,
-            bio: true,
-            isPrivate: true,
-            createdAt: true,
-            updatedAt: true,
-          },
-        },
+        user: { select: userSelect },
       },
       orderBy: { joinedAt: "asc" },
     });
 
-    const participantsResponse: TripParticipantResponse[] = participants.map(
-      (participant) => ({
+    const serializeUser = (user: {
+      id: string;
+      email: string;
+      username: string | null;
+      name: string | null;
+      avatarUrl: string | null;
+      bio: string | null;
+      isPrivate: boolean;
+      createdAt: Date;
+      updatedAt: Date;
+    }) => ({
+      ...user,
+      username: user.username || null,
+      name: user.name || null,
+      avatarUrl: user.avatarUrl || null,
+      bio: user.bio || null,
+      createdAt: user.createdAt.toISOString(),
+      updatedAt: user.updatedAt.toISOString(),
+    });
+
+    const participantsResponse: TripParticipantResponse[] = [];
+
+    if (tripWithOwner?.user) {
+      const ownerAlreadyListed = participants.some(
+        (p) => p.userId === tripWithOwner.userId
+      );
+      if (!ownerAlreadyListed) {
+        participantsResponse.push({
+          id: `owner-${tripWithOwner.id}`,
+          tripId: tripWithOwner.id,
+          userId: tripWithOwner.userId,
+          role: "owner",
+          joinedAt: tripWithOwner.createdAt.toISOString(),
+          user: serializeUser(tripWithOwner.user),
+        });
+      }
+    }
+
+    for (const participant of participants) {
+      participantsResponse.push({
         ...participant,
         joinedAt: participant.joinedAt.toISOString(),
-        user: {
-          ...participant.user,
-          username: participant.user.username || null,
-          name: participant.user.name || null,
-          avatarUrl: participant.user.avatarUrl || null,
-          bio: participant.user.bio || null,
-          createdAt: participant.user.createdAt.toISOString(),
-          updatedAt: participant.user.updatedAt.toISOString(),
-        },
-      })
-    );
+        user: serializeUser(participant.user),
+      });
+    }
 
     return NextResponse.json<ApiResponse<TripParticipantResponse[]>>({
       success: true,

@@ -80,6 +80,129 @@ class _TripMoneyPaneState extends State<TripMoneyPane> {
     );
   }
 
+  String _shareLabel(ExpenseSummary summary, ExpenseShare share) {
+    final fromSummary = _member(summary, share.userId);
+    if (fromSummary != null) {
+      return userPrimaryLabel(
+        id: fromSummary.userId,
+        username: fromSummary.username,
+        name: fromSummary.name,
+      );
+    }
+    final u = share.user;
+    return userPrimaryLabel(
+      id: share.userId,
+      username: u?.username,
+      name: u?.name,
+    );
+  }
+
+  Future<void> _openExpenseDetail(
+    ExpenseSummary summary,
+    TripExpense expense,
+  ) async {
+    final currency = expense.currency;
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      builder: (ctx) {
+        final maxHeight = MediaQuery.of(ctx).size.height * 0.75;
+        return SafeArea(
+          child: ConstrainedBox(
+            constraints: BoxConstraints(maxHeight: maxHeight),
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Center(
+                    child: Container(
+                      width: 40,
+                      height: 4,
+                      margin: const EdgeInsets.only(bottom: 12),
+                      decoration: BoxDecoration(
+                        color: Theme.of(ctx).colorScheme.outlineVariant,
+                        borderRadius: BorderRadius.circular(99),
+                      ),
+                    ),
+                  ),
+                  Text(
+                    expense.title,
+                    style: Theme.of(ctx).textTheme.titleLarge,
+                  ),
+                const SizedBox(height: 4),
+                Text(
+                  '${categoryLabel(expense.category)} · '
+                  '${formatMoneyMinor(expense.amountMinor, currency: currency)} · '
+                  '${expense.splitMethod == 'EQUAL' ? 'Equal split' : expense.splitMethod.toLowerCase()}',
+                  style: Theme.of(ctx).textTheme.bodyMedium?.copyWith(
+                        color: Theme.of(ctx).colorScheme.onSurfaceVariant,
+                      ),
+                ),
+                if (expense.payer != null) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    'Paid by ${userPrimaryLabel(id: expense.payer!.id, username: expense.payer!.username, name: expense.payer!.name)}',
+                    style: Theme.of(ctx).textTheme.bodySmall,
+                  ),
+                ],
+                if (expense.note != null && expense.note!.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  Text(expense.note!),
+                ],
+                const SizedBox(height: 16),
+                Text(
+                  'Each person\'s share',
+                  style: Theme.of(ctx).textTheme.titleSmall,
+                ),
+                const SizedBox(height: 8),
+                if (expense.shares.isEmpty)
+                  const Text('No share details available.')
+                else
+                  ...expense.shares.map((share) {
+                    final name = _shareLabel(summary, share);
+                    final pct = expense.amountMinor > 0
+                        ? (share.shareMinor * 100 / expense.amountMinor)
+                        : 0.0;
+                    final weightNote = share.weight != null
+                        ? ' · ${share.weight} share${share.weight == 1 ? '' : 's'}'
+                        : '';
+                    return ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      leading: CircleAvatar(
+                        radius: 16,
+                        backgroundImage: share.user?.avatarUrl != null &&
+                                share.user!.avatarUrl!.isNotEmpty
+                            ? NetworkImage(share.user!.avatarUrl!)
+                            : null,
+                        child: share.user?.avatarUrl == null ||
+                                share.user!.avatarUrl!.isEmpty
+                            ? Text(userAvatarInitial(
+                                username: share.user?.username,
+                                name: share.user?.name ?? name,
+                              ))
+                            : null,
+                      ),
+                      title: Text(name),
+                      subtitle: Text(
+                        '${pct.toStringAsFixed(pct % 1 == 0 ? 0 : 1)}%$weightNote',
+                      ),
+                      trailing: Text(
+                        formatMoneyMinor(share.shareMinor, currency: currency),
+                        style: const TextStyle(fontWeight: FontWeight.w700),
+                      ),
+                    );
+                  }),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final currentUserId = context.read<AuthProvider>().currentUser?.id;
@@ -165,7 +288,6 @@ class _TripMoneyPaneState extends State<TripMoneyPane> {
                     )
                   else
                     ...summary.openTransfers.map((t) {
-                      final fromMe = t.fromUserId == currentUserId;
                       return Card(
                         child: ListTile(
                           leading: _avatar(_member(summary, t.fromUserId)),
@@ -173,19 +295,14 @@ class _TripMoneyPaneState extends State<TripMoneyPane> {
                             '${_name(summary, t.fromUserId)} → ${_name(summary, t.toUserId)}',
                           ),
                           subtitle: Text(
-                            fromMe
-                                ? 'Pay in GPay/UPI, then ${_name(summary, t.toUserId)} can mark received'
-                                : formatMoneyMinor(t.amountMinor, currency: currency),
+                            formatMoneyMinor(t.amountMinor, currency: currency),
                           ),
                           trailing: t.canMarkPaid
                               ? FilledButton(
                                   onPressed: () => _runAction(() => provider.markPaid(t)),
                                   child: const Text('Mark as paid'),
                                 )
-                              : Text(
-                                  formatMoneyMinor(t.amountMinor, currency: currency),
-                                  style: const TextStyle(fontWeight: FontWeight.w600),
-                                ),
+                              : null,
                         ),
                       );
                     }),
@@ -198,46 +315,34 @@ class _TripMoneyPaneState extends State<TripMoneyPane> {
                         title: Text(
                           '${_name(summary, s.fromUserId)} paid ${_name(summary, s.toUserId)} ${formatMoneyMinor(s.amountMinor, currency: currency)}',
                         ),
-                        trailing: s.canUndo
-                            ? IconButton(
-                                icon: const Icon(Icons.undo, size: 20),
-                                onPressed: () => _runAction(
-                                  () => provider.undoSettlement(s.id),
-                                ),
-                              )
-                            : null,
                       );
                     }),
-                  ],
-                  if (summary.pairwise.isNotEmpty) ...[
-                    const SizedBox(height: 8),
-                    ExpansionTile(
-                      title: const Text('You and others (raw bills)'),
-                      children: summary.pairwise.map((p) {
-                        final line = p.youOweMinor > 0
-                            ? 'You owe ${formatMoneyMinor(p.youOweMinor, currency: currency)}'
-                            : p.theyOweMinor > 0
-                                ? 'They owe you ${formatMoneyMinor(p.theyOweMinor, currency: currency)}'
-                                : 'Settled between you';
-                        return ListTile(
-                          dense: true,
-                          title: Text(_name(summary, p.otherUserId)),
-                          subtitle: Text('${p.sharedCount} shared bills · $line'),
-                        );
-                      }).toList(),
-                    ),
                   ],
                   const SizedBox(height: 16),
                   Text('Expenses', style: Theme.of(context).textTheme.titleSmall),
                   const SizedBox(height: 8),
+                  if (summary.recordedSettlements.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 8),
+                      child: Text(
+                        'Splits are locked after a settlement is recorded.',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                              color: Theme.of(context).colorScheme.onSurfaceVariant,
+                            ),
+                      ),
+                    ),
                   if (provider.expenses.isEmpty)
                     const Text('No expenses yet. Log what you spent.')
                   else
                     ...provider.expenses.map((e) {
                       final payer = e.payer;
-                      final canDelete = e.createdById == currentUserId;
+                      final splitsLocked = summary.recordedSettlements.isNotEmpty;
+                      final canDelete =
+                          !splitsLocked && e.createdById == currentUserId;
+                      final isUnequal = e.splitMethod != 'EQUAL';
                       return Card(
                         child: ListTile(
+                          onTap: () => _openExpenseDetail(summary, e),
                           leading: CircleAvatar(
                             backgroundImage: payer?.avatarUrl != null
                                 ? NetworkImage(payer!.avatarUrl!)
@@ -260,6 +365,11 @@ class _TripMoneyPaneState extends State<TripMoneyPane> {
                                 formatMoneyMinor(e.amountMinor, currency: e.currency),
                                 style: const TextStyle(fontWeight: FontWeight.w600),
                               ),
+                              if (isUnequal)
+                                Icon(
+                                  Icons.chevron_right,
+                                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                                ),
                               if (canDelete)
                                 IconButton(
                                   icon: const Icon(Icons.delete_outline),

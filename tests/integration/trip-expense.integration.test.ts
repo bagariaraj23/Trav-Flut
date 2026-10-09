@@ -201,7 +201,7 @@ describe("Trip expense ledger", () => {
     expect(summaryPaid.data.openTransfers).toEqual([]);
     expect(summaryPaid.data.myNetMinor).toBe(0);
 
-    const undone = await deleteSettlementRoute(
+    const undoBlocked = await deleteSettlementRoute(
       authRequest(
         `http://localhost/api/trips/${trip.id}/settlements/${paidBody.data.id}`,
         "DELETE",
@@ -209,7 +209,7 @@ describe("Trip expense ledger", () => {
       ),
       { params: Promise.resolve({ id: trip.id, settlementId: paidBody.data.id }) }
     );
-    expect(undone.status).toBe(200);
+    expect(undoBlocked.status).toBe(409);
   });
 
   it("records only one settlement when mark-paid is submitted twice at once", async () => {
