@@ -13,7 +13,10 @@ import { POST as createSettlementRoute } from "../../src/app/api/trips/[id]/sett
 import { DELETE as deleteSettlementRoute } from "../../src/app/api/trips/[id]/settlements/[settlementId]/route";
 import { PATCH as patchSettingsRoute } from "../../src/app/api/trips/[id]/expense-settings/route";
 import { POST as leaveTripRoute } from "../../src/app/api/trips/[id]/leave/route";
-import { DELETE as removeParticipantRoute } from "../../src/app/api/trips/[id]/participants/route";
+import {
+  DELETE as removeParticipantRoute,
+  GET as getParticipantsRoute,
+} from "../../src/app/api/trips/[id]/participants/route";
 import { DELETE as deleteMeRoute } from "../../src/app/api/users/me/route";
 
 function authRequest(
@@ -141,7 +144,7 @@ describe("Trip expense ledger", () => {
     expect(allowed.status).toBe(201);
   });
 
-  it("lets only the payee mark a simplified transfer paid, rejects the payer, and supports undo", async () => {
+  it("lets only the payee mark a simplified transfer paid, rejects the payer, and forbids undo", async () => {
     const owner = await createUser({ email: "payee-owner@test.com" });
     const member = await createUser({ email: "payee-member@test.com" });
     const trip = await createTrip({ userId: owner.id, status: TripStatus.ONGOING });
@@ -200,6 +203,8 @@ describe("Trip expense ledger", () => {
     );
     expect(summaryPaid.data.openTransfers).toEqual([]);
     expect(summaryPaid.data.myNetMinor).toBe(0);
+    expect(summaryPaid.data.recordedSettlements).toHaveLength(1);
+    expect(summaryPaid.data.recordedSettlements[0].canUndo).toBe(false);
 
     const undoBlocked = await deleteSettlementRoute(
       authRequest(
@@ -210,6 +215,55 @@ describe("Trip expense ledger", () => {
       { params: Promise.resolve({ id: trip.id, settlementId: paidBody.data.id }) }
     );
     expect(undoBlocked.status).toBe(409);
+    expect(await prisma.tripSettlement.count({ where: { tripId: trip.id } })).toBe(1);
+  });
+
+  it("locks expense deletes after a settlement is recorded", async () => {
+    const owner = await createUser({ email: "lock-owner@test.com" });
+    const member = await createUser({ email: "lock-member@test.com" });
+    const trip = await createTrip({ userId: owner.id, status: TripStatus.ONGOING });
+    await addParticipant(trip.id, member.id);
+    const memberToken = await getAuthToken(member);
+
+    const created = await json(
+      await createExpenseRoute(
+        authRequest(`http://localhost/api/trips/${trip.id}/expenses`, "POST", memberToken, {
+          title: "Dinner",
+          category: "FOOD",
+          amountMinor: 20000,
+          payerId: member.id,
+          splitMethod: "EQUAL",
+          memberIds: [member.id, owner.id],
+        }),
+        { params: Promise.resolve({ id: trip.id }) }
+      )
+    );
+    expect(created.data.id).toBeTruthy();
+
+    const paid = await createSettlementRoute(
+      authRequest(`http://localhost/api/trips/${trip.id}/settlements`, "POST", memberToken, {
+        fromUserId: owner.id,
+        toUserId: member.id,
+        amountMinor: 10000,
+      }),
+      { params: Promise.resolve({ id: trip.id }) }
+    );
+    expect(paid.status).toBe(201);
+
+    const locked = await deleteExpenseRoute(
+      authRequest(
+        `http://localhost/api/trips/${trip.id}/expenses/${created.data.id}`,
+        "DELETE",
+        memberToken
+      ),
+      { params: Promise.resolve({ id: trip.id, expenseId: created.data.id }) }
+    );
+    expect(locked.status).toBe(409);
+    expect(
+      await prisma.tripExpense.count({
+        where: { id: created.data.id, deletedAt: null },
+      })
+    ).toBe(1);
   });
 
   it("records only one settlement when mark-paid is submitted twice at once", async () => {
@@ -389,6 +443,39 @@ describe("Trip expense ledger", () => {
       { params: Promise.resolve({ id: trip.id }) }
     );
     expect(locked.status).toBe(409);
+  });
+
+  it("includes the trip owner in participants even when they are not in trip_participants", async () => {
+    const owner = await createUser({
+      email: "owner-listed@test.com",
+      name: "Raj Owner",
+      username: "rajowner",
+    });
+    const member = await createUser({
+      email: "member-listed@test.com",
+      name: "Test Member",
+      username: "testmember",
+    });
+    const trip = await createTrip({ userId: owner.id, status: TripStatus.ONGOING });
+    await addParticipant(trip.id, member.id);
+    const memberToken = await getAuthToken(member);
+
+    const res = await getParticipantsRoute(
+      authRequest(`http://localhost/api/trips/${trip.id}/participants`, "GET", memberToken),
+      { params: Promise.resolve({ id: trip.id }) }
+    );
+    const body = await json(res);
+    expect(res.status).toBe(200);
+    expect(body.data.map((p: { userId: string }) => p.userId)).toEqual([
+      owner.id,
+      member.id,
+    ]);
+    expect(body.data[0]).toEqual(
+      expect.objectContaining({
+        userId: owner.id,
+        role: "owner",
+      })
+    );
   });
 
   it("blocks account delete while the user has an unpaid trip net", async () => {

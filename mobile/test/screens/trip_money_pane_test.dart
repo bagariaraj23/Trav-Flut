@@ -127,6 +127,46 @@ void main() {
 
     expect(find.text('This transfer is no longer valid'), findsOneWidget);
   });
+
+  testWidgets('paid settlements show without undo and lock expense deletes',
+      (tester) async {
+    final expenseProvider = ExpenseProvider(
+      expenseService: _PaidSettlementService(),
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MultiProvider(
+          providers: [
+            ChangeNotifierProvider<AuthProvider>.value(
+              value: MockAuthProvider(),
+            ),
+            ChangeNotifierProvider<ExpenseProvider>.value(
+              value: expenseProvider,
+            ),
+          ],
+          child: const Scaffold(
+            body: TripMoneyPane(tripId: 'trip-1'),
+          ),
+        ),
+      ),
+    );
+
+    await tester.pump();
+    await tester.pump();
+
+    expect(find.text('Already paid'), findsOneWidget);
+    expect(find.textContaining('@them paid @me'), findsOneWidget);
+    expect(find.byIcon(Icons.undo), findsNothing);
+    expect(find.textContaining('Pay in GPay'), findsNothing);
+    expect(find.textContaining('tap for shares'), findsNothing);
+    expect(
+      find.text('Splits are locked after a settlement is recorded.'),
+      findsOneWidget,
+    );
+    expect(find.byIcon(Icons.delete_outline), findsNothing);
+    expect(find.text('You and others (raw bills)'), findsNothing);
+  });
 }
 
 class _FailingSettlementService extends MockExpenseService {
@@ -163,6 +203,86 @@ class _FailingSettlementService extends MockExpenseService {
     return const ApiResponse(
       success: false,
       error: 'This transfer is no longer valid',
+    );
+  }
+}
+
+class _PaidSettlementService extends MockExpenseService {
+  @override
+  Future<ApiResponse<ExpenseSummary>> getSummary(String tripId) async {
+    return ApiResponse(
+      success: true,
+      data: ExpenseSummary(
+        currency: 'INR',
+        totalSpendMinor: 10000,
+        myNetMinor: 0,
+        members: const [
+          ExpenseMemberBalance(
+            userId: 'me',
+            name: 'Me',
+            username: 'me',
+            netMinor: 0,
+            paidMinor: 0,
+            owedMinor: 5000,
+          ),
+          ExpenseMemberBalance(
+            userId: 'them',
+            name: 'Them',
+            username: 'them',
+            netMinor: 0,
+            paidMinor: 10000,
+            owedMinor: 5000,
+          ),
+        ],
+        openTransfers: const [],
+        recordedSettlements: [
+          RecordedSettlement(
+            id: 's1',
+            fromUserId: 'them',
+            toUserId: 'me',
+            amountMinor: 5000,
+            status: 'PAID',
+            createdAt: DateTime.utc(2026, 1, 1),
+            canUndo: false,
+          ),
+        ],
+        pairwise: const [],
+      ),
+    );
+  }
+
+  @override
+  Future<ApiResponse<ExpenseListPage>> listExpenses(
+    String tripId, {
+    int page = 1,
+    int limit = 100,
+  }) async {
+    return ApiResponse(
+      success: true,
+      data: ExpenseListPage(
+        items: [
+          TripExpense(
+            id: 'e1',
+            tripId: tripId,
+            createdById: 'me',
+            payerId: 'me',
+            title: 'Dinner',
+            category: 'FOOD',
+            amountMinor: 10000,
+            currency: 'INR',
+            splitMethod: 'EXACT',
+            createdAt: DateTime.utc(2026, 1, 1),
+            shares: const [
+              ExpenseShare(userId: 'me', shareMinor: 4000),
+              ExpenseShare(userId: 'them', shareMinor: 6000),
+            ],
+          ),
+        ],
+        page: 1,
+        limit: limit,
+        total: 1,
+        hasNext: false,
+      ),
     );
   }
 }

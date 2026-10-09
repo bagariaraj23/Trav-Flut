@@ -74,13 +74,24 @@ void main() {
           'canMarkPaid': true,
         },
       ],
-      'recordedSettlements': [],
+      'recordedSettlements': [
+        {
+          'id': 's1',
+          'fromUserId': 'b',
+          'toUserId': 'a',
+          'amountMinor': 15000,
+          'status': 'PAID',
+          'createdAt': '2026-01-01T00:00:00.000Z',
+          'canUndo': false,
+        },
+      ],
       'pairwise': [],
     });
 
     expect(summary.totalSpendMinor, 30000);
     expect(summary.openTransfers.single.canMarkPaid, isTrue);
     expect(summary.members.single.username, 'alice');
+    expect(summary.recordedSettlements.single.canUndo, isFalse);
   });
 
   test('ExpenseProvider.load stores summary for the money pane', () async {
