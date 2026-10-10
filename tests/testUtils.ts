@@ -147,6 +147,7 @@ export async function createTrip(
     userId: string;
     title: string;
     status: TripStatus;
+    type: TripType;
   }> = {}
 ) {
   let ownerId: string;
@@ -181,7 +182,7 @@ export async function createTrip(
       startDate: new Date(),
       endDate: new Date(Date.now() + 86400000),
       status: overrides.status ?? TripStatus.UPCOMING,
-      type: TripType.SOLO,
+      type: overrides.type ?? TripType.SOLO,
       mood: TripMood.MIXED,
     },
   });

@@ -294,6 +294,7 @@ class ChatProvider with ChangeNotifier {
     final res = await _apiService.getChatConversations(tripId: tripId);
     _loadingConversations = false;
     if (res.success && res.data != null) {
+      _error = null;
       if (tripId != null) {
         // Upsert: merge the trip-filtered results into the full list so that
         // WS events for DMs/other groups still reach their conversations.

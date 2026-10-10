@@ -8,6 +8,7 @@ import 'package:tripthread/providers/feed_provider.dart';
 import 'package:tripthread/providers/user_provider.dart';
 import 'package:tripthread/providers/engagement_provider.dart';
 import 'package:tripthread/services/trip_service.dart';
+import 'package:tripthread/models/live_trip_story.dart';
 import 'package:tripthread/models/trip.dart';
 import 'package:tripthread/screens/discover/discover_tab.dart';
 import 'package:tripthread/utils/app_layout.dart';
@@ -225,7 +226,9 @@ class _HomeFeedScreenState extends State<HomeFeedScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
         debugPrint('[HomeFeedScreen] Calling loadHomeFeed with refresh=true');
-        context.read<FeedProvider>().loadHomeFeed(refresh: true);
+        final feed = context.read<FeedProvider>();
+        feed.loadHomeFeed(refresh: true);
+        feed.loadLiveTrips();
       }
     });
   }
@@ -368,14 +371,11 @@ class _HomeFeedScreenState extends State<HomeFeedScreen> {
 
           if (feedProvider.homeFeedPosts.isEmpty &&
               feedProvider.homeFeedError == null) {
-            final liveTrips = context
-                .watch<TripProvider>()
-                .trips
-                .where((trip) => trip.status == TripStatus.ongoing)
-                .toList();
+            final liveStories = feedProvider.liveTripStories;
             return Column(
               children: [
-                if (liveTrips.isNotEmpty) _buildLiveTripsRow(context, liveTrips),
+                if (liveStories.isNotEmpty)
+                  _buildLiveTripsRow(context, liveStories),
                 Expanded(
                   child: Center(
                     child: Column(
@@ -431,6 +431,7 @@ class _HomeFeedScreenState extends State<HomeFeedScreen> {
                     onPressed: () {
                       feedProvider.clearHomeFeedError();
                       feedProvider.loadHomeFeed(refresh: true);
+                      feedProvider.loadLiveTrips();
                     },
                     child: const Text('Retry'),
                   ),
@@ -439,16 +440,15 @@ class _HomeFeedScreenState extends State<HomeFeedScreen> {
             );
           }
 
-          final liveTrips = context
-              .watch<TripProvider>()
-              .trips
-              .where((trip) => trip.status == TripStatus.ongoing)
-              .toList();
-          final headerCount = liveTrips.isEmpty ? 0 : 1;
+          final liveStories = feedProvider.liveTripStories;
+          final headerCount = liveStories.isEmpty ? 0 : 1;
 
           return RefreshIndicator(
             onRefresh: () async {
-              feedProvider.loadHomeFeed(refresh: true);
+              await Future.wait([
+                feedProvider.loadHomeFeed(refresh: true),
+                feedProvider.loadLiveTrips(),
+              ]);
             },
             child: AppLayout.reading(
               context: context,
@@ -458,7 +458,7 @@ class _HomeFeedScreenState extends State<HomeFeedScreen> {
                 itemCount: feedProvider.homeFeedPosts.length + headerCount + 1,
                 itemBuilder: (context, index) {
                   if (headerCount == 1 && index == 0) {
-                    return _buildLiveTripsRow(context, liveTrips);
+                    return _buildLiveTripsRow(context, liveStories);
                   }
                   final postIndex = index - headerCount;
                   if (postIndex == feedProvider.homeFeedPosts.length) {
@@ -483,7 +483,10 @@ class _HomeFeedScreenState extends State<HomeFeedScreen> {
     );
   }
 
-  Widget _buildLiveTripsRow(BuildContext context, List<Trip> liveTrips) {
+  Widget _buildLiveTripsRow(
+    BuildContext context,
+    List<LiveTripStory> liveStories,
+  ) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
       child: Column(
@@ -502,15 +505,19 @@ class _HomeFeedScreenState extends State<HomeFeedScreen> {
             height: 92,
             child: ListView.separated(
               scrollDirection: Axis.horizontal,
-              itemCount: liveTrips.length,
+              itemCount: liveStories.length,
               separatorBuilder: (_, _) => const SizedBox(width: 12),
               itemBuilder: (context, index) {
-                final trip = liveTrips[index];
-                final author = trip.user;
-                final label = (author?.name ?? trip.title).split(' ').first;
+                final story = liveStories[index];
+                final person = story.user;
+                final label = (person.name ??
+                        person.username ??
+                        story.trip.title)
+                    .split(' ')
+                    .first;
                 return InkWell(
                   onTap: () => context.push(
-                    '/trip/${trip.id}',
+                    '/trip/${story.trip.id}',
                     extra: {'from': '/home'},
                   ),
                   child: SizedBox(
@@ -526,17 +533,27 @@ class _HomeFeedScreenState extends State<HomeFeedScreen> {
                               padding: const EdgeInsets.all(3),
                               decoration: BoxDecoration(
                                 borderRadius: BorderRadius.circular(18),
-                                border: Border.all(color: AppTheme.accent, width: 2),
+                                border: Border.all(
+                                  color: story.isSelf
+                                      ? AppTheme.accent
+                                      : AppTheme.live,
+                                  width: 2,
+                                ),
                               ),
                               child: ClipRRect(
                                 borderRadius: BorderRadius.circular(14),
-                                child: author?.avatarUrl != null
-                                    ? Image.network(author!.avatarUrl!, fit: BoxFit.cover)
+                                child: person.avatarUrl != null
+                                    ? Image.network(
+                                        person.avatarUrl!,
+                                        fit: BoxFit.cover,
+                                      )
                                     : Container(
                                         color: AppTheme.muted,
                                         alignment: Alignment.center,
                                         child: Text(
-                                          label.isEmpty ? 'T' : label.substring(0, 1),
+                                          label.isEmpty
+                                              ? 'T'
+                                              : label.substring(0, 1),
                                           style: const TextStyle(
                                             fontWeight: FontWeight.w600,
                                             color: AppTheme.ink,
@@ -545,19 +562,23 @@ class _HomeFeedScreenState extends State<HomeFeedScreen> {
                                       ),
                               ),
                             ),
-                            const Positioned(
+                            Positioned(
                               right: -2,
                               bottom: -2,
                               child: DecoratedBox(
-                                decoration: BoxDecoration(
+                                decoration: const BoxDecoration(
                                   color: AppTheme.live,
-                                  borderRadius: BorderRadius.all(Radius.circular(8)),
+                                  borderRadius:
+                                      BorderRadius.all(Radius.circular(8)),
                                 ),
                                 child: Padding(
-                                  padding: EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 4,
+                                    vertical: 1,
+                                  ),
                                   child: Text(
-                                    'LIVE',
-                                    style: TextStyle(
+                                    story.isSelf ? 'YOU' : 'LIVE',
+                                    style: const TextStyle(
                                       color: Colors.white,
                                       fontSize: 8,
                                       fontWeight: FontWeight.w700,
@@ -570,7 +591,7 @@ class _HomeFeedScreenState extends State<HomeFeedScreen> {
                         ),
                         const SizedBox(height: 4),
                         Text(
-                          label,
+                          story.isSelf ? 'You' : label,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: Theme.of(context).textTheme.bodySmall,

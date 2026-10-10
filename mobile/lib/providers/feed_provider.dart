@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'package:tripthread/models/live_trip_story.dart';
 import 'package:tripthread/models/trip.dart';
 import 'package:tripthread/services/api_service.dart';
 import 'package:tripthread/providers/engagement_provider.dart';
@@ -20,6 +21,10 @@ class FeedProvider extends ChangeNotifier {
   int _homeFeedPage = 1;
   bool _hasMoreHomeFeedPosts = true;
 
+  // Live trip stories (Happening Now)
+  List<LiveTripStory> _liveTripStories = [];
+  bool _isLiveTripsLoading = false;
+
   // Discover Trips State
   final List<Trip> _discoverTrips = [];
   bool _isDiscoverTripsLoading = false;
@@ -32,6 +37,9 @@ class FeedProvider extends ChangeNotifier {
   bool get isHomeFeedLoading => _isHomeFeedLoading;
   String? get homeFeedError => _homeFeedError;
   bool get hasMoreHomeFeedPosts => _hasMoreHomeFeedPosts;
+
+  List<LiveTripStory> get liveTripStories => _liveTripStories;
+  bool get isLiveTripsLoading => _isLiveTripsLoading;
 
   List<Trip> get discoverTrips => _discoverTrips;
   bool get isDiscoverTripsLoading => _isDiscoverTripsLoading;
@@ -49,6 +57,38 @@ class FeedProvider extends ChangeNotifier {
   void removeHomeFeedPostById(String postId) {
     _homeFeedPosts.removeWhere((p) => p.id == postId);
     notifyListeners();
+  }
+
+  Future<void> loadLiveTrips() async {
+    _isLiveTripsLoading = true;
+    notifyListeners();
+    try {
+      final response = await _apiService.getLiveTrips();
+      if (response.success && response.data != null) {
+        final stories = <LiveTripStory>[];
+        for (final item in response.data!) {
+          if (item is! Map<String, dynamic>) continue;
+          try {
+            stories.add(LiveTripStory.fromJson(item));
+          } catch (e) {
+            debugPrint('[FeedProvider] Failed to parse live trip story: $e');
+          }
+        }
+        _liveTripStories = stories;
+        debugPrint(
+          '[FeedProvider] Live trip stories loaded: ${_liveTripStories.length}',
+        );
+      } else {
+        debugPrint(
+          '[FeedProvider] Live trips failed: ${response.error}',
+        );
+      }
+    } catch (e) {
+      debugPrint('[FeedProvider] loadLiveTrips error: $e');
+    } finally {
+      _isLiveTripsLoading = false;
+      notifyListeners();
+    }
   }
 
   // Home Feed Methods
@@ -298,6 +338,7 @@ class FeedProvider extends ChangeNotifier {
     _homeFeedPage = 1;
     _hasMoreHomeFeedPosts = true;
     _homeFeedError = null;
+    _liveTripStories = [];
     notifyListeners();
   }
 

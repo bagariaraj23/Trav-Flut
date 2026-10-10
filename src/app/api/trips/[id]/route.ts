@@ -49,6 +49,8 @@ export async function GET(
         where: { id: tripId },
         include: {
           coverMedia: true,
+          startLocation: true,
+          endLocation: true,
           user: {
             select: {
               id: true,
@@ -167,6 +169,22 @@ export async function GET(
         }
       }
 
+      const serializePlace = (place: typeof trip.startLocation) =>
+        place
+          ? {
+              id: place.id,
+              name: place.name,
+              address: place.address ?? undefined,
+              lat: place.lat,
+              lng: place.lng,
+              placeType: place.placeType,
+              source: place.source,
+              externalId: place.externalId ?? undefined,
+              createdAt: place.createdAt.toISOString(),
+              updatedAt: place.updatedAt.toISOString(),
+            }
+          : undefined;
+
       const tripResponse: TripResponse = omitHiddenTripSpend({
         ...trip,
         startDate: trip.startDate?.toISOString() || undefined,
@@ -174,6 +192,10 @@ export async function GET(
         entryCount: trip.entryCount,
         participantCount: trip.participantCount,
         coverMediaId: trip.coverMediaId ?? undefined,
+        startLocationId: trip.startLocationId ?? undefined,
+        endLocationId: trip.endLocationId ?? undefined,
+        startLocation: serializePlace(trip.startLocation),
+        endLocation: serializePlace(trip.endLocation),
         createdAt: trip.createdAt.toISOString(),
         updatedAt: trip.updatedAt.toISOString(),
         user: trip.user

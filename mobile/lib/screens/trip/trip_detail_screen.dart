@@ -10,7 +10,6 @@ import 'package:tripthread/utils/app_layout.dart';
 import 'package:tripthread/utils/app_theme.dart';
 import 'package:tripthread/utils/user_display_labels.dart';
 import 'package:tripthread/utils/cloudinary_utils.dart';
-import 'package:tripthread/widgets/chat/chat_avatar.dart';
 import 'package:tripthread/widgets/loading_button.dart';
 import 'package:tripthread/widgets/mention_text.dart';
 import 'package:tripthread/widgets/trip_cover_placeholder.dart';
@@ -129,7 +128,7 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
                 titlePadding: const EdgeInsets.only(
                   left: 16,
                   right: 16,
-                  bottom: 72,
+                  bottom: 88,
                 ),
                 title: Text(
                   _trip?.title ?? 'Trip Not Found',
@@ -186,18 +185,13 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
                           if (_trip != null)
                             Positioned(
                               left: 16,
-                              top: MediaQuery.of(context).padding.top + 12,
-                              child: _buildStatusBadge(_trip!.status),
-                            ),
-                          if (_trip != null)
-                            Positioned(
-                              left: 16,
                               right: 16,
                               bottom: 12,
                               child: Wrap(
                                 spacing: 8,
                                 runSpacing: 8,
                                 children: [
+                                  _buildStatusBadge(_trip!.status),
                                   _glassChip(
                                     Icons.calendar_today,
                                     _formatDateRange(
@@ -205,10 +199,10 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
                                       _trip!.endDate,
                                     ),
                                   ),
-                                  if (_trip!.destinations.isNotEmpty)
+                                  if (_destinationLabel.isNotEmpty)
                                     _glassChip(
                                       Icons.place,
-                                      _trip!.destinations.join(' → '),
+                                      _destinationLabel,
                                     ),
                                 ],
                               ),
@@ -216,43 +210,6 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
                         ],
                       ),
                     ),
-                    // Floating avatar button in top right (only for other users' trips)
-                    if (_trip?.user != null && !_isOwner())
-                      Positioned(
-                        top: MediaQuery.of(context).padding.top + 12,
-                        right: 12,
-                        child: Material(
-                          color: Colors.transparent,
-                          child: InkWell(
-                            onTap: () {
-                              context.push('/profile/${_trip!.user!.id}');
-                            },
-                            customBorder: const CircleBorder(),
-                            borderRadius: BorderRadius.circular(20),
-                            child: Container(
-                              padding: const EdgeInsets.all(1.5),
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                color: Colors.white,
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: Colors.black.withValues(alpha: 0.15),
-                                    blurRadius: 8,
-                                    offset: const Offset(0, 2),
-                                    spreadRadius: 0,
-                                  ),
-                                ],
-                              ),
-                              child: ChatAvatar(
-                                radius: 15,
-                                avatarUrl: _trip!.user!.avatarUrl,
-                                username: _trip!.user!.username,
-                                name: _trip!.user!.name,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
                     if (_isUpdatingCover)
                       Positioned.fill(
                         child: Container(
@@ -563,85 +520,122 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Status Badge
-            Row(
-              children: [
-                _buildStatusBadge(_trip!.status),
-                const Spacer(),
-                if (_trip!.mood != null) _buildMoodChip(_trip!.mood!),
-              ],
-            ),
-            if (_trip!.user != null) ...[
-              const SizedBox(height: 14),
-              InkWell(
-                onTap: () => context.push('/profile/${_trip!.user!.id}'),
-                child: Row(
-                  children: [
-                    CircleAvatar(
-                      radius: 18,
-                      backgroundColor: AppTheme.muted,
-                      backgroundImage: _trip!.user!.avatarUrl != null
-                          ? NetworkImage(_trip!.user!.avatarUrl!)
-                          : null,
-                      child: _trip!.user!.avatarUrl == null
-                          ? Text(
-                              userAvatarInitial(name: _trip!.user!.name),
-                              style: const TextStyle(
-                                color: AppTheme.ink,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            )
-                          : null,
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+            if (_trip!.user != null)
+              Row(
+                children: [
+                  InkWell(
+                    onTap: () => context.push('/profile/${_trip!.user!.id}'),
+                    borderRadius: BorderRadius.circular(12),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 2),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
                         children: [
-                          Text(
-                            _trip!.user!.name ?? _trip!.user!.username ?? 'Traveller',
-                            style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                                  fontWeight: FontWeight.w600,
-                                  color: Theme.of(context).colorScheme.onSurface,
-                                ),
+                          CircleAvatar(
+                            radius: 18,
+                            backgroundColor: AppTheme.muted,
+                            backgroundImage: _trip!.user!.avatarUrl != null
+                                ? NetworkImage(_trip!.user!.avatarUrl!)
+                                : null,
+                            child: _trip!.user!.avatarUrl == null
+                                ? Text(
+                                    userAvatarInitial(
+                                      name: _trip!.user!.name,
+                                    ),
+                                    style: const TextStyle(
+                                      color: AppTheme.ink,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  )
+                                : null,
                           ),
-                          if (_trip!.user!.username != null)
-                            Text(
-                              _trip!.user!.username!,
-                              style: Theme.of(context).textTheme.bodySmall,
+                          const SizedBox(width: 10),
+                          ConstrainedBox(
+                            constraints: BoxConstraints(
+                              maxWidth:
+                                  MediaQuery.of(context).size.width * 0.45,
                             ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  _trip!.user!.name ??
+                                      _trip!.user!.username ??
+                                      'Traveller',
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .titleMedium
+                                      ?.copyWith(
+                                        fontWeight: FontWeight.w600,
+                                        color: Theme.of(context)
+                                            .colorScheme
+                                            .onSurface,
+                                      ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                if (_trip!.user!.username != null)
+                                  Text(
+                                    _trip!.user!.username!,
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .bodySmall,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                              ],
+                            ),
+                          ),
                         ],
                       ),
                     ),
-                  ],
-                ),
+                  ),
+                  const Spacer(),
+                  if (_trip!.mood != null) _buildMoodChip(_trip!.mood!),
+                ],
               ),
-            ],
             if ((_trip!.participants ?? []).isNotEmpty) ...[
               const SizedBox(height: 12),
               Row(
                 children: [
                   SizedBox(
                     height: 28,
-                    width: ((_trip!.participants!.length.clamp(1, 5)) * 18.0) + 10,
+                    width:
+                        ((_trip!.participants!.length.clamp(1, 5)) * 18.0) + 10,
                     child: Stack(
                       children: [
-                        for (var i = 0; i < _trip!.participants!.length.clamp(0, 5); i++)
+                        for (var i = 0;
+                            i < _trip!.participants!.length.clamp(0, 5);
+                            i++)
                           Positioned(
                             left: i * 18,
                             child: CircleAvatar(
                               radius: 14,
-                              backgroundColor: Theme.of(context).colorScheme.surface,
+                              backgroundColor:
+                                  Theme.of(context).colorScheme.surface,
                               child: CircleAvatar(
                                 radius: 12,
                                 backgroundColor: AppTheme.muted,
-                                backgroundImage: _trip!.participants![i].user?.avatarUrl != null
-                                    ? NetworkImage(_trip!.participants![i].user!.avatarUrl!)
+                                backgroundImage: _trip!
+                                            .participants![i]
+                                            .user
+                                            ?.avatarUrl !=
+                                        null
+                                    ? NetworkImage(_trip!
+                                        .participants![i].user!.avatarUrl!)
                                     : null,
-                                child: _trip!.participants![i].user?.avatarUrl == null
+                                child: _trip!.participants![i].user
+                                            ?.avatarUrl ==
+                                        null
                                     ? Text(
-                                        userAvatarInitial(name: _trip!.participants![i].user?.name),
-                                        style: const TextStyle(fontSize: 10, color: AppTheme.ink),
+                                        userAvatarInitial(
+                                          name: _trip!
+                                              .participants![i].user?.name,
+                                        ),
+                                        style: const TextStyle(
+                                          fontSize: 10,
+                                          color: AppTheme.ink,
+                                        ),
                                       )
                                     : null,
                               ),
@@ -661,27 +655,29 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
               ),
             ],
 
-            const SizedBox(height: 12),
-
-            // Destinations
-            Row(
-              children: [
-                Icon(
-                  Icons.location_on,
-                  color: Theme.of(context).colorScheme.onSurfaceVariant,
-                  size: 20,
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    (_trip!.destinations).join(', '),
-                    style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                      fontWeight: FontWeight.w500,
+            if (_destinationLabel.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Icon(
+                    Icons.location_on,
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    size: 20,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      _destinationLabel,
+                      style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                            fontWeight: FontWeight.w500,
+                          ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
                     ),
                   ),
-                ),
-              ],
-            ),
+                ],
+              ),
+            ],
 
             if (_trip!.description != null) ...[
               const SizedBox(height: 12),
@@ -702,43 +698,63 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
                   size: 20,
                 ),
                 const SizedBox(width: 8),
-                Text(
-                  _formatDateRange(_trip!.startDate, _trip!.endDate),
-                  style: Theme.of(context).textTheme.bodyMedium,
+                Expanded(
+                  child: Text(
+                    _formatDateRange(_trip!.startDate, _trip!.endDate),
+                    style: Theme.of(context).textTheme.bodyMedium,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
               ],
             ),
 
             const SizedBox(height: 12),
 
-            // Stats
-            Row(
-              children: [
-                _buildStatItem(
-                  Icons.photo_library,
-                  '${_trip!.entryCount}',
-                  'Entries',
-                ),
-                const SizedBox(width: 24),
-                _buildStatItem(
-                  Icons.people,
-                  '${_trip!.participantCount}',
-                  'Participants',
-                ),
-                if (_trip!.type != null) ...[
-                  const SizedBox(width: 24),
+            // Stats — single horizontal row
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: [
                   _buildStatItem(
-                    Icons.group,
-                    _getTripTypeLabel(_trip!.type!),
-                    'Type',
+                    Icons.photo_library,
+                    '${_trip!.entryCount}',
+                    'Entries',
                   ),
+                  const SizedBox(width: 16),
+                  _buildStatItem(
+                    Icons.people,
+                    '${_trip!.participantCount}',
+                    'Participants',
+                  ),
+                  if (_trip!.type != null) ...[
+                    const SizedBox(width: 16),
+                    _buildStatItem(
+                      Icons.group,
+                      _getTripTypeLabel(_trip!.type!),
+                      'Type',
+                    ),
+                  ],
                 ],
-              ],
+              ),
             ),
           ],
         ),
       ),
     );
+  }
+
+  String get _destinationLabel {
+    final trip = _trip;
+    if (trip == null) return '';
+    if (trip.destinations.isNotEmpty) {
+      return trip.destinations.join(' → ');
+    }
+    final endName = trip.endLocation?.name.trim();
+    if (endName != null && endName.isNotEmpty) return endName;
+    final startName = trip.startLocation?.name.trim();
+    if (startName != null && startName.isNotEmpty) return startName;
+    return '';
   }
 
   bool _isOwner() {
@@ -1356,32 +1372,18 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
   }
 
   Widget _buildStatItem(IconData icon, String value, String label) {
+    final scheme = Theme.of(context).colorScheme;
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(
-          icon,
-          size: 16,
-          color: Theme.of(context).colorScheme.onSurfaceVariant,
-        ),
-        const SizedBox(width: 4),
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              value,
-              style: Theme.of(
-                context,
-              ).textTheme.bodySmall?.copyWith(fontWeight: FontWeight.w600),
-            ),
-            Text(
-              label,
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                color: Theme.of(context).colorScheme.onSurfaceVariant,
-                fontSize: 10,
+        Icon(icon, size: 16, color: scheme.onSurfaceVariant),
+        const SizedBox(width: 6),
+        Text(
+          '$value $label',
+          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                fontWeight: FontWeight.w600,
+                color: scheme.onSurface,
               ),
-            ),
-          ],
         ),
       ],
     );
