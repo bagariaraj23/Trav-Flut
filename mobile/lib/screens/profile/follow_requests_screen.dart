@@ -233,7 +233,7 @@ class _FollowRequestsScreenState extends State<FollowRequestsScreen> {
                         ),
                         if (follower.username != null)
                           Text(
-                            '@${follower.username}',
+                            follower.username!,
                             style: Theme.of(context)
                                 .textTheme
                                 .bodyMedium

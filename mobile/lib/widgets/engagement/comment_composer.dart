@@ -45,7 +45,7 @@ class _MentionCandidate {
   });
 
   String get display =>
-      (username != null && username!.trim().isNotEmpty) ? '@$username' : (name ?? 'User');
+      (username != null && username!.trim().isNotEmpty) ? username! : (name ?? 'User');
 }
 
 const _kTripEveryoneMention = _MentionCandidate(
@@ -410,7 +410,7 @@ class _CommentComposerState extends State<CommentComposer> {
                                   final user = _mentionResults[index];
                                   final subtitle = (user.username != null &&
                                           user.username!.trim().isNotEmpty)
-                                      ? '@${user.username}'
+                                      ? user.username!
                                       : null;
                                   return InkWell(
                                     onTap: () => _insertMention(user),

@@ -1355,7 +1355,7 @@ class _TripThreadScreenState extends State<TripThreadScreen>
                 ),
                 subtitle: user?.username != null
                     ? Text(
-                        '@${user!.username}',
+                        user!.username!,
                         style: TextStyle(
                           fontSize: 12,
                           color: Theme.of(context).colorScheme.primary,
@@ -2031,7 +2031,6 @@ class _TripThreadScreenState extends State<TripThreadScreen>
                       for (final type in const [
                         ThreadEntryType.text,
                         ThreadEntryType.media,
-                        ThreadEntryType.checkin,
                         ThreadEntryType.location,
                       ])
                         Expanded(child: _composerTypeTab(type)),

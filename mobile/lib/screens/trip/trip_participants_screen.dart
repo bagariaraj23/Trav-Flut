@@ -76,7 +76,15 @@ class _TripParticipantsScreenState extends State<TripParticipantsScreen> {
     });
   }
 
+  bool get _viewerIsTripOwner {
+    final ownerId = _trip?.userId;
+    if (ownerId == null) return false;
+    return context.read<AuthProvider>().currentUser?.id == ownerId;
+  }
+
+  /// Owner-only API (`GET /trips/:id/invites` returns 403 for participants).
   Future<void> _loadSentInvitations() async {
+    if (!_viewerIsTripOwner) return;
     try {
       final tripProvider = context.read<TripProvider>();
       await tripProvider.loadSentTripInvitations(widget.tripId);
@@ -149,7 +157,7 @@ class _TripParticipantsScreenState extends State<TripParticipantsScreen> {
       if (!mounted) return;
       if (success) {
         final messenger = ScaffoldMessenger.of(context);
-        await tripProvider.loadSentTripInvitations(widget.tripId);
+        await _loadSentInvitations();
         if (!mounted) return;
         setState(() {});
         messenger.showSnackBar(
@@ -195,7 +203,7 @@ class _TripParticipantsScreenState extends State<TripParticipantsScreen> {
 
       if (!mounted) return;
       if (success) {
-        await tripProvider.loadSentTripInvitations(widget.tripId);
+        await _loadSentInvitations();
         if (!mounted) return;
         setState(() {});
         ScaffoldMessenger.of(context).showSnackBar(

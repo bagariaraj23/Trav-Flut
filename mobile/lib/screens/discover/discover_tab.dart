@@ -9,6 +9,7 @@ import 'package:go_router/go_router.dart';
 import 'package:tripthread/utils/app_layout.dart';
 import 'package:tripthread/utils/app_theme.dart';
 import 'package:tripthread/utils/cloudinary_utils.dart';
+import 'package:tripthread/widgets/chat/chat_avatar.dart';
 import 'package:tripthread/widgets/trip_cover_placeholder.dart';
 
 class DiscoverTab extends StatefulWidget {
@@ -689,15 +690,14 @@ class _DiscoverTabState extends State<DiscoverTab> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.1),
+        color: color,
         borderRadius: BorderRadius.circular(6),
-        border: Border.all(color: color.withValues(alpha: 0.3), width: 1),
       ),
       child: Text(
         label,
-        style: TextStyle(
-          color: color,
-          fontWeight: FontWeight.w600,
+        style: const TextStyle(
+          color: Colors.white,
+          fontWeight: FontWeight.w700,
           fontSize: 9,
         ),
       ),
@@ -744,22 +744,11 @@ class _DiscoverTabState extends State<DiscoverTab> {
           padding: const EdgeInsets.all(14),
           child: Row(
             children: [
-              CircleAvatar(
+              ChatAvatar(
                 radius: 24,
-                backgroundColor: Theme.of(context).colorScheme.primary,
-                backgroundImage: avatarUrl != null
-                    ? NetworkImage(avatarUrl)
-                    : null,
-                child: avatarUrl == null
-                    ? Text(
-                        name.substring(0, 1).toUpperCase(),
-                        style: const TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.white,
-                        ),
-                      )
-                    : null,
+                avatarUrl: avatarUrl as String?,
+                name: name is String ? name : null,
+                username: username is String ? username : null,
               ),
               const SizedBox(width: 14),
               Expanded(
@@ -812,7 +801,7 @@ class _DiscoverTabState extends State<DiscoverTab> {
                       ],
                     ),
                     Text(
-                      '@$username',
+                      username,
                       style: Theme.of(
                         context,
                       ).textTheme.bodyMedium?.copyWith(
@@ -913,8 +902,10 @@ class _DiscoverTabState extends State<DiscoverTab> {
                         style: ElevatedButton.styleFrom(
                           backgroundColor: Theme.of(
                             context,
-                          ).colorScheme.primary,
-                          foregroundColor: Colors.white,
+                          ).colorScheme.secondary,
+                          foregroundColor: Theme.of(
+                            context,
+                          ).colorScheme.onSecondary,
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(18),
                           ),

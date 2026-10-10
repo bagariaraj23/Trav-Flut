@@ -262,7 +262,7 @@ class _LikedByScreenState extends State<LikedByScreen> {
                     ? 'Unknown'
                     : (user.name ?? user.username ?? 'Unknown');
                 final subtitleText = (user.username != null && user.username!.isNotEmpty)
-                    ? '@${user.username!}'
+                    ? user.username!
                     : null;
 
                 return Material(

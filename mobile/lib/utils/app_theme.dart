@@ -13,14 +13,57 @@ class AppTheme {
   static const Color accentSoft = Color(0x14C2692A);
   static const Color likeRose = Color(0xFFE11D48);
   static const Color live = Color(0xFF059669);
-  static const Color upcoming = Color(0xFFB45309);
-  static const Color ended = Color(0xFF78716C);
+  static const Color upcoming = Color(0xFFD97706);
+  static const Color ended = Color(0xFFDC2626);
 
   static const Color darkBackground = Color(0xFF18140F);
   static const Color darkCard = Color(0xFF211C15);
   static const Color darkText = Color(0xFFF0EAE0);
   static const Color darkMuted = Color(0xFF2E2720);
   static const Color darkMutedForeground = Color(0xFFA09080);
+
+  /// Selectable FilterChip / ChoiceChip with guaranteed contrast on warm surfaces.
+  static Widget selectableChip({
+    required BuildContext context,
+    required String label,
+    required bool selected,
+    required ValueChanged<bool> onSelected,
+    bool choice = false,
+  }) {
+    final scheme = Theme.of(context).colorScheme;
+    final labelWidget = Text(
+      label,
+      style: TextStyle(
+        color: selected ? Colors.white : scheme.onSurface,
+        fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
+        fontSize: 13,
+      ),
+    );
+    if (choice) {
+      return ChoiceChip(
+        label: labelWidget,
+        selected: selected,
+        onSelected: onSelected,
+        selectedColor: accent,
+        backgroundColor: scheme.surfaceContainerHighest,
+        checkmarkColor: Colors.white,
+        side: BorderSide(
+          color: selected ? accent : scheme.outlineVariant,
+        ),
+      );
+    }
+    return FilterChip(
+      label: labelWidget,
+      selected: selected,
+      onSelected: onSelected,
+      selectedColor: accent,
+      backgroundColor: scheme.surfaceContainerHighest,
+      checkmarkColor: Colors.white,
+      side: BorderSide(
+        color: selected ? accent : scheme.outlineVariant,
+      ),
+    );
+  }
 
   static const Color primaryColor = ink;
   static const Color primaryVariant = Color(0xFF292524);
@@ -81,8 +124,12 @@ class AppTheme {
       outlineVariant: mutedText.withValues(alpha: 0.2),
       primaryContainer: mutedSurface,
       onPrimaryContainer: onSurface,
-      secondaryContainer: accentSoft,
-      onSecondaryContainer: accentColor,
+      // Opaque enough for M3 chips / selected filters (accentSoft alone is ~8%).
+      secondaryContainer: Color.alphaBlend(
+        accentColor.withValues(alpha: isDark ? 0.28 : 0.18),
+        surface,
+      ),
+      onSecondaryContainer: isDark ? darkText : ink,
       surfaceContainerHighest: mutedSurface,
       surfaceContainerLow: background,
     );
@@ -114,7 +161,11 @@ class AppTheme {
         style: ElevatedButton.styleFrom(
           backgroundColor: scheme.secondary,
           foregroundColor: scheme.onSecondary,
+          disabledBackgroundColor: scheme.secondary.withValues(alpha: 0.4),
+          disabledForegroundColor: scheme.onSecondary.withValues(alpha: 0.8),
           elevation: 0,
+          shadowColor: Colors.transparent,
+          surfaceTintColor: Colors.transparent,
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12),
@@ -126,7 +177,11 @@ class AppTheme {
         style: FilledButton.styleFrom(
           backgroundColor: scheme.secondary,
           foregroundColor: scheme.onSecondary,
+          disabledBackgroundColor: scheme.secondary.withValues(alpha: 0.4),
+          disabledForegroundColor: scheme.onSecondary.withValues(alpha: 0.8),
           elevation: 0,
+          shadowColor: Colors.transparent,
+          surfaceTintColor: Colors.transparent,
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12),
@@ -194,17 +249,21 @@ class AppTheme {
       dividerTheme: DividerThemeData(color: scheme.outlineVariant, thickness: 1),
       chipTheme: ChipThemeData(
         backgroundColor: mutedSurface,
-        selectedColor: isDark ? darkText : ink,
+        selectedColor: accentColor,
         disabledColor: mutedSurface,
+        checkmarkColor: Colors.white,
+        deleteIconColor: onSurface,
         labelStyle: _sans(fontSize: 13, weight: FontWeight.w500, color: onSurface),
         secondaryLabelStyle: _sans(
           fontSize: 13,
           weight: FontWeight.w600,
-          color: isDark ? darkBackground : cream,
+          color: Colors.white,
         ),
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 0),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(999)),
         side: BorderSide(color: scheme.outlineVariant),
+        // Ensure selected FilterChip / ChoiceChip labels stay white on terracotta.
+        brightness: brightness,
       ),
       dialogTheme: DialogThemeData(
         backgroundColor: surface,

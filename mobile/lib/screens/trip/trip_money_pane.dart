@@ -6,9 +6,9 @@ import 'package:tripthread/providers/expense_provider.dart';
 import 'package:tripthread/screens/trip/add_expense_sheet.dart';
 import 'package:tripthread/utils/app_layout.dart';
 import 'package:tripthread/utils/app_theme.dart';
-import 'package:tripthread/widgets/chat/chat_avatar.dart';
 import 'package:tripthread/utils/money.dart';
 import 'package:tripthread/utils/user_display_labels.dart';
+import 'package:tripthread/widgets/chat/chat_avatar.dart';
 
 class TripMoneyPane extends StatefulWidget {
   final String tripId;
@@ -49,7 +49,7 @@ class _TripMoneyPaneState extends State<TripMoneyPane> {
   String _name(ExpenseSummary summary, String userId) {
     final m = _member(summary, userId);
     if (m == null) return userId;
-    return userPrimaryLabel(id: m.userId, username: m.username, name: m.name);
+    return userPersonName(id: m.userId, username: m.username, name: m.name);
   }
 
   Widget _avatar(ExpenseMemberBalance? member) {
@@ -88,14 +88,14 @@ class _TripMoneyPaneState extends State<TripMoneyPane> {
   String _shareLabel(ExpenseSummary summary, ExpenseShare share) {
     final fromSummary = _member(summary, share.userId);
     if (fromSummary != null) {
-      return userPrimaryLabel(
+      return userPersonName(
         id: fromSummary.userId,
         username: fromSummary.username,
         name: fromSummary.name,
       );
     }
     final u = share.user;
-    return userPrimaryLabel(
+    return userPersonName(
       id: share.userId,
       username: u?.username,
       name: u?.name,
@@ -148,7 +148,7 @@ class _TripMoneyPaneState extends State<TripMoneyPane> {
                 if (expense.payer != null) ...[
                   const SizedBox(height: 4),
                   Text(
-                    'Paid by ${userPrimaryLabel(id: expense.payer!.id, username: expense.payer!.username, name: expense.payer!.name)}',
+                    'Paid by ${userPersonName(id: expense.payer!.id, username: expense.payer!.username, name: expense.payer!.name)}',
                     style: Theme.of(ctx).textTheme.bodySmall,
                   ),
                 ],
@@ -293,14 +293,32 @@ class _TripMoneyPaneState extends State<TripMoneyPane> {
                           leading: _avatar(_member(summary, t.fromUserId)),
                           title: Text(
                             '${_name(summary, t.fromUserId)} → ${_name(summary, t.toUserId)}',
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
                           ),
                           subtitle: Text(
                             formatMoneyMinor(t.amountMinor, currency: currency),
                           ),
                           trailing: t.canMarkPaid
-                              ? FilledButton(
-                                  onPressed: () => _runAction(() => provider.markPaid(t)),
-                                  child: const Text('Mark as paid'),
+                              ? PopupMenuButton<String>(
+                                  tooltip: 'Settlement actions',
+                                  icon: Icon(
+                                    Icons.more_vert,
+                                    color: Theme.of(context)
+                                        .colorScheme
+                                        .onSurfaceVariant,
+                                  ),
+                                  onSelected: (value) {
+                                    if (value == 'mark_paid') {
+                                      _runAction(() => provider.markPaid(t));
+                                    }
+                                  },
+                                  itemBuilder: (ctx) => const [
+                                    PopupMenuItem(
+                                      value: 'mark_paid',
+                                      child: Text('Mark as paid'),
+                                    ),
+                                  ],
                                 )
                               : null,
                         ),
@@ -377,7 +395,7 @@ class _TripMoneyPaneState extends State<TripMoneyPane> {
                           ),
                           title: Text(e.title),
                           subtitle: Text(
-                            '${categoryLabel(e.category)} · ${payer != null ? userPrimaryLabel(id: payer.id, username: payer.username, name: payer.name) : 'Someone'} paid · ${e.splitMethod == 'EQUAL' ? 'split ${e.shares.length} ways' : 'unequal'}',
+                            '${categoryLabel(e.category)} · ${payer != null ? userPersonName(id: payer.id, username: payer.username, name: payer.name) : 'Someone'} paid · ${e.splitMethod == 'EQUAL' ? 'split ${e.shares.length} ways' : 'unequal'}',
                           ),
                           trailing: Row(
                             mainAxisSize: MainAxisSize.min,

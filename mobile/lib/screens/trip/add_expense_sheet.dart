@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:tripthread/models/expense.dart';
 import 'package:tripthread/providers/auth_provider.dart';
 import 'package:tripthread/providers/expense_provider.dart';
+import 'package:tripthread/utils/app_theme.dart';
 import 'package:tripthread/utils/money.dart';
 import 'package:tripthread/utils/user_display_labels.dart';
 
@@ -86,7 +87,7 @@ class _AddExpenseSheetState extends State<AddExpenseSheet> {
       widget.summary.members.where((m) => _selectedIds.contains(m.userId)).toList();
 
   String _label(ExpenseMemberBalance m) =>
-      userPrimaryLabel(id: m.userId, username: m.username, name: m.name);
+      userPersonName(id: m.userId, username: m.username, name: m.name);
 
   String _money(int minor) =>
       formatMoneyMinor(minor, currency: widget.summary.currency);
@@ -412,8 +413,9 @@ class _AddExpenseSheetState extends State<AddExpenseSheet> {
                 spacing: 8,
                 children: widget.summary.members.map((m) {
                   final selected = _selectedIds.contains(m.userId);
-                  return FilterChip(
-                    label: Text(_label(m)),
+                  return AppTheme.selectableChip(
+                    context: context,
+                    label: _label(m),
                     selected: selected,
                     onSelected: (on) {
                       setState(() {
@@ -432,14 +434,16 @@ class _AddExpenseSheetState extends State<AddExpenseSheet> {
               Wrap(
                 spacing: 8,
                 children: _methods.map((method) {
-                  return ChoiceChip(
-                    label: Text(method == 'EQUAL'
+                  return AppTheme.selectableChip(
+                    context: context,
+                    choice: true,
+                    label: method == 'EQUAL'
                         ? 'Equal'
                         : method == 'EXACT'
                             ? 'Exact'
                             : method == 'PERCENT'
                                 ? '%'
-                                : 'Shares'),
+                                : 'Shares',
                     selected: _splitMethod == method,
                     onSelected: (_) => setState(() {
                       _splitMethod = method;

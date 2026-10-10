@@ -444,7 +444,7 @@ class _FollowersFollowingScreenState extends State<FollowersFollowingScreen> {
                     if (user.username != null) ...[
                       const SizedBox(height: 2),
                       Text(
-                        '@${user.username}',
+                        user.username!,
                         style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                               color: Theme.of(context).colorScheme.onSurfaceVariant,
                             ),

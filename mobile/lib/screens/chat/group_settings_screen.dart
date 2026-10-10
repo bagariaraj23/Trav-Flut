@@ -428,7 +428,7 @@ class _GroupSettingsScreenState extends State<GroupSettingsScreen> {
                   ),
                   subtitle: participant.username != null
                       ? Text(
-                          '@${participant.username}',
+                          participant.username!,
                           style: Theme.of(context).textTheme.bodySmall,
                         )
                       : null,
@@ -655,7 +655,7 @@ class _AddParticipantDialogState extends State<AddParticipantDialog> {
                       name: name,
                     ),
                     title: Text(name.isNotEmpty ? name : username),
-                    subtitle: Text('@$username'),
+                    subtitle: Text(username),
                     trailing: isAlreadyMember
                         ? Text(
                             'Member',

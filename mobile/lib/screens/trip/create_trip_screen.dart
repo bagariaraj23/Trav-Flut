@@ -11,6 +11,7 @@ import 'dart:io';
 import 'package:tripthread/services/media_service.dart';
 import 'package:tripthread/widgets/place_autocomplete_field.dart';
 import 'package:tripthread/utils/app_layout.dart';
+import 'package:tripthread/utils/app_theme.dart';
 import 'package:tripthread/utils/cloudinary_utils.dart';
 
 class CreateTripScreen extends StatefulWidget {
@@ -705,8 +706,9 @@ class _CreateTripScreenState extends State<CreateTripScreen> {
                     spacing: 8,
                     children: TripType.values.map((type) {
                       final isSelected = _selectedType == type;
-                      return FilterChip(
-                        label: Text(_getTripTypeLabel(type)),
+                      return AppTheme.selectableChip(
+                        context: context,
+                        label: _getTripTypeLabel(type),
                         selected: isSelected,
                         onSelected: (selected) {
                           setState(() {
@@ -731,15 +733,10 @@ class _CreateTripScreenState extends State<CreateTripScreen> {
                     runSpacing: 8,
                     children: TripMood.values.map((mood) {
                       final isSelected = _selectedMood == mood;
-                      return FilterChip(
-                        label: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text(_getTripMoodEmoji(mood)),
-                            const SizedBox(width: 4),
-                            Text(_getTripMoodLabel(mood)),
-                          ],
-                        ),
+                      return AppTheme.selectableChip(
+                        context: context,
+                        label:
+                            '${_getTripMoodEmoji(mood)} ${_getTripMoodLabel(mood)}',
                         selected: isSelected,
                         onSelected: (selected) {
                           setState(() {

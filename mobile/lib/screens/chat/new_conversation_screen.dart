@@ -211,7 +211,7 @@ class _NewConversationScreenState extends State<NewConversationScreen> {
                                 ),
                                 title: Text(displayName),
                                 subtitle: user.username != null
-                                    ? Text('@${user.username}')
+                                    ? Text(user.username!)
                                     : null,
                                 trailing: _groupMode
                                     ? Checkbox(
