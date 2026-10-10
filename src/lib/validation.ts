@@ -612,3 +612,103 @@ export const createShareSchema = z.object({
       message: "Expiration date must be in the future",
     }),
 });
+
+export const EXPENSE_CURRENCY_VALUES = [
+  "INR",
+  "USD",
+  "EUR",
+  "AED",
+  "GBP",
+  "SGD",
+  "AUD",
+  "CAD",
+] as const;
+
+const expenseShareInput = z.object({
+  userId: z.string().uuid("Invalid user ID"),
+  shareMinor: z.number().int().min(0),
+});
+
+const expensePercentInput = z.object({
+  userId: z.string().uuid("Invalid user ID"),
+  bps: z.number().int().min(0).max(10000),
+});
+
+const expenseWeightInput = z.object({
+  userId: z.string().uuid("Invalid user ID"),
+  weight: z.number().int().min(0),
+});
+
+export const createExpenseSchema = z
+  .object({
+    title: z
+      .string()
+      .min(1, "Title is required")
+      .max(80, "Title must be less than 80 characters")
+      .transform((t) => t.trim()),
+    category: z.enum([
+      "FOOD",
+      "STAY",
+      "TRANSPORT",
+      "ACTIVITIES",
+      "SHOPPING",
+      "OTHER",
+    ]),
+    amountMinor: z
+      .number()
+      .int()
+      .min(1, "Amount must be at least 1")
+      .max(1_000_000_000, "Amount exceeds the maximum"),
+    payerId: z.string().uuid("Invalid payer ID"),
+    splitMethod: z.enum(["EQUAL", "EXACT", "PERCENT", "SHARES"]),
+    memberIds: z
+      .array(z.string().uuid("Invalid user ID"))
+      .min(1, "Select at least one person to split with"),
+    shares: z.array(expenseShareInput).optional(),
+    percentBps: z.array(expensePercentInput).optional(),
+    weights: z.array(expenseWeightInput).optional(),
+    note: z
+      .string()
+      .max(500, "Note must be less than 500 characters")
+      .transform((t) => t.trim())
+      .optional()
+      .nullable(),
+  })
+  .superRefine((data, ctx) => {
+    if (data.splitMethod === "EXACT" && (!data.shares || data.shares.length === 0)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Exact split requires share amounts",
+        path: ["shares"],
+      });
+    }
+    if (data.splitMethod === "PERCENT" && (!data.percentBps || data.percentBps.length === 0)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Percent split requires percentages",
+        path: ["percentBps"],
+      });
+    }
+    if (data.splitMethod === "SHARES" && (!data.weights || data.weights.length === 0)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Shares split requires weights",
+        path: ["weights"],
+      });
+    }
+  });
+
+export const createSettlementSchema = z.object({
+  fromUserId: z.string().uuid("Invalid payer ID"),
+  toUserId: z.string().uuid("Invalid payee ID"),
+  amountMinor: z
+    .number()
+    .int()
+    .min(1, "Amount must be at least 1")
+    .max(1_000_000_000, "Amount exceeds the maximum"),
+});
+
+export const updateExpenseSettingsSchema = z.object({
+  expenseCurrency: z.enum(EXPENSE_CURRENCY_VALUES).optional(),
+  spendVisibleOnDiscover: z.boolean().optional(),
+});

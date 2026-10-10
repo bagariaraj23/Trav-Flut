@@ -4,6 +4,7 @@ import { AuthService } from "@/lib/auth";
 import { ApiResponse, TripResponse } from "@/types/api";
 import { withLogging, handleApiError } from "@/lib/middleware";
 import { PerformanceMonitor } from "@/lib/monitoring";
+import { omitHiddenTripSpend } from "@/lib/tripSpendVisibility";
 
 // Get trip by ID
 export async function GET(
@@ -166,7 +167,7 @@ export async function GET(
         }
       }
 
-      const tripResponse: TripResponse = {
+      const tripResponse: TripResponse = omitHiddenTripSpend({
         ...trip,
         startDate: trip.startDate?.toISOString() || undefined,
         endDate: trip.endDate?.toISOString() || undefined,
@@ -247,7 +248,7 @@ export async function GET(
             coverMediaUrl: trip.finalPost.coverMediaUrl ?? undefined,
           }
           : undefined,
-      };
+      }, isOwner || isParticipant);
 
       return NextResponse.json<ApiResponse<TripResponse>>({
         success: true,

@@ -6,6 +6,7 @@ import { CloudinaryService } from "@/lib/cloudinary";
 import { updateProfileSchema } from "@/lib/validation";
 import { handlePrismaUniqueError } from "@/lib/prismaErrors";
 import { PerformanceMonitor } from "@/lib/monitoring";
+import { assertUserHasNoUnsettledTrips } from "@/lib/services/expense";
 
 // Get current user profile
 export async function GET(request: NextRequest) {
@@ -271,6 +272,8 @@ export async function DELETE(request: NextRequest) {
         try {
           const currentUserId = authenticatedReq.user!.userId;
           console.log(`[API] DELETE /users/me - User: ${currentUserId}`);
+
+          await assertUserHasNoUnsettledTrips(currentUserId);
 
           // Erase user and related personal data in a single transaction.
           // Collect media publicIds to optionally delete remote assets after the DB transaction.

@@ -8,7 +8,7 @@ This document provides comprehensive information about the testing strategy, set
 
 ## 2026 Cross-Application Test Expansion
 
-TripThread has a broad surface area: 70+ backend API routes, 25+ Flutter screens, a shared Prisma data model, a separate scheduler runtime, and multiple third-party integrations. The test strategy is therefore organized around **risk-based coverage**, not only file count.
+TripThread has a broad surface area: 85+ backend API routes, 25+ Flutter screens, a shared Prisma data model, a separate scheduler runtime, and multiple third-party integrations. The test strategy is therefore organized around **risk-based coverage**, not only file count.
 
 ### Newly added / expanded suites in this pass
 
@@ -19,9 +19,11 @@ TripThread has a broad surface area: 70+ backend API routes, 25+ Flutter screens
 | Backend integration | `tests/integration/auth-flow.integration.test.ts` | Username login, invalid credentials, refresh-token rotation, current-device logout, OAuth complete-profile success, non-OAuth complete-profile rejection |
 | Backend integration | `tests/integration/trip-thread-flow.integration.test.ts` | Trip creation with destination places, conflict/status endpoints, participant current-trip lookup, thread text/media/location creation, pagination, edit/delete permissions, invalid-entry rejection |
 | Backend integration | `tests/integration/trip-leave.integration.test.ts` | Participant leave flow, participant count decrement, pending invite cleanup, optional own-entry purge, owner/ended-trip rejection |
-| API contract smoke | `src/app/test/api-route-contract.test.ts` | Filesystem-level guard that every `src/app/api/**/route.ts` exports at least one HTTP handler; also asserts the route inventory remains at 70+ routes |
+| API contract smoke | `src/app/test/api-route-contract.test.ts` | Filesystem-level guard that every `src/app/api/**/route.ts` exports at least one HTTP handler; also asserts the route inventory remains at 85+ routes |
 | Scheduler unit | `scheduler/tests/tripStatus.behavior.unit.test.ts` | Behavioral scheduler coverage: end-trip selection, final-post creation/skip behavior, ongoing transition filters, result counts, per-trip failure isolation |
-| Mobile provider | `mobile/test/providers/trip_provider_test.dart` | `TripProvider.leaveTrip` success/error behavior, state refresh, service argument propagation |
+| Backend unit | `tests/unit/expense-split.unit.test.ts` | Equal/exact/percent/shares rounding, simplify A→C, net-sum invariant |
+| Backend integration | `tests/integration/trip-expense.integration.test.ts` | Expense CRUD, subset split, payee mark-paid, payer 403, leave/kick/account-delete 409, currency freeze, ended-trip writes |
+| Mobile | `mobile/test/providers/expense_summary_test.dart`, `mobile/test/screens/trip_money_pane_test.dart` | Summary parse, leave UNSETTLED copy, money pane settled UI |
 
 ### Current high-level coverage map
 
@@ -30,13 +32,14 @@ TripThread has a broad surface area: 70+ backend API routes, 25+ Flutter screens
 | Auth | Signup integration; limited auth service coverage | AuthService token/hash unit tests; validation unit tests; login/refresh/logout/complete-profile route integration | Google/link Google; forgot/reset password route integration; logout-all route invariant |
 | Trips | Trip invites, concurrency, provider thread context | Leave-trip integration; create trip + conflict/status route integration; mobile provider leave flow | Update/get trip, cover updates, participants route matrix, invite UI/mobile coverage |
 | Thread entries | Pagination/context coverage in engagement-feed tests | Leave purge asserts participant entries are removed; text/media/location create, pagination, PATCH, DELETE, permission/error integration; validation unit tests | Thread entry context privacy matrix, tag notification assertions, media cleanup with Cloudinary mocked |
+| Expenses | None | Split math unit tests; expense/settlement route integration; leave/kick/account-delete unsettled 409; money pane widget + provider parse | Receipts, notifications, UPI, discover cost filter |
 | Final posts | Engagement/feed coverage for published posts | Scheduler final-post behavior | End route race/idempotency, draft edit/delete, publish validation |
 | Engagement | Strong likes/comments/shares suite | Route contract keeps all handlers visible | Rate limits, private-profile engagement matrix, larger pagination datasets |
 | Notifications | Unified notification integration tests | No change in this pass | Trip invite notification UX, unread-count edge cases, read-all idempotency |
 | Places/Mapbox | Limited | No change in this pass | Search/resolve caching, dedupe, external provider error handling |
 | Media/Cloudinary | Limited | No change in this pass | Signature, confirm, delete, quota race tests |
 | Scheduler | Weak call-only tests | Behavior-focused status/final-post tests | Jest/Vitest alignment, DB-backed scheduler integration, startup retry tests |
-| Mobile | Engagement widgets/providers/services; narrow trip provider tests | Leave-trip provider tests | Auth/feed/final-post/user/place providers; critical screens; service injection for HTTP tests |
+| Mobile | Engagement widgets/providers/services; narrow trip provider tests | Leave-trip provider tests; expense summary parse; money pane settled UI | Auth/feed/final-post/user/place providers; critical screens; service injection for HTTP tests |
 
 ### End-to-end flow coverage targets
 

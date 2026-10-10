@@ -14,6 +14,7 @@ import 'package:tripthread/services/storage_service.dart';
 import 'package:tripthread/services/token_refresh_manager.dart';
 import 'package:tripthread/config/app_config.dart';
 import 'package:tripthread/utils/error_handler.dart';
+import 'package:tripthread/utils/unsettled_balance.dart';
 import 'package:flutter/foundation.dart';
 
 class ApiService {
@@ -2487,7 +2488,22 @@ class ApiService {
 
       if (response.data['success'] && response.data['data'] != null) {
         final participants = response.data['data'] as List<dynamic>;
-        return participants.map((p) => TripParticipant.fromJson(p)).toList();
+        final parsed = <TripParticipant>[];
+        for (final p in participants) {
+          try {
+            parsed.add(
+              TripParticipant.fromJson(p as Map<String, dynamic>),
+            );
+          } catch (err) {
+            debugPrint(
+              '[ApiService] Skipping unreadable participant: $err data=$p',
+            );
+          }
+        }
+        debugPrint(
+          '[ApiService] Get participants parsed ${parsed.length}/${participants.length}',
+        );
+        return parsed;
       } else {
         throw Exception(response.data['error'] ?? 'Failed to get participants');
       }
@@ -2514,12 +2530,14 @@ class ApiService {
 
       if (!response.data['success']) {
         throw Exception(
-          response.data['error'] ?? 'Failed to remove participant',
+          kickErrorFrom(response.data, 'Failed to remove participant'),
         );
       }
     } on DioException catch (e) {
       debugPrint('[ApiService] Remove participant DioException: ${e.message}');
-      throw Exception(e.response?.data['error'] ?? 'Network error occurred');
+      throw Exception(
+        kickErrorFrom(e.response?.data, 'Network error occurred'),
+      );
     } catch (e) {
       debugPrint('[ApiService] Remove participant unexpected error: $e');
       throw Exception('An unexpected error occurred');

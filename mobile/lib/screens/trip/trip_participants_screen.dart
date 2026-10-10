@@ -90,6 +90,25 @@ class _TripParticipantsScreenState extends State<TripParticipantsScreen> {
     super.dispose();
   }
 
+  List<TripParticipant> _withOwnerFirst(List<TripParticipant> list) {
+    final trip = _trip;
+    if (trip == null) return list;
+    final ownerAlreadyListed = list.any((p) => p.userId == trip.userId);
+    if (ownerAlreadyListed) return list;
+    final ownerUser = trip.user;
+    return [
+      TripParticipant(
+        id: 'owner-${trip.id}',
+        tripId: trip.id,
+        userId: trip.userId,
+        role: 'owner',
+        joinedAt: trip.createdAt,
+        user: ownerUser,
+      ),
+      ...list,
+    ];
+  }
+
   Future<void> _loadParticipants() async {
     try {
       setState(() {});
@@ -99,12 +118,19 @@ class _TripParticipantsScreenState extends State<TripParticipantsScreen> {
 
       if (mounted) {
         setState(() {
-          _participants = response;
+          _participants = _withOwnerFirst(response);
         });
       }
     } catch (e) {
+      debugPrint('[TripParticipants] load failed: $e');
       if (mounted) {
-        setState(() {});
+        setState(() {
+          // Still surface the trip owner if the list endpoint fails partially.
+          _participants = _withOwnerFirst(_participants);
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not refresh participants: $e')),
+        );
       }
     }
   }

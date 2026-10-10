@@ -16,6 +16,7 @@ import 'package:tripthread/providers/share_provider.dart';
 import 'package:tripthread/services/like_service.dart';
 import 'package:tripthread/services/comment_service.dart';
 import 'package:tripthread/services/share_service.dart';
+import 'package:tripthread/services/expense_service.dart';
 import 'package:tripthread/screens/trip/trip_map_screen.dart';
 import 'package:tripthread/services/api_service.dart';
 import 'package:tripthread/services/storage_service.dart';
@@ -52,6 +53,7 @@ import 'package:tripthread/screens/chat/chat_screen.dart';
 import 'package:tripthread/screens/chat/new_conversation_screen.dart';
 import 'package:tripthread/screens/chat/group_settings_screen.dart';
 import 'package:tripthread/providers/chat_provider.dart';
+import 'package:tripthread/providers/expense_provider.dart';
 import 'package:tripthread/screens/share/share_link_screen.dart';
 import 'package:tripthread/utils/app_theme.dart';
 import 'package:tripthread/utils/error_handler.dart';
@@ -109,6 +111,7 @@ void main() async {
     final likeService = LikeService();
     final commentService = CommentService();
     final shareService = ShareService();
+    final expenseService = ExpenseService();
     debugPrint('[main] Core services created');
 
     debugPrint('[main] Setting up providers');
@@ -124,6 +127,7 @@ void main() async {
           Provider<LikeService>.value(value: likeService),
           Provider<CommentService>.value(value: commentService),
           Provider<ShareService>.value(value: shareService),
+          Provider<ExpenseService>.value(value: expenseService),
           Provider<GoogleSignInService>.value(value: GoogleSignInService()),
           ChangeNotifierProvider<ConnectivityService>.value(
             value: connectivityService,
@@ -250,6 +254,20 @@ void main() async {
                 shareService: shareService,
               );
               shareService.setStorageService(storageService);
+              return provider;
+            },
+          ),
+          ChangeNotifierProvider<ExpenseProvider>(
+            create: (context) {
+              debugPrint('[main] Creating ExpenseProvider');
+              expenseService.setStorageService(storageService);
+              final provider = ExpenseProvider(expenseService: expenseService);
+              final authProvider = context.read<AuthProvider>();
+              authProvider.addListener(() {
+                if (!authProvider.isAuthenticated) {
+                  provider.clear();
+                }
+              });
               return provider;
             },
           ),
@@ -644,9 +662,12 @@ class _TripThreadAppRouterState extends State<TripThreadAppRouter> {
               final tripId = state.pathParameters['tripId']!;
               final extra = state.extra as Map<String, dynamic>?;
               final highlightEntryId = extra?['highlightEntryId'] as String?;
+              final openMoneyPane = extra?['pane'] == 'money' ||
+                  state.uri.queryParameters['pane'] == 'money';
               return TripThreadScreen(
                 tripId: tripId,
                 highlightEntryId: highlightEntryId,
+                openMoneyPane: openMoneyPane,
               );
             },
           ),

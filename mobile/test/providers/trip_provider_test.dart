@@ -207,5 +207,21 @@ void main() {
       expect(provider.isLoading, isFalse);
       expect(provider.error, 'Cannot leave ended trip');
     });
+
+    test('surfaces unsettled balance so the money pane can be opened', () async {
+      const message =
+          'Settle your trip expenses before leaving. Open Money on the trip thread to see who still owes whom.';
+      final mockService = MockTripService()
+        ..leaveResponse = ApiResponse<void>(
+          success: false,
+          error: message,
+        );
+      final provider = TripProvider(tripService: mockService);
+
+      final left = await provider.leaveTrip('trip-1', removeMyData: false);
+
+      expect(left, isFalse);
+      expect(provider.error, message);
+    });
   });
 }

@@ -43,6 +43,12 @@ model User {
   receivedNotifications    Notification[]    @relation("NotificationRecipient")
   conversationParticipants ConversationParticipant[]
   sentChatMessages         ChatMessage[]     @relation("ChatMessageSender")
+  createdExpenses          TripExpense[]     @relation("ExpenseCreatedBy")
+  paidExpenses             TripExpense[]     @relation("ExpensePayer")
+  expenseShares            TripExpenseShare[]
+  settlementsFrom          TripSettlement[]  @relation("SettlementFrom")
+  settlementsTo            TripSettlement[]  @relation("SettlementTo")
+  recordedSettlements      TripSettlement[]  @relation("SettlementRecordedBy")
 
   @@map("users")
 }
@@ -199,6 +205,13 @@ model Trip {
 
   placeVisits   PlaceOnTrip[]
   conversation  Conversation?  @relation("TripConversation")
+  expenses      TripExpense[]
+  settlements   TripSettlement[]
+
+  // Expense ledger (v1 tracking)
+  expenseCurrency          String  @default("INR")
+  totalSpendMinor          Int     @default(0)
+  spendVisibleOnDiscover   Boolean @default(false)
 
   // Optional precomputed map center/bounds (can be derived server-side)
   centerLat  Float?
@@ -546,6 +559,94 @@ enum ShareType {
   DEEP_LINK
   WEB_LINK
   EXTERNAL
+}
+
+enum ExpenseCategory {
+  FOOD
+  STAY
+  TRANSPORT
+  ACTIVITIES
+  SHOPPING
+  OTHER
+}
+
+enum ExpenseSplitMethod {
+  EQUAL
+  EXACT
+  PERCENT
+  SHARES
+}
+
+enum TripSettlementStatus {
+  PAID
+  PENDING
+  COMPLETED
+  FAILED
+  CANCELLED
+  DISPUTED
+}
+
+model TripExpense {
+  id          String             @id @default(uuid())
+  tripId      String
+  createdById String
+  payerId     String
+  title       String
+  category    ExpenseCategory
+  amountMinor Int
+  currency    String
+  splitMethod ExpenseSplitMethod
+  note        String?
+  deletedAt   DateTime?
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+
+  trip      Trip               @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  createdBy User               @relation("ExpenseCreatedBy", fields: [createdById], references: [id], onDelete: Cascade)
+  payer     User               @relation("ExpensePayer", fields: [payerId], references: [id], onDelete: Cascade)
+  shares    TripExpenseShare[]
+
+  @@index([tripId, createdAt])
+  @@index([tripId, deletedAt])
+  @@index([payerId])
+  @@map("trip_expenses")
+}
+
+model TripExpenseShare {
+  id         String @id @default(uuid())
+  expenseId  String
+  userId     String
+  shareMinor Int
+  weight     Int?
+
+  expense TripExpense @relation(fields: [expenseId], references: [id], onDelete: Cascade)
+  user    User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([expenseId, userId])
+  @@index([userId])
+  @@map("trip_expense_shares")
+}
+
+model TripSettlement {
+  id           String               @id @default(uuid())
+  tripId       String
+  fromUserId   String
+  toUserId     String
+  amountMinor  Int
+  currency     String
+  status       TripSettlementStatus @default(PAID)
+  recordedById String
+  createdAt    DateTime             @default(now())
+
+  trip       Trip @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  fromUser   User @relation("SettlementFrom", fields: [fromUserId], references: [id], onDelete: Cascade)
+  toUser     User @relation("SettlementTo", fields: [toUserId], references: [id], onDelete: Cascade)
+  recordedBy User @relation("SettlementRecordedBy", fields: [recordedById], references: [id], onDelete: Cascade)
+
+  @@index([tripId, createdAt])
+  @@index([fromUserId])
+  @@index([toUserId])
+  @@map("trip_settlements")
 }
 
 model Like {
