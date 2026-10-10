@@ -5,6 +5,7 @@ import 'package:tripthread/models/trip.dart';
 import 'package:tripthread/providers/auth_provider.dart';
 import 'package:tripthread/providers/final_post_provider.dart';
 import 'package:tripthread/services/trip_service.dart';
+import 'package:tripthread/utils/app_layout.dart';
 import 'package:tripthread/utils/cloudinary_utils.dart';
 
 class FinalPostEditScreen extends StatefulWidget {
@@ -149,7 +150,9 @@ class _FinalPostEditScreenState extends State<FinalPostEditScreen> {
       ),
       body: isBusy
           ? const Center(child: CircularProgressIndicator())
-          : RefreshIndicator(
+          : AppLayout.reading(
+              context: context,
+              child: RefreshIndicator(
               onRefresh: () => _refresh(provider),
               child: ListView(
                 padding: const EdgeInsets.all(16),
@@ -217,6 +220,7 @@ class _FinalPostEditScreenState extends State<FinalPostEditScreen> {
                   const SizedBox(height: 80),
                 ],
               ),
+            ),
             ),
       bottomNavigationBar: draft == null
           ? null

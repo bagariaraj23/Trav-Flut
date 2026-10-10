@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:intl/intl.dart';
 import 'package:tripthread/models/chat_conversation.dart';
 import 'package:tripthread/providers/chat_provider.dart';
 import 'package:tripthread/providers/auth_provider.dart';
-import 'package:tripthread/utils/avatar_utils.dart';
+import 'package:tripthread/utils/app_feedback.dart';
+import 'package:tripthread/utils/app_layout.dart';
 import 'package:tripthread/widgets/chat/chat_avatar.dart';
 
 class ConversationListScreen extends StatefulWidget {
@@ -56,7 +56,9 @@ class _ConversationListScreenState extends State<ConversationListScreen> {
               ]
             : null,
       ),
-      body: Consumer<ChatProvider>(
+      body: AppLayout.reading(
+        context: context,
+        child: Consumer<ChatProvider>(
         builder: (context, chat, _) {
           // Use trip-filtered list when scoped to a trip; full list otherwise.
           final list = widget.tripId != null
@@ -82,45 +84,20 @@ class _ConversationListScreenState extends State<ConversationListScreen> {
             );
           }
           if (list.isEmpty) {
-            final scheme = Theme.of(context).colorScheme;
-            return Center(
-              child: Padding(
-                padding: const EdgeInsets.all(32),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(
-                      Icons.chat_bubble_outline,
-                      size: 48,
-                      color: scheme.onSurfaceVariant,
-                    ),
-                    const SizedBox(height: 16),
-                    Text(
-                      'No conversations yet',
-                      style: Theme.of(context).textTheme.titleMedium,
-                      textAlign: TextAlign.center,
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      widget.tripId == null
-                          ? 'Start a trip chat or message a friend.'
-                          : 'Trip chat will appear once you are a participant.',
-                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                            color: scheme.onSurfaceVariant,
-                          ),
-                      textAlign: TextAlign.center,
-                    ),
-                    if (widget.tripId == null) ...[
-                      const SizedBox(height: 20),
-                      FilledButton.icon(
-                        onPressed: () => context.push('/chat/new'),
-                        icon: const Icon(Icons.add_comment),
-                        label: const Text('New chat'),
-                      ),
-                    ],
-                  ],
-                ),
-              ),
+            return AppFeedback.empty(
+              context: context,
+              icon: Icons.chat_bubble_outline,
+              title: 'No conversations yet',
+              subtitle: widget.tripId == null
+                  ? 'Start a trip chat or message a friend.'
+                  : 'Trip chat will appear once you are a participant.',
+              action: widget.tripId == null
+                  ? FilledButton.icon(
+                      onPressed: () => context.push('/chat/new'),
+                      icon: const Icon(Icons.add_comment),
+                      label: const Text('New chat'),
+                    )
+                  : null,
             );
           }
           return RefreshIndicator(
@@ -138,6 +115,7 @@ class _ConversationListScreenState extends State<ConversationListScreen> {
             ),
           );
         },
+      ),
       ),
     );
   }
@@ -178,37 +156,16 @@ class _ConversationTile extends StatelessWidget {
         : isTrip
             ? 'Trip'
             : otherDisplayName;
-    final avatarInitial = AvatarUtils.initialsFromName(avatarLabel);
-    final avatarColor = AvatarUtils.colorForKey(
-      isGroup || isTrip ? conversation.id : (other.isNotEmpty ? other.first.userId : ''),
-    );
+    final dmOther = other.isNotEmpty ? other.first : null;
 
     return ListTile(
-      leading: CircleAvatar(
-        backgroundColor: avatarColor,
-        backgroundImage: (isGroup || isTrip)
-            ? (conversation.avatarUrl != null && conversation.avatarUrl!.isNotEmpty
-                ? CachedNetworkImageProvider(conversation.avatarUrl!)
-                : null)
-            : (other.isNotEmpty && other.first.avatarUrl != null
-                ? CachedNetworkImageProvider(other.first.avatarUrl!)
-                : null),
-        child: (isGroup || isTrip)
-            ? (conversation.avatarUrl == null || conversation.avatarUrl!.isEmpty
-                ? Text(
-                    avatarInitial,
-                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
-                  )
-                : null)
-            : (other.isEmpty || other.first.avatarUrl == null
-                ? Text(
-                    avatarInitial,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  )
-                : null),
+      leading: ChatAvatar(
+        radius: 22,
+        avatarUrl: (isGroup || isTrip)
+            ? conversation.avatarUrl
+            : dmOther?.avatarUrl,
+        username: isGroup || isTrip ? null : dmOther?.username,
+        name: isGroup || isTrip ? avatarLabel : (dmOther?.name ?? dmOther?.username),
       ),
       title: Row(
         children: [

@@ -32,6 +32,26 @@ class AppLayout {
     return MediaQuery.sizeOf(context).width >= 360;
   }
 
+  /// Auth-style form: centered column, max width 420, responsive padding.
+  static Widget authFormBody({
+    required BuildContext context,
+    required Widget child,
+  }) {
+    final spacing = authSpacing(context);
+    return SafeArea(
+      child: Align(
+        alignment: Alignment.topCenter,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 420),
+          child: SingleChildScrollView(
+            padding: EdgeInsets.all(spacing.pagePadding),
+            child: child,
+          ),
+        ),
+      ),
+    );
+  }
+
   static Widget reading({
     required BuildContext context,
     required Widget child,

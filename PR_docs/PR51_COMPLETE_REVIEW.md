@@ -64,3 +64,89 @@ cd mobile && flutter test \
 ```
 
 Backend expense suites live on `main` from PR #50; no new expense API changes expected in this PR after rebase.
+
+---
+
+## 6. Warm theme coverage audit (2026-10-10)
+
+**How to read the table**
+
+| Status | Meaning |
+| --- | --- |
+| **Themed** | Uses `AppTheme` tokens and/or `AppLayout.reading` beyond global `ThemeData` |
+| **Inherited** | Relies on `MaterialApp` theme (inputs, cards, app bar, chips, bottom sheets) — visually warm, no screen-specific polish |
+| **Legacy local** | Hardcoded `Colors.*` / Material primaries that fight the warm palette |
+| **Intentional dark** | Full-screen media (map picker, video) — white-on-black OK |
+
+PR #51 originally targeted auth, home, discover, trip detail/thread, chat bubbles, settings, notifications, profile shell, and shared widgets (`trip_cover_placeholder`, `chat_avatar`, `like_button`). **Trip expense UI landed on `main` in PR #50 after that plan** and needed a follow-up pass on this branch.
+
+### 6.1 Screens (`mobile/lib/screens`)
+
+| Screen | Status | Notes |
+| --- | --- | --- |
+| `splash_screen.dart` | Themed | `AppTheme` background |
+| `auth/login_screen.dart` | Themed | `AppLayout.authSpacing` |
+| `auth/signup_screen.dart` | Themed | Same |
+| `auth/forgot_password_screen.dart` | **Themed** | `AppLayout.authFormBody`, `AppFeedback` |
+| `auth/reset_password_screen.dart` | **Themed** | Same + terracotta dialog actions |
+| `auth/reset_password_success_screen.dart` | **Themed** | `AppTheme.live` success icon |
+| `auth/reset_success_screen.dart` | **Themed** | Same |
+| `auth/complete_profile_screen.dart` | **Themed** | Logo + auth form layout |
+| `home/home_screen.dart` | Themed | Cover cards, tabs |
+| `discover/discover_tab.dart` | Themed | |
+| `notifications/notifications_screen.dart` | Themed | |
+| `settings/settings_screen.dart` | Themed | Dev snackbars still use raw green/red |
+| `profile/profile_screen.dart` | Themed | Partial `AppTheme` accents |
+| `profile/edit_profile_screen.dart` | **Themed** | `AppLayout.reading`, `ChatAvatar`, `AppFeedback` |
+| `profile/followers_following_screen.dart` | **Themed** | `ChatAvatar`, `AppTheme.upcoming` private badge |
+| `profile/follow_requests_screen.dart` | **Themed** | Reading layout, themed cards/buttons |
+| `profile/trip_invitations_screen.dart` | **Themed** | Same |
+| `trip/create_trip_screen.dart` | Themed | Hero cover overlay (white on photo — OK) |
+| `trip/trip_detail_screen.dart` | Themed | Cover hero; stat chips use accent overrides |
+| `trip/trip_thread_screen.dart` | Themed | Compose chips, media chrome |
+| `trip/trip_map_screen.dart` | Inherited / map SDK | |
+| `trip/trip_participants_screen.dart` | **Themed (this pass)** | `AppLayout.reading`, `ChatAvatar`, terracotta owner badge, `AppTheme.live` member chip |
+| `trip/trip_money_pane.dart` | **Themed (this pass)** | `AppLayout.reading`, accent summary card, lock banner, `ChatAvatar` |
+| `trip/add_expense_sheet.dart` | **Themed (this pass)** | Sheet handle, terracotta section labels, global chips/inputs |
+| `trip/final_post_edit_screen.dart` | **Themed** | `AppLayout.reading` |
+| `chat/chat_screen.dart` | Themed | Outgoing bubble contrast |
+| `chat/conversation_list_screen.dart` | **Themed** | `ChatAvatar`, `AppFeedback.empty` |
+| `chat/new_conversation_screen.dart` | **Themed** | Reading layout, `ChatAvatar` |
+| `chat/group_settings_screen.dart` | **Themed** | `ChatAvatar`, terracotta admin badge |
+| `post/post_detail_screen.dart` | Inherited | Engagement sheets |
+| `engagement/comments_screen.dart` | **Themed** | Reading layout + warm comment widgets |
+| `engagement/liked_by_screen.dart` | **Themed** | `ChatAvatar`, `AppFeedback` |
+| `share/share_link_screen.dart` | **Themed** | `AppLayout.reading` |
+
+### 6.2 Shared widgets (selected)
+
+| Widget | Status | Notes |
+| --- | --- | --- |
+| `app_theme.dart` | Source of truth | Cream, ink, terracotta, chips, sheets |
+| `trip_cover_placeholder.dart` | Themed | PR #51 |
+| `chat_avatar.dart` | Themed | Warm fallback palette |
+| `like_button.dart` | **Themed** | `AppTheme.likeRose` / `mutedForeground` |
+| `engagement_action_bar.dart` | **Themed** | Muted comment/share icons |
+| `thread_entry_card.dart` | Mixed | Media overlays white-on-image |
+| `engagement/comment_list_item.dart` | **Themed** | `AppTheme.likeRose`, `AppFeedback` |
+| `engagement/comment_composer.dart` | **Themed** | Terracotta send, theme counter |
+| `sheets/map_picker_sheet.dart` | Intentional dark | Map UX |
+| `sheets/share_bottom_sheet.dart` | Legacy local | Red error snackbars |
+
+### 6.3 Shared helpers (this pass)
+
+- `AppLayout.authFormBody` — auth/forgot/reset/complete/success screens (420px column, responsive padding).
+- `AppFeedback` — themed success/error snackbars and empty/error states.
+
+### 6.4 Remaining gaps (non-blocking)
+
+1. **`settings_screen` / `home_screen` / `discover_tab`**: some dev or feed empty states still use raw `Colors.red` / `Colors.grey`.
+2. **`post_detail_screen`**: minor grey hint text.
+3. **`trip_map_screen`**: map legend colors (functional, not warm tokens).
+4. **`sheets/share_bottom_sheet.dart`**: red error snackbars.
+
+### 6.5 Expense smoke (after rebase)
+
+- Money tab: terracotta summary card, lock banner after settlement, FAB uses theme FAB (terracotta).
+- Add expense sheet: terracotta section header, chip theme for split method.
+- Participants: warm avatars and owner/member badges.

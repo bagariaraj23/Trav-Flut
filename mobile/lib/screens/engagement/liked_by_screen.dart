@@ -4,8 +4,10 @@ import 'package:tripthread/providers/engagement_provider.dart';
 import 'package:tripthread/providers/auth_provider.dart';
 import 'package:tripthread/providers/user_provider.dart';
 import 'package:tripthread/models/user.dart';
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:go_router/go_router.dart';
+import 'package:tripthread/utils/app_feedback.dart';
+import 'package:tripthread/utils/app_layout.dart';
+import 'package:tripthread/widgets/chat/chat_avatar.dart';
 
 class LikedByScreen extends StatefulWidget {
   final String entityType;
@@ -47,13 +49,6 @@ class _LikedByScreenState extends State<LikedByScreen> {
         _scrollController.position.maxScrollExtent * 0.8) {
       _loadMoreUsers();
     }
-  }
-
-  /// Safe one-letter initial for avatar. Never null, never throws.
-  String _userDisplayInitial(User user) {
-    final s = (user.name ?? user.username ?? 'U').trim();
-    if (s.isEmpty) return 'U';
-    return s.substring(0, 1).toUpperCase();
   }
 
   Future<void> _loadUsers() async {
@@ -109,12 +104,7 @@ class _LikedByScreenState extends State<LikedByScreen> {
 
     if (detailedStatus == null) {
       setState(() => _followTogglingUserId = null);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Unable to determine follow status'),
-          backgroundColor: Colors.red,
-        ),
-      );
+      AppFeedback.showError(context, 'Unable to determine follow status');
       return;
     }
 
@@ -165,12 +155,11 @@ class _LikedByScreenState extends State<LikedByScreen> {
 
     final errorMessage =
         userProvider.error ?? userProvider.followRequestsError ?? 'An error occurred';
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(success ? actionMessage : errorMessage),
-        backgroundColor: success ? Colors.green : Colors.red,
-      ),
-    );
+    if (success) {
+      AppFeedback.showSuccess(context, actionMessage);
+    } else {
+      AppFeedback.showError(context, errorMessage);
+    }
   }
 
   Widget? _buildFollowButton(BuildContext context, User user) {
@@ -219,7 +208,9 @@ class _LikedByScreenState extends State<LikedByScreen> {
       appBar: AppBar(
         title: const Text('Liked by'),
       ),
-      body: Consumer2<EngagementProvider, UserProvider>(
+      body: AppLayout.reading(
+        context: context,
+        child: Consumer2<EngagementProvider, UserProvider>(
         builder: (context, engagementProvider, userProvider, child) {
           final users = engagementProvider.getLikeUsersList('${widget.entityType}:${widget.entityId}');
           final isLoading = engagementProvider.isLoadingUsers('${widget.entityType}:${widget.entityId}');
@@ -230,38 +221,19 @@ class _LikedByScreenState extends State<LikedByScreen> {
           }
 
           if (error != null && users.isEmpty) {
-            return Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Text(error),
-                  const SizedBox(height: 16),
-                  ElevatedButton(
-                    onPressed: _loadUsers,
-                    child: const Text('Retry'),
-                  ),
-                ],
-              ),
+            return AppFeedback.error(
+              context: context,
+              title: 'Could not load likes',
+              message: error,
+              onRetry: _loadUsers,
             );
           }
 
           if (users.isEmpty) {
-            return Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(
-                    Icons.favorite_border,
-                    size: 64,
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                  ),
-                  const SizedBox(height: 16),
-                  Text(
-                    'No likes yet',
-                    style: Theme.of(context).textTheme.titleMedium,
-                  ),
-                ],
-              ),
+            return AppFeedback.empty(
+              context: context,
+              icon: Icons.favorite_border,
+              title: 'No likes yet',
             );
           }
 
@@ -286,7 +258,6 @@ class _LikedByScreenState extends State<LikedByScreen> {
                   return const SizedBox.shrink();
                 }
                 final followButton = _buildFollowButton(context, user);
-                final initial = _userDisplayInitial(user);
                 final titleText = (user.name ?? user.username ?? 'Unknown').trim().isEmpty
                     ? 'Unknown'
                     : (user.name ?? user.username ?? 'Unknown');
@@ -305,19 +276,11 @@ class _LikedByScreenState extends State<LikedByScreen> {
                       ),
                       child: Row(
                         children: [
-                          CircleAvatar(
+                          ChatAvatar(
                             radius: 24,
-                            backgroundImage: user.avatarUrl != null &&
-                                    user.avatarUrl!.isNotEmpty
-                                ? CachedNetworkImageProvider(user.avatarUrl!)
-                                : null,
-                            child: user.avatarUrl == null ||
-                                    (user.avatarUrl?.isEmpty ?? true)
-                                ? Text(
-                                    initial,
-                                    style: const TextStyle(fontSize: 18),
-                                  )
-                                : null,
+                            avatarUrl: user.avatarUrl,
+                            username: user.username,
+                            name: user.name,
                           ),
                           const SizedBox(width: 16),
                           Expanded(
@@ -374,6 +337,7 @@ class _LikedByScreenState extends State<LikedByScreen> {
             ),
           );
         },
+      ),
       ),
     );
   }

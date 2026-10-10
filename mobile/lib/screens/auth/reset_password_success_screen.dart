@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:tripthread/utils/app_layout.dart';
+import 'package:tripthread/utils/app_theme.dart';
 
 class ResetPasswordSuccessScreen extends StatelessWidget {
   const ResetPasswordSuccessScreen({super.key});
@@ -9,33 +11,31 @@ class ResetPasswordSuccessScreen extends StatelessWidget {
       canPop: false,
       child: Scaffold(
         appBar: AppBar(
-          automaticallyImplyLeading: false, // Remove back button
+          automaticallyImplyLeading: false,
         ),
-        body: SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.all(24.0),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                const Icon(
-                  Icons.check_circle_outline,
-                  color: Colors.green,
-                  size: 64,
-                ),
-                const SizedBox(height: 24),
-                Text(
-                  'Password Reset Successful!',
-                  style: Theme.of(context).textTheme.titleLarge,
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 16),
-                Text(
-                  'Your password has been successfully reset. You can now log in with your new credentials.',
-                  style: Theme.of(context).textTheme.bodyMedium,
-                  textAlign: TextAlign.center,
-                ),
-              ],
-            ),
+        body: AppLayout.authFormBody(
+          context: context,
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                Icons.check_circle_outline,
+                color: AppTheme.live,
+                size: 64,
+              ),
+              const SizedBox(height: 24),
+              Text(
+                'Password Reset Successful!',
+                style: Theme.of(context).textTheme.titleLarge,
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'Your password has been successfully reset. You can now log in with your new credentials.',
+                style: Theme.of(context).textTheme.bodyMedium,
+                textAlign: TextAlign.center,
+              ),
+            ],
           ),
         ),
       ),
