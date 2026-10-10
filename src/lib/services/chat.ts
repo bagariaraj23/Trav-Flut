@@ -348,8 +348,69 @@ async function findExistingDM(userId: string, otherId: string): Promise<Conversa
   return await formatConversationSummary(conv, userId)
 }
 
+/** Owner is on trips.userId and is often NOT in trip_participants — always include them. */
+function tripChatMemberIds(trip: {
+  userId: string
+  participants: Array<{ userId: string }>
+}): string[] {
+  const ids = new Set<string>([trip.userId])
+  for (const p of trip.participants) ids.add(p.userId)
+  return [...ids]
+}
+
+function isTripMember(
+  trip: { userId: string; participants: Array<{ userId: string }> },
+  userId: string
+): boolean {
+  return trip.userId === userId || trip.participants.some((p) => p.userId === userId)
+}
+
 /**
- * Get or create the TRIP-scoped conversation for a trip (participants = TripParticipant set).
+ * Ensure a TRIP conversation exists and membership matches trip owner + participants.
+ * Skips SOLO trips (no group chat). Safe to call after create / join / leave.
+ */
+export async function ensureTripConversation(tripId: string): Promise<void> {
+  const trip = await prisma.trip.findUnique({
+    where: { id: tripId },
+    select: {
+      id: true,
+      userId: true,
+      type: true,
+      participants: { select: { userId: true } },
+    },
+  })
+  if (!trip) return
+  // Solo trips do not get a group chat.
+  if (trip.type === 'SOLO') return
+
+  const memberIds = tripChatMemberIds(trip)
+  let conv = await prisma.conversation.findUnique({
+    where: { tripId },
+    include: conversationListInclude,
+  })
+
+  if (!conv) {
+    await prisma.conversation.create({
+      data: {
+        type: 'TRIP',
+        tripId,
+        participants: {
+          create: memberIds.map((uid) => ({
+            userId: uid,
+            role: uid === trip.userId ? 'ADMIN' : 'MEMBER',
+          })),
+        },
+      },
+    })
+    return
+  }
+
+  await syncTripConversationParticipants(conv, memberIds)
+}
+
+/**
+ * Get or create the TRIP-scoped conversation for a trip
+ * (members = trip owner + TripParticipant set).
  */
 export async function getOrCreateTripConversation(
   tripId: string,
@@ -357,12 +418,21 @@ export async function getOrCreateTripConversation(
 ): Promise<ConversationSummary> {
   const trip = await prisma.trip.findUnique({
     where: { id: tripId },
-    select: { id: true, participants: { select: { userId: true } } },
+    select: {
+      id: true,
+      userId: true,
+      type: true,
+      participants: { select: { userId: true } },
+    },
   })
   if (!trip) throw new NotFoundError('Trip not found')
 
-  const isParticipant = trip.participants.some((p) => p.userId === userId)
-  if (!isParticipant) throw new AuthorizationError('Not a participant of this trip')
+  if (!isTripMember(trip, userId)) {
+    throw new AuthorizationError('Not a participant of this trip')
+  }
+
+  // Solo: still allow owner to open chat (creates a 1-person trip thread if needed).
+  const memberIds = tripChatMemberIds(trip)
 
   let conv = await prisma.conversation.findUnique({
     where: { tripId },
@@ -375,16 +445,16 @@ export async function getOrCreateTripConversation(
         type: 'TRIP',
         tripId,
         participants: {
-          create: trip.participants.map((p) => ({
-            userId: p.userId,
-            role: 'MEMBER',
+          create: memberIds.map((uid) => ({
+            userId: uid,
+            role: uid === trip.userId ? 'ADMIN' : 'MEMBER',
           })),
         },
       },
       include: conversationListInclude,
     })
   } else {
-    await syncTripConversationParticipants(conv, trip.participants.map((p) => p.userId))
+    await syncTripConversationParticipants(conv, memberIds)
     conv = await prisma.conversation.findUnique({
       where: { tripId },
       include: conversationListInclude,

@@ -15,6 +15,7 @@ import {
   getOrCreateTripConversation,
 } from "../../src/lib/services/chat";
 import { ValidationError, AuthorizationError } from "../../src/lib/errors";
+import { TripType } from "@prisma/client";
 
 describe("Chat Service Integration Tests", () => {
   beforeEach(async () => {
@@ -391,6 +392,19 @@ describe("Chat Service Integration Tests", () => {
 
       const synced = await getOrCreateTripConversation(trip.id, owner.id);
       expect(synced.participants).toHaveLength(3);
+    });
+
+    it("allows trip owner who is not in trip_participants to open trip chat", async () => {
+      const owner = await createUser({ email: "trip-owner-only@test.com" });
+      const trip = await createTrip({
+        userId: owner.id,
+        title: "Owner Only Chat",
+        type: TripType.GROUP,
+      });
+
+      const conv = await getOrCreateTripConversation(trip.id, owner.id);
+      expect(conv.type).toBe("TRIP");
+      expect(conv.participants.map((p) => p.userId)).toContain(owner.id);
     });
   });
 });

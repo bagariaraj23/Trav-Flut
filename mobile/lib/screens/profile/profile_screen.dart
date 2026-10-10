@@ -864,10 +864,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 final trip = _profileTrips[index];
                 return ListTile(
                   contentPadding: EdgeInsets.zero,
-                  leading: Icon(
-                    Icons.map_outlined,
-                    color: Theme.of(context).colorScheme.primary,
-                  ),
+                  leading: _buildTripLeadingThumb(trip),
                   title: Text(
                     trip.title,
                     maxLines: 1,
@@ -892,38 +889,61 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
+  Widget _buildTripLeadingThumb(Trip trip) {
+    const size = 44.0;
+    final coverUrl = trip.coverMedia?.url;
+    final trimmed = trip.title.trim();
+    final titleInitial =
+        trimmed.isNotEmpty ? trimmed[0].toUpperCase() : 'T';
+
+    Widget imageChild;
+    if (coverUrl != null && coverUrl.isNotEmpty) {
+      imageChild = Image.network(
+        buildOptimizedImageUrl(coverUrl, width: 128),
+        fit: BoxFit.cover,
+        errorBuilder: (_, _, _) => _tripThumbInitial(titleInitial),
+      );
+    } else {
+      imageChild = _tripThumbInitial(titleInitial);
+    }
+
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(10),
+      child: SizedBox(
+        width: size,
+        height: size,
+        child: imageChild,
+      ),
+    );
+  }
+
+  Widget _tripThumbInitial(String initial) {
+    return ColoredBox(
+      color: AppTheme.muted,
+      child: Center(
+        child: Text(
+          initial,
+          style: const TextStyle(
+            color: AppTheme.ink,
+            fontWeight: FontWeight.w600,
+            fontSize: 16,
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildStatColumn(
     BuildContext context,
     String count,
     String label, {
     VoidCallback? onTap,
   }) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
     final clickable = onTap != null;
+    final scheme = Theme.of(context).colorScheme;
 
-    final content = Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      decoration: clickable
-          ? BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: isDark
-                    ? [
-                        AppTheme.darkMuted,
-                        AppTheme.accent.withValues(alpha: 0.22),
-                      ]
-                    : [
-                        AppTheme.accentSoft,
-                        AppTheme.muted,
-                      ],
-              ),
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(
-                color: AppTheme.accent.withValues(alpha: isDark ? 0.45 : 0.28),
-              ),
-            )
-          : null,
+    final content = Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -932,9 +952,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             style: TextStyle(
               fontSize: 18,
               fontWeight: FontWeight.bold,
-              color: clickable
-                  ? Theme.of(context).colorScheme.secondary
-                  : Theme.of(context).colorScheme.onSurface,
+              color: clickable ? scheme.secondary : scheme.onSurface,
             ),
           ),
           const SizedBox(height: 4),
@@ -944,8 +962,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
               fontSize: 14,
               fontWeight: clickable ? FontWeight.w600 : FontWeight.w400,
               color: clickable
-                  ? Theme.of(context).colorScheme.onSurface
-                  : Theme.of(context).colorScheme.onSurfaceVariant,
+                  ? scheme.onSurface
+                  : scheme.onSurfaceVariant,
             ),
           ),
         ],
@@ -962,7 +980,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         color: Colors.transparent,
         child: InkWell(
           onTap: onTap,
-          borderRadius: BorderRadius.circular(14),
+          borderRadius: BorderRadius.circular(8),
           child: content,
         ),
       ),
