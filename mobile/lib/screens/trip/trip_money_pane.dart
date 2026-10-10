@@ -5,6 +5,8 @@ import 'package:tripthread/providers/auth_provider.dart';
 import 'package:tripthread/providers/expense_provider.dart';
 import 'package:tripthread/screens/trip/add_expense_sheet.dart';
 import 'package:tripthread/utils/app_layout.dart';
+import 'package:tripthread/utils/app_theme.dart';
+import 'package:tripthread/widgets/chat/chat_avatar.dart';
 import 'package:tripthread/utils/money.dart';
 import 'package:tripthread/utils/user_display_labels.dart';
 
@@ -51,16 +53,18 @@ class _TripMoneyPaneState extends State<TripMoneyPane> {
   }
 
   Widget _avatar(ExpenseMemberBalance? member) {
-    final initial = userAvatarInitial(
+    return ChatAvatar(
+      radius: 16,
+      avatarUrl: member?.avatarUrl,
       username: member?.username,
       name: member?.name,
     );
-    final url = member?.avatarUrl;
-    return CircleAvatar(
-      radius: 16,
-      backgroundImage: url != null && url.isNotEmpty ? NetworkImage(url) : null,
-      child: url == null || url.isEmpty ? Text(initial) : null,
-    );
+  }
+
+  Color _warmSurfaceHighlight(BuildContext context) {
+    return Theme.of(context).brightness == Brightness.dark
+        ? AppTheme.darkMuted
+        : AppTheme.accentSoft;
   }
 
   ExpenseMemberBalance? _member(ExpenseSummary summary, String id) {
@@ -171,19 +175,11 @@ class _TripMoneyPaneState extends State<TripMoneyPane> {
                         : '';
                     return ListTile(
                       contentPadding: EdgeInsets.zero,
-                      leading: CircleAvatar(
+                      leading: ChatAvatar(
                         radius: 16,
-                        backgroundImage: share.user?.avatarUrl != null &&
-                                share.user!.avatarUrl!.isNotEmpty
-                            ? NetworkImage(share.user!.avatarUrl!)
-                            : null,
-                        child: share.user?.avatarUrl == null ||
-                                share.user!.avatarUrl!.isEmpty
-                            ? Text(userAvatarInitial(
-                                username: share.user?.username,
-                                name: share.user?.name ?? name,
-                              ))
-                            : null,
+                        avatarUrl: share.user?.avatarUrl,
+                        username: share.user?.username,
+                        name: share.user?.name ?? name,
                       ),
                       title: Text(name),
                       subtitle: Text(
@@ -254,6 +250,7 @@ class _TripMoneyPaneState extends State<TripMoneyPane> {
                 padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
                 children: [
                   Card(
+                    color: _warmSurfaceHighlight(context),
                     child: Padding(
                       padding: const EdgeInsets.all(16),
                       child: Column(
@@ -327,11 +324,37 @@ class _TripMoneyPaneState extends State<TripMoneyPane> {
                   if (summary.recordedSettlements.isNotEmpty)
                     Padding(
                       padding: const EdgeInsets.only(bottom: 8),
-                      child: Text(
-                        'Splits are locked after a settlement is recorded.',
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                              color: Theme.of(context).colorScheme.onSurfaceVariant,
-                            ),
+                      child: Material(
+                        color: _warmSurfaceHighlight(context),
+                        borderRadius: BorderRadius.circular(12),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 10,
+                          ),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Icon(
+                                Icons.lock_outline,
+                                size: 18,
+                                color: Theme.of(context).colorScheme.secondary,
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  'Splits are locked after a settlement is recorded.',
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .bodySmall
+                                      ?.copyWith(
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
                       ),
                     ),
                   if (provider.expenses.isEmpty)
@@ -346,16 +369,11 @@ class _TripMoneyPaneState extends State<TripMoneyPane> {
                       return Card(
                         child: ListTile(
                           onTap: () => _openExpenseDetail(summary, e),
-                          leading: CircleAvatar(
-                            backgroundImage: payer?.avatarUrl != null
-                                ? NetworkImage(payer!.avatarUrl!)
-                                : null,
-                            child: payer?.avatarUrl == null
-                                ? Text(userAvatarInitial(
-                                    username: payer?.username,
-                                    name: payer?.name,
-                                  ))
-                                : null,
+                          leading: ChatAvatar(
+                            radius: 20,
+                            avatarUrl: payer?.avatarUrl,
+                            username: payer?.username,
+                            name: payer?.name,
                           ),
                           title: Text(e.title),
                           subtitle: Text(

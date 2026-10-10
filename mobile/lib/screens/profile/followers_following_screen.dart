@@ -5,6 +5,10 @@ import 'package:tripthread/models/user.dart';
 import 'package:tripthread/services/api_service.dart';
 import 'package:tripthread/providers/user_provider.dart';
 import 'package:tripthread/providers/auth_provider.dart';
+import 'package:tripthread/utils/app_feedback.dart';
+import 'package:tripthread/utils/app_layout.dart';
+import 'package:tripthread/utils/app_theme.dart';
+import 'package:tripthread/widgets/chat/chat_avatar.dart';
 
 class FollowersFollowingScreen extends StatefulWidget {
   final String userId;
@@ -343,9 +347,12 @@ class _FollowersFollowingScreenState extends State<FollowersFollowingScreen> {
             },
           ),
         ),
-        body: RefreshIndicator(
-          onRefresh: _refresh,
-          child: _buildBody(),
+        body: AppLayout.reading(
+          context: context,
+          child: RefreshIndicator(
+            onRefresh: _refresh,
+            child: _buildBody(),
+          ),
         ),
       ),
     );
@@ -361,7 +368,7 @@ class _FollowersFollowingScreenState extends State<FollowersFollowingScreen> {
 
     return Card(
       margin: const EdgeInsets.only(bottom: 8, left: 8, right: 8),
-      elevation: 2,
+      elevation: 0,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
       ),
@@ -374,23 +381,11 @@ class _FollowersFollowingScreenState extends State<FollowersFollowingScreen> {
           padding: const EdgeInsets.all(14),
           child: Row(
             children: [
-              CircleAvatar(
+              ChatAvatar(
                 radius: 24,
-                backgroundColor: Theme.of(context).colorScheme.primary,
-                backgroundImage:
-                    user.avatarUrl != null ? NetworkImage(user.avatarUrl!) : null,
-                child: user.avatarUrl == null
-                    ? Text(
-                        (user.name ?? user.username ?? 'U')
-                            .substring(0, 1)
-                            .toUpperCase(),
-                        style: const TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.white,
-                        ),
-                      )
-                    : null,
+                avatarUrl: user.avatarUrl,
+                username: user.username,
+                name: user.name,
               ),
               const SizedBox(width: 14),
               Expanded(
@@ -418,9 +413,11 @@ class _FollowersFollowingScreenState extends State<FollowersFollowingScreen> {
                             padding: const EdgeInsets.symmetric(
                                 horizontal: 6, vertical: 2),
                             decoration: BoxDecoration(
-                              color: Colors.orange[100],
+                              color: AppTheme.upcoming.withValues(alpha: 0.12),
                               borderRadius: BorderRadius.circular(6),
-                              border: Border.all(color: Colors.orange[300]!),
+                              border: Border.all(
+                                color: AppTheme.upcoming.withValues(alpha: 0.35),
+                              ),
                             ),
                             child: Row(
                               mainAxisSize: MainAxisSize.min,
@@ -428,13 +425,13 @@ class _FollowersFollowingScreenState extends State<FollowersFollowingScreen> {
                                 Icon(
                                   Icons.lock_outline,
                                   size: 11,
-                                  color: Colors.orange[700],
+                                  color: AppTheme.upcoming,
                                 ),
                                 const SizedBox(width: 2),
                                 Text(
                                   'Private',
                                   style: TextStyle(
-                                    color: Colors.orange[700],
+                                    color: AppTheme.upcoming,
                                     fontSize: 9,
                                     fontWeight: FontWeight.w600,
                                   ),
@@ -547,22 +544,15 @@ class _FollowersFollowingScreenState extends State<FollowersFollowingScreen> {
         await userProvider.fetchUserStats(widget.userId);
 
         if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Successfully unfollowed user'),
-            backgroundColor: Colors.green,
-          ),
-        );
+        AppFeedback.showSuccess(context, 'Successfully unfollowed user');
       } else {
         setState(() {
           _unfollowingUserId = null;
         });
 
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(userProvider.error ?? 'Failed to unfollow user'),
-            backgroundColor: Colors.red,
-          ),
+        AppFeedback.showError(
+          context,
+          userProvider.error ?? 'Failed to unfollow user',
         );
       }
     } catch (e) {
@@ -571,12 +561,7 @@ class _FollowersFollowingScreenState extends State<FollowersFollowingScreen> {
         _unfollowingUserId = null;
       });
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('An error occurred: $e'),
-          backgroundColor: Colors.red,
-        ),
-      );
+      AppFeedback.showError(context, 'An error occurred: $e');
     }
   }
 }

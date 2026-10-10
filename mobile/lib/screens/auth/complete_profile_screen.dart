@@ -4,7 +4,9 @@ import 'package:go_router/go_router.dart';
 import 'package:tripthread/providers/auth_provider.dart';
 import 'package:tripthread/utils/validators.dart';
 import 'package:tripthread/widgets/custom_text_field.dart';
+import 'package:tripthread/utils/app_layout.dart';
 import 'package:tripthread/widgets/loading_button.dart';
+import 'package:tripthread/widgets/tripthread_logo.dart';
 
 class CompleteProfileScreen extends StatefulWidget {
   const CompleteProfileScreen({super.key});
@@ -65,6 +67,7 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final spacing = AppLayout.authSpacing(context);
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, result) async {
@@ -98,20 +101,28 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
           title: const Text('Complete your profile'),
           automaticallyImplyLeading: false,
         ),
-        body: SafeArea(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.all(24.0),
-            child: Form(
+        body: AppLayout.authFormBody(
+          context: context,
+          child: Form(
               key: _formKey,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  const SizedBox(height: 16),
+                  SizedBox(height: spacing.top),
+                  Center(child: TripThreadLogo(size: spacing.logo)),
+                  SizedBox(height: spacing.afterLogo),
+                  Text(
+                    'Complete your profile',
+                    style: Theme.of(context).textTheme.displaySmall,
+                    textAlign: TextAlign.center,
+                  ),
+                  SizedBox(height: spacing.section),
                   Text(
                     'Set a username and password so you can also sign in with email later.',
                     style: Theme.of(context).textTheme.bodyMedium,
+                    textAlign: TextAlign.center,
                   ),
-                  const SizedBox(height: 24),
+                  SizedBox(height: spacing.beforeFields),
                   CustomTextField(
                     controller: _usernameController,
                     label: 'Username',
@@ -276,7 +287,6 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
                 ],
               ),
             ),
-          ),
         ),
       ),
     );

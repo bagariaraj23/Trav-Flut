@@ -6,7 +6,10 @@ import 'package:tripthread/providers/auth_provider.dart';
 import 'package:tripthread/providers/trip_provider.dart';
 import 'package:tripthread/models/trip.dart';
 import 'package:tripthread/services/api_service.dart';
+import 'package:tripthread/utils/app_layout.dart';
+import 'package:tripthread/utils/app_theme.dart';
 import 'package:tripthread/utils/user_display_labels.dart';
+import 'package:tripthread/widgets/chat/chat_avatar.dart';
 
 class TripParticipantsScreen extends StatefulWidget {
   final String tripId;
@@ -359,15 +362,11 @@ class _TripParticipantsScreenState extends State<TripParticipantsScreen> {
           padding: const EdgeInsets.all(12),
           child: Row(
             children: [
-              CircleAvatar(
+              ChatAvatar(
                 radius: 20,
-                backgroundColor: Theme.of(context).colorScheme.primary,
-                backgroundImage: avatarUrl != null
-                    ? NetworkImage(avatarUrl)
-                    : null,
-                child: avatarUrl == null
-                    ? Icon(Icons.person, color: Colors.white, size: 20)
-                    : null,
+                avatarUrl: avatarUrl,
+                username: uname,
+                name: displayName,
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -401,25 +400,28 @@ class _TripParticipantsScreenState extends State<TripParticipantsScreen> {
                     vertical: 6,
                   ),
                   decoration: BoxDecoration(
-                    color: Colors.green.shade50,
+                    color: AppTheme.live.withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: Colors.green.shade200, width: 1),
+                    border: Border.all(
+                      color: AppTheme.live.withValues(alpha: 0.35),
+                      width: 1,
+                    ),
                   ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Icon(
                         Icons.check_circle,
-                        color: Colors.green.shade700,
+                        color: AppTheme.live,
                         size: 16,
                       ),
                       const SizedBox(width: 4),
                       Text(
                         'Member',
                         style: TextStyle(
-                          color: Colors.green.shade900,
+                          color: AppTheme.live,
                           fontSize: 12,
-                          fontWeight: FontWeight.w500,
+                          fontWeight: FontWeight.w600,
                         ),
                       ),
                     ],
@@ -518,14 +520,11 @@ class _TripParticipantsScreenState extends State<TripParticipantsScreen> {
     );
 
     return ListTile(
-      leading: CircleAvatar(
-        backgroundColor: Theme.of(context).colorScheme.primary,
-        backgroundImage: participant.user?.avatarUrl != null
-            ? NetworkImage(participant.user!.avatarUrl!)
-            : null,
-        child: participant.user?.avatarUrl == null
-            ? Icon(Icons.person, color: Colors.white, size: 20)
-            : null,
+      leading: ChatAvatar(
+        radius: 22,
+        avatarUrl: participant.user?.avatarUrl,
+        username: participant.user?.username,
+        name: participant.user?.name,
       ),
       title: Text(
         userPrimaryLabel(
@@ -562,16 +561,15 @@ class _TripParticipantsScreenState extends State<TripParticipantsScreen> {
                   padding:
                       const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                   decoration: BoxDecoration(
-                    color: Theme.of(context)
-                        .colorScheme
-                        .primary
-                        .withValues(alpha: 0.1),
+                    color: Theme.of(context).brightness == Brightness.dark
+                        ? AppTheme.darkMuted
+                        : AppTheme.accentSoft,
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Text(
                     'Owner',
                     style: TextStyle(
-                      color: Theme.of(context).colorScheme.primary,
+                      color: Theme.of(context).colorScheme.secondary,
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
                     ),
@@ -624,7 +622,9 @@ class _TripParticipantsScreenState extends State<TripParticipantsScreen> {
           ],
         ),
         body: SafeArea(
-          child: Column(
+          child: AppLayout.reading(
+            context: context,
+            child: Column(
             children: [
               // Search Section
               Padding(
@@ -733,6 +733,7 @@ class _TripParticipantsScreenState extends State<TripParticipantsScreen> {
                 ),
               ),
             ],
+          ),
           ),
         ),
       ),

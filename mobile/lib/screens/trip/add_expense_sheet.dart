@@ -268,6 +268,34 @@ class _AddExpenseSheetState extends State<AddExpenseSheet> {
     }
   }
 
+  Widget _sheetHandle(BuildContext context) {
+    return Center(
+      child: Container(
+        width: 40,
+        height: 4,
+        margin: const EdgeInsets.only(bottom: 12),
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.outlineVariant,
+          borderRadius: BorderRadius.circular(99),
+        ),
+      ),
+    );
+  }
+
+  Widget _sectionLabel(BuildContext context, String text) {
+    final scheme = Theme.of(context).colorScheme;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Text(
+        text,
+        style: Theme.of(context).textTheme.titleSmall?.copyWith(
+              color: scheme.secondary,
+              fontWeight: FontWeight.w600,
+            ),
+      ),
+    );
+  }
+
   Widget _errorBanner(BuildContext context) {
     if (_formError == null) return const SizedBox.shrink();
     final scheme = Theme.of(context).colorScheme;
@@ -312,18 +340,20 @@ class _AddExpenseSheetState extends State<AddExpenseSheet> {
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
             children: [
-              Center(
-                child: Container(
-                  width: 40,
-                  height: 4,
-                  margin: const EdgeInsets.only(bottom: 12),
-                  decoration: BoxDecoration(
-                    color: Theme.of(context).colorScheme.outlineVariant,
-                    borderRadius: BorderRadius.circular(99),
+              _sheetHandle(context),
+              Row(
+                children: [
+                  Icon(Icons.receipt_long_outlined,
+                      color: Theme.of(context).colorScheme.secondary, size: 26),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      'Add expense',
+                      style: Theme.of(context).textTheme.titleLarge,
+                    ),
                   ),
-                ),
+                ],
               ),
-              Text('Add expense', style: Theme.of(context).textTheme.titleLarge),
               const SizedBox(height: 12),
               _errorBanner(context),
               // 1. Amount
@@ -377,7 +407,7 @@ class _AddExpenseSheetState extends State<AddExpenseSheet> {
                 onChanged: (v) => setState(() => _payerId = v ?? _payerId),
               ),
               const SizedBox(height: 12),
-              Text('Split among', style: Theme.of(context).textTheme.titleSmall),
+              _sectionLabel(context, 'Split among'),
               Wrap(
                 spacing: 8,
                 children: widget.summary.members.map((m) {
