@@ -959,7 +959,7 @@ class _ChatScreenState extends State<ChatScreen> {
                           const SizedBox(width: 10),
                           Expanded(
                             child: Text(
-                              '@${user.username}',
+                              user.username!,
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                             ),

@@ -121,6 +121,8 @@ void main() {
     await tester.pump();
     await tester.pump();
 
+    await tester.tap(find.byIcon(Icons.more_vert));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Mark as paid'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 100));
@@ -156,7 +158,7 @@ void main() {
     await tester.pump();
 
     expect(find.text('Already paid'), findsOneWidget);
-    expect(find.textContaining('@them paid @me'), findsOneWidget);
+    expect(find.textContaining('Them paid Me'), findsOneWidget);
     expect(find.byIcon(Icons.undo), findsNothing);
     expect(find.textContaining('Pay in GPay'), findsNothing);
     expect(find.textContaining('tap for shares'), findsNothing);

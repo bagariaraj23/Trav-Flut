@@ -50,9 +50,9 @@ class CommentUser {
   String? get displayNameSecondary =>
       userSecondaryName(username: username, name: name);
 
-  /// Username with @ prefix, or fallback to id
+  /// Username without @ prefix, or fallback to id prefix.
   String get handle =>
       username != null && username!.trim().isNotEmpty
-          ? '@${username!.trim()}'
-          : '@${id.length >= 8 ? id.substring(0, 8) : id}';
+          ? username!.trim()
+          : (id.length >= 8 ? id.substring(0, 8) : id);
 }

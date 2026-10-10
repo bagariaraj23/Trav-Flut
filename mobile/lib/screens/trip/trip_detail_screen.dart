@@ -10,6 +10,7 @@ import 'package:tripthread/utils/app_layout.dart';
 import 'package:tripthread/utils/app_theme.dart';
 import 'package:tripthread/utils/user_display_labels.dart';
 import 'package:tripthread/utils/cloudinary_utils.dart';
+import 'package:tripthread/widgets/chat/chat_avatar.dart';
 import 'package:tripthread/widgets/loading_button.dart';
 import 'package:tripthread/widgets/mention_text.dart';
 import 'package:tripthread/widgets/trip_cover_placeholder.dart';
@@ -242,29 +243,11 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
                                   ),
                                 ],
                               ),
-                              child: CircleAvatar(
+                              child: ChatAvatar(
                                 radius: 15,
-                                backgroundColor: Theme.of(
-                                  context,
-                                ).colorScheme.primary,
-                                backgroundImage: _trip!.user!.avatarUrl != null
-                                    ? NetworkImage(_trip!.user!.avatarUrl!)
-                                    : null,
-                                child: _trip!.user!.avatarUrl == null
-                                    ? Text(
-                                        (_trip!.user!.name != null &&
-                                                _trip!.user!.name!.isNotEmpty
-                                            ? _trip!.user!.name!
-                                                .substring(0, 1)
-                                                .toUpperCase()
-                                            : 'U'),
-                                        style: const TextStyle(
-                                          fontSize: 11,
-                                          fontWeight: FontWeight.w600,
-                                          color: Colors.white,
-                                        ),
-                                      )
-                                    : null,
+                                avatarUrl: _trip!.user!.avatarUrl,
+                                username: _trip!.user!.username,
+                                name: _trip!.user!.name,
                               ),
                             ),
                           ),
@@ -624,7 +607,7 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
                           ),
                           if (_trip!.user!.username != null)
                             Text(
-                              '@${_trip!.user!.username}',
+                              _trip!.user!.username!,
                               style: Theme.of(context).textTheme.bodySmall,
                             ),
                         ],
@@ -920,6 +903,10 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
                     extra: {'from': '/trip/${widget.tripId}'},
                   );
                 },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Theme.of(context).colorScheme.secondary,
+                  foregroundColor: Theme.of(context).colorScheme.onSecondary,
+                ),
                 icon: const Icon(Icons.add),
                 label: const Text('Add Entry'),
               ),
@@ -1281,8 +1268,9 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.22),
+        color: Colors.black.withValues(alpha: 0.55),
         borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.35)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -1292,7 +1280,11 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
           Flexible(
             child: Text(
               label,
-              style: const TextStyle(color: Colors.white, fontSize: 12),
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+              ),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),
@@ -1324,14 +1316,20 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.1),
+        color: color,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: color.withValues(alpha: 0.3)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.25),
+            blurRadius: 6,
+            offset: const Offset(0, 2),
+          ),
+        ],
       ),
       child: Text(
         label,
-        style: TextStyle(
-          color: color,
+        style: const TextStyle(
+          color: Colors.white,
           fontWeight: FontWeight.w600,
           fontSize: 12,
         ),

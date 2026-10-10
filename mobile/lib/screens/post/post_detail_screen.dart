@@ -8,6 +8,7 @@ import 'package:tripthread/providers/feed_provider.dart';
 import 'package:tripthread/services/api_service.dart';
 import 'package:tripthread/services/trip_service.dart';
 import 'package:tripthread/utils/cloudinary_utils.dart';
+import 'package:tripthread/widgets/chat/chat_avatar.dart';
 import 'package:tripthread/widgets/engagement/engagement_action_bar.dart';
 import 'package:tripthread/widgets/mention_text.dart';
 import 'package:tripthread/widgets/sheets/comment_bottom_sheet.dart';
@@ -249,15 +250,11 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
             padding: const EdgeInsets.all(16),
             child: Row(
               children: [
-                CircleAvatar(
+                ChatAvatar(
                   radius: 20,
-                  backgroundColor: Theme.of(context).colorScheme.primary,
-                  backgroundImage: post.trip?.user?.avatarUrl != null
-                      ? NetworkImage(post.trip!.user!.avatarUrl!)
-                      : null,
-                  child: post.trip?.user?.avatarUrl == null
-                      ? Icon(Icons.person, color: Colors.white, size: 20)
-                      : null,
+                  avatarUrl: post.trip?.user?.avatarUrl,
+                  username: post.trip?.user?.username,
+                  name: post.trip?.user?.name,
                 ),
                 const SizedBox(width: 12),
                 Expanded(

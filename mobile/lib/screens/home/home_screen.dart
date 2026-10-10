@@ -1567,15 +1567,14 @@ class _TripsTabState extends State<TripsTab> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.1),
+        color: color,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.withValues(alpha: 0.3)),
       ),
       child: Text(
         label,
-        style: TextStyle(
-          color: color,
-          fontWeight: FontWeight.w600,
+        style: const TextStyle(
+          color: Colors.white,
+          fontWeight: FontWeight.w700,
           fontSize: 12,
         ),
       ),
@@ -1805,7 +1804,7 @@ class ProfileTab extends StatelessWidget {
                       if (user.username != null) ...[
                         const SizedBox(height: 4),
                         Text(
-                          '@${user.username}',
+                          user.username!,
                           style: Theme.of(context).textTheme.bodyMedium,
                         ),
                       ],

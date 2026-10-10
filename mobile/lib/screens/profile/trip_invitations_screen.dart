@@ -193,7 +193,7 @@ class _TripInvitationsScreenState extends State<TripInvitationsScreen> {
                         ),
                         if (sender.username != null)
                           Text(
-                            '@${sender.username}',
+                            sender.username!,
                             style: Theme.of(context)
                                 .textTheme
                                 .bodyMedium

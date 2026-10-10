@@ -696,8 +696,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   child: ElevatedButton(
                     onPressed: isLoading ? null : _handleFollowToggle,
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: Theme.of(context).colorScheme.primary,
-                      foregroundColor: Colors.white,
+                      backgroundColor: Theme.of(context).colorScheme.secondary,
+                      foregroundColor: Theme.of(context).colorScheme.onSecondary,
                       padding: const EdgeInsets.symmetric(vertical: 12),
                     ),
                     child: const Text('Send Follow Request'),
@@ -767,8 +767,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   return ElevatedButton(
                     onPressed: isProcessing ? null : _handleFollowToggle,
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: Theme.of(context).colorScheme.primary,
-                      foregroundColor: Colors.white,
+                      backgroundColor: Theme.of(context).colorScheme.secondary,
+                      foregroundColor: Theme.of(context).colorScheme.onSecondary,
                       padding: const EdgeInsets.symmetric(vertical: 12),
                     ),
                     child: isProcessing
@@ -894,12 +894,32 @@ class _ProfileScreenState extends State<ProfileScreen> {
     String label, {
     VoidCallback? onTap,
   }) {
-    debugPrint(
-      '[ProfileScreen] _buildStatColumn - label: $label, count: $count, onTap: ${onTap != null}',
-    );
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final clickable = onTap != null;
 
     final content = Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: clickable
+          ? BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: isDark
+                    ? [
+                        AppTheme.darkMuted,
+                        AppTheme.accent.withValues(alpha: 0.22),
+                      ]
+                    : [
+                        AppTheme.accentSoft,
+                        AppTheme.muted,
+                      ],
+              ),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(
+                color: AppTheme.accent.withValues(alpha: isDark ? 0.45 : 0.28),
+              ),
+            )
+          : null,
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -908,9 +928,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
             style: TextStyle(
               fontSize: 18,
               fontWeight: FontWeight.bold,
-              color: onTap != null
-                  ? Theme.of(context).colorScheme.primary
-                  : null,
+              color: clickable
+                  ? Theme.of(context).colorScheme.secondary
+                  : Theme.of(context).colorScheme.onSurface,
             ),
           ),
           const SizedBox(height: 4),
@@ -918,28 +938,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
             label,
             style: TextStyle(
               fontSize: 14,
-              color: Theme.of(context).colorScheme.onSurfaceVariant,
+              fontWeight: clickable ? FontWeight.w600 : FontWeight.w400,
+              color: clickable
+                  ? Theme.of(context).colorScheme.onSurface
+                  : Theme.of(context).colorScheme.onSurfaceVariant,
             ),
           ),
         ],
       ),
     );
 
-    if (onTap == null) {
+    if (!clickable) {
       return content;
-    }
-
-    void tapHandler() {
-      debugPrint(
-        '[ProfileScreen] StatColumn tapped - label: $label, count: $count',
-      );
-      try {
-        onTap();
-        debugPrint('[ProfileScreen] StatColumn onTap executed successfully');
-      } catch (e, stackTrace) {
-        debugPrint('[ProfileScreen] StatColumn onTap error: $e');
-        debugPrint('[ProfileScreen] Stack trace: $stackTrace');
-      }
     }
 
     return MouseRegion(
@@ -947,8 +957,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
       child: Material(
         color: Colors.transparent,
         child: InkWell(
-          onTap: tapHandler,
-          borderRadius: BorderRadius.circular(8),
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(14),
           child: content,
         ),
       ),

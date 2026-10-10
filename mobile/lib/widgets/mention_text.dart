@@ -50,7 +50,7 @@ class MentionText extends StatelessWidget {
       }
       final username = match.group(1)!;
       spans.add(TextSpan(
-        text: '@$username',
+        text: username,
         style: mentionStyle,
         recognizer: TapGestureRecognizer()
           ..onTap = () {

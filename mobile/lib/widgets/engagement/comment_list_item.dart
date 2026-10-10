@@ -10,8 +10,8 @@ import 'package:tripthread/utils/app_feedback.dart';
 import 'package:tripthread/utils/app_theme.dart';
 import 'package:tripthread/utils/error_handler.dart';
 import 'package:tripthread/utils/user_display_labels.dart';
+import 'package:tripthread/widgets/chat/chat_avatar.dart';
 import 'package:tripthread/widgets/mention_text.dart';
-import 'package:cached_network_image/cached_network_image.dart';
 
 class CommentListItem extends StatefulWidget {
   final Comment comment;
@@ -84,24 +84,11 @@ class _CommentListItemState extends State<CommentListItem> {
               onTap: () {
                 context.push('/profile/${widget.comment.userId}');
               },
-              child: CircleAvatar(
+              child: ChatAvatar(
                 radius: 18,
-                backgroundImage:
-                    widget.comment.user?.avatarUrl != null &&
-                        widget.comment.user!.avatarUrl!.isNotEmpty
-                    ? CachedNetworkImageProvider(widget.comment.user!.avatarUrl!)
-                    : null,
-                child:
-                    (widget.comment.user?.avatarUrl == null ||
-                        widget.comment.user!.avatarUrl!.isEmpty)
-                    ? Text(
-                        userAvatarInitial(
-                          username: widget.comment.user?.username,
-                          name: widget.comment.user?.name,
-                        ),
-                        style: const TextStyle(fontSize: 14),
-                      )
-                    : null,
+                avatarUrl: widget.comment.user?.avatarUrl,
+                username: widget.comment.user?.username,
+                name: widget.comment.user?.name,
               ),
             ),
             const SizedBox(width: 12),
