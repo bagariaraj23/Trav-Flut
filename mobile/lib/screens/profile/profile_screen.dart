@@ -7,6 +7,9 @@ import 'package:tripthread/providers/feed_provider.dart';
 import 'package:tripthread/models/user.dart';
 import 'package:tripthread/models/trip.dart';
 import 'package:tripthread/services/api_service.dart';
+import 'package:tripthread/utils/app_layout.dart';
+import 'package:tripthread/utils/app_theme.dart';
+import 'package:tripthread/utils/cloudinary_utils.dart';
 import 'package:tripthread/utils/user_display_labels.dart';
 import 'package:go_router/go_router.dart';
 
@@ -269,7 +272,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 tripProvider.pendingTripInvitations, // Add trip invitations
               ),
             ),
-            body: RefreshIndicator(
+            body: AppLayout.reading(
+              context: context,
+              child: RefreshIndicator(
               onRefresh: _refreshProfile,
               child: SingleChildScrollView(
                 physics: const AlwaysScrollableScrollPhysics(),
@@ -291,6 +296,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   ],
                 ),
               ),
+            ),
             ),
           ),
         );
@@ -421,13 +427,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       decoration: BoxDecoration(
         color: Theme.of(context).colorScheme.surface,
         borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 2),
-          ),
-        ],
+        border: Border.all(color: Theme.of(context).colorScheme.outlineVariant),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -437,26 +437,31 @@ class _ProfileScreenState extends State<ProfileScreen> {
             child: Material(
               color: Colors.transparent,
               child: InkWell(
-                customBorder: const CircleBorder(),
+                customBorder: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(20),
+                ),
                 onTap: user.avatarUrl != null && user.avatarUrl!.isNotEmpty
                     ? () => _openAvatarFullScreen(context, user.avatarUrl!)
                     : null,
-                child: CircleAvatar(
-                  radius: 48,
-                  backgroundColor: Theme.of(context).colorScheme.primary,
-                  backgroundImage: user.avatarUrl != null
-                      ? NetworkImage(user.avatarUrl!)
-                      : null,
-                  child: user.avatarUrl == null
-                      ? Text(
-                          _avatarInitial(user),
-                          style: TextStyle(
-                            fontSize: 28,
-                            fontWeight: FontWeight.bold,
-                            color: Theme.of(context).colorScheme.onPrimary,
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(20),
+                  child: Container(
+                    width: 96,
+                    height: 96,
+                    color: AppTheme.muted,
+                    child: user.avatarUrl != null && user.avatarUrl!.isNotEmpty
+                        ? Image.network(user.avatarUrl!, fit: BoxFit.cover)
+                        : Center(
+                            child: Text(
+                              _avatarInitial(user),
+                              style: const TextStyle(
+                                fontSize: 28,
+                                fontWeight: FontWeight.bold,
+                                color: AppTheme.ink,
+                              ),
+                            ),
                           ),
-                        )
-                      : null,
+                  ),
                 ),
               ),
             ),
@@ -692,8 +697,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   child: ElevatedButton(
                     onPressed: isLoading ? null : _handleFollowToggle,
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: Theme.of(context).colorScheme.primary,
-                      foregroundColor: Colors.white,
+                      backgroundColor: Theme.of(context).colorScheme.secondary,
+                      foregroundColor: Theme.of(context).colorScheme.onSecondary,
                       padding: const EdgeInsets.symmetric(vertical: 12),
                     ),
                     child: const Text('Send Follow Request'),
@@ -763,8 +768,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   return ElevatedButton(
                     onPressed: isProcessing ? null : _handleFollowToggle,
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: Theme.of(context).colorScheme.primary,
-                      foregroundColor: Colors.white,
+                      backgroundColor: Theme.of(context).colorScheme.secondary,
+                      foregroundColor: Theme.of(context).colorScheme.onSecondary,
                       padding: const EdgeInsets.symmetric(vertical: 12),
                     ),
                     child: isProcessing
@@ -801,13 +806,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
       decoration: BoxDecoration(
         color: Theme.of(context).colorScheme.surface,
         borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 2),
-          ),
-        ],
+        border: Border.all(
+          color: Theme.of(context).colorScheme.outlineVariant,
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -860,10 +861,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 final trip = _profileTrips[index];
                 return ListTile(
                   contentPadding: EdgeInsets.zero,
-                  leading: Icon(
-                    Icons.map_outlined,
-                    color: Theme.of(context).colorScheme.primary,
-                  ),
+                  leading: _buildTripLeadingThumb(trip),
                   title: Text(
                     trip.title,
                     maxLines: 1,
@@ -888,18 +886,61 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
+  Widget _buildTripLeadingThumb(Trip trip) {
+    const size = 44.0;
+    final coverUrl = trip.coverMedia?.url;
+    final trimmed = trip.title.trim();
+    final titleInitial =
+        trimmed.isNotEmpty ? trimmed[0].toUpperCase() : 'T';
+
+    Widget imageChild;
+    if (coverUrl != null && coverUrl.isNotEmpty) {
+      imageChild = Image.network(
+        buildOptimizedImageUrl(coverUrl, width: 128),
+        fit: BoxFit.cover,
+        errorBuilder: (_, _, _) => _tripThumbInitial(titleInitial),
+      );
+    } else {
+      imageChild = _tripThumbInitial(titleInitial);
+    }
+
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(10),
+      child: SizedBox(
+        width: size,
+        height: size,
+        child: imageChild,
+      ),
+    );
+  }
+
+  Widget _tripThumbInitial(String initial) {
+    return ColoredBox(
+      color: AppTheme.muted,
+      child: Center(
+        child: Text(
+          initial,
+          style: const TextStyle(
+            color: AppTheme.ink,
+            fontWeight: FontWeight.w600,
+            fontSize: 16,
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildStatColumn(
     BuildContext context,
     String count,
     String label, {
     VoidCallback? onTap,
   }) {
-    debugPrint(
-      '[ProfileScreen] _buildStatColumn - label: $label, count: $count, onTap: ${onTap != null}',
-    );
+    final clickable = onTap != null;
+    final scheme = Theme.of(context).colorScheme;
 
-    final content = Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+    final content = Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -908,9 +949,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             style: TextStyle(
               fontSize: 18,
               fontWeight: FontWeight.bold,
-              color: onTap != null
-                  ? Theme.of(context).colorScheme.primary
-                  : null,
+              color: clickable ? scheme.secondary : scheme.onSurface,
             ),
           ),
           const SizedBox(height: 4),
@@ -918,28 +957,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
             label,
             style: TextStyle(
               fontSize: 14,
-              color: Theme.of(context).colorScheme.onSurfaceVariant,
+              fontWeight: clickable ? FontWeight.w600 : FontWeight.w400,
+              color: clickable
+                  ? scheme.onSurface
+                  : scheme.onSurfaceVariant,
             ),
           ),
         ],
       ),
     );
 
-    if (onTap == null) {
+    if (!clickable) {
       return content;
-    }
-
-    void tapHandler() {
-      debugPrint(
-        '[ProfileScreen] StatColumn tapped - label: $label, count: $count',
-      );
-      try {
-        onTap();
-        debugPrint('[ProfileScreen] StatColumn onTap executed successfully');
-      } catch (e, stackTrace) {
-        debugPrint('[ProfileScreen] StatColumn onTap error: $e');
-        debugPrint('[ProfileScreen] Stack trace: $stackTrace');
-      }
     }
 
     return MouseRegion(
@@ -947,7 +976,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       child: Material(
         color: Colors.transparent,
         child: InkWell(
-          onTap: tapHandler,
+          onTap: onTap,
           borderRadius: BorderRadius.circular(8),
           child: content,
         ),

@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import 'package:tripthread/models/comment_user.dart';
 import 'package:tripthread/providers/auth_provider.dart';
 import 'package:tripthread/providers/comment_provider.dart';
+import 'package:tripthread/utils/app_feedback.dart';
 import 'package:tripthread/models/comment.dart';
 import 'package:tripthread/services/api_service.dart';
 import 'package:tripthread/utils/debouncer.dart';
@@ -44,7 +45,7 @@ class _MentionCandidate {
   });
 
   String get display =>
-      (username != null && username!.trim().isNotEmpty) ? '@$username' : (name ?? 'User');
+      (username != null && username!.trim().isNotEmpty) ? username! : (name ?? 'User');
 }
 
 const _kTripEveryoneMention = _MentionCandidate(
@@ -254,11 +255,9 @@ class _CommentComposerState extends State<CommentComposer> {
       widget.onCommentPosted?.call();
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Failed to post comment: ${e.toString()}'),
-            backgroundColor: Colors.red,
-          ),
+        AppFeedback.showError(
+          context,
+          'Failed to post comment: ${e.toString()}',
         );
       }
     } finally {
@@ -411,7 +410,7 @@ class _CommentComposerState extends State<CommentComposer> {
                                   final user = _mentionResults[index];
                                   final subtitle = (user.username != null &&
                                           user.username!.trim().isNotEmpty)
-                                      ? '@${user.username}'
+                                      ? user.username!
                                       : null;
                                   return InkWell(
                                     onTap: () => _insertMention(user),
@@ -584,7 +583,7 @@ class _CommentComposerState extends State<CommentComposer> {
                           : const Icon(Icons.send),
                       onPressed:
                           (_isSubmitting || isCreating) ? null : _submitComment,
-                      color: colorScheme.primary,
+                      color: colorScheme.secondary,
                     ),
                 ],
               ),
@@ -595,8 +594,8 @@ class _CommentComposerState extends State<CommentComposer> {
                     '${_textController.text.length}/$_maxLength',
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(
                           color: _textController.text.length > _maxLength
-                              ? Colors.red
-                              : Colors.grey,
+                              ? colorScheme.error
+                              : colorScheme.onSurfaceVariant,
                         ),
                   ),
                 ),

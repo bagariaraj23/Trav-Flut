@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:tripthread/providers/engagement_provider.dart';
+import 'package:tripthread/utils/app_theme.dart';
 import 'package:tripthread/widgets/engagement/like_button.dart';
 
 class EngagementActionBar extends StatelessWidget {
@@ -89,13 +90,13 @@ class _ActionButton extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 24, color: Colors.grey),
+          Icon(icon, size: 24, color: AppTheme.mutedForeground),
           const SizedBox(width: 4),
           if (count > 0)
             Text(
               _formatCount(count),
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: Colors.grey,
+                    color: AppTheme.mutedForeground,
                     fontWeight: FontWeight.w500,
                   ),
             ),

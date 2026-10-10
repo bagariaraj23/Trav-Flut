@@ -17,6 +17,10 @@ class CustomTextField extends StatelessWidget {
   final VoidCallback? onTap;
   final TextCapitalization textCapitalization;
 
+  /// When true, collapses a tap-created range selection to a caret at the
+  /// tap end (helps OEMs that select-from-old-caret instead of moving it).
+  final bool collapseSelectionOnTap;
+
   const CustomTextField({
     super.key,
     required this.controller,
@@ -34,6 +38,7 @@ class CustomTextField extends StatelessWidget {
     this.onChanged,
     this.onTap,
     this.textCapitalization = TextCapitalization.none,
+    this.collapseSelectionOnTap = false,
   });
 
   @override
@@ -76,7 +81,17 @@ class CustomTextField extends StatelessWidget {
           maxLength: maxLength,
           enabled: enabled,
           onChanged: onChanged,
-          onTap: onTap,
+          enableInteractiveSelection: true,
+          onTap: () {
+            onTap?.call();
+            if (!collapseSelectionOnTap) return;
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              final sel = controller.selection;
+              if (!sel.isValid || sel.isCollapsed) return;
+              final offset = sel.extentOffset.clamp(0, controller.text.length);
+              controller.selection = TextSelection.collapsed(offset: offset);
+            });
+          },
           textCapitalization: textCapitalization,
           style: inputStyle,
           decoration: InputDecoration(

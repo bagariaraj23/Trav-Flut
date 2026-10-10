@@ -7,6 +7,7 @@ import {
 } from "./errors";
 import { TripJoinRequestStatus } from "@prisma/client";
 import { handlePrismaUniqueError } from "./prismaErrors";
+import { ensureTripConversation } from "./services/chat";
 
 export class TripInvitationService {
   // Send a trip invitation
@@ -208,9 +209,9 @@ export class TripInvitationService {
     }
 
     if (action === "accept") {
-      return prisma.$transaction(async (tx) => {
+      const updatedRequest = await prisma.$transaction(async (tx) => {
         // Update invitation status
-        const updatedRequest = await tx.tripJoinRequest.update({
+        const updated = await tx.tripJoinRequest.update({
           where: { id: inviteId },
           data: { status: TripJoinRequestStatus.ACCEPTED },
         });
@@ -230,8 +231,19 @@ export class TripInvitationService {
           data: { participantCount: { increment: 1 } },
         });
 
-        return updatedRequest;
+        return updated;
       });
+
+      try {
+        await ensureTripConversation(request.tripId);
+      } catch (chatErr) {
+        console.error(
+          `[WARN] Failed to sync trip chat after invite accept on ${request.tripId}:`,
+          chatErr
+        );
+      }
+
+      return updatedRequest;
     } else {
       return prisma.tripJoinRequest.update({
         where: { id: inviteId },

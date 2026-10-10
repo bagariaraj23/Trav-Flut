@@ -10,6 +10,8 @@ import 'package:tripthread/providers/user_provider.dart';
 import 'package:tripthread/providers/auth_provider.dart';
 import 'package:tripthread/providers/trip_provider.dart';
 import 'package:tripthread/services/api_service.dart';
+import 'package:tripthread/utils/app_layout.dart';
+import 'package:tripthread/utils/app_theme.dart';
 import 'package:tripthread/utils/user_display_labels.dart';
 
 /// Time grouping for notifications
@@ -452,7 +454,9 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
             },
           ),
         ),
-        body: Consumer2<UserProvider, TripProvider>(
+        body: AppLayout.reading(
+          context: context,
+          child: Consumer2<UserProvider, TripProvider>(
           builder: (context, userProvider, tripProvider, child) {
             final followReqs = _followRequests(
               userProvider.unifiedNotifications,
@@ -586,6 +590,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
               ),
             );
           },
+        ),
         ),
       ),
     );
@@ -1164,7 +1169,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                 n.isFollow) &&
             (n.readAt == null || (n.readAt?.isEmpty ?? true)));
     final backgroundColor = isUnread
-        ? Theme.of(context).colorScheme.primary.withValues(alpha: 0.08)
+        ? AppTheme.accentSoft
         : Colors.transparent;
 
     return Material(
@@ -1173,11 +1178,12 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         onTap: () => _onTapNotification(n),
         child: Container(
           decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(16),
             border: isUnread
-                ? Border(
+                ? const Border(
                     left: BorderSide(
-                      color: Theme.of(context).colorScheme.primary,
-                      width: 4,
+                      color: AppTheme.accent,
+                      width: 3,
                     ),
                   )
                 : null,

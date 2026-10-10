@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import 'package:tripthread/providers/auth_provider.dart';
 import 'package:tripthread/services/share_service.dart';
+import 'package:tripthread/utils/app_layout.dart';
 import 'package:tripthread/utils/error_handler.dart';
 
 /// Resolves a share token from deep links and navigates to the target post.
@@ -66,50 +67,53 @@ class _ShareLinkScreenState extends State<ShareLinkScreen> {
 
     return Scaffold(
       appBar: AppBar(title: const Text('Opening…')),
-      body: Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: _error == null
-              ? const CircularProgressIndicator()
-              : Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(
-                      Icons.link_off,
-                      size: 48,
-                      color: Theme.of(context).colorScheme.error,
-                    ),
-                    const SizedBox(height: 16),
-                    Text(
-                      _error!,
-                      textAlign: TextAlign.center,
-                      style: Theme.of(context).textTheme.bodyLarge,
-                    ),
-                    const SizedBox(height: 24),
-                    if (_suggestLogin && !isLoggedIn) ...[
-                      FilledButton(
-                        onPressed: () => context.go(_loginResumePath),
-                        child: const Text('Log in'),
+      body: AppLayout.reading(
+        context: context,
+        child: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: _error == null
+                ? const CircularProgressIndicator()
+                : Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        Icons.link_off,
+                        size: 48,
+                        color: Theme.of(context).colorScheme.error,
                       ),
-                      const SizedBox(height: 12),
-                    ],
-                    if (isLoggedIn)
-                      FilledButton(
-                        onPressed: () => context.go('/home'),
-                        child: const Text('Go to home'),
-                      )
-                    else
+                      const SizedBox(height: 16),
+                      Text(
+                        _error!,
+                        textAlign: TextAlign.center,
+                        style: Theme.of(context).textTheme.bodyLarge,
+                      ),
+                      const SizedBox(height: 24),
+                      if (_suggestLogin && !isLoggedIn) ...[
+                        FilledButton(
+                          onPressed: () => context.go(_loginResumePath),
+                          child: const Text('Log in'),
+                        ),
+                        const SizedBox(height: 12),
+                      ],
+                      if (isLoggedIn)
+                        FilledButton(
+                          onPressed: () => context.go('/home'),
+                          child: const Text('Go to home'),
+                        )
+                      else
+                        TextButton(
+                          onPressed: () => context.go('/login'),
+                          child: const Text('Back to login'),
+                        ),
+                      const SizedBox(height: 8),
                       TextButton(
-                        onPressed: () => context.go('/login'),
-                        child: const Text('Back to login'),
+                        onPressed: _resolve,
+                        child: const Text('Try again'),
                       ),
-                    const SizedBox(height: 8),
-                    TextButton(
-                      onPressed: _resolve,
-                      child: const Text('Try again'),
-                    ),
-                  ],
-                ),
+                    ],
+                  ),
+          ),
         ),
       ),
     );
