@@ -2,9 +2,9 @@
     "project": {
         "name": "TripThread",
         "workspacePath": "/Users/rajbagaria/Desktop/Bolt-Travello/Flut/project",
-        "generatedAt": "2026-10-10",
+        "generatedAt": "2026-10-14",
         "description": "Travel-focused social platform where users create trips, post thread entries (text/media/location/check-ins), split trip expenses and settle up on a Money pane, generate/publish final trip posts, and chat via 1:1 DMs, groups, and trip-scoped rooms (realtime WebSocket).",
-        "lastPRReviewed": "PR #50 merged to main (2026-10-09) — trip expense ledger. Open stack: PR #52 API/DB optimizations (feat-api-db-optimizations → main), then PR #51 Warm UI (feat-ui-warm-polish → feat-api-db-optimizations). Cloudinary upload presets must exist in the dashboard (tripthread_thread_image, cover, video, avatar) before signed uploads that include upload_preset succeed. Universal Links ops (TEAMID/SHA-256 + SHARE_LINK_BASE_URL) still remaining.",
+        "lastPRReviewed": "PR #50 merged to main (2026-10-09) — trip expense ledger. Open stack: PR #52 API/DB optimizations (feat-api-db-optimizations → main), PR #51 Warm UI (feat-ui-warm-polish → feat-api-db-optimizations), PR #54 trip create UX (feat-trip-create-ux → feat-ui-warm-polish). Cloudinary upload presets must exist in the dashboard (tripthread_thread_image, cover, video, avatar) before signed uploads that include upload_preset succeed. Apply migration 20261014150000_trip_open_ended_schedule with the create-flow branch. Universal Links ops (TEAMID/SHA-256 + SHARE_LINK_BASE_URL) still remaining.",
         "recentProductionPRs": [
             "https://github.com/bagariaraj23/Trav-Flut/pull/50",
             "https://github.com/bagariaraj23/Trav-Flut/pull/49",
@@ -153,11 +153,12 @@
             "chat (merged PR #48: REST /api/chat + WS /chat on server.cjs; DM/GROUP/TRIP; single-node event bus; rate-limit + Redis Pub/Sub + offline push deferred)"
         ],
         "keyTripFlow": {
-            "createTrip": "POST /trips",
+            "createTrip": "POST /trips — startDate optional (defaults to now, status ONGOING); endDate optional (null = manual end only); future start stays UPCOMING. Dates are UTC instants. scheduleTimezone is the IANA zone the wall time was chosen in. Omitted type becomes SOLO with typeSetByUser false.",
+            "updateTripDates": "PATCH /trips/[id]/dates — owner only, not ENDED. startDate only while UPCOMING. endDate may be set or cleared. End must be after start and in the future.",
             "threadEntries": "POST /trips/[id]/entries; GET cursor-paginated page { items, hasMoreOlder, nextOlderCursor } (limit default 30); GET /trips/[id]/entries/[entryId]/context returns a centered window around the target entry for deep-link jumps; DELETE/PATCH /trips/[id]/entries/[entryId] (PATCH: author text edit within 15m, owner may moderate later); shared purge in threadEntryPurge.ts",
             "participantLeave": "POST /trips/[id]/leave { removeMyData: boolean } — non-owner participant leaves; optional purge of author's entries (ONGOING only) now uses bulk cleanup path for scalability; blocked with 409 UNSETTLED_BALANCE when expense net ≠ 0",
             "tripExpenses": "GET/POST /trips/[id]/expenses; GET /trips/[id]/expenses/summary; DELETE /trips/[id]/expenses/[expenseId] (409 after any PAID settlement); POST /trips/[id]/settlements (payee only); DELETE settlements returns 409 (immutable); PATCH /trips/[id]/expense-settings (owner; currency frozen after first live expense)",
-            "endTripAndGenerateFinalPost": "POST /trips/[id]/end (transactionally marks ENDED + generates final post)",
+            "endTripAndGenerateFinalPost": "POST /trips/[id]/end — ONGOING marks ENDED, sets endDate to now, and generates the final post. UPCOMING marks ENDED without a final post.",
             "finalPostDraftEdit": "GET/PUT/DELETE /trips/[id]/final-post (DELETE owner-only; removes post + engagement)",
             "publishFinalPost": "POST /trips/[id]/publish",
             "homeFeed": "GET /feed/home (published final posts from self, followed users, and public users). Page/limit still works. Optional cursor (base64url {createdAt,id}) keyset-pages the next slice and returns nextCursor; the mobile FeedProvider sends that cursor. Trip card counts use denormalized entryCount/participantCount, not per-row _count. Discover count and page load in parallel."
@@ -924,11 +925,14 @@
             "scheduler/src/tripStatus.ts"
         ],
         "jobLogic": [
-            "End trips where endDate <= now and status in UPCOMING/ONGOING",
+            "End trips where endDate is set and endDate <= now and status in UPCOMING/ONGOING",
             "Generate final posts for ended trips if missing",
-            "Start trips where startDate <= now < endDate and status is UPCOMING"
+            "Start trips where startDate <= now and (endDate is null or endDate > now) and status is UPCOMING",
+            "Comparisons are UTC instants. Null endDate is manual end only. Trip reads apply the same rules so the app does not wait for the hourly run."
         ],
-        "observedDifferenceVsBackendFinalizer": "Scheduler has its own inline final-post generation logic and does not call backend TripFinalizerService directly."
+        "observedDifferenceVsBackendFinalizer": "Scheduler has its own inline final-post generation logic and does not call backend TripFinalizerService directly.",
+        "timeStorage": "startDate and endDate are absolute UTC instants. scheduleTimezone labels the zone used when the wall time was picked. Clients convert to the device zone for display. Legacy rows with a null scheduleTimezone and an exact UTC midnight stay date-only in the app.",
+        "tripType": "Unset type is SOLO. When typeSetByUser is false, participantCount >= 2 promotes the trip to GROUP and a drop back to 1 returns SOLO. COUPLE and FAMILY are never assigned automatically."
     },
     "scriptsAndOps": {
         "rootScripts": [
@@ -2244,6 +2248,21 @@
                 "head": "feat-ui-warm-polish"
             },
             {
+                "number": 54,
+                "title": "Trip create UX",
+                "state": "open",
+                "url": "https://github.com/bagariaraj23/Trav-Flut/pull/54",
+                "base": "feat-ui-warm-polish",
+                "head": "feat-trip-create-ux",
+                "created_at": "2026-10-14",
+                "notes": "Stacked on PR #51. A trip can start now, keep an optional end, and store real UTC instants. Apply migration 20261014150000_trip_open_ended_schedule.",
+                "keyFeatures": [
+                    "Optional start and end on create; missing start means ongoing now",
+                    "PATCH /trips/[id]/dates and end-on-demand",
+                    "Unset type stays Solo until someone else joins, then Group"
+                ]
+            },
+            {
                 "number": 38,
                 "title": "personalised final posts",
                 "state": "draft",
@@ -2293,7 +2312,7 @@
         "plannedFeatures": 3,
         "totalPRs": 52,
         "mergedPRs": 47,
-        "openPRs": 5,
+        "openPRs": 6,
         "raceConditionFixes": {
             "total": 17,
             "fixed": 15,
@@ -2314,7 +2333,7 @@
             "notes": "See tests/TESTING.md and context.json testing section for suite inventory; run npm run test:coverage on Node 20+ with tripthread_test DB. Do not add platform-specific Rolldown bindings (e.g. @rolldown/binding-darwin-arm64) to root dependencies — breaks Railway Linux deploys (fixed in PR #47)."
         },
         "lastMergedFeature": "PR #50 Trip expense ledger (merged main 2026-10-09)",
-        "notes": "Expense ledger is on main. Open stack is PR #52 API/DB optimizations (base main), then PR #51 Warm UI (base feat-api-db-optimizations). Cloudinary dashboard presets are an ops prerequisite. Universal Links ops remain.",
+        "notes": "Expense ledger is on main. Open stack is PR #52 API/DB optimizations (base main), PR #51 Warm UI (base feat-api-db-optimizations), then PR #54 trip create UX (base feat-ui-warm-polish): start-now, optional end, UTC instants shown in the viewer zone, Solo until someone joins then Group. Apply migration 20261014150000_trip_open_ended_schedule. Cloudinary dashboard presets are an ops prerequisite. Universal Links ops remain.",
         "mainBranchStable": true,
         "activeStack": [
             {
@@ -2326,6 +2345,11 @@
                 "pr": 51,
                 "branch": "feat-ui-warm-polish",
                 "base": "feat-api-db-optimizations"
+            },
+            {
+                "pr": 54,
+                "branch": "feat-trip-create-ux",
+                "base": "feat-ui-warm-polish"
             }
         ]
     },
@@ -2481,17 +2505,17 @@
             {
                 "number": 6,
                 "title": "Extend trip end date",
-                "status": "Open"
+                "status": "Addressed on feat-trip-create-ux"
             },
             {
                 "number": 7,
                 "title": "Optional / dynamic trip dates",
-                "status": "Open"
+                "status": "Addressed on feat-trip-create-ux"
             },
             {
                 "number": 8,
                 "title": "Start/end time & timezone for scheduler",
-                "status": "Open"
+                "status": "Addressed on feat-trip-create-ux"
             },
             {
                 "number": 9,

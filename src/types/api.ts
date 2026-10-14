@@ -110,6 +110,8 @@ export interface TripResponse {
   endLocationId?: string | null;
   startLocation?: PlaceResponse | null;
   endLocation?: PlaceResponse | null;
+  scheduleTimezone?: string | null;
+  typeSetByUser?: boolean;
   status: "UPCOMING" | "ONGOING" | "ENDED";
   createdAt: string;
   updatedAt: string;
@@ -215,6 +217,7 @@ export interface CreateTripRequest {
   description?: string | null;
   startDate?: string | null;
   endDate?: string | null;
+  scheduleTimezone?: string | null;
   destinations: string[];
   mood?:
   | "RELAXED"

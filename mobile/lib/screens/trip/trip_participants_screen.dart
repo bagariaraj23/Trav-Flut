@@ -7,6 +7,7 @@ import 'package:tripthread/providers/trip_provider.dart';
 import 'package:tripthread/models/trip.dart';
 import 'package:tripthread/services/api_service.dart';
 import 'package:tripthread/utils/app_layout.dart';
+import 'package:tripthread/utils/trip_time_format.dart';
 import 'package:tripthread/utils/app_theme.dart';
 import 'package:tripthread/utils/user_display_labels.dart';
 import 'package:tripthread/widgets/chat/chat_avatar.dart';
@@ -554,7 +555,7 @@ class _TripParticipantsScreenState extends State<TripParticipantsScreen> {
             ),
           ),
           Text(
-            'Joined: ${_formatDate(participant.joinedAt)}',
+            'Joined: ${formatLocalDate(participant.joinedAt)}',
             style: TextStyle(
               color: Theme.of(context).colorScheme.onSurfaceVariant,
               fontSize: 12,
@@ -748,11 +749,6 @@ class _TripParticipantsScreenState extends State<TripParticipantsScreen> {
     );
   }
 
-  String _formatDate(DateTime date) {
-    // Extract only date components to avoid timezone issues
-    final dateOnly = DateTime.utc(date.year, date.month, date.day);
-    return '${dateOnly.day}/${dateOnly.month}/${dateOnly.year}';
-  }
 }
 
 enum _LeaveTripChoice { cancel, keepEntries, removeEntries }
