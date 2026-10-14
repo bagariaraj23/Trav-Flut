@@ -5,6 +5,7 @@ import { ApiResponse, TripResponse } from "@/types/api";
 import { withLogging, handleApiError } from "@/lib/middleware";
 import { PerformanceMonitor } from "@/lib/monitoring";
 import { omitHiddenTripSpend } from "@/lib/tripSpendVisibility";
+import { syncTripById } from "@/lib/tripSchedule";
 
 // Get trip by ID
 export async function GET(
@@ -43,6 +44,7 @@ export async function GET(
       }
 
       const currentUserId = payload.userId;
+      await syncTripById(tripId);
 
       // Get trip with full details
       const trip = await prisma.trip.findUnique({

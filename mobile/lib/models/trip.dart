@@ -11,11 +11,14 @@ class Trip {
   final String title;
   final String? description;
   final DateTime startDate;
-  final DateTime endDate;
+  final DateTime? endDate;
+  final String? scheduleTimezone;
   @JsonKey(defaultValue: [])
   final List<String> destinations;
   final TripMood? mood;
   final TripType? type;
+  @JsonKey(defaultValue: false)
+  final bool typeSetByUser;
   final String? coverMediaId;
   final Media? coverMedia;
   final TripStatus status;
@@ -42,10 +45,12 @@ class Trip {
     required this.title,
     this.description,
     required this.startDate,
-    required this.endDate,
+    this.endDate,
+    this.scheduleTimezone,
     required this.destinations,
     this.mood,
     this.type,
+    this.typeSetByUser = false,
     this.coverMediaId,
     this.coverMedia,
     required this.status,
@@ -75,9 +80,11 @@ class Trip {
     String? description,
     DateTime? startDate,
     DateTime? endDate,
+    String? scheduleTimezone,
     List<String>? destinations,
     TripMood? mood,
     TripType? type,
+    bool? typeSetByUser,
     String? coverMediaId,
     Media? coverMedia,
     TripStatus? status,
@@ -98,9 +105,11 @@ class Trip {
       description: description ?? this.description,
       startDate: startDate ?? this.startDate,
       endDate: endDate ?? this.endDate,
+      scheduleTimezone: scheduleTimezone ?? this.scheduleTimezone,
       destinations: destinations ?? this.destinations,
       mood: mood ?? this.mood,
       type: type ?? this.type,
+      typeSetByUser: typeSetByUser ?? this.typeSetByUser,
       coverMediaId: coverMediaId ?? this.coverMediaId,
       coverMedia: coverMedia ?? this.coverMedia,
       status: status ?? this.status,
@@ -427,6 +436,7 @@ class CreateTripRequest {
   final TripMood? mood;
   final TripType? type;
   final String? coverMediaId;
+  final String? scheduleTimezone;
 
   const CreateTripRequest({
     required this.title,
@@ -438,25 +448,29 @@ class CreateTripRequest {
     this.mood,
     this.type,
     this.coverMediaId,
+    this.scheduleTimezone,
   });
 
   factory CreateTripRequest.fromJson(Map<String, dynamic> json) =>
       _$CreateTripRequestFromJson(json);
 
   Map<String, dynamic> toJson() {
-    final normalizedStartDate = startDate != null
-        ? DateTime.utc(startDate!.year, startDate!.month, startDate!.day)
-        : null;
-    final normalizedEndDate = endDate != null
-        ? DateTime.utc(endDate!.year, endDate!.month, endDate!.day)
-        : null;
-
     final baseJson = _$CreateTripRequestToJson(this);
-    if (normalizedStartDate != null) {
-      baseJson['startDate'] = normalizedStartDate.toIso8601String();
+    if (startDate != null) {
+      baseJson['startDate'] = startDate!.toUtc().toIso8601String();
+    } else {
+      baseJson.remove('startDate');
     }
-    if (normalizedEndDate != null) {
-      baseJson['endDate'] = normalizedEndDate.toIso8601String();
+    if (endDate != null) {
+      baseJson['endDate'] = endDate!.toUtc().toIso8601String();
+    } else {
+      baseJson.remove('endDate');
+    }
+    if (scheduleTimezone == null || scheduleTimezone!.isEmpty) {
+      baseJson.remove('scheduleTimezone');
+    }
+    if (type == null) {
+      baseJson.remove('type');
     }
     return baseJson;
   }
@@ -514,6 +528,7 @@ class TripConflictTrip {
   final String title;
   final DateTime startDate;
   final DateTime? endDate;
+  final String? scheduleTimezone;
   final TripStatus status;
 
   const TripConflictTrip({
@@ -521,6 +536,7 @@ class TripConflictTrip {
     required this.title,
     required this.startDate,
     this.endDate,
+    this.scheduleTimezone,
     required this.status,
   });
 

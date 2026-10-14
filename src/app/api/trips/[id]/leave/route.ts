@@ -11,6 +11,7 @@ import {
 import { assertMemberZeroNetOnTrip } from "@/lib/services/expense";
 import { UnsettledBalanceError } from "@/lib/errors";
 import { ensureTripConversation } from "@/lib/services/chat";
+import { applyAutoTripType } from "@/lib/tripSchedule";
 
 export async function POST(
   request: NextRequest,
@@ -123,6 +124,7 @@ export async function POST(
           updatedAt: new Date(),
         },
       });
+      await applyAutoTripType(tx, tripId);
 
       await tx.tripJoinRequest.deleteMany({
         where: {
