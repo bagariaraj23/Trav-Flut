@@ -168,6 +168,38 @@ class TripProvider extends ChangeNotifier {
     }
   }
 
+  Future<bool> updateTripDates({
+    required String tripId,
+    DateTime? startDate,
+    DateTime? endDate,
+    bool clearEnd = false,
+    String? scheduleTimezone,
+  }) async {
+    try {
+      _isLoading = true;
+      _error = null;
+      notifyListeners();
+      final response = await _tripService.updateTripDates(
+        tripId,
+        startDate: startDate,
+        endDate: endDate,
+        clearEnd: clearEnd,
+        scheduleTimezone: scheduleTimezone,
+      );
+      _isLoading = false;
+      if (!response.success) {
+        _error = response.error ?? 'Could not update the schedule';
+      }
+      notifyListeners();
+      return response.success;
+    } catch (e) {
+      _error = 'Could not update the schedule';
+      _isLoading = false;
+      notifyListeners();
+      return false;
+    }
+  }
+
   // End trip (defaults to current ongoing trip)
   Future<bool> endTrip({String? tripId}) async {
     final targetTripId = tripId ?? _currentTrip?.id;

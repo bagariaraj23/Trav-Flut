@@ -7,6 +7,7 @@ import 'package:tripthread/providers/final_post_provider.dart';
 import 'package:tripthread/services/trip_service.dart';
 import 'package:tripthread/utils/app_layout.dart';
 import 'package:tripthread/utils/cloudinary_utils.dart';
+import 'package:tripthread/utils/trip_time_format.dart';
 
 class FinalPostEditScreen extends StatefulWidget {
   final String tripId;
@@ -531,7 +532,11 @@ class _FinalPostEditScreenState extends State<FinalPostEditScreen> {
                 _MetadataChip(
                   icon: Icons.calendar_month,
                   label:
-                      '${_trip!.startDate.toLocal().toShortDateString()} - ${_trip!.endDate.toLocal().toShortDateString()}',
+                      formatTripRange(
+                        _trip!.startDate,
+                        _trip!.endDate,
+                        scheduleTimezone: _trip!.scheduleTimezone,
+                      ),
                 ),
                 if (_trip!.destinations.isNotEmpty)
                   _MetadataChip(
@@ -703,14 +708,6 @@ class _MetadataChip extends StatelessWidget {
       avatar: Icon(icon, size: 18),
       label: Text(label),
     );
-  }
-}
-
-extension _DateFormatting on DateTime {
-  String toShortDateString() {
-    return '${day.toString().padLeft(2, '0')}/'
-        '${month.toString().padLeft(2, '0')}/'
-        '${year.toString()}';
   }
 }
 

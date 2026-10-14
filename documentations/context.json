@@ -2,9 +2,9 @@
     "project": {
         "name": "TripThread",
         "workspacePath": "/Users/rajbagaria/Desktop/Bolt-Travello/Flut/project",
-        "generatedAt": "2026-10-10",
+        "generatedAt": "2026-10-14",
         "description": "Travel-focused social platform where users create trips, post thread entries (text/media/location/check-ins), split trip expenses and settle up on a Money pane, generate/publish final trip posts, and chat via 1:1 DMs, groups, and trip-scoped rooms (realtime WebSocket).",
-        "lastPRReviewed": "PR #50 merged to main (2026-10-09) \u2014 trip expense ledger. PR #51 (Warm UI) open; retarget/rebase onto main.",
+        "lastPRReviewed": "PR #50 merged to main (2026-10-09) \u2014 trip expense ledger. PR #51 (Warm UI) open on feat-ui-warm-polish. Trip create UX (start now, optional end, UTC instants) is on feat-trip-create-ux stacked on feat-ui-warm-polish.",
         "recentProductionPRs": [
             "https://github.com/bagariaraj23/Trav-Flut/pull/50",
             "https://github.com/bagariaraj23/Trav-Flut/pull/49",
@@ -152,11 +152,12 @@
             "chat (merged PR #48: REST /api/chat + WS /chat on server.cjs; DM/GROUP/TRIP; single-node event bus; rate-limit + Redis Pub/Sub + offline push deferred)"
         ],
         "keyTripFlow": {
-            "createTrip": "POST /trips",
+            "createTrip": "POST /trips \u2014 startDate optional (defaults to now, status ONGOING); endDate optional (null = manual end only); future start stays UPCOMING. Dates are UTC instants. scheduleTimezone is the IANA zone the wall time was chosen in. Omitted type becomes SOLO with typeSetByUser false.",
+            "updateTripDates": "PATCH /trips/[id]/dates \u2014 owner only, not ENDED. startDate only while UPCOMING. endDate may be set or cleared. End must be after start and in the future.",
             "threadEntries": "POST /trips/[id]/entries; GET cursor-paginated page { items, hasMoreOlder, nextOlderCursor } (limit default 30); GET /trips/[id]/entries/[entryId]/context returns a centered window around the target entry for deep-link jumps; DELETE/PATCH /trips/[id]/entries/[entryId] (PATCH: author text edit within 15m, owner may moderate later); shared purge in threadEntryPurge.ts",
             "participantLeave": "POST /trips/[id]/leave { removeMyData: boolean } \u2014 non-owner participant leaves; optional purge of author's entries (ONGOING only) now uses bulk cleanup path for scalability; blocked with 409 UNSETTLED_BALANCE when expense net \u2260 0",
             "tripExpenses": "GET/POST /trips/[id]/expenses; GET /trips/[id]/expenses/summary; DELETE /trips/[id]/expenses/[expenseId] (409 after any PAID settlement); POST /trips/[id]/settlements (payee only); DELETE settlements returns 409 (immutable); PATCH /trips/[id]/expense-settings (owner; currency frozen after first live expense)",
-            "endTripAndGenerateFinalPost": "POST /trips/[id]/end (transactionally marks ENDED + generates final post)",
+            "endTripAndGenerateFinalPost": "POST /trips/[id]/end \u2014 ONGOING marks ENDED, sets endDate to now, and generates the final post. UPCOMING marks ENDED without a final post.",
             "finalPostDraftEdit": "GET/PUT/DELETE /trips/[id]/final-post (DELETE owner-only; removes post + engagement)",
             "publishFinalPost": "POST /trips/[id]/publish",
             "homeFeed": "GET /feed/home (published final posts from self, followed users, and public users)"
@@ -883,11 +884,14 @@
             "scheduler/src/tripStatus.ts"
         ],
         "jobLogic": [
-            "End trips where endDate <= now and status in UPCOMING/ONGOING",
+            "End trips where endDate is set and endDate <= now and status in UPCOMING/ONGOING",
             "Generate final posts for ended trips if missing",
-            "Start trips where startDate <= now < endDate and status is UPCOMING"
+            "Start trips where startDate <= now and (endDate is null or endDate > now) and status is UPCOMING",
+            "Comparisons are UTC instants. Null endDate is manual end only. Trip reads apply the same rules so the app does not wait for the hourly run."
         ],
-        "observedDifferenceVsBackendFinalizer": "Scheduler has its own inline final-post generation logic and does not call backend TripFinalizerService directly."
+        "observedDifferenceVsBackendFinalizer": "Scheduler has its own inline final-post generation logic and does not call backend TripFinalizerService directly.",
+        "timeStorage": "startDate and endDate are absolute UTC instants. scheduleTimezone labels the zone used when the wall time was picked. Clients convert to the device zone for display. Legacy rows with a null scheduleTimezone and an exact UTC midnight stay date-only in the app.",
+        "tripType": "Unset type is SOLO. When typeSetByUser is false, participantCount >= 2 promotes the trip to GROUP and a drop back to 1 returns SOLO. COUPLE and FAMILY are never assigned automatically."
     },
     "scriptsAndOps": {
         "rootScripts": [
@@ -2244,7 +2248,7 @@
             "notes": "See tests/TESTING.md and context.json testing section for suite inventory; run npm run test:coverage on Node 20+ with tripthread_test DB. Do not add platform-specific Rolldown bindings (e.g. @rolldown/binding-darwin-arm64) to root dependencies \u2014 breaks Railway Linux deploys (fixed in PR #47)."
         },
         "lastMergedFeature": "PR #50 Trip expense ledger (merged main 2026-10-09)",
-        "notes": "Expense Money pane live on main. PR #51 Warm UI open \u2014 rebase onto main. Share Universal Links ops still needed. Docker local stack aligned with server.cjs. Next deferred: prod API query optimization, test-suite expansion."
+        "notes": "Expense Money pane live on main. PR #51 Warm UI open on feat-ui-warm-polish. Trip create UX is stacked on that branch (feat-trip-create-ux): start-now, optional end, UTC instants shown in the viewer zone, Solo until someone joins then Group. Apply migration 20261014150000_trip_open_ended_schedule. Share Universal Links ops still needed. Open product leftovers are listed under openProductIssuesFromRajasthanDoc."
     },
     "hotspotsForFurtherDeepDive": [
         "src/app/api/trips/[id]/entries/route.ts",
@@ -2398,17 +2402,17 @@
             {
                 "number": 6,
                 "title": "Extend trip end date",
-                "status": "Open"
+                "status": "Addressed on feat-trip-create-ux"
             },
             {
                 "number": 7,
                 "title": "Optional / dynamic trip dates",
-                "status": "Open"
+                "status": "Addressed on feat-trip-create-ux"
             },
             {
                 "number": 8,
                 "title": "Start/end time & timezone for scheduler",
-                "status": "Open"
+                "status": "Addressed on feat-trip-create-ux"
             },
             {
                 "number": 9,

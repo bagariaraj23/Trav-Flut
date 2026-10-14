@@ -13,6 +13,7 @@ import 'package:tripthread/models/trip.dart';
 import 'package:tripthread/screens/discover/discover_tab.dart';
 import 'package:tripthread/utils/app_layout.dart';
 import 'package:tripthread/utils/app_theme.dart';
+import 'package:tripthread/utils/trip_time_format.dart';
 import 'package:tripthread/utils/cloudinary_utils.dart';
 import 'package:tripthread/widgets/engagement/engagement_action_bar.dart';
 import 'package:tripthread/widgets/sheets/comment_bottom_sheet.dart';
@@ -1006,7 +1007,11 @@ class _TripsTabState extends State<TripsTab> {
                           ),
                           const SizedBox(width: 6),
                           Text(
-                            '${_formatDate(existingTrip.startDate)}${existingTrip.endDate != null ? ' - ${_formatDate(existingTrip.endDate!)}' : ''}',
+                            formatTripRange(
+                              existingTrip.startDate,
+                              existingTrip.endDate,
+                              scheduleTimezone: existingTrip.scheduleTimezone,
+                            ),
                             style: Theme.of(context).textTheme.bodySmall
                                 ?.copyWith(
                                   color: Theme.of(
@@ -1140,27 +1145,6 @@ class _TripsTabState extends State<TripsTab> {
         extra: {'from': '/home', 'replaceExisting': true},
       );
     }
-  }
-
-  String _formatDate(DateTime date) {
-    // Extract only date components to avoid timezone issues
-    // Use UTC date components to ensure consistent display
-    final dateOnly = DateTime.utc(date.year, date.month, date.day);
-    final months = [
-      'Jan',
-      'Feb',
-      'Mar',
-      'Apr',
-      'May',
-      'Jun',
-      'Jul',
-      'Aug',
-      'Sep',
-      'Oct',
-      'Nov',
-      'Dec',
-    ];
-    return '${months[dateOnly.month - 1]} ${dateOnly.day}, ${dateOnly.year}';
   }
 
   @override
@@ -1630,12 +1614,6 @@ class _TripsTabState extends State<TripsTab> {
 
 class ProfileTab extends StatelessWidget {
   const ProfileTab({super.key});
-
-  static String _formatDateForCard(DateTime date) {
-    // Extract only date components to avoid timezone issues
-    final dateOnly = DateTime.utc(date.year, date.month, date.day);
-    return '${dateOnly.day}/${dateOnly.month}/${dateOnly.year}';
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -2120,7 +2098,12 @@ class ProfileTab extends StatelessWidget {
                                                     const SizedBox(width: 6),
                                                     Expanded(
                                                       child: Text(
-                                                        '${ProfileTab._formatDateForCard(trip.startDate)} - ${ProfileTab._formatDateForCard(trip.endDate)}',
+                                                        formatTripRange(
+                                                          trip.startDate,
+                                                          trip.endDate,
+                                                          scheduleTimezone:
+                                                              trip.scheduleTimezone,
+                                                        ),
                                                         style: theme
                                                             .textTheme
                                                             .bodySmall
