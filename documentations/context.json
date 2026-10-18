@@ -2364,19 +2364,13 @@
             "notes": "2026-10-18 Vitest (unit, scheduler, route contract, auth, signup, thread, leave, expenses, engagement, notifications, chat, follow requests, invites, spend visibility): database branch 29 files / 210 tests passed; Warm UI branch 29 files / 211 tests passed; trip-create tip 30 files / 215 tests passed. Flutter widget tests were not run (no Flutter SDK). Do not add platform-specific Rolldown bindings to root dependencies."
         },
         "lastMergedFeature": "PR #55 API and database performance (merged main 2026-10-29); PR #51 Warm UI (merged main 2026-10-31)",
-        "notes": "Current work is PR #54 (feat-trip-create-ux → main): start-now, optional end, UTC instants, Solo until someone joins then Group, named map pins with a static thumbnail, and while-in-use permissions. Apply migration 20261014150000_trip_open_ended_schedule when that branch is deployed. PR #56 was refreshed onto this branch on 2026-11-06 and still merges after 54. A road line between saved pins can come later with one cached Mapbox Directions call. A walked-path trace needs background location and stays deferred. Cloudinary dashboard presets and Universal Links ops remain.",
+        "notes": "PR #54 (trip create UX) is merged to main. Current work is PR #56: dockerise the whole application on current main (Postgres, API with migrations, scheduler, and the Flutter UI as a web container). A road line between saved pins can come later with one cached Mapbox Directions call. A walked-path trace needs background location and stays deferred. Cloudinary dashboard presets and Universal Links ops remain.",
         "mainBranchStable": true,
         "activeStack": [
             {
-                "pr": 54,
-                "branch": "feat-trip-create-ux",
-                "base": "main",
-                "mergeBefore": 56
-            },
-            {
                 "pr": 56,
                 "branch": "cursor/docker-stack-refresh-8029",
-                "base": "feat-trip-create-ux"
+                "base": "main"
             }
         ]
     },
@@ -2491,10 +2485,11 @@
                 "title": "Dockerization completeness (post PR #44 + #48)",
                 "basis": [
                     "PR #44",
-                    "PR #48"
+                    "PR #48",
+                    "feat-dockerize refresh (stacked on feat-trip-create-ux, 2026-10-18)"
                 ],
                 "status": "complete-for-local-stack",
-                "notes": "WS /chat documented; Dockerfile CMD node server.cjs; no esbuild at container start; entrypoint without accept-data-loss by default; SHARE_LINK_BASE_URL + /api/health healthcheck. Not remaining: Flutter-in-Docker. Scale-out chat still needs Redis Pub/Sub outside Docker scope."
+                "notes": "Entrypoint DB_SCHEMA_MODE=migrate (default) runs prisma migrate deploy; volumes created by the old db push entrypoint are baselined once (push, replay the typeSetByUser backfill, migrate resolve --applied for all 22). push and skip remain opt-in. Scheduler waits for a healthy backend, runs every SCHEDULER_INTERVAL_SECONDS (default 300), TZ=UTC. Backend loads optional .env via env_file. Test profile: api-tests (Vitest against postgres-test) and mobile-tests (cirruslabs Flutter image: pub get, analyze, test). Flutter image pinned to 3.38.5 to match mobile/pubspec.lock (pub get --enforce-lockfile). 2026-10-18 in Docker: api-tests 32 files / 219 tests passed; mobile-tests analyze 0 errors, 166 passed, 27 failing the same as main (comment/like service and screen tests hit the production base URL). Flutter app itself is not containerized. Scale-out chat still needs Redis Pub/Sub; keep one backend replica."
             },
             {
                 "id": "prod-gaps-optimizations",

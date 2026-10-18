@@ -193,10 +193,25 @@ npm run setup:env
 npm run docker:up
 ```
 
-* **API Server**: Accessible at [http://localhost:3000](http://localhost:3000)
-* **Dev Database**: PostgreSQL at `localhost:5432` (`tripthread_dev`)
+* **API Server**: Accessible at [http://localhost:3000](http://localhost:3000), with WebSocket chat at `ws://localhost:3000/chat`
+* **Dev Database**: PostgreSQL at `localhost:5432` (`tripthread_dev`; set `POSTGRES_PORT` if 5432 is taken)
 * **Test Database**: PostgreSQL at `localhost:5433` (`tripthread_test`)
-* **Scheduler**: Runs in the background (polls and updates trip statuses hourly)
+* **Scheduler**: Starts after the backend is healthy and updates trip statuses every `SCHEDULER_INTERVAL_SECONDS` (default 300)
+
+On boot the backend runs `prisma migrate deploy`. A volume created by the older `db push` entrypoint is baselined once: the schema is pushed, data-only migration steps (such as the `typeSetByUser` backfill) are replayed, and every migration is marked applied. Set `DB_SCHEMA_MODE=push` or `skip` to opt out.
+
+Run the test suites in containers:
+```bash
+docker compose --profile test run --rm api-tests     # Vitest unit + integration against postgres-test
+docker compose --profile test run --rm mobile-tests  # flutter analyze + flutter test
+```
+
+`mobile-tests` uses Flutter 3.38.5 (`FLUTTER_IMAGE_TAG`) so `pub get --enforce-lockfile` leaves `mobile/pubspec.lock` unchanged. It copies `mobile/.env.example` to `mobile/.env` when that file is missing. Some comment and like tests fail on `main` as well; see `documentations/remaining-product-issues.md`.
+
+List or delete orphaned media rows (does not run on deploy):
+```bash
+docker compose exec backend npm run cleanup:orphan-media
+```
 
 To view backend or database logs:
 ```bash
