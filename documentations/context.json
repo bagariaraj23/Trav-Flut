@@ -2,10 +2,11 @@
     "project": {
         "name": "TripThread",
         "workspacePath": "/Users/rajbagaria/Desktop/Bolt-Travello/Flut/project",
-        "generatedAt": "2026-10-04",
+        "generatedAt": "2026-10-18",
         "description": "Travel-focused social platform where users create trips, post thread entries (text/media/location/check-ins), generate/publish final trip posts, track a private trip expense ledger, and chat via 1:1 DMs, groups, and trip-scoped rooms (realtime WebSocket).",
-        "lastPRReviewed": "Open stack, not merged: PR #50 trip expense ledger (draft, feat-expenses-split \u2192 main), PR #51 Warm theme polish (draft, feat-ui-warm-polish \u2192 feat-expenses-split), PR #52 API/DB optimizations (draft, feat-api-db-optimizations \u2192 feat-ui-warm-polish). PR #49 share/Docker follow-ups remain the latest merge on main. Universal Links ops (TEAMID/SHA-256 + SHARE_LINK_BASE_URL) still remaining. Cloudinary upload presets must exist in the dashboard (tripthread_thread_image, cover, video, avatar) before signed uploads that include upload_preset succeed.",
+        "lastPRReviewed": "PR #50 merged to main (2026-10-09) — trip expense ledger. This branch is PR #52 API/DB optimizations (feat-api-db-optimizations → main). PR #51 Warm UI and PR #54 trip create UX stack above it. Cloudinary upload presets must exist in the dashboard (tripthread_thread_image, cover, video, avatar) before signed uploads that include upload_preset succeed. Universal Links ops (TEAMID/SHA-256 + SHARE_LINK_BASE_URL) still remaining.",
         "recentProductionPRs": [
+            "https://github.com/bagariaraj23/Trav-Flut/pull/50",
             "https://github.com/bagariaraj23/Trav-Flut/pull/49",
             "https://github.com/bagariaraj23/Trav-Flut/pull/48",
             "https://github.com/bagariaraj23/Trav-Flut/pull/47",
@@ -62,7 +63,7 @@
             "entrypoint": "scripts/docker-entrypoint.sh waits for DB, runs prisma db push (ALLOW_DATA_LOSS=1 required for --accept-data-loss), then exec CMD (node server.cjs).",
             "hybridMode": "docker-compose.dev.yml launches only Postgres containers for host-based Next.js development",
             "chatCoverage": {
-                "dockerfileBuild": "npm run build && node scripts/build-server.mjs \u2192 dist/chat-ws.cjs at image build",
+                "dockerfileBuild": "npm run build && node scripts/build-server.mjs → dist/chat-ws.cjs at image build",
                 "composeStart": "node server.cjs (WS /chat); Dockerfile CMD matches Railway Start",
                 "share": "SHARE_LINK_BASE_URL passed to backend; /.well-known and /share served by same process",
                 "healthcheck": "HTTP GET /api/health (does not probe WebSocket)",
@@ -131,7 +132,7 @@
             "Notification model supports unified notifications (likes, comments, follows, mentions)",
             "Conversation model supports DM, GROUP, and TRIP type rooms with dynamic participants and leftAt validation",
             "ChatMessage model supports content, soft deletion with deletedAt, and message replyTo hierarchy",
-            "Trip expense ledger (PR #50, not merged): TripExpense soft-delete, TripExpenseShare, TripSettlement; money stored as integer minor units; one expenseCurrency per trip frozen after the first live expense; nets recomputed from live expenses plus PAID/COMPLETED settlements",
+            "Trip expense ledger (PR #50, merged): TripExpense soft-delete, TripExpenseShare, TripSettlement; money stored as integer minor units; one expenseCurrency per trip frozen after the first live expense; nets recomputed from live expenses plus PAID/COMPLETED settlements",
             "Hot-path indexes (PR #52): migration 20261004153000_add_hot_path_query_indexes plus 20261004180000_add_remaining_hot_path_indexes (trips userId+createdAt, media tripId, trip_join_requests receiverId+status, conversations updatedAt). Earlier slice covers trip threads, published final posts, notifications, follows, trip status+dates, participant userId, likes, comment replies, media by uploader"
         ]
     },
@@ -146,15 +147,15 @@
             "media",
             "feed/discover",
             "follow",
-            "likes/comments/shares (POST /shares shareSource: SYSTEM_SHEET default, no shareCount bump; IN_APP_DM increments \u2014 wire from chat share UI; Universal Links still ops-only)",
-            "expenses (PR #50, not merged: GET/POST /trips/[id]/expenses, GET summary, DELETE expense, POST/DELETE settlements, PATCH expense-settings; members only; leave/kick/account-delete return 409 UNSETTLED_BALANCE while |net| != 0)",
+            "likes/comments/shares (POST /shares shareSource: SYSTEM_SHEET default, no shareCount bump; IN_APP_DM increments — wire from chat share UI; Universal Links still ops-only)",
+            "expenses (PR #50, merged: GET/POST /trips/[id]/expenses, GET summary, DELETE expense, POST/DELETE settlements, PATCH expense-settings; members only; leave/kick/account-delete return 409 UNSETTLED_BALANCE while |net| != 0)",
             "notifications",
             "chat (merged PR #48: REST /api/chat + WS /chat on server.cjs; DM/GROUP/TRIP; single-node event bus; rate-limit + Redis Pub/Sub + offline push deferred)"
         ],
         "keyTripFlow": {
             "createTrip": "POST /trips",
             "threadEntries": "POST /trips/[id]/entries; GET cursor-paginated page { items, hasMoreOlder, nextOlderCursor } (limit default 30); GET /trips/[id]/entries/[entryId]/context returns a centered window around the target entry for deep-link jumps; DELETE/PATCH /trips/[id]/entries/[entryId] (PATCH: author text edit within 15m, owner may moderate later); shared purge in threadEntryPurge.ts",
-            "participantLeave": "POST /trips/[id]/leave { removeMyData: boolean } \u2014 non-owner participant leaves; optional purge of author's entries (ONGOING only) uses bulk cleanup. With the expense ledger, leave/kick/account-delete return 409 UNSETTLED_BALANCE and netMinor until the member net is zero",
+            "participantLeave": "POST /trips/[id]/leave { removeMyData: boolean } — non-owner participant leaves; optional purge of author's entries (ONGOING only) uses bulk cleanup. With the expense ledger, leave/kick/account-delete return 409 UNSETTLED_BALANCE and netMinor until the member net is zero",
             "endTripAndGenerateFinalPost": "POST /trips/[id]/end (transactionally marks ENDED + generates final post)",
             "finalPostDraftEdit": "GET/PUT/DELETE /trips/[id]/final-post (DELETE owner-only; removes post + engagement)",
             "publishFinalPost": "POST /trips/[id]/publish",
@@ -909,7 +910,7 @@
                 "/chat/:conversationId/settings"
             ],
             "deepLinkRoutes": [
-                "/share/:shareToken \u2192 ShareLinkScreen (resolves token \u2192 /post/TRIP_FINAL_POST/:id)",
+                "/share/:shareToken → ShareLinkScreen (resolves token → /post/TRIP_FINAL_POST/:id)",
                 "tripthread://share/{token} | https://{SHARE_LINK_HOST}/share/{token}"
             ]
         }
@@ -1093,7 +1094,7 @@
                 "linesFraction": "1608/3100"
             },
             "highCoverageAreas": [
-                "src/lib/services (comment, like, notification, share) ~75\u201388%",
+                "src/lib/services (comment, like, notification, share) ~75–88%",
                 "src/lib/validation.ts ~80%",
                 "tests/integration helpers ~92%",
                 "src/lib/auth/permissions.ts ~60%"
@@ -1665,11 +1666,11 @@
                 },
                 {
                     "name": "Payment Logging",
-                    "status": "in-progress",
+                    "status": "completed",
                     "description": "Trip-scoped expense ledger with split math and settle-up. Money stays off the social timeline (thread page 0, Money pane page 1). Tracking only: no UPI, receipts, or partial settle in v1.",
-                    "notes": "Draft PR #50 (feat-expenses-split). Review fixes on that branch: clear stale trip balances across loads/logout, follow expense list pages, surface settle-up errors, and lock the trip row so concurrent mark-paid cannot insert two settlements.",
+                    "notes": "Merged in PR #50. This branch includes that ledger.",
                     "pr": 50,
-                    "url": "https://github.com/bagariaraj23/Trav-Flut/pull/50"
+                    "merged": "2026-10-09"
                 },
                 {
                     "name": "Advanced AI Content Generation",
@@ -1682,6 +1683,18 @@
     },
     "prTracking": {
         "merged": [
+            {
+                "number": 50,
+                "title": "Add trip-scoped expense ledger with split math and settle-up",
+                "merged_at": "2026-10-09",
+                "url": "https://github.com/bagariaraj23/Trav-Flut/pull/50",
+                "keyFeatures": [
+                    "Equal, exact, percent, and shares splits in integer minor units",
+                    "Derived nets, greedy settle-up, payee mark-paid and undo",
+                    "Leave, kick, and account delete blocked while a net is unpaid",
+                    "Expenses allowed on upcoming, ongoing, and ended trips"
+                ]
+            },
             {
                 "number": 49,
                 "title": "fix: restore share deep links and harden Docker chat/share setup",
@@ -1782,7 +1795,7 @@
             },
             {
                 "number": 43,
-                "title": "Prod fixes \u2014 discover, thread CRUD/pagination, shares, @all, QA thread UI",
+                "title": "Prod fixes — discover, thread CRUD/pagination, shares, @all, QA thread UI",
                 "merged_at": "2026-05-15",
                 "url": "https://github.com/bagariaraj23/Trav-Flut/pull/43",
                 "keyFeatures": [
@@ -1793,7 +1806,7 @@
                     "tripTagResolution: @all + trip-member-only TAG notifications on entries and comments",
                     "permissions: trip participants can view/like thread + final post on private trips",
                     "share/like: longer Prisma tx timeouts; SYSTEM_SHEET vs IN_APP_DM shareCount; Redis del non-fatal",
-                    "Final post: DELETE; owner \u22ee Edit/Delete on feed + post detail; feed tap \u2192 trip detail",
+                    "Final post: DELETE; owner ⋮ Edit/Delete on feed + post detail; feed tap → trip detail",
                     "Shares: /share/[token] bridge; tripthread:// + SHARE_LINK_BASE_URL",
                     "Post-testing: per-action invite/follow loaders; tripInvitation private-profile rules; auth_error_messages"
                 ],
@@ -1804,7 +1817,7 @@
             },
             {
                 "number": 42,
-                "title": "Build fixes \u2014 Prisma transaction client types",
+                "title": "Build fixes — Prisma transaction client types",
                 "merged_at": "2026-02-24",
                 "url": "https://github.com/bagariaraj23/Trav-Flut/pull/42",
                 "keyFeatures": [
@@ -1816,7 +1829,7 @@
             },
             {
                 "number": 41,
-                "title": "Prod fixes \u2014 trip invitations, FOLLOW notifications, profile UX",
+                "title": "Prod fixes — trip invitations, FOLLOW notifications, profile UX",
                 "merged_at": "2026-02-24",
                 "url": "https://github.com/bagariaraj23/Trav-Flut/pull/41",
                 "keyFeatures": [
@@ -1828,7 +1841,7 @@
             },
             {
                 "number": 40,
-                "title": "Prod fixes \u2014 settings privacy, trip cover, follow-requests back, scheduler",
+                "title": "Prod fixes — settings privacy, trip cover, follow-requests back, scheduler",
                 "merged_at": "2026-02-23",
                 "url": "https://github.com/bagariaraj23/Trav-Flut/pull/40",
                 "keyFeatures": [
@@ -1840,7 +1853,7 @@
             },
             {
                 "number": 39,
-                "title": "Scheduler fixes \u2014 DB connection retry",
+                "title": "Scheduler fixes — DB connection retry",
                 "merged_at": "2026-02-23",
                 "url": "https://github.com/bagariaraj23/Trav-Flut/pull/39",
                 "keyFeatures": [
@@ -1849,7 +1862,7 @@
             },
             {
                 "number": 37,
-                "title": "Feat notification \u2014 unified notifications + thread engagement",
+                "title": "Feat notification — unified notifications + thread engagement",
                 "merged_at": "2026-02-22",
                 "url": "https://github.com/bagariaraj23/Trav-Flut/pull/37",
                 "keyFeatures": [
@@ -2182,35 +2195,28 @@
         ],
         "open": [
             {
+                "number": 52,
+                "title": "API and database performance",
+                "state": "open",
+                "url": "https://github.com/bagariaraj23/Trav-Flut/pull/52",
+                "base": "main",
+                "head": "feat-api-db-optimizations",
+                "notes": "First open PR, based on main."
+            },
+            {
                 "number": 51,
                 "title": "Polish Warm theme UX across auth, covers, and expense screens",
                 "state": "draft",
                 "url": "https://github.com/bagariaraj23/Trav-Flut/pull/51",
-                "base": "feat-expenses-split",
+                "base": "feat-api-db-optimizations",
                 "head": "feat-ui-warm-polish",
                 "created_at": "2026-10-04",
-                "notes": "Stacked on PR #50. Review fixes: outgoing chat pending spinner and Seen label use onPrimary so they stay readable on terracotta bubbles; trip-detail avatars use userAvatarInitial so a blank name does not throw.",
+                "notes": "Stacks above this branch (PR #52), not included in this diff.",
                 "keyFeatures": [
                     "Light-mode surfaces and terracotta CTAs, including the Money pane",
                     "Tighter auth spacing on short phones",
                     "Cover placeholders and stable thread media layout",
                     "Clearer chat empty state"
-                ]
-            },
-            {
-                "number": 50,
-                "title": "Add trip-scoped expense ledger with split math and settle-up",
-                "state": "draft",
-                "url": "https://github.com/bagariaraj23/Trav-Flut/pull/50",
-                "base": "main",
-                "head": "feat-expenses-split",
-                "created_at": "2026-09-14",
-                "notes": "Money is a second thread page, not a thread entry. Review fixes: stale balances cleared on trip switch and logout, full expense pages loaded, settle-up failures shown, trip row locked around mark-paid and undo.",
-                "keyFeatures": [
-                    "Equal, exact, percent, and shares splits in integer minor units",
-                    "Derived nets, greedy settle-up, payee mark-paid and undo",
-                    "Leave, kick, and account delete blocked while a net is unpaid",
-                    "Expenses allowed on upcoming, ongoing, and ended trips"
                 ]
             },
             {
@@ -2242,7 +2248,7 @@
                 "created_at": "2026-02-15",
                 "keyFeatures": [
                     "Username login (email or username)",
-                    "Username normalization (Unicode lookalike \u2192 ASCII)",
+                    "Username normalization (Unicode lookalike → ASCII)",
                     "Thread screen auto-open for ongoing trips",
                     "Floating bubble navigation button (draggable, position persists)",
                     "Enhanced logout (per-device and all-device)",
@@ -2275,33 +2281,33 @@
             ]
         },
         "testingCoverage": {
-            "backend": "Good \u2014 127 Vitest tests passing (22 files); v8 coverage 51% statements / 52% lines overall",
-            "mobile": "Partial \u2014 18 Flutter test files (incl. chat provider + ChatAvatar widget); engagement widgets/providers covered",
-            "integration": "Good \u2014 auth, trips, thread, leave, engagement, notifications, invites, concurrency, chat",
-            "scheduler": "Partial \u2014 behavioral unit tests; DB integration tests exist but scheduler source still low line coverage",
+            "backend": "Good — 127 Vitest tests passing (22 files); v8 coverage 51% statements / 52% lines overall",
+            "mobile": "Partial — 18 Flutter test files (incl. chat provider + ChatAvatar widget); engagement widgets/providers covered",
+            "integration": "Good — auth, trips, thread, leave, engagement, notifications, invites, concurrency, chat",
+            "scheduler": "Partial — behavioral unit tests; DB integration tests exist but scheduler source still low line coverage",
             "reportPath": "coverage/index.html",
             "lastRun": "2026-06-13",
-            "notes": "See tests/TESTING.md and context.json testing section for suite inventory; run npm run test:coverage on Node 20+ with tripthread_test DB. Do not add platform-specific Rolldown bindings (e.g. @rolldown/binding-darwin-arm64) to root dependencies \u2014 breaks Railway Linux deploys (fixed in PR #47)."
+            "notes": "See tests/TESTING.md and context.json testing section for suite inventory; run npm run test:coverage on Node 20+ with tripthread_test DB. Do not add platform-specific Rolldown bindings (e.g. @rolldown/binding-darwin-arm64) to root dependencies — breaks Railway Linux deploys (fixed in PR #47)."
         },
-        "lastMergedFeature": "PR #49 Share deep links + Docker chat/share follow-ups (merged 2026-09-14, ca8fc88)",
-        "notes": "main is still PR #49. Open stack above main: PR #50 expense ledger, PR #51 Warm theme polish, PR #52 API/DB optimizations (Redis timeout and circuit breaker, getOrSet stampede lock, hot-path indexes, discover SQL order, lean trip list, trip GET without embedded thread, stats in parallel, unread badge cache, batched share previews, places resolve lock, Mapbox/Google timeouts, rate-limit presets, Cloudinary preset names, orphan-media script, home fetch dedupe). Cloudinary dashboard presets are still an ops prerequisite. Universal Links ops remain.",
+        "lastMergedFeature": "PR #50 Trip expense ledger (merged main 2026-10-09)",
+        "notes": "Expense ledger is on main. This branch is PR #52 API/DB optimizations (base main): Redis timeout and circuit breaker, getOrSet stampede lock, hot-path indexes, discover SQL order, lean trip list, trip GET without an embedded thread, stats in parallel, unread badge cache, batched share previews, places resolve lock, Mapbox/Google timeouts, rate-limit presets, Cloudinary preset names, orphan-media script, and home fetch dedupe. PR #51 Warm UI and PR #54 trip create UX stack above this branch. Cloudinary dashboard presets are an ops prerequisite. Universal Links ops remain.",
         "mainBranchStable": true,
         "activeStack": [
             {
-                "pr": 50,
-                "branch": "feat-expenses-split",
-                "base": "main"
+                "pr": 52,
+                "branch": "feat-api-db-optimizations",
+                "base": "main",
+                "notes": "https://github.com/bagariaraj23/Trav-Flut/pull/52"
             },
             {
                 "pr": 51,
                 "branch": "feat-ui-warm-polish",
-                "base": "feat-expenses-split"
+                "base": "feat-api-db-optimizations"
             },
             {
-                "pr": 52,
-                "branch": "feat-api-db-optimizations",
-                "base": "feat-ui-warm-polish",
-                "notes": "https://github.com/bagariaraj23/Trav-Flut/pull/52"
+                "pr": 54,
+                "branch": "feat-trip-create-ux",
+                "base": "feat-ui-warm-polish"
             }
         ]
     },
@@ -2327,9 +2333,9 @@
     ],
     "productionOps": {
         "hosting": {
-            "backend": "Railway (Railpack) \u2014 Singapore region",
+            "backend": "Railway (Railpack) — Singapore region",
             "scheduler": "Railway separate service",
-            "database": "Neon Postgres 17 \u2014 branches production + development (ap-southeast-1)",
+            "database": "Neon Postgres 17 — branches production + development (ap-southeast-1)",
             "cacheRateLimit": "Upstash Redis REST (not used for chat pub/sub)",
             "media": "Cloudinary",
             "maps": "Mapbox"
@@ -2348,7 +2354,7 @@
             ],
             "replicas": 1,
             "notes": [
-                "Must use server.cjs for WebSocket /chat \u2014 next start has no chat",
+                "Must use server.cjs for WebSocket /chat — next start has no chat",
                 "Keep replicas=1 until Redis TCP Pub/Sub for chat events",
                 "Apply Neon schema with prisma migrate deploy (prefer over db push --accept-data-loss)"
             ]
@@ -2366,7 +2372,7 @@
             ],
             "patterns": [
                 "Recurring prisma:error PostgreSQL connection Closed (Neon idle/cold reconnect)",
-                "Slow GET /api/users/me (~8s) and get_trip_by_id / GET /trips/:id (~7\u20138s)",
+                "Slow GET /api/users/me (~8s) and get_trip_by_id / GET /trips/:id (~7–8s)",
                 "Slow POST /api/auth/refresh-token (~1s)",
                 "No share-link or chat failures in these pre-PR#48 windows"
             ]
