@@ -11,7 +11,7 @@ import { assertUserHasNoUnsettledTrips } from "@/lib/services/expense";
 // Get current user profile
 export async function GET(request: NextRequest) {
   const loggedHandler = withLogging(async (req) => {
-    return withRateLimit(req, async (rateLimitedReq) => {
+    return withRateLimit(req, "read_hot", async (rateLimitedReq) => {
       return withAuth(rateLimitedReq, async (authenticatedReq) => {
         const endTimer = PerformanceMonitor.getInstance().startTimer("get_user_profile");
         try {
@@ -19,22 +19,29 @@ export async function GET(request: NextRequest) {
           console.log(`[API] GET /users/me - User: ${currentUserId}`);
 
           // Get current user with profile details and oauthAccounts for profileComplete
-          const user = await prisma.user.findUnique({
-            where: { id: currentUserId },
-            select: {
-              id: true,
-              email: true,
-              username: true,
-              name: true,
-              avatarUrl: true,
-              bio: true,
-              isPrivate: true,
-              createdAt: true,
-              updatedAt: true,
-              password: true,
-              oauthAccounts: { select: { id: true, provider: true } },
-            },
-          });
+          const [user, passwordRows] = await Promise.all([
+            prisma.user.findUnique({
+              where: { id: currentUserId },
+              select: {
+                id: true,
+                email: true,
+                username: true,
+                name: true,
+                avatarUrl: true,
+                bio: true,
+                isPrivate: true,
+                createdAt: true,
+                updatedAt: true,
+                oauthAccounts: { select: { id: true, provider: true } },
+              },
+            }),
+            prisma.$queryRaw<Array<{ hasPassword: boolean }>>`
+              SELECT ("password" IS NOT NULL) AS "hasPassword"
+              FROM "users"
+              WHERE id = ${currentUserId}
+            `,
+          ]);
+          const hasPassword = passwordRows[0]?.hasPassword === true;
 
           if (!user) {
             console.error(
@@ -55,13 +62,13 @@ export async function GET(request: NextRequest) {
 
           const profileComplete =
             user.username != null &&
-            (user.password != null || user.oauthAccounts.length === 0);
+            (hasPassword || user.oauthAccounts.length === 0);
 
           const hasGoogleLinked = user.oauthAccounts.some(
             (a) => a.provider === "GOOGLE"
           );
 
-          const { password: _p, oauthAccounts: _oa, ...userFields } = user;
+          const { oauthAccounts: _oa, ...userFields } = user;
           const userResponse: UserProfile = {
             ...userFields,
             username: user.username ?? undefined,
@@ -96,7 +103,7 @@ export async function GET(request: NextRequest) {
 // Update current user profile
 export async function PUT(request: NextRequest) {
   const loggedHandler = withLogging(async (req) => {
-    return withRateLimit(req, async (rateLimitedReq) => {
+    return withRateLimit(req, "write", async (rateLimitedReq) => {
       return withAuth(rateLimitedReq, async (authenticatedReq) => {
         const endTimer = PerformanceMonitor.getInstance().startTimer("update_user_profile");
         try {
@@ -266,7 +273,7 @@ export async function PUT(request: NextRequest) {
 // Delete current user account (soft delete)
 export async function DELETE(request: NextRequest) {
   const loggedHandler = withLogging(async (req) => {
-    return withRateLimit(req, async (rateLimitedReq) => {
+    return withRateLimit(req, "write", async (rateLimitedReq) => {
       return withAuth(rateLimitedReq, async (authenticatedReq) => {
         const endTimer = PerformanceMonitor.getInstance().startTimer("delete_user_account");
         try {

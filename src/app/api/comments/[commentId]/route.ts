@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { withAuth, withLogging, handleApiError } from "@/lib/middleware";
+import { enforcePresetRateLimit } from "@/lib/rateLimit";
 import { updateComment, deleteComment } from "@/lib/services/comment";
 import { canEditComment, canDeleteComment } from "@/lib/auth/permissions";
 import { moderateContent } from "@/lib/security/moderation";
@@ -22,6 +23,8 @@ export async function PUT(
   request: NextRequest,
   { params }: { params: Promise<{ commentId: string }> }
 ) {
+  const limited = await enforcePresetRateLimit(request, "write");
+  if (limited) return limited;
   const loggedHandler = withLogging(async (req) => {
     return withAuth(req, async (authenticatedReq) => {
       try {
@@ -115,6 +118,8 @@ export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ commentId: string }> }
 ) {
+  const limited = await enforcePresetRateLimit(request, "write");
+  if (limited) return limited;
   const handler = withLogging(async (req) => {
     return withAuth(req, async (authenticatedReq) => {
       try {

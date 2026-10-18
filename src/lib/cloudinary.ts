@@ -131,6 +131,19 @@ interface SignedUploadParams {
   publicId: string;
   resourceType: "auto";
   uploadUrl: string;
+  /** Named Cloudinary upload preset. Must already exist in the dashboard. */
+  uploadPreset: string;
+}
+
+/**
+ * Preset names are created in the Cloudinary dashboard, not by this API.
+ * tripthread_thread_image, cover, video, avatar.
+ */
+function uploadPresetFor(usage: string, contentType: string): string {
+  if (contentType.startsWith("video/")) return "video";
+  if (usage === "trip_cover") return "cover";
+  if (usage === "group_avatar") return "avatar";
+  return "tripthread_thread_image";
 }
 
 function ensureConfigured(): void {
@@ -182,10 +195,12 @@ export class CloudinaryService {
       .slice(0, 60);
     const uniqueSlug = `${timestamp}_${randomUUID()}_${sanitizedBaseName}`;
 
+    const uploadPreset = uploadPresetFor(usage, contentType);
     const paramsToSign: Record<string, string | number> = {
       folder,
       public_id: uniqueSlug,
       timestamp,
+      upload_preset: uploadPreset,
     };
 
     const signature = cloudinary.utils.api_sign_request(
@@ -202,6 +217,7 @@ export class CloudinaryService {
       publicId: uniqueSlug,
       resourceType: "auto",
       uploadUrl: `https://api.cloudinary.com/v1_1/${process.env.CLOUDINARY_CLOUD_NAME}/auto/upload`,
+      uploadPreset,
     };
   }
 

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { AuthService } from "@/lib/auth";
-import { verifyGoogleIdToken } from "@/lib/services/googleAuth";
+import { GoogleVerifyTimeoutError, verifyGoogleIdToken } from "@/lib/services/googleAuth";
 import { authGoogleSchema } from "@/lib/validation";
 import { ApiResponse, AuthResponse, UserProfile } from "@/types/api";
 import { withRateLimit, withLogging } from "@/lib/middleware";
@@ -340,6 +340,12 @@ export async function POST(request: NextRequest) {
           throw createError;
         }
       } catch (error: unknown) {
+        if (error instanceof GoogleVerifyTimeoutError) {
+          return NextResponse.json<ApiResponse>(
+            { success: false, error: "Google verification timed out" },
+            { status: 504 }
+          );
+        }
         // Handle validation errors 
         if (error && typeof error === "object" && "name" in error && (error as { name: string }).name === "ZodError") {
           return NextResponse.json<ApiResponse>(

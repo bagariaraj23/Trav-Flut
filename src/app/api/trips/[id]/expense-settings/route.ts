@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { ZodError } from "zod";
 import { withAuth, withLogging, handleApiError } from "@/lib/middleware";
+import { enforcePresetRateLimit } from "@/lib/rateLimit";
 import { updateExpenseSettingsSchema } from "@/lib/validation";
 import { ApiResponse } from "@/types/api";
 import { updateExpenseSettings } from "@/lib/services/expense";
@@ -9,6 +10,8 @@ export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const limited = await enforcePresetRateLimit(request, "write");
+  if (limited) return limited;
   return withLogging(async (req) => {
     return withAuth(req, async (authReq) => {
       try {
