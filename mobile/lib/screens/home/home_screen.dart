@@ -407,7 +407,6 @@ class _HomeFeedScreenState extends State<HomeFeedScreen> {
                 feedProvider.loadLiveTrips();
               },
             );
-            );
           }
 
           final liveStories = feedProvider.liveTripStories;
