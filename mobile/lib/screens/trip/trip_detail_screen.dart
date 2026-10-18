@@ -1213,22 +1213,23 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
     IconData icon;
     Color accent;
 
+    final scheme = Theme.of(context).colorScheme;
     switch (type) {
       case ThreadEntryType.text:
         icon = Icons.text_fields;
-        accent = accentOverride ?? Colors.blueAccent;
+        accent = accentOverride ?? scheme.primary;
         break;
       case ThreadEntryType.media:
         icon = Icons.photo_camera;
-        accent = accentOverride ?? Colors.lightGreenAccent.shade200;
+        accent = accentOverride ?? scheme.secondary;
         break;
       case ThreadEntryType.location:
         icon = Icons.location_on;
-        accent = accentOverride ?? Colors.redAccent;
+        accent = accentOverride ?? AppTheme.live;
         break;
       case ThreadEntryType.checkin:
         icon = Icons.check_circle;
-        accent = accentOverride ?? Colors.orangeAccent;
+        accent = accentOverride ?? AppTheme.upcoming;
         break;
     }
 

@@ -3,7 +3,9 @@ import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
 import 'package:tripthread/providers/auth_provider.dart';
 import 'package:tripthread/services/google_sign_in_service.dart';
+import 'package:tripthread/utils/app_feedback.dart';
 import 'package:tripthread/utils/app_layout.dart';
+import 'package:tripthread/utils/app_theme.dart';
 import 'package:tripthread/widgets/logout_dialog.dart';
 
 class SettingsScreen extends StatelessWidget {
@@ -122,7 +124,7 @@ class SettingsScreen extends StatelessWidget {
                       ? 'Google account linked'
                       : 'Link Google account',
                   iconColor: authProvider.currentUser?.hasGoogleLinked == true
-                      ? Colors.green
+                      ? AppTheme.live
                       : null,
                   onTap: () async {
                     final googleSignIn = context.read<GoogleSignInService>();
@@ -138,24 +140,15 @@ class SettingsScreen extends StatelessWidget {
                         debugPrint(
                           '[SettingsScreen] Google Sign-In configuration error (SHA-1 not configured)',
                         );
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text(
-                              'Google Sign-In is not properly configured. Please contact support.',
-                            ),
-                            duration: Duration(seconds: 5),
-                            backgroundColor: Colors.red,
-                          ),
+                        AppFeedback.showError(
+                          context,
+                          'Google Sign-In is not properly configured. Please contact support.',
+                          duration: const Duration(seconds: 5),
                         );
                         return;
                       }
                       if (result is GoogleSignInNativeFailure) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text(result.message),
-                            backgroundColor: Colors.red,
-                          ),
-                        );
+                        AppFeedback.showError(context, result.message);
                         return;
                       }
                       return;
@@ -164,22 +157,12 @@ class SettingsScreen extends StatelessWidget {
                     final message = await authProvider.linkGoogle(idToken);
                     if (!context.mounted) return;
                     if (message != null) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text(message),
-                          backgroundColor: Colors.green,
-                        ),
-                      );
+                      AppFeedback.showSuccess(context, message);
                     } else {
                       final errorText =
                           authProvider.error ??
                           'Failed to link Google account.';
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text(errorText),
-                          backgroundColor: Colors.red,
-                        ),
-                      );
+                      AppFeedback.showError(context, errorText);
                       // So next tap shows account picker instead of reusing the same account
                       if (errorText.toLowerCase().contains(
                         'already linked to another account',
@@ -239,24 +222,16 @@ class SettingsScreen extends StatelessWidget {
                           final success = await auth.togglePrivacy();
                           if (!context.mounted) return;
                           if (success) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text(
-                                  value
-                                      ? 'Account is now private'
-                                      : 'Account is now public',
-                                ),
-                                backgroundColor: Colors.green,
-                              ),
+                            AppFeedback.showSuccess(
+                              context,
+                              value
+                                  ? 'Account is now private'
+                                  : 'Account is now public',
                             );
                           } else {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text(
-                                  auth.error ?? 'Failed to update privacy',
-                                ),
-                                backgroundColor: Colors.red,
-                              ),
+                            AppFeedback.showError(
+                              context,
+                              auth.error ?? 'Failed to update privacy',
                             );
                           }
                         },
@@ -301,39 +276,23 @@ class SettingsScreen extends StatelessWidget {
 
                                   if (context.mounted) {
                                     if (success) {
-                                      ScaffoldMessenger.of(
+                                      AppFeedback.showSuccess(
                                         context,
-                                      ).showSnackBar(
-                                        const SnackBar(
-                                          content: Text(
-                                            'Password reset link has been sent to your email.',
-                                          ),
-                                          backgroundColor: Colors.green,
-                                        ),
+                                        'Password reset link has been sent to your email.',
                                       );
                                     } else {
-                                      ScaffoldMessenger.of(
+                                      AppFeedback.showError(
                                         context,
-                                      ).showSnackBar(
-                                        SnackBar(
-                                          content: Text(
-                                            authProvider.error ??
-                                                'Failed to send reset link. Please try again.',
-                                          ),
-                                          backgroundColor: Colors.red,
-                                        ),
+                                        authProvider.error ??
+                                            'Failed to send reset link. Please try again.',
                                       );
                                     }
                                   }
                                 } else {
                                   if (context.mounted) {
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      const SnackBar(
-                                        content: Text(
-                                          'Unable to retrieve user email. Please try again.',
-                                        ),
-                                        backgroundColor: Colors.red,
-                                      ),
+                                    AppFeedback.showError(
+                                      context,
+                                      'Unable to retrieve user email. Please try again.',
                                     );
                                   }
                                 }
@@ -361,8 +320,8 @@ class SettingsScreen extends StatelessWidget {
                   context: context,
                   icon: Icons.delete_outline,
                   title: 'Delete Account',
-                  iconColor: Colors.red,
-                  textColor: Colors.red,
+                  iconColor: AppTheme.errorColor,
+                  textColor: AppTheme.errorColor,
                   onTap: () {
                     showDialog(
                       context: context,
@@ -373,7 +332,7 @@ class SettingsScreen extends StatelessWidget {
                           ),
                           title: const Text(
                             'Delete Account',
-                            style: TextStyle(color: Colors.red),
+                            style: TextStyle(color: AppTheme.errorColor),
                           ),
                           content: const Text(
                             'Are you sure you want to delete your account? '
@@ -410,32 +369,22 @@ class SettingsScreen extends StatelessWidget {
                                   if (success) {
                                     if (context.mounted) {
                                       context.go('/login');
-                                      ScaffoldMessenger.of(
+                                      AppFeedback.showSuccess(
                                         context,
-                                      ).showSnackBar(
-                                        const SnackBar(
-                                          content: Text(
-                                            'Your account has been deleted successfully.',
-                                          ),
-                                          backgroundColor: Colors.green,
-                                        ),
+                                        'Your account has been deleted successfully.',
                                       );
                                     }
                                   } else {
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      SnackBar(
-                                        content: Text(
-                                          authProvider.error ??
-                                              'Failed to delete account. Please try again.',
-                                        ),
-                                        backgroundColor: Colors.red,
-                                      ),
+                                    AppFeedback.showError(
+                                      context,
+                                      authProvider.error ??
+                                          'Failed to delete account. Please try again.',
                                     );
                                   }
                                 }
                               },
                               style: TextButton.styleFrom(
-                                foregroundColor: Colors.red,
+                                foregroundColor: AppTheme.errorColor,
                               ),
                               child: const Text('Delete Account'),
                             ),

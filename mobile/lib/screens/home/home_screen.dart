@@ -11,6 +11,7 @@ import 'package:tripthread/services/trip_service.dart';
 import 'package:tripthread/models/live_trip_story.dart';
 import 'package:tripthread/models/trip.dart';
 import 'package:tripthread/screens/discover/discover_tab.dart';
+import 'package:tripthread/utils/app_feedback.dart';
 import 'package:tripthread/utils/app_layout.dart';
 import 'package:tripthread/utils/app_theme.dart';
 import 'package:tripthread/utils/cloudinary_utils.dart';
@@ -329,7 +330,7 @@ class _HomeFeedScreenState extends State<HomeFeedScreen> {
                       child: Container(
                         padding: const EdgeInsets.all(2),
                         decoration: BoxDecoration(
-                          color: Colors.red,
+                          color: AppTheme.likeRose,
                           borderRadius: BorderRadius.circular(6),
                         ),
                         constraints: const BoxConstraints(
@@ -396,37 +397,16 @@ class _HomeFeedScreenState extends State<HomeFeedScreen> {
           }
 
           if (feedProvider.homeFeedError != null) {
-            return Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.error_outline, size: 64, color: Colors.red[300]),
-                  const SizedBox(height: 16),
-                  Text(
-                    'Error loading feed',
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w600,
-                      color: Colors.red[300],
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    feedProvider.homeFeedError!,
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(color: Colors.grey),
-                  ),
-                  const SizedBox(height: 16),
-                  ElevatedButton(
-                    onPressed: () {
-                      feedProvider.clearHomeFeedError();
-                      feedProvider.loadHomeFeed(refresh: true);
-                      feedProvider.loadLiveTrips();
-                    },
-                    child: const Text('Retry'),
-                  ),
-                ],
-              ),
+            return AppFeedback.error(
+              context: context,
+              title: 'Couldn’t load your feed',
+              message: feedProvider.homeFeedError!,
+              onRetry: () {
+                feedProvider.clearHomeFeedError();
+                feedProvider.loadHomeFeed(refresh: true);
+                feedProvider.loadLiveTrips();
+              },
+            );
             );
           }
 
@@ -731,11 +711,13 @@ class _HomeFeedScreenState extends State<HomeFeedScreen> {
                                             ? 0.06
                                             : 0.03,
                                       ),
-                                  child: const Center(
+                                  child: Center(
                                     child: Icon(
                                       Icons.image_not_supported,
                                       size: 48,
-                                      color: Colors.grey,
+                                      color: Theme.of(context)
+                                          .colorScheme
+                                          .onSurfaceVariant,
                                     ),
                                   ),
                                 );
@@ -1671,7 +1653,7 @@ class ProfileTab extends StatelessWidget {
                       child: Container(
                         padding: const EdgeInsets.all(2),
                         decoration: BoxDecoration(
-                          color: Colors.red,
+                          color: AppTheme.likeRose,
                           borderRadius: BorderRadius.circular(6),
                         ),
                         constraints: const BoxConstraints(
@@ -1945,36 +1927,12 @@ class ProfileTab extends StatelessWidget {
                           ),
                           const SizedBox(height: 16),
                           if (recentTrips.isEmpty)
-                            Center(
-                              child: Column(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Icon(
-                                    Icons.map_outlined,
-                                    size: 48,
-                                    color: Colors.grey,
-                                  ),
-                                  const SizedBox(height: 12),
-                                  Text(
-                                    'No trips yet',
-                                    style: TextStyle(
-                                      fontSize: 16,
-                                      color: Colors.grey,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 4),
-                                  Builder(
-                                    builder: (context) => Text(
-                                      'Start documenting your adventures!',
-                                      style: TextStyle(
-                                        color: Theme.of(
-                                          context,
-                                        ).colorScheme.onSurfaceVariant,
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
+                            AppFeedback.empty(
+                              context: context,
+                              icon: Icons.map_outlined,
+                              title: 'No trips yet',
+                              subtitle: 'Start documenting your adventures!',
+                              expand: false,
                             )
                           else
                             Column(

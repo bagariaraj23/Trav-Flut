@@ -505,7 +505,10 @@ class _MapPickerModalState extends State<MapPickerModal> {
                             context,
                           ).colorScheme.primary,
                           foregroundColor: Colors.white,
-                          disabledBackgroundColor: Colors.grey,
+                          disabledBackgroundColor: Theme.of(context)
+                              .colorScheme
+                              .onSurface
+                              .withValues(alpha: 0.12),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(12),
                           ),

@@ -1606,7 +1606,10 @@ class _TripThreadScreenState extends State<TripThreadScreen>
         ),
         child: Row(
           children: [
-            const Icon(Icons.image_not_supported_outlined, color: Colors.grey),
+            Icon(
+              Icons.image_not_supported_outlined,
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
             const SizedBox(width: 12),
             Expanded(
               child: Text(
@@ -2831,7 +2834,10 @@ class _TripThreadScreenState extends State<TripThreadScreen>
                       ? 0.18
                       : 0.10,
                 ),
-                child: const Icon(Icons.broken_image, color: Colors.grey),
+                child: Icon(
+                  Icons.broken_image,
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
               ),
             )
           : Image.file(
@@ -2843,7 +2849,10 @@ class _TripThreadScreenState extends State<TripThreadScreen>
                       ? 0.18
                       : 0.10,
                 ),
-                child: const Icon(Icons.broken_image, color: Colors.grey),
+                child: Icon(
+                  Icons.broken_image,
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
               ),
             );
       content = imageWidget;

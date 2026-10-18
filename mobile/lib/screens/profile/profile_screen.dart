@@ -7,6 +7,7 @@ import 'package:tripthread/providers/feed_provider.dart';
 import 'package:tripthread/models/user.dart';
 import 'package:tripthread/models/trip.dart';
 import 'package:tripthread/services/api_service.dart';
+import 'package:tripthread/utils/app_feedback.dart';
 import 'package:tripthread/utils/app_layout.dart';
 import 'package:tripthread/utils/app_theme.dart';
 import 'package:tripthread/utils/cloudinary_utils.dart';
@@ -93,12 +94,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
     if (detailedStatus == null) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Unable to determine follow status'),
-          backgroundColor: Colors.red,
-        ),
-      );
+      AppFeedback.showError(context, 'Unable to determine follow status');
       return;
     }
 
@@ -112,8 +108,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
       );
       // Use the message from the API response if available
       actionMessage = success
-          ? (userProvider.error == null ? 'Successfully unfollowed user' : userProvider.error!)
-          : (userProvider.error ?? 'Failed to unfollow user');
+          ? (userProvider.error == null ? 'Unfollowed' : userProvider.error!)
+          : (userProvider.error ?? 'Couldn’t unfollow');
     } else if (detailedStatus.isRequestPending) {
       success = await userProvider.cancelFollowRequest(
         widget.userId,
@@ -133,7 +129,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       if (success) {
         if (updatedStatus?.isFollowing == true) {
           // Public profile - now following
-          actionMessage = 'Successfully following user';
+          actionMessage = 'You’re following them';
         } else if (updatedStatus?.isRequestPending == true) {
           // Private profile - request sent
           actionMessage = 'Follow request sent';
@@ -153,14 +149,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final errorMessage = userProvider.error ?? 
         userProvider.followRequestsError ?? 
         'An error occurred';
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          success ? actionMessage : errorMessage,
-        ),
-        backgroundColor: success ? Colors.green : Colors.red,
-      ),
-    );
+    if (success) {
+      AppFeedback.showSuccess(context, actionMessage);
+    } else {
+      AppFeedback.showError(context, errorMessage);
+    }
 
     // Force refresh of profile data to ensure UI is in sync (avatar, stats, trips section)
     if (success) {
@@ -333,7 +326,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             child: Container(
               padding: const EdgeInsets.all(2),
               decoration: BoxDecoration(
-                color: Colors.red,
+                color: AppTheme.likeRose,
                 borderRadius: BorderRadius.circular(6),
               ),
               constraints: const BoxConstraints(minWidth: 14, minHeight: 14),
@@ -364,7 +357,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               child: Container(
                 padding: const EdgeInsets.all(2),
                 decoration: BoxDecoration(
-                  color: Colors.red,
+                  color: AppTheme.likeRose,
                   borderRadius: BorderRadius.circular(6),
                 ),
                 constraints: const BoxConstraints(minWidth: 14, minHeight: 14),
@@ -842,17 +835,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ),
             )
           else if (_profileTrips.isEmpty)
-            const Center(
-              child: Column(
-                children: [
-                  Icon(Icons.map_outlined, size: 48, color: Colors.grey),
-                  SizedBox(height: 12),
-                  Text(
-                    'No trips yet',
-                    style: TextStyle(fontSize: 16, color: Colors.grey),
-                  ),
-                ],
-              ),
+            AppFeedback.empty(
+              context: context,
+              icon: Icons.map_outlined,
+              title: 'No trips yet',
+              subtitle: isOwnProfile
+                  ? 'Start a trip and it will show up here'
+                  : 'Trips they share will show up here',
+              expand: false,
             )
           else
             ListView.separated(

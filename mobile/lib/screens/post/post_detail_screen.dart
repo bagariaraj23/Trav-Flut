@@ -326,11 +326,13 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
                                           ? 0.06
                                           : 0.03,
                                 ),
-                            child: const Center(
+                            child: Center(
                               child: Icon(
                                 Icons.image_not_supported,
                                 size: 48,
-                                color: Colors.grey,
+                                color: Theme.of(context)
+                                    .colorScheme
+                                    .onSurfaceVariant,
                               ),
                             ),
                           );

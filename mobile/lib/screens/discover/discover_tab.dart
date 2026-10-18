@@ -6,6 +6,7 @@ import 'package:tripthread/providers/feed_provider.dart';
 import 'package:tripthread/providers/auth_provider.dart';
 import 'package:tripthread/models/trip.dart';
 import 'package:go_router/go_router.dart';
+import 'package:tripthread/utils/app_feedback.dart';
 import 'package:tripthread/utils/app_layout.dart';
 import 'package:tripthread/utils/app_theme.dart';
 import 'package:tripthread/utils/cloudinary_utils.dart';
@@ -156,36 +157,22 @@ class _DiscoverTabState extends State<DiscoverTab> {
         if (!mounted) return;
         final status = userProvider.getDetailedFollowStatus(userId);
         if (status != null) {
-          final newState = status.isRequestPending
-              ? 'requested to follow'
-              : (status.isFollowing ? 'following' : 'not following');
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Successfully $newState user'),
-              backgroundColor: Colors.green,
-            ),
-          );
+          final message = status.isRequestPending
+              ? 'Follow request sent'
+              : (status.isFollowing ? 'You’re following them' : 'Unfollowed');
+          AppFeedback.showSuccess(context, message);
         }
       } else {
         final errorMessage = userProvider.error ?? 
             userProvider.followRequestsError ?? 
             'Failed to perform action';
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(errorMessage),
-            backgroundColor: Colors.red,
-          ),
-        );
+        AppFeedback.showError(context, errorMessage);
       }
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'Failed to ${isCurrentlyFollowing ? 'unfollow' : (userProvider.getDetailedFollowStatus(userId)?.isRequestPending == true ? 'cancel request' : 'follow')} user',
-          ),
-          backgroundColor: Colors.red,
-        ),
+      AppFeedback.showError(
+        context,
+        'Failed to ${isCurrentlyFollowing ? 'unfollow' : (userProvider.getDetailedFollowStatus(userId)?.isRequestPending == true ? 'cancel request' : 'follow')} user',
       );
     }
   }
@@ -324,68 +311,23 @@ class _DiscoverTabState extends State<DiscoverTab> {
 
         if (userProvider.discoverUsers.isEmpty &&
             userProvider.discoverError == null) {
-          return const Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(Icons.people_outline, size: 64, color: Colors.grey),
-                SizedBox(height: 16),
-                Text(
-                  'No users found',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.grey,
-                  ),
-                ),
-                SizedBox(height: 8),
-                Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 32),
-                  child: Text(
-                    'Try adjusting your search or check back later',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(color: Colors.grey),
-                  ),
-                ),
-              ],
-            ),
+          return AppFeedback.empty(
+            context: context,
+            icon: Icons.people_outline,
+            title: 'No travellers found',
+            subtitle: 'Try a different name, or check back later',
           );
         }
 
         if (userProvider.discoverError != null) {
-          return Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(Icons.error_outline, size: 64, color: Colors.red[300]),
-                const SizedBox(height: 16),
-                Text(
-                  'Error loading users',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.red[300],
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 32),
-                  child: Text(
-                    userProvider.discoverError!,
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(color: Colors.grey),
-                  ),
-                ),
-                const SizedBox(height: 16),
-                ElevatedButton(
-                  onPressed: () {
-                    userProvider.clearDiscoverError();
-                    userProvider.searchUsers(refresh: true);
-                  },
-                  child: const Text('Retry'),
-                ),
-              ],
-            ),
+          return AppFeedback.error(
+            context: context,
+            title: 'Couldn’t load people',
+            message: userProvider.discoverError!,
+            onRetry: () {
+              userProvider.clearDiscoverError();
+              userProvider.searchUsers(refresh: true);
+            },
           );
         }
 
@@ -431,68 +373,23 @@ class _DiscoverTabState extends State<DiscoverTab> {
 
         if (feedProvider.discoverTrips.isEmpty &&
             feedProvider.discoverTripsError == null) {
-          return const Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(Icons.explore_outlined, size: 64, color: Colors.grey),
-                SizedBox(height: 16),
-                Text(
-                  'No trips to discover',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.grey,
-                  ),
-                ),
-                SizedBox(height: 8),
-                Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 32),
-                  child: Text(
-                    'Follow some travelers to see their amazing journeys',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(color: Colors.grey),
-                  ),
-                ),
-              ],
-            ),
+          return AppFeedback.empty(
+            context: context,
+            icon: Icons.explore_outlined,
+            title: 'Nothing to explore yet',
+            subtitle: 'Follow travellers to see their journeys here',
           );
         }
 
         if (feedProvider.discoverTripsError != null) {
-          return Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(Icons.error_outline, size: 64, color: Colors.red[300]),
-                const SizedBox(height: 16),
-                Text(
-                  'Error loading trips',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.red[300],
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 32),
-                  child: Text(
-                    feedProvider.discoverTripsError!,
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(color: Colors.grey),
-                  ),
-                ),
-                const SizedBox(height: 16),
-                ElevatedButton(
-                  onPressed: () {
-                    feedProvider.clearDiscoverTripsError();
-                    feedProvider.loadDiscoverTrips(refresh: true);
-                  },
-                  child: const Text('Retry'),
-                ),
-              ],
-            ),
+          return AppFeedback.error(
+            context: context,
+            title: 'Couldn’t load trips',
+            message: feedProvider.discoverTripsError!,
+            onRetry: () {
+              feedProvider.clearDiscoverTripsError();
+              feedProvider.loadDiscoverTrips(refresh: true);
+            },
           );
         }
 
@@ -774,23 +671,25 @@ class _DiscoverTabState extends State<DiscoverTab> {
                               vertical: 2,
                             ),
                             decoration: BoxDecoration(
-                              color: Colors.orange[100],
+                              color: AppTheme.upcoming.withValues(alpha: 0.14),
                               borderRadius: BorderRadius.circular(6),
-                              border: Border.all(color: Colors.orange[300]!),
+                              border: Border.all(
+                                color: AppTheme.upcoming.withValues(alpha: 0.45),
+                              ),
                             ),
                             child: Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                Icon(
+                                const Icon(
                                   Icons.lock_outline,
                                   size: 11,
-                                  color: Colors.orange[700],
+                                  color: AppTheme.upcoming,
                                 ),
                                 const SizedBox(width: 2),
-                                Text(
+                                const Text(
                                   'Private',
                                   style: TextStyle(
-                                    color: Colors.orange[700],
+                                    color: AppTheme.upcoming,
                                     fontSize: 9,
                                     fontWeight: FontWeight.w600,
                                   ),

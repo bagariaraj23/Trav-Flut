@@ -317,7 +317,7 @@ void main() async {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                const Icon(Icons.error, size: 64, color: Colors.red),
+                const Icon(Icons.error, size: 64, color: AppTheme.errorColor),
                 const SizedBox(height: 16),
                 const Text('Failed to initialize app'),
                 const SizedBox(height: 8),
@@ -421,7 +421,7 @@ class _ConnectivityToastHandlerState extends State<ConnectivityToastHandler> {
       title: 'No Internet Connection',
       message: 'You are offline. Some features may not be available.',
       icon: const Icon(Icons.wifi_off_rounded, size: 28.0, color: Colors.white),
-      backgroundColor: Colors.red.shade700,
+      backgroundColor: AppTheme.ink,
       // The toast will disappear after 8 seconds.
       // For a persistent toast that only disappears when connection is back
       // or when the user dismisses it, set `duration: null`.
@@ -473,7 +473,7 @@ class _TripThreadAppRouterState extends State<TripThreadAppRouter> {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                const Icon(Icons.error, size: 64, color: Colors.red),
+                const Icon(Icons.error, size: 64, color: AppTheme.errorColor),
                 const SizedBox(height: 16),
                 const Text('Page not found'),
                 const SizedBox(height: 16),

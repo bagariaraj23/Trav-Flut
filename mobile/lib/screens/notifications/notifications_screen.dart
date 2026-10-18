@@ -10,6 +10,7 @@ import 'package:tripthread/providers/user_provider.dart';
 import 'package:tripthread/providers/auth_provider.dart';
 import 'package:tripthread/providers/trip_provider.dart';
 import 'package:tripthread/services/api_service.dart';
+import 'package:tripthread/utils/app_feedback.dart';
 import 'package:tripthread/utils/app_layout.dart';
 import 'package:tripthread/utils/app_theme.dart';
 import 'package:tripthread/utils/user_display_labels.dart';
@@ -301,11 +302,9 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     if (!mounted) return;
 
     if (success) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Accepted follow request from $actorName'),
-          backgroundColor: Colors.green,
-        ),
+      AppFeedback.showSuccess(
+        context,
+        'You accepted $actorName’s follow request',
       );
       if (mounted && currentUserId != null) {
         await userProvider.loadUnifiedNotifications();
@@ -313,13 +312,9 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         await userProvider.loadProfileData(currentUserId, currentUserId);
       }
     } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            userProvider.followRequestsError ?? 'Failed to accept request',
-          ),
-          backgroundColor: Colors.red,
-        ),
+      AppFeedback.showError(
+        context,
+        userProvider.followRequestsError ?? 'Couldn’t accept that request',
       );
     }
   }
@@ -334,25 +329,16 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     if (!mounted) return;
 
     if (success) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Rejected follow request from $actorName'),
-          backgroundColor: Colors.orange,
-        ),
-      );
+      AppFeedback.showNotice(context, 'Declined $actorName’s follow request');
       if (mounted && currentUserId != null) {
         await userProvider.loadUnifiedNotifications();
         await userProvider.loadUnreadNotificationCount();
         await userProvider.loadProfileData(currentUserId, currentUserId);
       }
     } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            userProvider.followRequestsError ?? 'Failed to reject request',
-          ),
-          backgroundColor: Colors.red,
-        ),
+      AppFeedback.showError(
+        context,
+        userProvider.followRequestsError ?? 'Couldn’t decline that request',
       );
     }
   }
