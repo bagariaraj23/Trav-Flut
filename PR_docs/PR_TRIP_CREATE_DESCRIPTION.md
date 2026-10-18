@@ -3,7 +3,7 @@
 A new trip starts when it is created and stays open until the owner taps End trip. Start later and Set an end are optional date-and-time controls. Times are stored as UTC instants and shown in the viewer's zone. An unset trip type is Solo and becomes Group when someone else joins.
 
 **Branch:** `feat-trip-create-ux` · **Base:** `feat-ui-warm-polish`  
-**PR:** draft, stacked on PR #51 (Warm UI)
+**PR:** draft, third in the stack: [PR #52](https://github.com/bagariaraj23/Trav-Flut/pull/52) database performance → [PR #51](https://github.com/bagariaraj23/Trav-Flut/pull/51) Warm UI → this PR
 
 Apply migration `20261014150000_trip_open_ended_schedule` before using this against a database. iOS needs a pod install for `flutter_timezone`.
 
@@ -57,7 +57,7 @@ Manual:
 
 ## Notes for Reviewers
 
-*   This branch is stacked on `feat-ui-warm-polish` (PR #51), not `main`.
+*   This branch is stacked on `feat-ui-warm-polish` (PR #51). That branch is stacked on `feat-api-db-optimizations` (PR #52), which is based on `main`.
 *   `IDENTIFIED_ISSUES_AND_FIX_PLANS.md` is gitignored. Issues 6, 7, and 8 are marked addressed in the local copy. `documentations/context.json` carries the same schedule rules.
 *   The hourly scheduler can still lag by up to an hour for trips nobody opens. Opening the trip list, detail, or status catches the transition.
 *   Historical trips stay date-only. New and edited instants show a converted clock time.
