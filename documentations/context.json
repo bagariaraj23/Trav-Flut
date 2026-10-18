@@ -2354,6 +2354,12 @@
                 "pr": 54,
                 "branch": "feat-trip-create-ux",
                 "base": "feat-ui-warm-polish"
+            },
+            {
+                "pr": "docker-refresh",
+                "branch": "feat-dockerize",
+                "prHead": "cursor/docker-stack-refresh-8029",
+                "base": "feat-trip-create-ux"
             }
         ]
     },
@@ -2469,10 +2475,11 @@
                 "title": "Dockerization completeness (post PR #44 + #48)",
                 "basis": [
                     "PR #44",
-                    "PR #48"
+                    "PR #48",
+                    "feat-dockerize refresh (stacked on feat-trip-create-ux, 2026-10-18)"
                 ],
                 "status": "complete-for-local-stack",
-                "notes": "WS /chat documented; Dockerfile CMD node server.cjs; no esbuild at container start; entrypoint without accept-data-loss by default; SHARE_LINK_BASE_URL + /api/health healthcheck. Not remaining: Flutter-in-Docker. Scale-out chat still needs Redis Pub/Sub outside Docker scope."
+                "notes": "Entrypoint DB_SCHEMA_MODE=migrate (default) runs prisma migrate deploy; volumes created by the old db push entrypoint are baselined once (push, replay the typeSetByUser backfill, migrate resolve --applied for all 22). push and skip remain opt-in. Scheduler waits for a healthy backend, runs every SCHEDULER_INTERVAL_SECONDS (default 300), TZ=UTC. Backend loads optional .env via env_file. Test profile: api-tests (Vitest against postgres-test) and mobile-tests (cirruslabs Flutter image: pub get, analyze, test). Flutter image pinned to 3.38.5 to match mobile/pubspec.lock (pub get --enforce-lockfile). 2026-10-18 in Docker: api-tests 32 files / 219 tests passed; mobile-tests analyze 0 errors, 166 passed, 27 failing the same as main (comment/like service and screen tests hit the production base URL). Flutter app itself is not containerized. Scale-out chat still needs Redis Pub/Sub; keep one backend replica."
             },
             {
                 "id": "prod-gaps-optimizations",
