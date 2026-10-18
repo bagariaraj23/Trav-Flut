@@ -119,8 +119,8 @@ describe("updateTripStatuses behavior", () => {
     expect(tx.trip.updateMany).toHaveBeenCalledWith({
       where: {
         startDate: { lte: now },
-        endDate: { gt: now },
         status: TripStatus.UPCOMING,
+        OR: [{ endDate: null }, { endDate: { gt: now } }],
       },
       data: { status: TripStatus.ONGOING },
     });

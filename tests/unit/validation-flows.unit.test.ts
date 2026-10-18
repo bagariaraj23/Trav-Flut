@@ -60,6 +60,26 @@ describe("Trip validation schemas", () => {
     expect(result.destinationPlaceIds).toHaveLength(2);
   });
 
+  it("accepts a start-now trip with no dates and a zoned future start", () => {
+    const openEnded = createTripSchema.parse({
+      title: "Walk",
+      destinationPlaceIds: [randomUUID()],
+    });
+    expect(openEnded.startDate).toBeUndefined();
+    expect(openEnded.endDate).toBeUndefined();
+
+    const start = daysFromNow(30);
+    const zoned = createTripSchema.parse({
+      title: "Evening train",
+      destinationPlaceIds: [randomUUID()],
+      startDate: start,
+      scheduleTimezone: "Asia/Kolkata",
+    });
+    expect(zoned.startDate).toBe(start);
+    expect(new Date(zoned.startDate!).toISOString()).toBe(new Date(start).toISOString());
+    expect(zoned.scheduleTimezone).toBe("Asia/Kolkata");
+  });
+
   it("rejects invalid date order and missing destinations", () => {
     expect(() =>
       createTripSchema.parse({
