@@ -46,8 +46,8 @@ Key commits on the Warm branch include `e1574e3` (theme sweep), `b03a2a6` (chat 
 
 ## 4. Merge checklist (post–PR #50)
 
-1. On GitHub: change PR #51 **base branch** from `feat-expenses-split` → **`main`**.
-2. Locally: `git fetch origin && git checkout feat-ui-warm-polish && git rebase origin/main` (resolve conflicts in expense screens if any — keep Warm styling + main’s expense logic).
+1. On GitHub: PR #51’s base is `feat-api-db-optimizations` (PR #52), not `feat-expenses-split` or `main`.
+2. PR #52 is the first open branch and is based on `main`. Do not rebase this Warm UI branch onto `main` directly.
 3. Run Flutter tests listed in `PR51_DESCRIPTION.md`.
 4. Smoke: auth on short phone, trip cover placeholder, chat outgoing bubble contrast, Money pane theming on an ongoing trip.
 

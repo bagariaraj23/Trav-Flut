@@ -2,7 +2,7 @@
 
 Applies the Warm visual system across the Flutter app: cream canvas, ink text, terracotta accent, Playfair Display titles, and DM Sans body. It also adds a cover placeholder, a safe avatar initial for a blank name, readable status text on outgoing chat bubbles, and tighter auth spacing on short phones.
 
-**Branch:** `feat-ui-warm-polish` · **Base:** `main` (includes merged **PR #50** trip expense ledger)  
+**Branch:** `feat-ui-warm-polish` · **Base:** `feat-api-db-optimizations` (PR #52)  
 **PR:** https://github.com/bagariaraj23/Trav-Flut/pull/51
 
 ## Changes Made
@@ -50,11 +50,12 @@ Manual: login on a short phone (spacing should not push the button off screen), 
 
 ## Notes for Reviewers
 
-*   **PR #50 is merged to `main`.** Retarget this PR to `main` and rebase `feat-ui-warm-polish` onto latest `main` so the diff is Warm-theme-only (the branch was originally opened against `feat-expenses-split`).
+*   This PR is the second in the open stack. Base it on `feat-api-db-optimizations` (PR #52), which itself is based on `main` (PR #50 is already merged). The diff should be the Warm theme only.
 *   The accent is `#C2692A`, not `#D95338`. The canvas is `#FAF8F4`, not `#FBF8F3`. Cards are white. Body text is ink `#1C1917`.
 *   Outgoing bubbles are ink with cream text. Terracotta is the button and secondary color.
 *   Theme/avatar/cover test fixes are on the branch (`16abadb` and related commits). See `PR51_COMPLETE_REVIEW.md` for review notes.
 
 ## Related
 
+*   Stacked on: [PR #52](https://github.com/bagariaraj23/Trav-Flut/pull/52) — API and database performance.
 *   Merged dependency: [PR #50](https://github.com/bagariaraj23/Trav-Flut/pull/50) — trip expense ledger (Money pane, splits, settle-up).
