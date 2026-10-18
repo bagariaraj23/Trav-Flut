@@ -11,8 +11,10 @@ import 'package:tripthread/models/chat_message.dart';
 import 'package:tripthread/providers/chat_provider.dart';
 import 'package:tripthread/providers/auth_provider.dart';
 import 'package:tripthread/services/media_service.dart';
+import 'package:tripthread/utils/app_layout.dart';
+import 'package:tripthread/utils/app_theme.dart';
+import 'package:tripthread/utils/cloudinary_utils.dart';
 import 'package:tripthread/utils/avatar_utils.dart';
-import 'package:tripthread/widgets/chat/chat_avatar.dart';
 
 class ChatScreen extends StatefulWidget {
   final String conversationId;
@@ -667,7 +669,9 @@ class _ChatScreenState extends State<ChatScreen> {
 
     return Scaffold(
       appBar: buildAppBar(),
-      body: Column(
+      body: AppLayout.reading(
+        context: context,
+        child: Column(
         children: [
           Expanded(
             child: Consumer<ChatProvider>(
@@ -957,7 +961,7 @@ class _ChatScreenState extends State<ChatScreen> {
                           const SizedBox(width: 10),
                           Expanded(
                             child: Text(
-                              '@${user.username}',
+                              user.username!,
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                             ),
@@ -1028,6 +1032,7 @@ class _ChatScreenState extends State<ChatScreen> {
             ),
           ),
         ],
+        ),
       ),
     );
   }
@@ -1118,19 +1123,19 @@ class _MessageBubble extends StatelessWidget {
         constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.68),
         decoration: BoxDecoration(
           color: isMe
-              ? Theme.of(context).colorScheme.primaryContainer
-              : Theme.of(context).colorScheme.surfaceContainerHighest,
+              ? Theme.of(context).colorScheme.primary
+              : Theme.of(context).colorScheme.surface,
           border: isHighlighted
               ? Border.all(
-                  color: Theme.of(context).colorScheme.primary,
+                  color: AppTheme.accent,
                   width: 2,
                 )
-              : (isMe
-                  ? null
-                  : Border.all(
-                      color: Theme.of(context).colorScheme.outlineVariant,
-                      width: 1,
-                    )),
+              : Border.all(
+                  color: isMe
+                      ? Colors.transparent
+                      : Theme.of(context).colorScheme.outlineVariant,
+                  width: 1,
+                ),
           boxShadow: isMe
               ? null
               : [
@@ -1174,7 +1179,7 @@ class _MessageBubble extends StatelessWidget {
                                 fontWeight: FontWeight.bold,
                                 fontSize: 11,
                                 color: isMe
-                                    ? Theme.of(context).colorScheme.onPrimaryContainer.withOpacity(0.9)
+                                    ? Theme.of(context).colorScheme.onPrimary.withOpacity(0.9)
                                     : Theme.of(context).colorScheme.onSurfaceVariant.withOpacity(0.9),
                               ),
                         ),
@@ -1184,7 +1189,7 @@ class _MessageBubble extends StatelessWidget {
                           style: Theme.of(context).textTheme.bodySmall?.copyWith(
                                 fontSize: 12,
                                 color: isMe
-                                    ? Theme.of(context).colorScheme.onPrimaryContainer.withOpacity(0.8)
+                                    ? Theme.of(context).colorScheme.onPrimary.withOpacity(0.8)
                                     : Theme.of(context).colorScheme.onSurfaceVariant.withOpacity(0.8),
                               ),
                           maxLines: 2,
@@ -1200,7 +1205,7 @@ class _MessageBubble extends StatelessWidget {
                   style: Theme.of(context).textTheme.bodyLarge?.copyWith(
                         fontStyle: FontStyle.italic,
                         color: isMe
-                            ? Theme.of(context).colorScheme.onPrimaryContainer.withOpacity(0.6)
+                            ? Theme.of(context).colorScheme.onPrimary.withOpacity(0.6)
                             : Theme.of(context).colorScheme.onSurfaceVariant.withOpacity(0.6),
                       ),
                 )
@@ -1223,7 +1228,7 @@ class _MessageBubble extends StatelessWidget {
                       child: ClipRRect(
                         borderRadius: BorderRadius.circular(8),
                         child: CachedNetworkImage(
-                          imageUrl: a.url,
+                          imageUrl: buildOptimizedImageUrl(a.url, width: 800),
                           fit: BoxFit.cover,
                           maxWidthDiskCache: 400,
                           maxHeightDiskCache: 400,
@@ -1244,7 +1249,7 @@ class _MessageBubble extends StatelessWidget {
                           alignment: Alignment.center,
                           children: [
                             CachedNetworkImage(
-                              imageUrl: a.url,
+                              imageUrl: buildVideoThumbnailUrl(a.url, maxWidth: 800),
                               fit: BoxFit.cover,
                               width: double.infinity,
                               height: 200,
@@ -1261,7 +1266,7 @@ class _MessageBubble extends StatelessWidget {
                       '[${a.type}]',
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
                             color: isMe
-                                ? Theme.of(context).colorScheme.onPrimaryContainer.withOpacity(0.8)
+                                ? Theme.of(context).colorScheme.onPrimary.withOpacity(0.8)
                                 : Theme.of(context).colorScheme.onSurfaceVariant.withOpacity(0.8),
                           ),
                     ),
@@ -1293,7 +1298,7 @@ class _MessageBubble extends StatelessWidget {
                             strokeWidth: 1.5,
                             color: Theme.of(context)
                                 .colorScheme
-                                .onPrimaryContainer
+                                .onPrimary
                                 .withOpacity(0.7),
                           ),
                         ),
@@ -1303,7 +1308,7 @@ class _MessageBubble extends StatelessWidget {
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
                             fontSize: 10,
                             color: isMe
-                                ? Theme.of(context).colorScheme.onPrimaryContainer.withOpacity(0.7)
+                                ? Theme.of(context).colorScheme.onPrimary.withOpacity(0.7)
                                 : Theme.of(context).colorScheme.onSurfaceVariant.withOpacity(0.7),
                           ),
                     ),
@@ -1374,11 +1379,11 @@ class _MessageBubble extends StatelessWidget {
     final List<InlineSpan> spans = [];
     final textStyle = Theme.of(context).textTheme.bodyLarge?.copyWith(
           color: isMe
-              ? Theme.of(context).colorScheme.onPrimaryContainer
+              ? Theme.of(context).colorScheme.onPrimary
               : Theme.of(context).colorScheme.onSurfaceVariant,
         );
     final mentionColor = isMe
-        ? Theme.of(context).colorScheme.onPrimaryContainer
+        ? Theme.of(context).colorScheme.onPrimary
         : Theme.of(context).colorScheme.primary;
     final mentionStyle = textStyle?.copyWith(
           fontWeight: FontWeight.bold,
@@ -1471,7 +1476,7 @@ class _SeenIndicator extends StatelessWidget {
         label,
         style: Theme.of(context).textTheme.bodySmall?.copyWith(
               fontSize: 10,
-              color: Theme.of(context).colorScheme.primary.withOpacity(0.85),
+              color: Theme.of(context).colorScheme.onPrimary.withOpacity(0.85),
             ),
       ),
     );

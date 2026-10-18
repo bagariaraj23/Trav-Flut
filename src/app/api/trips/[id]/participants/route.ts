@@ -5,12 +5,16 @@ import { addParticipantSchema } from "@/lib/validation";
 import { ApiResponse, TripParticipantResponse } from "@/types/api";
 import { assertMemberZeroNetOnTrip } from "@/lib/services/expense";
 import { UnsettledBalanceError } from "@/lib/errors";
+import { enforcePresetRateLimit } from "@/lib/rateLimit";
+import { ensureTripConversation } from "@/lib/services/chat";
 
 // Add participant to trip
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const limited = await enforcePresetRateLimit(request, "write");
+  if (limited) return limited;
   try {
     const { id } = await params;
     const tripId = id;
@@ -175,6 +179,15 @@ export async function POST(
       },
     };
 
+    try {
+      await ensureTripConversation(tripId);
+    } catch (chatErr) {
+      console.error(
+        `[WARN] Failed to sync trip chat after adding participant to ${tripId}:`,
+        chatErr
+      );
+    }
+
     return NextResponse.json<ApiResponse<TripParticipantResponse>>(
       {
         success: true,
@@ -210,6 +223,8 @@ export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const limited = await enforcePresetRateLimit(request, "write");
+  if (limited) return limited;
   try {
     const { id } = await params;
     const tripId = id;
@@ -315,6 +330,16 @@ export async function DELETE(
         },
       }),
     ]);
+
+    try {
+      await ensureTripConversation(tripId);
+    } catch (chatErr) {
+      console.error(
+        `[WARN] Failed to sync trip chat after removing participant from ${tripId}:`,
+        chatErr
+      );
+    }
+
     return NextResponse.json<ApiResponse>({
       success: true,
       message: "Participant and any pending join requests removed successfully",
@@ -336,6 +361,8 @@ export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const limited = await enforcePresetRateLimit(request, "read_hot");
+  if (limited) return limited;
   try {
     const { id } = await params;
     const tripId = id;

@@ -3,6 +3,8 @@ import 'package:provider/provider.dart';
 import 'package:tripthread/models/comment.dart';
 import 'package:tripthread/providers/comment_provider.dart';
 import 'package:tripthread/widgets/engagement/comment_composer.dart';
+import 'package:tripthread/utils/app_feedback.dart';
+import 'package:tripthread/utils/app_layout.dart';
 import 'package:tripthread/widgets/engagement/comment_list_item.dart';
 
 class CommentsScreen extends StatefulWidget {
@@ -126,7 +128,9 @@ class _CommentsScreenState extends State<CommentsScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('Comments')),
-      body: Column(
+      body: AppLayout.reading(
+        context: context,
+        child: Column(
         children: [
           Expanded(
             child: Consumer<CommentProvider>(
@@ -141,43 +145,20 @@ class _CommentsScreenState extends State<CommentsScreen> {
                 }
 
                 if (error != null && comments.isEmpty) {
-                  return Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Text(error),
-                        const SizedBox(height: 16),
-                        ElevatedButton(
-                          onPressed: _loadComments,
-                          child: const Text('Retry'),
-                        ),
-                      ],
-                    ),
+                  return AppFeedback.error(
+                    context: context,
+                    title: 'Could not load comments',
+                    message: error,
+                    onRetry: _loadComments,
                   );
                 }
 
                 if (comments.isEmpty) {
-                  return Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          Icons.comment_outlined,
-                          size: 64,
-                          color: Theme.of(context).colorScheme.onSurfaceVariant,
-                        ),
-                        const SizedBox(height: 16),
-                        Text(
-                          'No comments yet',
-                          style: Theme.of(context).textTheme.titleMedium,
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          'Be the first to comment!',
-                          style: Theme.of(context).textTheme.bodyMedium,
-                        ),
-                      ],
-                    ),
+                  return AppFeedback.empty(
+                    context: context,
+                    icon: Icons.comment_outlined,
+                    title: 'No comments yet',
+                    subtitle: 'Be the first to comment!',
                   );
                 }
 
@@ -248,6 +229,7 @@ class _CommentsScreenState extends State<CommentsScreen> {
             onCancel: _cancelReply,
           ),
         ],
+      ),
       ),
     );
   }

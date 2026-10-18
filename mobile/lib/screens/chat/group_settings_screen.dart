@@ -2,15 +2,14 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:tripthread/models/chat_conversation.dart';
 import 'package:tripthread/providers/chat_provider.dart';
 import 'package:tripthread/providers/auth_provider.dart';
 import 'package:tripthread/services/media_service.dart';
-import 'package:tripthread/utils/avatar_utils.dart';
+import 'package:tripthread/utils/app_layout.dart';
+import 'package:tripthread/utils/app_theme.dart';
 import 'package:tripthread/widgets/chat/chat_avatar.dart';
 import 'package:tripthread/services/api_service.dart';
-import 'package:tripthread/utils/user_display_labels.dart';
 
 class GroupSettingsScreen extends StatefulWidget {
   final String conversationId;
@@ -278,11 +277,9 @@ class _GroupSettingsScreenState extends State<GroupSettingsScreen> {
       );
     }
 
-    final other = conversation.participants
-        .where((p) => p.userId != currentUserId)
-        .toList();
     final name = conversation.name ?? 'Group Chat';
-    final hasImage = conversation.avatarUrl != null && conversation.avatarUrl!.isNotEmpty;
+    final hasImage =
+        conversation.avatarUrl != null && conversation.avatarUrl!.isNotEmpty;
 
     final currentUserParticipant = conversation.participants.firstWhere(
       (p) => p.userId == currentUserId,
@@ -291,14 +288,13 @@ class _GroupSettingsScreenState extends State<GroupSettingsScreen> {
     final isViewerAdmin = currentUserParticipant.role == 'ADMIN';
 
     final avatarLabel = name;
-    final avatarInitial = AvatarUtils.initialsFromName(avatarLabel);
-    final avatarColor = AvatarUtils.colorForKey(conversation.id);
-
     return Scaffold(
       appBar: AppBar(
         title: const Text('Group Details'),
       ),
-      body: SingleChildScrollView(
+      body: AppLayout.reading(
+        context: context,
+        child: SingleChildScrollView(
         child: Column(
           children: [
             const SizedBox(height: 24),
@@ -306,29 +302,17 @@ class _GroupSettingsScreenState extends State<GroupSettingsScreen> {
               child: Stack(
                 clipBehavior: Clip.none,
                 children: [
-                  CircleAvatar(
+                  ChatAvatar(
                     radius: 60,
-                    backgroundColor: avatarColor,
-                    backgroundImage: hasImage
-                        ? CachedNetworkImageProvider(conversation.avatarUrl!)
-                        : null,
-                    child: !hasImage
-                        ? Text(
-                            avatarInitial,
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 48,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          )
-                        : null,
+                    avatarUrl: conversation.avatarUrl,
+                    name: avatarLabel,
                   ),
                   if (isViewerAdmin)
                     Positioned(
                       bottom: 0,
                       right: 0,
                       child: CircleAvatar(
-                        backgroundColor: Theme.of(context).colorScheme.primary,
+                        backgroundColor: Theme.of(context).colorScheme.secondary,
                         child: _uploadingAvatar
                             ? const Padding(
                                 padding: EdgeInsets.all(8.0),
@@ -430,22 +414,13 @@ class _GroupSettingsScreenState extends State<GroupSettingsScreen> {
                 final isMe = participant.userId == currentUserId;
                 final isParticipantAdmin = participant.role == 'ADMIN';
 
-                final pInitials = AvatarUtils.initialsFromName(pDisplayName);
-                final pColor = AvatarUtils.colorForKey(participant.userId);
-
                 return ListTile(
                   onTap: () => context.push('/profile/${participant.userId}'),
-                  leading: CircleAvatar(
-                    backgroundColor: pColor,
-                    backgroundImage: participant.avatarUrl != null && participant.avatarUrl!.isNotEmpty
-                        ? CachedNetworkImageProvider(participant.avatarUrl!)
-                        : null,
-                    child: participant.avatarUrl == null || participant.avatarUrl!.isEmpty
-                        ? Text(
-                            pInitials,
-                            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
-                          )
-                        : null,
+                  leading: ChatAvatar(
+                    radius: 22,
+                    avatarUrl: participant.avatarUrl,
+                    username: participant.username,
+                    name: participant.name ?? participant.username,
                   ),
                   title: Text(
                     isMe ? 'You' : pDisplayName,
@@ -453,7 +428,7 @@ class _GroupSettingsScreenState extends State<GroupSettingsScreen> {
                   ),
                   subtitle: participant.username != null
                       ? Text(
-                          '@${participant.username}',
+                          participant.username!,
                           style: Theme.of(context).textTheme.bodySmall,
                         )
                       : null,
@@ -465,13 +440,15 @@ class _GroupSettingsScreenState extends State<GroupSettingsScreen> {
                           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                           margin: const EdgeInsets.only(right: 8),
                           decoration: BoxDecoration(
-                            color: Theme.of(context).colorScheme.primary.withOpacity(0.1),
+                            color: Theme.of(context).brightness == Brightness.dark
+                                ? AppTheme.darkMuted
+                                : AppTheme.accentSoft,
                             borderRadius: BorderRadius.circular(12),
                           ),
                           child: Text(
                             'Admin',
                             style: TextStyle(
-                              color: Theme.of(context).colorScheme.primary,
+                              color: Theme.of(context).colorScheme.secondary,
                               fontSize: 12,
                               fontWeight: FontWeight.w600,
                             ),
@@ -520,6 +497,7 @@ class _GroupSettingsScreenState extends State<GroupSettingsScreen> {
             const SizedBox(height: 24),
           ],
         ),
+      ),
       ),
     );
   }
@@ -668,27 +646,23 @@ class _AddParticipantDialogState extends State<AddParticipantDialog> {
 
                   final isAlreadyMember = widget.currentParticipants.any((p) => p.userId == userId);
 
-                  final initials = AvatarUtils.initialsFromName(name.isNotEmpty ? name : username);
-                  final color = AvatarUtils.colorForKey(userId);
-
                   return ListTile(
                     contentPadding: EdgeInsets.zero,
-                    leading: CircleAvatar(
-                      backgroundColor: color,
-                      backgroundImage: avatarUrl != null && avatarUrl.isNotEmpty
-                          ? CachedNetworkImageProvider(avatarUrl)
-                          : null,
-                      child: avatarUrl == null || avatarUrl.isEmpty
-                          ? Text(
-                              initials,
-                              style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
-                            )
-                          : null,
+                    leading: ChatAvatar(
+                      radius: 20,
+                      avatarUrl: avatarUrl,
+                      username: username,
+                      name: name,
                     ),
                     title: Text(name.isNotEmpty ? name : username),
-                    subtitle: Text('@$username'),
+                    subtitle: Text(username),
                     trailing: isAlreadyMember
-                        ? const Text('Member', style: TextStyle(color: Colors.grey))
+                        ? Text(
+                            'Member',
+                            style: TextStyle(
+                              color: Theme.of(context).colorScheme.onSurfaceVariant,
+                            ),
+                          )
                         : IconButton(
                             icon: const Icon(Icons.add_circle_outline),
                             onPressed: () => _addMember(userId, username),

@@ -12,12 +12,14 @@ import {
 import { PerformanceMonitor, ErrorTracker } from "@/lib/monitoring";
 import { NotFoundError, ConflictError, ValidationError } from "@/lib/errors";
 import { TripStatus } from "@prisma/client";
+import { ensureTripConversation } from "@/lib/services/chat";
 
 // Create a new trip
 export async function POST(request: NextRequest) {
   const loggedHandler = withLogging(async (req) => {
     return withRateLimit(
       req,
+      "write",
       async (rateLimitedReq) => {
         return withAuth(rateLimitedReq, async (authenticatedReq) => {
           const endTimer =
@@ -142,6 +144,7 @@ export async function POST(request: NextRequest) {
 
             let startLocationId: string | undefined;
             let endLocationId: string | undefined;
+            let destinationNames: string[] = [];
 
             if (destinationPlaceIds && destinationPlaceIds.length > 0) {
               startLocationId = destinationPlaceIds[0];
@@ -149,6 +152,15 @@ export async function POST(request: NextRequest) {
                 destinationPlaceIds.length > 1
                   ? destinationPlaceIds[destinationPlaceIds.length - 1]
                   : destinationPlaceIds[0];
+
+              const places = await prisma.place.findMany({
+                where: { id: { in: destinationPlaceIds } },
+                select: { id: true, name: true },
+              });
+              const byId = new Map(places.map((p) => [p.id, p.name]));
+              destinationNames = destinationPlaceIds
+                .map((id: string) => byId.get(id))
+                .filter((n: string | undefined): n is string => Boolean(n));
             }
 
             const coverMediaId = tripData.coverMediaId ?? null;
@@ -214,6 +226,7 @@ export async function POST(request: NextRequest) {
                   type: tripData.type ?? null,
                   mood: tripData.mood ?? null,
                   coverMediaId,
+                  destinations: destinationNames,
                   startLocationId: startLocationId ?? null,
                   endLocationId: endLocationId ?? null,
                 },
@@ -271,6 +284,16 @@ export async function POST(request: NextRequest) {
 
               return newTrip;
             });
+
+            // Non-solo trips get a group chat immediately (owner included).
+            try {
+              await ensureTripConversation(trip.id);
+            } catch (chatErr) {
+              console.error(
+                `[WARN] Failed to ensure trip chat for ${trip.id}:`,
+                chatErr
+              );
+            }
 
             const tripResponse: TripResponse = {
               ...trip,
@@ -390,7 +413,7 @@ export async function POST(request: NextRequest) {
 // Get user's trips
 export async function GET(request: NextRequest) {
   const loggedHandler = withLogging(async (req) => {
-    return withRateLimit(req, async (rateLimitedReq) => {
+    return withRateLimit(req, "read_hot", async (rateLimitedReq) => {
       return withAuth(rateLimitedReq, async (authenticatedReq) => {
         const endTimer =
           PerformanceMonitor.getInstance().startTimer("get_trips");
@@ -432,12 +455,20 @@ export async function GET(request: NextRequest) {
                   updatedAt: true,
                 },
               },
-              coverMedia: true,
-              _count: {
+              coverMedia: {
                 select: {
-                  threadEntries: true,
-                  media: true,
-                  participants: true,
+                  id: true,
+                  url: true,
+                  publicId: true,
+                  type: true,
+                  filename: true,
+                  size: true,
+                  width: true,
+                  height: true,
+                  duration: true,
+                  uploadedById: true,
+                  tripId: true,
+                  createdAt: true,
                 },
               },
             },

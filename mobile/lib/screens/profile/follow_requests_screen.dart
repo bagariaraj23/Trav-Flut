@@ -4,6 +4,9 @@ import 'package:go_router/go_router.dart';
 import 'package:tripthread/providers/user_provider.dart';
 import 'package:tripthread/providers/auth_provider.dart';
 import 'package:tripthread/models/follow_status.dart';
+import 'package:tripthread/utils/app_feedback.dart';
+import 'package:tripthread/utils/app_layout.dart';
+import 'package:tripthread/widgets/chat/chat_avatar.dart';
 
 class FollowRequestsScreen extends StatefulWidget {
   const FollowRequestsScreen({super.key});
@@ -34,11 +37,9 @@ class _FollowRequestsScreenState extends State<FollowRequestsScreen> {
     if (!mounted) return;
 
     if (success) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Accepted follow request from $followerName'),
-          backgroundColor: Colors.green,
-        ),
+      AppFeedback.showSuccess(
+        context,
+        'Accepted follow request from $followerName',
       );
 
       // Refresh follow requests list and current user's profile stats
@@ -49,12 +50,9 @@ class _FollowRequestsScreenState extends State<FollowRequestsScreen> {
         ]);
       }
     } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-              userProvider.followRequestsError ?? 'Failed to accept request'),
-          backgroundColor: Colors.red,
-        ),
+      AppFeedback.showError(
+        context,
+        userProvider.followRequestsError ?? 'Failed to accept request',
       );
     }
   }
@@ -72,11 +70,9 @@ class _FollowRequestsScreenState extends State<FollowRequestsScreen> {
     if (!mounted) return;
 
     if (success) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Rejected follow request from $followerName'),
-          backgroundColor: Colors.orange,
-        ),
+      AppFeedback.showSuccess(
+        context,
+        'Rejected follow request from $followerName',
       );
 
       // Refresh follow requests list and current user's profile stats
@@ -87,12 +83,9 @@ class _FollowRequestsScreenState extends State<FollowRequestsScreen> {
         ]);
       }
     } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-              userProvider.followRequestsError ?? 'Failed to reject request'),
-          backgroundColor: Colors.red,
-        ),
+      AppFeedback.showError(
+        context,
+        userProvider.followRequestsError ?? 'Failed to reject request',
       );
     }
   }
@@ -124,7 +117,9 @@ class _FollowRequestsScreenState extends State<FollowRequestsScreen> {
             },
           ),
         ),
-      body: Consumer<UserProvider>(
+      body: AppLayout.reading(
+        context: context,
+        child: Consumer<UserProvider>(
         builder: (context, userProvider, child) {
           if (userProvider.isFollowRequestsLoading &&
               userProvider.pendingFollowRequests.isEmpty) {
@@ -132,39 +127,11 @@ class _FollowRequestsScreenState extends State<FollowRequestsScreen> {
           }
 
           if (userProvider.followRequestsError != null) {
-            return Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(
-                    Icons.error_outline,
-                    size: 64,
-                    color: Colors.red[300],
-                  ),
-                  const SizedBox(height: 16),
-                  Text(
-                    'Error loading requests',
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w600,
-                      color: Colors.red[300],
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    userProvider.followRequestsError!,
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(color: Colors.grey),
-                  ),
-                  const SizedBox(height: 16),
-                  ElevatedButton(
-                    onPressed: () {
-                      userProvider.loadPendingFollowRequests();
-                    },
-                    child: const Text('Retry'),
-                  ),
-                ],
-              ),
+            return AppFeedback.error(
+              context: context,
+              title: 'Error loading requests',
+              message: userProvider.followRequestsError!,
+              onRetry: () => userProvider.loadPendingFollowRequests(),
             );
           }
 
@@ -214,6 +181,7 @@ class _FollowRequestsScreenState extends State<FollowRequestsScreen> {
         },
       ),
       ),
+      ),
     );
   }
 
@@ -224,9 +192,11 @@ class _FollowRequestsScreenState extends State<FollowRequestsScreen> {
   ) {
     final follower = request.follower;
 
+    final scheme = Theme.of(context).colorScheme;
+
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
-      elevation: 2,
+      elevation: 0,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
       ),
@@ -240,22 +210,11 @@ class _FollowRequestsScreenState extends State<FollowRequestsScreen> {
               Row(
                 children: [
                   // Avatar
-                  CircleAvatar(
+                  ChatAvatar(
                     radius: 25,
-                    backgroundColor: Theme.of(context).colorScheme.primary,
-                    backgroundImage: follower.avatarUrl != null
-                        ? NetworkImage(follower.avatarUrl!)
-                        : null,
-                    child: follower.avatarUrl == null
-                        ? Text(
-                            follower.name?.substring(0, 1).toUpperCase() ?? 'U',
-                            style: const TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.white,
-                            ),
-                          )
-                        : null,
+                    avatarUrl: follower.avatarUrl,
+                    username: follower.username,
+                    name: follower.name,
                   ),
 
                   const SizedBox(width: 16),
@@ -274,7 +233,7 @@ class _FollowRequestsScreenState extends State<FollowRequestsScreen> {
                         ),
                         if (follower.username != null)
                           Text(
-                            '@${follower.username}',
+                            follower.username!,
                             style: Theme.of(context)
                                 .textTheme
                                 .bodyMedium
@@ -321,8 +280,8 @@ class _FollowRequestsScreenState extends State<FollowRequestsScreen> {
                                     follower.name ?? 'User',
                                   ),
                       style: OutlinedButton.styleFrom(
-                        foregroundColor: Colors.red,
-                        side: BorderSide(color: Colors.red[300]!),
+                        foregroundColor: scheme.error,
+                        side: BorderSide(color: scheme.error.withValues(alpha: 0.5)),
                       ),
                       child: userProvider.isProcessingRequestId == request.id &&
                               userProvider.followRequestActionIsAccept == false

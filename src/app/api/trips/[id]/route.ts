@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { AuthService } from "@/lib/auth";
 import { ApiResponse, TripResponse } from "@/types/api";
 import { withLogging, handleApiError } from "@/lib/middleware";
+import { enforcePresetRateLimit } from "@/lib/rateLimit";
 import { PerformanceMonitor } from "@/lib/monitoring";
 import { omitHiddenTripSpend } from "@/lib/tripSpendVisibility";
 
@@ -14,6 +15,8 @@ export async function GET(
   return withLogging(async (req) => {
     const endTimer = PerformanceMonitor.getInstance().startTimer("get_trip_by_id");
     try {
+      const limited = await enforcePresetRateLimit(request, "read_hot");
+      if (limited) return limited;
       const { id } = await params;
       const tripId = id;
 
@@ -49,6 +52,8 @@ export async function GET(
         where: { id: tripId },
         include: {
           coverMedia: true,
+          startLocation: true,
+          endLocation: true,
           user: {
             select: {
               id: true,
@@ -79,50 +84,7 @@ export async function GET(
               },
             },
           },
-          threadEntries: {
-            include: {
-              author: {
-                select: {
-                  id: true,
-                  email: true,
-                  username: true,
-                  name: true,
-                  avatarUrl: true,
-                  bio: true,
-                  isPrivate: true,
-                  createdAt: true,
-                  updatedAt: true,
-                },
-              },
-              taggedUsers: {
-                include: {
-                  taggedUser: {
-                    select: {
-                      id: true,
-                      email: true,
-                      username: true,
-                      name: true,
-                      avatarUrl: true,
-                      bio: true,
-                      isPrivate: true,
-                      createdAt: true,
-                      updatedAt: true,
-                    },
-                  },
-                },
-              },
-              media: true,
-            },
-            orderBy: { createdAt: "asc" },
-          },
           finalPost: true,
-          _count: {
-            select: {
-              threadEntries: true,
-              media: true,
-              participants: true,
-            },
-          },
         },
       });
 
@@ -167,6 +129,22 @@ export async function GET(
         }
       }
 
+      const serializePlace = (place: typeof trip.startLocation) =>
+        place
+          ? {
+              id: place.id,
+              name: place.name,
+              address: place.address ?? undefined,
+              lat: place.lat,
+              lng: place.lng,
+              placeType: place.placeType,
+              source: place.source,
+              externalId: place.externalId ?? undefined,
+              createdAt: place.createdAt.toISOString(),
+              updatedAt: place.updatedAt.toISOString(),
+            }
+          : undefined;
+
       const tripResponse: TripResponse = omitHiddenTripSpend({
         ...trip,
         startDate: trip.startDate?.toISOString() || undefined,
@@ -174,6 +152,10 @@ export async function GET(
         entryCount: trip.entryCount,
         participantCount: trip.participantCount,
         coverMediaId: trip.coverMediaId ?? undefined,
+        startLocationId: trip.startLocationId ?? undefined,
+        endLocationId: trip.endLocationId ?? undefined,
+        startLocation: serializePlace(trip.startLocation),
+        endLocation: serializePlace(trip.endLocation),
         createdAt: trip.createdAt.toISOString(),
         updatedAt: trip.updatedAt.toISOString(),
         user: trip.user
@@ -209,36 +191,6 @@ export async function GET(
             createdAt: trip.coverMedia.createdAt.toISOString(),
           }
           : undefined,
-        threadEntries: trip.threadEntries.map((entry) => ({
-          ...entry,
-          gpsCoordinates: entry.gpsCoordinates
-            ? ((typeof entry.gpsCoordinates === "string"
-              ? JSON.parse(entry.gpsCoordinates)
-              : entry.gpsCoordinates) as {
-                lat: number | null;
-                lng: number | null;
-              })
-            : null,
-          createdAt: entry.createdAt.toISOString(),
-          author: {
-            ...entry.author,
-            createdAt: entry.author.createdAt.toISOString(),
-            updatedAt: entry.author.updatedAt.toISOString(),
-          },
-          taggedUsers: entry.taggedUsers && entry.taggedUsers.length > 0
-            ? entry.taggedUsers.map((tag) => ({
-              ...tag.taggedUser,
-              createdAt: tag.taggedUser.createdAt.toISOString(),
-              updatedAt: tag.taggedUser.updatedAt.toISOString(),
-            }))
-            : [],
-          media: entry.media
-            ? {
-              ...entry.media,
-              createdAt: entry.media.createdAt.toISOString(),
-            }
-            : undefined,
-        })),
         finalPost: trip.finalPost
           ? {
             ...trip.finalPost,

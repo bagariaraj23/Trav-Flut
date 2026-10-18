@@ -193,7 +193,11 @@ class _TripMapScreenState extends State<TripMapScreen> {
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Icon(Icons.error, size: 64, color: Colors.red[300]),
+                    Icon(
+                      Icons.error,
+                      size: 64,
+                      color: Theme.of(context).colorScheme.error,
+                    ),
                     const SizedBox(height: 16),
                     Text(_error!),
                     const SizedBox(height: 16),
@@ -212,7 +216,7 @@ class _TripMapScreenState extends State<TripMapScreen> {
                     Icon(
                       Icons.map_outlined,
                       size: 80,
-                      color: Colors.grey.shade400,
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
                     ),
                     const SizedBox(height: 12),
                     const Text(

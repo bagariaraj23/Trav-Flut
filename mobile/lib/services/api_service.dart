@@ -1590,15 +1590,61 @@ class ApiService {
   }
 
   // Feed endpoints
+  Future<ApiResponse<List<dynamic>>> getLiveTrips() async {
+    try {
+      debugPrint('[ApiService] Getting live trips for home story strip');
+      final response = await _dio.get('/feed/live-trips');
+      if (response.data is! Map<String, dynamic>) {
+        return ApiResponse<List<dynamic>>(
+          success: false,
+          error: 'Invalid server response format',
+        );
+      }
+      if (response.data['success'] == true && response.data['data'] != null) {
+        final data = response.data['data'];
+        if (data is! List) {
+          return ApiResponse<List<dynamic>>(
+            success: false,
+            error: 'Invalid live trips payload',
+          );
+        }
+        return ApiResponse<List<dynamic>>(success: true, data: data);
+      }
+      return ApiResponse<List<dynamic>>(
+        success: false,
+        error: response.data['error'] ?? 'Failed to load live trips',
+      );
+    } on DioException catch (e) {
+      debugPrint('[ApiService] Get live trips DioException: ${e.message}');
+      return ApiResponse<List<dynamic>>(
+        success: false,
+        error: e.response?.data is Map
+            ? (e.response!.data['error'] ?? 'Network error occurred')
+            : 'Network error occurred',
+      );
+    } catch (e) {
+      debugPrint('[ApiService] Get live trips unexpected error: $e');
+      return ApiResponse<List<dynamic>>(
+        success: false,
+        error: 'Unknown error occurred',
+      );
+    }
+  }
+
   Future<ApiResponse<Map<String, dynamic>>> getHomeFeed({
     int page = 1,
     int limit = 20,
+    String? cursor,
   }) async {
     try {
       debugPrint('[ApiService] Getting home feed: page=$page, limit=$limit');
       final response = await _dio.get(
         '/feed/home',
-        queryParameters: {'page': page.toString(), 'limit': limit.toString()},
+        queryParameters: {
+          'page': page.toString(),
+          'limit': limit.toString(),
+          if (cursor != null && cursor.isNotEmpty) 'cursor': cursor,
+        },
       );
       debugPrint('[ApiService] Get home feed response: ${response.statusCode}');
 

@@ -31,4 +31,21 @@ void main() {
 
     expect(find.text('B'), findsOneWidget);
   });
+
+  testWidgets('ChatAvatar uses a safe initial when the name is blank', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: Scaffold(
+          body: ChatAvatar(
+            username: '   ',
+            name: '',
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('U'), findsOneWidget);
+  });
 }

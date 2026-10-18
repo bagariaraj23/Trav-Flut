@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'package:tripthread/models/live_trip_story.dart';
 import 'package:tripthread/models/trip.dart';
 import 'package:tripthread/services/api_service.dart';
 import 'package:tripthread/providers/engagement_provider.dart';
@@ -18,7 +19,12 @@ class FeedProvider extends ChangeNotifier {
   bool _isHomeFeedLoading = false;
   String? _homeFeedError;
   int _homeFeedPage = 1;
+  String? _homeFeedCursor;
   bool _hasMoreHomeFeedPosts = true;
+
+  // Live trip stories (Happening Now)
+  List<LiveTripStory> _liveTripStories = [];
+  bool _isLiveTripsLoading = false;
 
   // Discover Trips State
   final List<Trip> _discoverTrips = [];
@@ -26,12 +32,18 @@ class FeedProvider extends ChangeNotifier {
   String? _discoverTripsError;
   int _discoverTripsPage = 1;
   bool _hasMoreDiscoverTrips = true;
+  Future<void>? _discoverRefreshInFlight;
+  String? _discoverRefreshKey;
+  int _discoverRequestGeneration = 0;
 
   // Getters
   List<TripFinalPost> get homeFeedPosts => _homeFeedPosts;
   bool get isHomeFeedLoading => _isHomeFeedLoading;
   String? get homeFeedError => _homeFeedError;
   bool get hasMoreHomeFeedPosts => _hasMoreHomeFeedPosts;
+
+  List<LiveTripStory> get liveTripStories => _liveTripStories;
+  bool get isLiveTripsLoading => _isLiveTripsLoading;
 
   List<Trip> get discoverTrips => _discoverTrips;
   bool get isDiscoverTripsLoading => _isDiscoverTripsLoading;
@@ -51,6 +63,38 @@ class FeedProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> loadLiveTrips() async {
+    _isLiveTripsLoading = true;
+    notifyListeners();
+    try {
+      final response = await _apiService.getLiveTrips();
+      if (response.success && response.data != null) {
+        final stories = <LiveTripStory>[];
+        for (final item in response.data!) {
+          if (item is! Map<String, dynamic>) continue;
+          try {
+            stories.add(LiveTripStory.fromJson(item));
+          } catch (e) {
+            debugPrint('[FeedProvider] Failed to parse live trip story: $e');
+          }
+        }
+        _liveTripStories = stories;
+        debugPrint(
+          '[FeedProvider] Live trip stories loaded: ${_liveTripStories.length}',
+        );
+      } else {
+        debugPrint(
+          '[FeedProvider] Live trips failed: ${response.error}',
+        );
+      }
+    } catch (e) {
+      debugPrint('[FeedProvider] loadLiveTrips error: $e');
+    } finally {
+      _isLiveTripsLoading = false;
+      notifyListeners();
+    }
+  }
+
   // Home Feed Methods
   Future<void> loadHomeFeed({bool refresh = false}) async {
     try {
@@ -61,6 +105,7 @@ class FeedProvider extends ChangeNotifier {
       }
       if (refresh) {
         _homeFeedPage = 1;
+        _homeFeedCursor = null;
         _homeFeedPosts.clear();
         _hasMoreHomeFeedPosts = true;
         _homeFeedError = null;
@@ -78,9 +123,11 @@ class FeedProvider extends ChangeNotifier {
       debugPrint(
         '[FeedProvider] Loading home feed, page: $_homeFeedPage, limit: 20',
       );
+      final cursorForRequest = refresh ? null : _homeFeedCursor;
       final response = await _apiService.getHomeFeed(
         page: _homeFeedPage,
         limit: 20,
+        cursor: cursorForRequest,
       );
 
       debugPrint(
@@ -145,7 +192,13 @@ class FeedProvider extends ChangeNotifier {
 
         _homeFeedPosts.addAll(posts);
         _hasMoreHomeFeedPosts = hasNext && posts.isNotEmpty;
-        _homeFeedPage++;
+        final nextCursor = data['nextCursor'];
+        if (nextCursor is String && nextCursor.isNotEmpty) {
+          _homeFeedCursor = nextCursor;
+        } else {
+          _homeFeedCursor = null;
+          _homeFeedPage++;
+        }
         _homeFeedError = null;
 
         debugPrint(
@@ -173,6 +226,39 @@ class FeedProvider extends ChangeNotifier {
     bool refresh = false,
     String? status,
     String? mood,
+  }) {
+    final key = '${status ?? ''}|${mood ?? ''}';
+    if (refresh &&
+        _discoverRefreshInFlight != null &&
+        _discoverRefreshKey == key) {
+      return _discoverRefreshInFlight!;
+    }
+
+    final generation = ++_discoverRequestGeneration;
+    final run = _loadDiscoverTrips(
+      refresh: refresh,
+      status: status,
+      mood: mood,
+      generation: generation,
+    );
+    if (!refresh) return run;
+
+    _discoverRefreshKey = key;
+    final tracked = run.whenComplete(() {
+      if (_discoverRequestGeneration == generation) {
+        _discoverRefreshInFlight = null;
+        _discoverRefreshKey = null;
+      }
+    });
+    _discoverRefreshInFlight = tracked;
+    return tracked;
+  }
+
+  Future<void> _loadDiscoverTrips({
+    bool refresh = false,
+    String? status,
+    String? mood,
+    required int generation,
   }) async {
     try {
       if (refresh) {
@@ -207,6 +293,8 @@ class FeedProvider extends ChangeNotifier {
       debugPrint(
         '[FeedProvider] Discover trips API response: success=${response.success}, error=${response.error}',
       );
+
+      if (generation != _discoverRequestGeneration) return;
 
       if (response.success && response.data != null) {
         final data = response.data!;
@@ -264,18 +352,22 @@ class FeedProvider extends ChangeNotifier {
           '[FeedProvider] Discover trips updated: ${_discoverTrips.length} trips, hasNext: $_hasMoreDiscoverTrips, page: $_discoverTripsPage',
         );
       } else {
+        if (generation != _discoverRequestGeneration) return;
         _discoverTripsError = response.error ?? 'Failed to load discover trips';
         debugPrint(
           '[FeedProvider] Discover trips failed: $_discoverTripsError',
         );
       }
     } catch (e) {
+      if (generation != _discoverRequestGeneration) return;
       _discoverTripsError = 'An unexpected error occurred: $e';
       debugPrint('[FeedProvider] Load discover trips error: $e');
       debugPrint('[FeedProvider] Stack trace: ${StackTrace.current}');
     } finally {
-      _isDiscoverTripsLoading = false;
-      notifyListeners();
+      if (generation == _discoverRequestGeneration) {
+        _isDiscoverTripsLoading = false;
+        notifyListeners();
+      }
     }
   }
 
@@ -296,8 +388,10 @@ class FeedProvider extends ChangeNotifier {
     debugPrint('[FeedProvider] Resetting home feed');
     _homeFeedPosts.clear();
     _homeFeedPage = 1;
+    _homeFeedCursor = null;
     _hasMoreHomeFeedPosts = true;
     _homeFeedError = null;
+    _liveTripStories = [];
     notifyListeners();
   }
 
@@ -314,6 +408,8 @@ class FeedProvider extends ChangeNotifier {
     debugPrint('[FeedProvider] Clearing all feed data');
     _homeFeedPosts.clear();
     _discoverTrips.clear();
+    _homeFeedPage = 1;
+    _homeFeedCursor = null;
     _homeFeedError = null;
     _discoverTripsError = null;
     notifyListeners();

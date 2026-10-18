@@ -29,6 +29,7 @@ dependencies:
 
   # UI Components
   cupertino_icons: ^1.0.6
+  google_fonts: ^6.3.2
 
   # Form Validation
   form_field_validator: ^1.1.0

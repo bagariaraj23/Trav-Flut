@@ -3,6 +3,9 @@ import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
 import 'package:tripthread/providers/trip_provider.dart';
 import 'package:tripthread/models/trip_join_request.dart';
+import 'package:tripthread/utils/app_feedback.dart';
+import 'package:tripthread/utils/app_layout.dart';
+import 'package:tripthread/widgets/chat/chat_avatar.dart';
 
 class TripInvitationsScreen extends StatefulWidget {
   const TripInvitationsScreen({super.key});
@@ -31,20 +34,14 @@ class _TripInvitationsScreenState extends State<TripInvitationsScreen> {
     if (!mounted) return;
 
     if (success) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-              '${accept ? 'Accepted' : 'Rejected'} invitation for "$tripTitle"'),
-          backgroundColor: accept ? Colors.green : Colors.orange,
-        ),
+      AppFeedback.showSuccess(
+        context,
+        '${accept ? 'Accepted' : 'Rejected'} invitation for "$tripTitle"',
       );
     } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(tripProvider.tripInvitesError ??
-              'Failed to respond to invitation'),
-          backgroundColor: Colors.red,
-        ),
+      AppFeedback.showError(
+        context,
+        tripProvider.tripInvitesError ?? 'Failed to respond to invitation',
       );
     }
   }
@@ -76,7 +73,9 @@ class _TripInvitationsScreenState extends State<TripInvitationsScreen> {
             },
           ),
         ),
-      body: Consumer<TripProvider>(
+      body: AppLayout.reading(
+        context: context,
+        child: Consumer<TripProvider>(
         builder: (context, tripProvider, child) {
           if (tripProvider.isTripInvitesLoading &&
               tripProvider.pendingTripInvitations.isEmpty) {
@@ -84,39 +83,11 @@ class _TripInvitationsScreenState extends State<TripInvitationsScreen> {
           }
 
           if (tripProvider.tripInvitesError != null) {
-            return Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(
-                    Icons.error_outline,
-                    size: 64,
-                    color: Colors.red[300],
-                  ),
-                  const SizedBox(height: 16),
-                  Text(
-                    'Error loading invitations',
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w600,
-                      color: Colors.red[300],
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    tripProvider.tripInvitesError!,
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(color: Colors.grey),
-                  ),
-                  const SizedBox(height: 16),
-                  ElevatedButton(
-                    onPressed: () {
-                      tripProvider.loadPendingTripInvitations();
-                    },
-                    child: const Text('Retry'),
-                  ),
-                ],
-              ),
+            return AppFeedback.error(
+              context: context,
+              title: 'Error loading invitations',
+              message: tripProvider.tripInvitesError!,
+              onRetry: () => tripProvider.loadPendingTripInvitations(),
             );
           }
 
@@ -166,6 +137,7 @@ class _TripInvitationsScreenState extends State<TripInvitationsScreen> {
         },
       ),
       ),
+      ),
     );
   }
 
@@ -181,9 +153,11 @@ class _TripInvitationsScreenState extends State<TripInvitationsScreen> {
       return const SizedBox.shrink();
     }
 
+    final scheme = Theme.of(context).colorScheme;
+
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
-      elevation: 2,
+      elevation: 0,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
       ),
@@ -198,22 +172,11 @@ class _TripInvitationsScreenState extends State<TripInvitationsScreen> {
               Row(
                 children: [
                   // Sender Avatar
-                  CircleAvatar(
+                  ChatAvatar(
                     radius: 25,
-                    backgroundColor: Theme.of(context).colorScheme.primary,
-                    backgroundImage: sender.avatarUrl != null
-                        ? NetworkImage(sender.avatarUrl!)
-                        : null,
-                    child: sender.avatarUrl == null
-                        ? Text(
-                            sender.name?.substring(0, 1).toUpperCase() ?? 'U',
-                            style: const TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.white,
-                            ),
-                          )
-                        : null,
+                    avatarUrl: sender.avatarUrl,
+                    username: sender.username,
+                    name: sender.name,
                   ),
                   const SizedBox(width: 16),
                   // Sender Info & Trip Title
@@ -230,7 +193,7 @@ class _TripInvitationsScreenState extends State<TripInvitationsScreen> {
                         ),
                         if (sender.username != null)
                           Text(
-                            '@${sender.username}',
+                            sender.username!,
                             style: Theme.of(context)
                                 .textTheme
                                 .bodyMedium
@@ -345,8 +308,8 @@ class _TripInvitationsScreenState extends State<TripInvitationsScreen> {
                               ? null
                               : () => _handleResponse(invite.id, false, trip.title),
                       style: OutlinedButton.styleFrom(
-                        foregroundColor: Colors.red,
-                        side: BorderSide(color: Colors.red[300]!),
+                        foregroundColor: scheme.error,
+                        side: BorderSide(color: scheme.error.withValues(alpha: 0.5)),
                       ),
                       child: tripProvider.respondingTripInviteId == invite.id &&
                               tripProvider.respondingTripInviteAccept == false

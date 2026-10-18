@@ -1,15 +1,17 @@
 import 'package:flutter/material.dart';
+import 'package:tripthread/utils/app_theme.dart';
 
 class AvatarUtils {
+  /// Warm, distinguishable fallbacks. Same key always maps to the same color.
   static const List<Color> _palette = [
-    Color(0xFFEF5350),
-    Color(0xFFAB47BC),
-    Color(0xFF5C6BC0),
-    Color(0xFF29B6F6),
-    Color(0xFF26A69A),
-    Color(0xFF66BB6A),
-    Color(0xFFFFCA28),
-    Color(0xFFFF7043),
+    AppTheme.accent,
+    AppTheme.ink,
+    AppTheme.live,
+    AppTheme.upcoming,
+    AppTheme.likeRose,
+    Color(0xFF8C5A3C),
+    Color(0xFF6B7C3E),
+    Color(0xFF9A3412),
   ];
 
   /// Initials rule:
@@ -32,7 +34,7 @@ class AvatarUtils {
   /// Deterministic color from stable key (e.g. userId or conversationId).
   static Color colorForKey(String? key) {
     final normalized = (key ?? '').trim().toLowerCase();
-    if (normalized.isEmpty) return Colors.blueGrey;
+    if (normalized.isEmpty) return AppTheme.mutedForeground;
     final hash = normalized.codeUnits.fold<int>(0, (acc, c) => (acc * 31 + c) & 0x7fffffff);
     return _palette[hash % _palette.length];
   }

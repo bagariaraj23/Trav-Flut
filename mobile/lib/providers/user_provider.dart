@@ -295,7 +295,20 @@ class UserProvider extends ChangeNotifier {
     return null;
   }
 
-  Future<UserStats?> fetchUserStats(String userId) async {
+  final Map<String, Future<UserStats?>> _statsInFlight = {};
+  Future<void>? _followRequestsInFlight;
+
+  Future<UserStats?> fetchUserStats(String userId) {
+    final existing = _statsInFlight[userId];
+    if (existing != null) return existing;
+    final flight = _fetchUserStats(userId);
+    _statsInFlight[userId] = flight;
+    return flight.whenComplete(() {
+      _statsInFlight.remove(userId);
+    });
+  }
+
+  Future<UserStats?> _fetchUserStats(String userId) async {
     try {
       final response = await _apiService.getUserStats(userId);
       if (response.success && response.data != null) {
@@ -326,7 +339,19 @@ class UserProvider extends ChangeNotifier {
     return null;
   }
 
-  Future<void> loadPendingFollowRequests() async {
+  Future<void> loadPendingFollowRequests() {
+    final existing = _followRequestsInFlight;
+    if (existing != null) return existing;
+    final flight = _loadPendingFollowRequests();
+    _followRequestsInFlight = flight;
+    return flight.whenComplete(() {
+      if (identical(_followRequestsInFlight, flight)) {
+        _followRequestsInFlight = null;
+      }
+    });
+  }
+
+  Future<void> _loadPendingFollowRequests() async {
     _isFollowRequestsLoading = true;
     notifyListeners();
     try {
