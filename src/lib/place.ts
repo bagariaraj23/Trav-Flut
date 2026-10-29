@@ -10,7 +10,7 @@ import {
   upstashFetch,
 } from "@/lib/cache";
 import { checkRateLimit, getRequestIdentifier, RATE_LIMIT_PRESETS } from "@/lib/rateLimit";
-import { withLock } from "@/lib/mutex";
+import { acquireLock, releaseLock, withLock } from "@/lib/mutex";
 
 const placesProvider = new MapboxPlacesAdapter();
 
@@ -420,8 +420,40 @@ export async function searchPlaces(params: {
   return deduplicatedResults;
 }
 
-// Main resolve function
+// Main resolve function. External ids take a short Redis lock so concurrent
+// searches do not insert duplicate Place rows for the same Mapbox feature.
 export async function resolvePlace(input: PlaceInput) {
+  if (!input.externalId) {
+    return resolvePlaceInner(input);
+  }
+
+  const lockKey = `place:resolve:lock:${input.externalId}`;
+  let acquired = false;
+  try {
+    acquired = await acquireLock(lockKey, 8000);
+  } catch (error) {
+    console.warn(`[Place] Resolve lock failed for ${input.externalId}:`, error);
+    acquired = false;
+  }
+
+  if (!acquired) {
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    const existing = await prisma.place.findUnique({
+      where: { externalId: input.externalId },
+    });
+    if (existing) return existing;
+  }
+
+  try {
+    return await resolvePlaceInner(input);
+  } finally {
+    if (acquired) {
+      await releaseLock(lockKey);
+    }
+  }
+}
+
+async function resolvePlaceInner(input: PlaceInput) {
   const spatialKey = generateSpatialKey(input.lat, input.lng);
 
   // Generate reference cache keys

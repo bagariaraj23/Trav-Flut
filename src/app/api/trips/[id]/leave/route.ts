@@ -10,11 +10,14 @@ import {
 } from "@/lib/services/threadEntryPurge";
 import { assertMemberZeroNetOnTrip } from "@/lib/services/expense";
 import { UnsettledBalanceError } from "@/lib/errors";
+import { enforcePresetRateLimit } from "@/lib/rateLimit";
 
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const limited = await enforcePresetRateLimit(request, "write");
+  if (limited) return limited;
   try {
     const authHeader = request.headers.get("authorization");
     if (!authHeader?.startsWith("Bearer ")) {

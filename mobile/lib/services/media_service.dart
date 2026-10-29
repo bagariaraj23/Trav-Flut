@@ -350,6 +350,8 @@ class MediaService {
             'signature': uploadParams['signature'],
             'folder': uploadParams['folder'],
             'public_id': uploadParams['publicId'],
+            if (uploadParams['uploadPreset'] != null)
+              'upload_preset': uploadParams['uploadPreset'],
           });
 
           final response = await _uploadClient.post(

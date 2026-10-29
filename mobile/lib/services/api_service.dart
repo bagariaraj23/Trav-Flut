@@ -1593,12 +1593,17 @@ class ApiService {
   Future<ApiResponse<Map<String, dynamic>>> getHomeFeed({
     int page = 1,
     int limit = 20,
+    String? cursor,
   }) async {
     try {
       debugPrint('[ApiService] Getting home feed: page=$page, limit=$limit');
       final response = await _dio.get(
         '/feed/home',
-        queryParameters: {'page': page.toString(), 'limit': limit.toString()},
+        queryParameters: {
+          'page': page.toString(),
+          'limit': limit.toString(),
+          if (cursor != null && cursor.isNotEmpty) 'cursor': cursor,
+        },
       );
       debugPrint('[ApiService] Get home feed response: ${response.statusCode}');
 

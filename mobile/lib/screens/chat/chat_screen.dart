@@ -11,6 +11,7 @@ import 'package:tripthread/models/chat_message.dart';
 import 'package:tripthread/providers/chat_provider.dart';
 import 'package:tripthread/providers/auth_provider.dart';
 import 'package:tripthread/services/media_service.dart';
+import 'package:tripthread/utils/cloudinary_utils.dart';
 import 'package:tripthread/utils/avatar_utils.dart';
 import 'package:tripthread/widgets/chat/chat_avatar.dart';
 
@@ -1223,7 +1224,7 @@ class _MessageBubble extends StatelessWidget {
                       child: ClipRRect(
                         borderRadius: BorderRadius.circular(8),
                         child: CachedNetworkImage(
-                          imageUrl: a.url,
+                          imageUrl: buildOptimizedImageUrl(a.url, width: 800),
                           fit: BoxFit.cover,
                           maxWidthDiskCache: 400,
                           maxHeightDiskCache: 400,
@@ -1244,7 +1245,7 @@ class _MessageBubble extends StatelessWidget {
                           alignment: Alignment.center,
                           children: [
                             CachedNetworkImage(
-                              imageUrl: a.url,
+                              imageUrl: buildVideoThumbnailUrl(a.url, maxWidth: 800),
                               fit: BoxFit.cover,
                               width: double.infinity,
                               height: 200,

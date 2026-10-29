@@ -18,6 +18,7 @@ export async function POST(request: NextRequest) {
   const loggedHandler = withLogging(async (req) => {
     return withRateLimit(
       req,
+      "write",
       async (rateLimitedReq) => {
         return withAuth(rateLimitedReq, async (authenticatedReq) => {
           const endTimer =
@@ -390,7 +391,7 @@ export async function POST(request: NextRequest) {
 // Get user's trips
 export async function GET(request: NextRequest) {
   const loggedHandler = withLogging(async (req) => {
-    return withRateLimit(req, async (rateLimitedReq) => {
+    return withRateLimit(req, "read_hot", async (rateLimitedReq) => {
       return withAuth(rateLimitedReq, async (authenticatedReq) => {
         const endTimer =
           PerformanceMonitor.getInstance().startTimer("get_trips");
@@ -432,12 +433,20 @@ export async function GET(request: NextRequest) {
                   updatedAt: true,
                 },
               },
-              coverMedia: true,
-              _count: {
+              coverMedia: {
                 select: {
-                  threadEntries: true,
-                  media: true,
-                  participants: true,
+                  id: true,
+                  url: true,
+                  publicId: true,
+                  type: true,
+                  filename: true,
+                  size: true,
+                  width: true,
+                  height: true,
+                  duration: true,
+                  uploadedById: true,
+                  tripId: true,
+                  createdAt: true,
                 },
               },
             },
