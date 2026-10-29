@@ -1341,9 +1341,9 @@ class _TripThreadScreenState extends State<TripThreadScreen>
                   child: user?.avatarUrl == null
                       ? Text(
                           user?.name?.substring(0, 1).toUpperCase() ?? 'U',
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 12,
-                            color: Colors.white,
+                            color: Theme.of(context).colorScheme.onPrimary,
                           ),
                         )
                       : null,

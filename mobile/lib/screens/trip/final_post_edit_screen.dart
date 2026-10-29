@@ -6,6 +6,7 @@ import 'package:tripthread/providers/auth_provider.dart';
 import 'package:tripthread/providers/final_post_provider.dart';
 import 'package:tripthread/services/trip_service.dart';
 import 'package:tripthread/utils/app_layout.dart';
+import 'package:tripthread/utils/app_theme.dart';
 import 'package:tripthread/utils/cloudinary_utils.dart';
 
 class FinalPostEditScreen extends StatefulWidget {
@@ -271,10 +272,10 @@ class _FinalPostEditScreenState extends State<FinalPostEditScreen> {
             Container(
               height: 180,
               decoration: BoxDecoration(
-                gradient: LinearGradient(
+                gradient: const LinearGradient(
                   colors: [
-                    Theme.of(context).colorScheme.primary,
-                    Theme.of(context).colorScheme.secondary,
+                    AppTheme.accent,
+                    AppTheme.accentDark,
                   ],
                 ),
               ),

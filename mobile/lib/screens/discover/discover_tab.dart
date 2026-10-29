@@ -523,10 +523,12 @@ class _DiscoverTabState extends State<DiscoverTab> {
                                           ?.substring(0, 1)
                                           .toUpperCase() ??
                                       'U',
-                                  style: const TextStyle(
+                                  style: TextStyle(
                                     fontSize: 7,
                                     fontWeight: FontWeight.bold,
-                                    color: Colors.white,
+                                    color: Theme.of(context)
+                                        .colorScheme
+                                        .onPrimary,
                                   ),
                                 )
                               : null,

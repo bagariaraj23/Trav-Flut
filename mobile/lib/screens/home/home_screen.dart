@@ -1357,14 +1357,23 @@ class _TripsTabState extends State<TripsTab> {
                     '/trip/${trip.id}/thread',
                     extra: {'from': '/trip/${trip.id}'},
                   ),
-                  icon: Icon(Icons.add, size: isLandscape ? 16 : 18),
+                  icon: Icon(
+                    Icons.add,
+                    size: isLandscape ? 16 : 18,
+                    color: AppTheme.ink,
+                  ),
                   label: Text(
                     'Add Entry',
-                    style: TextStyle(fontSize: isLandscape ? 12 : 14),
+                    style: TextStyle(
+                      fontSize: isLandscape ? 12 : 14,
+                      color: AppTheme.ink,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.white,
-                    foregroundColor: Theme.of(context).colorScheme.primary,
+                    foregroundColor: AppTheme.ink,
+                    iconColor: AppTheme.ink,
                     padding: EdgeInsets.symmetric(
                       vertical: isLandscape ? 8 : 12,
                     ),
@@ -1773,10 +1782,12 @@ class ProfileTab extends StatelessWidget {
                                 ? Text(
                                     user.name?.substring(0, 1).toUpperCase() ??
                                         'U',
-                                    style: const TextStyle(
+                                    style: TextStyle(
                                       fontSize: 24,
                                       fontWeight: FontWeight.bold,
-                                      color: Colors.white,
+                                      color: Theme.of(context)
+                                          .colorScheme
+                                          .onPrimary,
                                     ),
                                   )
                                 : null,
