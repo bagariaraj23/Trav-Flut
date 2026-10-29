@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:tripthread/providers/trip_provider.dart';
 import 'package:tripthread/models/trip_join_request.dart';
 import 'package:tripthread/utils/app_feedback.dart';
+import 'package:tripthread/utils/trip_time_format.dart';
 import 'package:tripthread/utils/app_layout.dart';
 import 'package:tripthread/widgets/chat/chat_avatar.dart';
 
@@ -280,7 +281,11 @@ class _TripInvitationsScreenState extends State<TripInvitationsScreen> {
                                   .onSurfaceVariant),
                           const SizedBox(width: 4),
                           Text(
-                            _formatDateRange(trip.startDate, trip.endDate),
+                            formatTripRange(
+                              trip.startDate,
+                              trip.endDate,
+                              scheduleTimezone: trip.scheduleTimezone,
+                            ),
                             style:
                                 Theme.of(context).textTheme.bodySmall?.copyWith(
                                       color: Theme.of(context)
@@ -351,16 +356,4 @@ class _TripInvitationsScreenState extends State<TripInvitationsScreen> {
     );
   }
 
-  String _formatDateRange(DateTime? start, DateTime? end) {
-    if (start == null && end == null) return 'Dates not set';
-    if (start == null) return 'Until ${_formatDate(end!)}';
-    if (end == null) return 'From ${_formatDate(start)}';
-    return '${_formatDate(start)} - ${_formatDate(end)}';
-  }
-
-  String _formatDate(DateTime date) {
-    // Extract only date components to avoid timezone issues
-    final dateOnly = DateTime.utc(date.year, date.month, date.day);
-    return '${dateOnly.day}/${dateOnly.month}/${dateOnly.year}';
-  }
 }
