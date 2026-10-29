@@ -2014,17 +2014,19 @@ class ApiService {
     int limit = 20,
     String? status,
     String? mood,
+    String? search,
     bool includePrivate = false,
   }) async {
     try {
       debugPrint(
-        '[ApiService] Getting discover trips: page=$page, limit=$limit, status=$status, mood=$mood',
+        '[ApiService] Getting discover trips: page=$page, limit=$limit, status=$status, mood=$mood, search=$search',
       );
       final queryParams = {
         'page': page.toString(),
         'limit': limit.toString(),
         if (status != null) 'status': status,
         if (mood != null) 'mood': mood,
+        if (search != null && search.trim().isNotEmpty) 'q': search.trim(),
         'includePrivate': includePrivate.toString(),
       };
 

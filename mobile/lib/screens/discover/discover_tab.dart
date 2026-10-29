@@ -66,13 +66,24 @@ class _DiscoverTabState extends State<DiscoverTab> {
         });
 
         if (query.isNotEmpty) {
-          debugPrint('[DiscoverTab] Searching for users with query: "$query"');
+          debugPrint(
+            '[DiscoverTab] Searching users and trips with query: "$query"',
+          );
           context.read<UserProvider>().searchUsers(
             search: query,
             refresh: true,
           );
+          context.read<FeedProvider>().loadDiscoverTrips(
+            refresh: true,
+            search: query,
+            applySearch: true,
+          );
         } else {
-          debugPrint('[DiscoverTab] Empty query, clearing user search');
+          debugPrint('[DiscoverTab] Empty query, restoring discover trips');
+          context.read<FeedProvider>().loadDiscoverTrips(
+            refresh: true,
+            applySearch: true,
+          );
         }
 
         setState(() {
@@ -291,7 +302,7 @@ class _DiscoverTabState extends State<DiscoverTab> {
             // Content based on search state
             Expanded(
               child: _showUserSearch
-                  ? _buildUserSearchResults()
+                  ? _buildCombinedSearchResults()
                   : _buildDiscoverTrips(),
             ),
           ],
@@ -301,7 +312,28 @@ class _DiscoverTabState extends State<DiscoverTab> {
     );
   }
 
-  Widget _buildUserSearchResults() {
+  Widget _buildCombinedSearchResults() {
+    final titleStyle = Theme.of(context).textTheme.titleSmall?.copyWith(
+      fontWeight: FontWeight.w600,
+    );
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
+          child: Text('People', style: titleStyle),
+        ),
+        Flexible(child: _buildUserSearchResults(embedded: true)),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
+          child: Text('Trips', style: titleStyle),
+        ),
+        Flexible(flex: 2, child: _buildDiscoverTrips()),
+      ],
+    );
+  }
+
+  Widget _buildUserSearchResults({bool embedded = false}) {
     return Consumer<UserProvider>(
       builder: (context, userProvider, child) {
         if (userProvider.discoverUsers.isEmpty &&
@@ -311,6 +343,14 @@ class _DiscoverTabState extends State<DiscoverTab> {
 
         if (userProvider.discoverUsers.isEmpty &&
             userProvider.discoverError == null) {
+          if (embedded) {
+            return const Center(
+              child: Text(
+                'No people found',
+                style: TextStyle(color: Colors.grey),
+              ),
+            );
+          }
           return AppFeedback.empty(
             context: context,
             icon: Icons.people_outline,
@@ -373,11 +413,14 @@ class _DiscoverTabState extends State<DiscoverTab> {
 
         if (feedProvider.discoverTrips.isEmpty &&
             feedProvider.discoverTripsError == null) {
+          final searching = feedProvider.discoverTripsQuery?.isNotEmpty == true;
           return AppFeedback.empty(
             context: context,
-            icon: Icons.explore_outlined,
-            title: 'Nothing to explore yet',
-            subtitle: 'Follow travellers to see their journeys here',
+            icon: searching ? Icons.search_off : Icons.explore_outlined,
+            title: searching ? 'No trips found' : 'Nothing to explore yet',
+            subtitle: searching
+                ? 'Try another title, place, or traveller'
+                : 'Follow travellers to see their journeys here',
           );
         }
 
