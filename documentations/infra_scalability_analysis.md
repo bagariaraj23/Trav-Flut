@@ -27,7 +27,7 @@ Logs show `prisma:error` PostgreSQL connection closed after idle or cold start. 
 
 ### Scheduler lag
 
-The trip-status job is hourly. A trip can sit in the wrong status for up to an hour if nobody opens it. Read paths call `syncTripById` / `syncViewerTripSchedule`, so an opened trip corrects itself. A tighter schedule, or a scheduled wake at the stored UTC instant, is still missing for trips nobody opens.
+The local Docker stack runs the trip-status job every `SCHEDULER_INTERVAL_SECONDS` (default 300). The Railway cron is still hourly, so in production a trip can sit in the wrong status for up to an hour if nobody opens it. Read paths call `syncTripById` / `syncViewerTripSchedule`, so an opened trip corrects itself. A tighter schedule, or a scheduled wake at the stored UTC instant, is still missing for trips nobody opens.
 
 ### Cloudinary presets are an ops prerequisite
 
@@ -43,6 +43,10 @@ Set `SHARE_LINK_BASE_URL` to the public Next origin. Replace `TEAMID` and the An
 - Media quota accounting can overshoot under concurrent uploads.
 
 The cache stampede on hot reads is treated as fixed.
+
+## Local Docker stack
+
+`docker compose up --build -d` runs Postgres, the backend (`server.cjs`, REST and `/chat`), and the scheduler. The backend applies migrations with `prisma migrate deploy` and baselines older `db push` volumes once. `docker compose --profile test run --rm api-tests` and `mobile-tests` run the Vitest and Flutter suites in containers. Redis stays Upstash REST; there is no Redis container.
 
 ## Explicitly not the next move
 

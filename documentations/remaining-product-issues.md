@@ -32,5 +32,5 @@ Warm UI consistency landed on `feat-ui-warm-polish`: feed, discover, profile, no
 ## UX follow-ups (not regressions)
 
 - Map legend and the location pin stay red / green / blue on purpose.
-- Flutter widget tests were not run in this environment (no Flutter SDK). Backend Vitest is the check that older flows still pass.
+- Flutter tests now run in Docker (`docker compose --profile test run --rm mobile-tests`, Flutter 3.38.5). `flutter analyze` has no errors. 166 tests pass. 27 fail the same way on `main`: the comment/like service tests, the comment bottom sheet, comment composer, comments and liked-by screens, and the default counter smoke test. Their mocked services still reach the production API base URL and get “resource not found”. Fix the test harness (inject the HTTP client / base URL) before treating `mobile-tests` as a gate.
 - Empty and error copy now speaks in the product voice (“Couldn’t load your feed”, “You’re following them”). Do not reintroduce Material green and red snackbars on these screens.
