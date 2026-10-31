@@ -3,16 +3,7 @@ import 'package:tripthread/utils/app_theme.dart';
 
 class AvatarUtils {
   /// Warm, distinguishable fallbacks. Same key always maps to the same color.
-  static const List<Color> _palette = [
-    AppTheme.accent,
-    AppTheme.ink,
-    AppTheme.live,
-    AppTheme.upcoming,
-    AppTheme.likeRose,
-    Color(0xFF8C5A3C),
-    Color(0xFF6B7C3E),
-    Color(0xFF9A3412),
-  ];
+  static List<Color> get _palette => AppTheme.avatarPalette;
 
   /// Initials rule:
   /// first letter of first word + (first letter of second word,

@@ -1279,14 +1279,7 @@ class _TripsTabState extends State<TripsTab> {
       margin: EdgeInsets.all(isLandscape ? 12 : 16),
       padding: EdgeInsets.all(isLandscape ? 12 : 16),
       decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [
-            AppTheme.ink,
-            AppTheme.accent,
-          ],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
+        gradient: AppTheme.brandWash(Theme.of(context).brightness),
         borderRadius: BorderRadius.circular(12),
       ),
       child: Column(

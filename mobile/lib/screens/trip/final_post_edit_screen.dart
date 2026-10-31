@@ -272,12 +272,7 @@ class _FinalPostEditScreenState extends State<FinalPostEditScreen> {
             Container(
               height: 180,
               decoration: BoxDecoration(
-                gradient: const LinearGradient(
-                  colors: [
-                    AppTheme.accent,
-                    AppTheme.accentDark,
-                  ],
-                ),
+                gradient: AppTheme.brandWash(Theme.of(context).brightness),
               ),
               child: const Center(
                 child: Icon(Icons.photo, color: Colors.white, size: 48),

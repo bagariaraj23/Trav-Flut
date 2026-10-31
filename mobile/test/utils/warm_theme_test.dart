@@ -43,6 +43,17 @@ void main() {
     });
   });
 
+  test('brand washes follow the accent and stay ink-led in light mode', () {
+    final light = AppTheme.brandWash(Brightness.light);
+    expect(light.colors.first, AppTheme.ink);
+    expect(
+      AppTheme.accentSoft,
+      AppTheme.accent.withValues(alpha: 0.08),
+    );
+    expect(AppTheme.brandWash(Brightness.dark).colors.first, AppTheme.accent);
+    expect(AppTheme.accentGradient.colors, [AppTheme.accent, AppTheme.accentDark]);
+  });
+
   test('dark theme keeps the warm accent on buttons', () {
     return withThemeFonts(() async {
       final theme = AppTheme.darkTheme;

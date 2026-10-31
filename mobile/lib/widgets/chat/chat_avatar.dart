@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:tripthread/utils/app_theme.dart';
 import 'package:tripthread/utils/user_display_labels.dart';
 
 class ChatAvatar extends StatelessWidget {
@@ -51,16 +52,7 @@ class ChatAvatar extends StatelessWidget {
   }
 
   Color _getAvatarColor(String initial) {
-    final colors = [
-      const Color(0xFFC2692A),
-      const Color(0xFF5C7F67),
-      const Color(0xFF7B5EA7),
-      const Color(0xFF4A7FA5),
-      const Color(0xFFB45309),
-      const Color(0xFF78716C),
-      const Color(0xFF9A3412),
-      const Color(0xFF44403C),
-    ];
+    final colors = AppTheme.chatAvatarPalette;
     final index = initial.isEmpty ? 0 : initial.codeUnitAt(0) % colors.length;
     return colors[index];
   }

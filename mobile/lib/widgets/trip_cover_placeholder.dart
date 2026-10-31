@@ -35,16 +35,8 @@ class TripCoverPlaceholder extends StatelessWidget {
 
     return Container(
       width: double.infinity,
-      decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          colors: [
-            AppTheme.accent,
-            Color(0xFF8B4A1F),
-            AppTheme.ink,
-          ],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
+      decoration: BoxDecoration(
+        gradient: AppTheme.brandWash(Theme.of(context).brightness),
       ),
       child: Center(
         child: Padding(
