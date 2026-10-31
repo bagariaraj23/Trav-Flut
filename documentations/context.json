@@ -2242,7 +2242,7 @@
                 "created_at": "2026-10-04",
                 "updated_at": "2026-10-31",
                 "head": "2474db4",
-                "notes": "Stacked on PR #52. Accent is the blue pair (#1D6FE8 / #6AA8FF); change those two tokens to retint. Discover search covers people and trips. Trip chats use the trip name and the same member controls as groups. Back from a chat returns to the screen that opened it. See PR_docs/PR51_DESCRIPTION.md and PR_docs/PR51_COMPLETE_REVIEW.md.",
+                "notes": "Stacked on PR #52. Accent is the blue pair (#1D6FE8 / #6AA8FF); change those two tokens to retint. Discover search covers people and trips. Trip chats use the trip name and the same member controls as groups. Back from a chat returns to the screen that opened it.",
                 "keyFeatures": [
                     "Brand pair accent/accentDark drives washes, chips, and gradients; status colors stay separate",
                     "Discover search across people and trips, with All/People/Trips chips and a short preview",
@@ -2426,9 +2426,7 @@
                 "id": "warm-ui-polish",
                 "title": "Theme, Discover search, and trip chat (PR #51)",
                 "basis": [
-                    "PR #51",
-                    "PR_docs/PR51_DESCRIPTION.md",
-                    "PR_docs/PR51_COMPLETE_REVIEW.md"
+                    "PR #51"
                 ],
                 "status": "open",
                 "notes": "Head 2474db4 on feat-ui-warm-polish, still based on feat-api-db-optimizations (PR #52). Accent is blue. Includes Discover search and trip chat member controls."
