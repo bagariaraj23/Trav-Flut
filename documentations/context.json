@@ -2,9 +2,9 @@
     "project": {
         "name": "TripThread",
         "workspacePath": "/Users/rajbagaria/Desktop/Bolt-Travello/Flut/project",
-        "generatedAt": "2026-10-10",
+        "generatedAt": "2026-10-31",
         "description": "Travel-focused social platform where users create trips, post thread entries (text/media/location/check-ins), split trip expenses and settle up on a Money pane, generate/publish final trip posts, and chat via 1:1 DMs, groups, and trip-scoped rooms (realtime WebSocket).",
-        "lastPRReviewed": "PR #50 merged to main (2026-10-09) — trip expense ledger. Open stack: PR #52 API/DB optimizations (feat-api-db-optimizations → main), then PR #51 Warm UI (feat-ui-warm-polish → feat-api-db-optimizations). Cloudinary upload presets must exist in the dashboard (tripthread_thread_image, cover, video, avatar) before signed uploads that include upload_preset succeed. Universal Links ops (TEAMID/SHA-256 + SHARE_LINK_BASE_URL) still remaining.",
+        "lastPRReviewed": "PR #51 updated 2026-10-31 (head 2474db4) — blue accent, Discover people and trip search, trip chat member controls, and chat back navigation. Open stack: PR #52 API/DB optimizations (feat-api-db-optimizations → main), then PR #51 (feat-ui-warm-polish → feat-api-db-optimizations). Cloudinary upload presets must exist in the dashboard (tripthread_thread_image, cover, video, avatar) before signed uploads that include upload_preset succeed. Universal Links ops (TEAMID/SHA-256 + SHARE_LINK_BASE_URL) still remaining.",
         "recentProductionPRs": [
             "https://github.com/bagariaraj23/Trav-Flut/pull/50",
             "https://github.com/bagariaraj23/Trav-Flut/pull/49",
@@ -150,7 +150,7 @@
             "follow",
             "likes/comments/shares (POST /shares shareSource: SYSTEM_SHEET default, no shareCount bump; IN_APP_DM increments — wire from chat share UI; Universal Links still ops-only)",
             "notifications",
-            "chat (merged PR #48: REST /api/chat + WS /chat on server.cjs; DM/GROUP/TRIP; single-node event bus; rate-limit + Redis Pub/Sub + offline push deferred)"
+            "chat (merged PR #48: REST /api/chat + WS /chat on server.cjs; DM/GROUP/TRIP. Trip chats default to the trip title and use the same add/remove/promote/leave controls as groups. Leaving a chat does not leave the trip, and that leave is not undone on the next trip sync. Single-node event bus; rate-limit + Redis Pub/Sub + offline push deferred)"
         ],
         "keyTripFlow": {
             "createTrip": "POST /trips",
@@ -315,6 +315,12 @@
                 "path": "/chat/conversations/[id]/read",
                 "methods": [
                     "PATCH"
+                ]
+            },
+            {
+                "path": "/chat/conversations/[id]/leave",
+                "methods": [
+                    "POST"
                 ]
             },
             {
@@ -2228,20 +2234,22 @@
             },
             {
                 "number": 51,
-                "title": "Warm theme polish",
+                "title": "Blue theme, Discover search, and trip chat controls",
                 "state": "open",
                 "url": "https://github.com/bagariaraj23/Trav-Flut/pull/51",
                 "branch": "feat-ui-warm-polish",
                 "base": "feat-api-db-optimizations",
                 "created_at": "2026-10-04",
-                "notes": "Stacked on PR #52 (API/DB optimizations). Warm palette, short-phone auth spacing, cover placeholder, and readable outgoing chat status.",
+                "updated_at": "2026-10-31",
+                "head": "2474db4",
+                "notes": "Stacked on PR #52. Accent is the blue pair (#1D6FE8 / #6AA8FF); change those two tokens to retint. Discover search covers people and trips. Trip chats use the trip name and the same member controls as groups. Back from a chat returns to the screen that opened it. See PR_docs/PR51_DESCRIPTION.md and PR_docs/PR51_COMPLETE_REVIEW.md.",
                 "keyFeatures": [
-                    "AppTheme warm palette (cream/ink/terracotta), Playfair + DM Sans",
-                    "AppLayout auth spacing + reading width",
-                    "TripCoverPlaceholder, ChatAvatar blank-name fix, outgoing bubble contrast",
-                    "Flutter tests: warm_theme, chat_avatar, trip_cover_placeholder, like_button"
-                ],
-                "head": "feat-ui-warm-polish"
+                    "Brand pair accent/accentDark drives washes, chips, and gradients; status colors stay separate",
+                    "Discover search across people and trips, with All/People/Trips chips and a short preview",
+                    "Trip chat name defaults to the trip title; settings include add, remove, promote, leave, rename, and photo",
+                    "Leaving a chat does not leave the trip and is not undone by the next trip sync",
+                    "Chat back returns to Messages or the trip; every bubble ripples, edit/delete stays within 15 minutes"
+                ]
             },
             {
                 "number": 38,
@@ -2314,7 +2322,7 @@
             "notes": "See tests/TESTING.md and context.json testing section for suite inventory; run npm run test:coverage on Node 20+ with tripthread_test DB. Do not add platform-specific Rolldown bindings (e.g. @rolldown/binding-darwin-arm64) to root dependencies — breaks Railway Linux deploys (fixed in PR #47)."
         },
         "lastMergedFeature": "PR #50 Trip expense ledger (merged main 2026-10-09)",
-        "notes": "Expense ledger is on main. Open stack is PR #52 API/DB optimizations (base main), then PR #51 Warm UI (base feat-api-db-optimizations). Cloudinary dashboard presets are an ops prerequisite. Universal Links ops remain.",
+        "notes": "Expense ledger is on main. Open stack is PR #52 API/DB optimizations (base main), then PR #51 (base feat-api-db-optimizations, head 2474db4): blue accent, Discover search, and trip chat controls. Cloudinary dashboard presets are an ops prerequisite. Universal Links ops remain.",
         "mainBranchStable": true,
         "activeStack": [
             {
@@ -2412,17 +2420,18 @@
         }
     },
     "nextFeaturePipeline": {
-        "updatedAt": "2026-10-10",
+        "updatedAt": "2026-10-31",
         "priorityOrder": [
             {
                 "id": "warm-ui-polish",
-                "title": "Warm theme polish (PR #51)",
+                "title": "Theme, Discover search, and trip chat (PR #51)",
                 "basis": [
                     "PR #51",
-                    "PR_docs/PR51_DESCRIPTION.md"
+                    "PR_docs/PR51_DESCRIPTION.md",
+                    "PR_docs/PR51_COMPLETE_REVIEW.md"
                 ],
-                "status": "open-rebase-onto-main",
-                "notes": "Merge after rebase onto main post PR #50. Visual-only; no new expense APIs."
+                "status": "open",
+                "notes": "Head 2474db4 on feat-ui-warm-polish, still based on feat-api-db-optimizations (PR #52). Accent is blue. Includes Discover search and trip chat member controls."
             },
             {
                 "id": "test-suite-completeness",
