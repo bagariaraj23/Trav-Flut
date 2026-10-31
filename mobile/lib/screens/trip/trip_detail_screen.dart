@@ -8,6 +8,8 @@ import 'package:tripthread/models/user.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:tripthread/utils/app_layout.dart';
 import 'package:tripthread/utils/app_theme.dart';
+import 'package:tripthread/utils/trip_time_format.dart';
+import 'package:flutter_timezone/flutter_timezone.dart';
 import 'package:tripthread/utils/chat_navigation.dart';
 import 'package:tripthread/utils/user_display_labels.dart';
 import 'package:tripthread/utils/cloudinary_utils.dart';
@@ -67,13 +69,67 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
     }
   }
 
+  Future<String?> _deviceZone() async {
+    try {
+      final name = (await FlutterTimezone.getLocalTimezone()).identifier;
+      if (name.isNotEmpty) return name;
+    } catch (_) {}
+    return _trip?.scheduleTimezone;
+  }
+
+  Future<void> _changeEnd({bool clear = false}) async {
+    DateTime? picked = _trip?.endDate?.toLocal();
+    if (!clear) {
+      final now = DateTime.now();
+      final date = await showDatePicker(
+        context: context,
+        initialDate: picked ?? now.add(const Duration(days: 1)),
+        firstDate: DateTime(now.year, now.month, now.day),
+        lastDate: now.add(const Duration(days: 365)),
+      );
+      if (date == null || !mounted) return;
+      final time = await showTimePicker(
+        context: context,
+        initialTime: TimeOfDay.fromDateTime(picked ?? now),
+      );
+      if (time == null || !mounted) return;
+      picked = DateTime(date.year, date.month, date.day, time.hour, time.minute);
+    }
+
+    final messenger = ScaffoldMessenger.of(context);
+    final ok = await context.read<TripProvider>().updateTripDates(
+      tripId: widget.tripId,
+      endDate: clear ? null : picked,
+      clearEnd: clear,
+      scheduleTimezone: await _deviceZone(),
+    );
+    if (!mounted) return;
+    if (ok) {
+      messenger.showSnackBar(
+        SnackBar(content: Text(clear ? 'End time removed' : 'End time updated')),
+      );
+      await _loadTrip();
+    } else {
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(
+            context.read<TripProvider>().error ?? 'Could not update the end time',
+          ),
+        ),
+      );
+    }
+  }
+
   Future<void> _endTrip() async {
+    final beforeStart = _trip?.status == TripStatus.upcoming;
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('End Trip'),
-        content: const Text(
-          'Are you sure you want to end this trip? This will generate your final post.',
+        title: Text(beforeStart ? 'End trip before it starts?' : 'End Trip'),
+        content: Text(
+          beforeStart
+              ? 'This cancels the trip. A final post is not created.'
+              : 'Are you sure you want to end this trip? This will generate your final post.',
         ),
         actions: [
           TextButton(
@@ -97,10 +153,14 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
       if (!mounted) return;
       if (success) {
         messenger.showSnackBar(
-          const SnackBar(content: Text('Trip ended successfully! 🎉')),
+          SnackBar(
+            content: Text(
+              beforeStart ? 'Trip ended' : 'Trip ended successfully!',
+            ),
+          ),
         );
         await _loadTrip();
-        if (!mounted) return;
+        if (!mounted || beforeStart) return;
         navigator.go('/trip/${widget.tripId}/final-post');
       }
     }
@@ -949,6 +1009,25 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
                   ),
                 ),
               ],
+              if (isOwner) ...[
+                const SizedBox(height: 8),
+                OutlinedButton.icon(
+                  onPressed: _endTrip,
+                  icon: const Icon(Icons.stop_circle_outlined),
+                  label: const Text('End trip'),
+                ),
+                const SizedBox(height: 8),
+                OutlinedButton.icon(
+                  onPressed: () => _changeEnd(),
+                  icon: const Icon(Icons.event),
+                  label: Text(_trip!.endDate == null ? 'Set an end' : 'Change end'),
+                ),
+                if (_trip!.endDate != null)
+                  TextButton(
+                    onPressed: () => _changeEnd(clear: true),
+                    child: const Text('Remove end time'),
+                  ),
+              ],
               const SizedBox(height: 8),
             ],
             if (_trip!.status == TripStatus.ongoing) ...[
@@ -1004,6 +1083,17 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
                     );
                   },
                 ),
+                const SizedBox(height: 8),
+                OutlinedButton.icon(
+                  onPressed: () => _changeEnd(),
+                  icon: const Icon(Icons.event),
+                  label: Text(_trip!.endDate == null ? 'Set an end' : 'Change end'),
+                ),
+                if (_trip!.endDate != null)
+                  TextButton(
+                    onPressed: () => _changeEnd(clear: true),
+                    child: const Text('Remove end time'),
+                  ),
               ],
             ] else if (_trip!.status == TripStatus.ended) ...[
               if (_isOwnerOrParticipant()) ...[
@@ -1431,16 +1521,11 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
   }
 
   String _formatDateRange(DateTime? start, DateTime? end) {
-    if (start == null && end == null) return 'Dates not set';
-    if (start == null) return 'Until ${_formatDate(end!)}';
-    if (end == null) return 'From ${_formatDate(start)}';
-    return '${_formatDate(start)} - ${_formatDate(end)}';
-  }
-
-  String _formatDate(DateTime date) {
-    // Extract only date components to avoid timezone issues
-    final dateOnly = DateTime.utc(date.year, date.month, date.day);
-    return '${dateOnly.day}/${dateOnly.month}/${dateOnly.year}';
+    return formatTripRange(
+      start,
+      end,
+      scheduleTimezone: _trip?.scheduleTimezone,
+    );
   }
 
   String _formatDateTime(DateTime dateTime) {

@@ -4,7 +4,7 @@
         "workspacePath": "/Users/rajbagaria/Desktop/Bolt-Travello/Flut/project",
         "generatedAt": "2026-10-31",
         "description": "Travel-focused social platform where users create trips, post thread entries (text/media/location/check-ins), split trip expenses and settle up on a Money pane, generate/publish final trip posts, and chat via 1:1 DMs, groups, and trip-scoped rooms (realtime WebSocket).",
-        "lastPRReviewed": "PR #51 updated 2026-10-31 (head 2474db4) — blue accent, Discover people and trip search, trip chat member controls, and chat back navigation. Open stack: PR #52 API/DB optimizations (feat-api-db-optimizations → main), then PR #51 (feat-ui-warm-polish → feat-api-db-optimizations). Cloudinary upload presets must exist in the dashboard (tripthread_thread_image, cover, video, avatar) before signed uploads that include upload_preset succeed. Universal Links ops (TEAMID/SHA-256 + SHARE_LINK_BASE_URL) still remaining.",
+        "lastPRReviewed": "PR #51 merged to main on 2026-10-31. PR #55 is already on main. Open next: PR #54 trip create (feat-trip-create-ux → main), then PR #56 Docker (cursor/docker-stack-refresh-8029 → feat-trip-create-ux). Apply migration 20261014150000_trip_open_ended_schedule with PR #54. Cloudinary upload presets and Universal Links ops remain.",
         "recentProductionPRs": [
             "https://github.com/bagariaraj23/Trav-Flut/pull/50",
             "https://github.com/bagariaraj23/Trav-Flut/pull/49",
@@ -153,11 +153,12 @@
             "chat (merged PR #48: REST /api/chat + WS /chat on server.cjs; DM/GROUP/TRIP. Trip chats default to the trip title and use the same add/remove/promote/leave controls as groups. Leaving a chat does not leave the trip, and that leave is not undone on the next trip sync. Single-node event bus; rate-limit + Redis Pub/Sub + offline push deferred)"
         ],
         "keyTripFlow": {
-            "createTrip": "POST /trips",
+            "createTrip": "POST /trips — startDate optional (defaults to now, status ONGOING); endDate optional (null = manual end only); future start stays UPCOMING. Dates are UTC instants. scheduleTimezone is the IANA zone the wall time was chosen in. Omitted type becomes SOLO with typeSetByUser false.",
+            "updateTripDates": "PATCH /trips/[id]/dates — owner only, not ENDED. startDate only while UPCOMING. endDate may be set or cleared. End must be after start and in the future.",
             "threadEntries": "POST /trips/[id]/entries; GET cursor-paginated page { items, hasMoreOlder, nextOlderCursor } (limit default 30); GET /trips/[id]/entries/[entryId]/context returns a centered window around the target entry for deep-link jumps; DELETE/PATCH /trips/[id]/entries/[entryId] (PATCH: author text edit within 15m, owner may moderate later); shared purge in threadEntryPurge.ts",
             "participantLeave": "POST /trips/[id]/leave { removeMyData: boolean } — non-owner participant leaves; optional purge of author's entries (ONGOING only) now uses bulk cleanup path for scalability; blocked with 409 UNSETTLED_BALANCE when expense net ≠ 0",
             "tripExpenses": "GET/POST /trips/[id]/expenses; GET /trips/[id]/expenses/summary; DELETE /trips/[id]/expenses/[expenseId] (409 after any PAID settlement); POST /trips/[id]/settlements (payee only); DELETE settlements returns 409 (immutable); PATCH /trips/[id]/expense-settings (owner; currency frozen after first live expense)",
-            "endTripAndGenerateFinalPost": "POST /trips/[id]/end (transactionally marks ENDED + generates final post)",
+            "endTripAndGenerateFinalPost": "POST /trips/[id]/end — ONGOING marks ENDED, sets endDate to now, and generates the final post. UPCOMING marks ENDED without a final post.",
             "finalPostDraftEdit": "GET/PUT/DELETE /trips/[id]/final-post (DELETE owner-only; removes post + engagement)",
             "publishFinalPost": "POST /trips/[id]/publish",
             "homeFeed": "GET /feed/home (published final posts from self, followed users, and public users). Page/limit still works. Optional cursor (base64url {createdAt,id}) keyset-pages the next slice and returns nextCursor; the mobile FeedProvider sends that cursor. Trip card counts use denormalized entryCount/participantCount, not per-row _count. Discover count and page load in parallel."
@@ -930,11 +931,14 @@
             "scheduler/src/tripStatus.ts"
         ],
         "jobLogic": [
-            "End trips where endDate <= now and status in UPCOMING/ONGOING",
+            "End trips where endDate is set and endDate <= now and status in UPCOMING/ONGOING",
             "Generate final posts for ended trips if missing",
-            "Start trips where startDate <= now < endDate and status is UPCOMING"
+            "Start trips where startDate <= now and (endDate is null or endDate > now) and status is UPCOMING",
+            "Comparisons are UTC instants. Null endDate is manual end only. Trip reads apply the same rules so the app does not wait for the hourly run."
         ],
-        "observedDifferenceVsBackendFinalizer": "Scheduler has its own inline final-post generation logic and does not call backend TripFinalizerService directly."
+        "observedDifferenceVsBackendFinalizer": "Scheduler has its own inline final-post generation logic and does not call backend TripFinalizerService directly.",
+        "timeStorage": "startDate and endDate are absolute UTC instants. scheduleTimezone labels the zone used when the wall time was picked. Clients convert to the device zone for display. Legacy rows with a null scheduleTimezone and an exact UTC midnight stay date-only in the app.",
+        "tripType": "Unset type is SOLO. When typeSetByUser is false, participantCount >= 2 promotes the trip to GROUP and a drop back to 1 returns SOLO. COUPLE and FAMILY are never assigned automatically."
     },
     "scriptsAndOps": {
         "rootScripts": [
@@ -2216,14 +2220,14 @@
         ],
         "open": [
             {
-                "number": 52,
+                "number": 55,
                 "title": "API and database performance",
                 "state": "open",
-                "url": "https://github.com/bagariaraj23/Trav-Flut/pull/52",
+                "url": "https://github.com/bagariaraj23/Trav-Flut/pull/55",
                 "base": "main",
-                "head": "feat-api-db-optimizations",
-                "created_at": "2026-10-04",
-                "notes": "First open PR, based on main. Redis fails soft, hot-path indexes, keyset home feed, lean trip reads, and client fetch dedupe.",
+                "head": "cursor/api-db-performance-8029",
+                "created_at": "2026-10-18",
+                "notes": "Reviewable database diff against main. Same tree as feat-api-db-optimizations. PR #52 merged into the rewritten Warm UI branch and cannot be reopened. Redis fails soft, hot-path indexes, keyset home feed, lean trip reads, and client fetch dedupe.",
                 "keyFeatures": [
                     "Redis 250ms deadline and circuit breaker; getOrSet stampede lock",
                     "Hot-path Prisma indexes",
@@ -2235,20 +2239,36 @@
             {
                 "number": 51,
                 "title": "Blue theme, Discover search, and trip chat controls",
-                "state": "open",
+                "state": "merged",
                 "url": "https://github.com/bagariaraj23/Trav-Flut/pull/51",
                 "branch": "feat-ui-warm-polish",
-                "base": "feat-api-db-optimizations",
+                "base": "main",
                 "created_at": "2026-10-04",
                 "updated_at": "2026-10-31",
-                "head": "2474db4",
-                "notes": "Stacked on PR #52. Accent is the blue pair (#1D6FE8 / #6AA8FF); change those two tokens to retint. Discover search covers people and trips. Trip chats use the trip name and the same member controls as groups. Back from a chat returns to the screen that opened it.",
+                "merged_at": "2026-10-31",
+                "head": "479305b",
+                "notes": "Merged to main. Accent is the blue pair (#1D6FE8 / #6AA8FF). Discover search covers people and trips. Trip chats use the trip name and the same member controls as groups. Back from a chat returns to the screen that opened it. Rejoining a trip restores chat membership; a voluntary chat leave stays until an admin adds that person back.",
                 "keyFeatures": [
                     "Brand pair accent/accentDark drives washes, chips, and gradients; status colors stay separate",
                     "Discover search across people and trips, with All/People/Trips chips and a short preview",
                     "Trip chat name defaults to the trip title; settings include add, remove, promote, leave, rename, and photo",
                     "Leaving a chat does not leave the trip and is not undone by the next trip sync",
                     "Chat back returns to Messages or the trip; every bubble ripples, edit/delete stays within 15 minutes"
+                ]
+            },
+            {
+                "number": 54,
+                "title": "Trip create UX",
+                "state": "open",
+                "url": "https://github.com/bagariaraj23/Trav-Flut/pull/54",
+                "base": "main",
+                "head": "feat-trip-create-ux",
+                "created_at": "2026-10-14",
+                "notes": "Base is main after PR #51 merged. A trip can start now, keep an optional end, and store real UTC instants. Apply migration 20261014150000_trip_open_ended_schedule when this branch is deployed. Merge before PR #56.",
+                "keyFeatures": [
+                    "Optional start and end on create; missing start means ongoing now",
+                    "PATCH /trips/[id]/dates and end-on-demand",
+                    "Unset type stays Solo until someone else joins, then Group"
                 ]
             },
             {
@@ -2301,7 +2321,7 @@
         "plannedFeatures": 3,
         "totalPRs": 52,
         "mergedPRs": 47,
-        "openPRs": 5,
+        "openPRs": 6,
         "raceConditionFixes": {
             "total": 17,
             "fixed": 15,
@@ -2318,22 +2338,23 @@
             "integration": "Good — auth, trips, thread, leave, engagement, notifications, invites, concurrency, chat, trip-expense, trip-spend-visibility",
             "scheduler": "Partial — behavioral unit tests; DB integration tests exist but scheduler source still low line coverage",
             "reportPath": "coverage/index.html",
-            "lastRun": "2026-06-13",
-            "notes": "See tests/TESTING.md and context.json testing section for suite inventory; run npm run test:coverage on Node 20+ with tripthread_test DB. Do not add platform-specific Rolldown bindings (e.g. @rolldown/binding-darwin-arm64) to root dependencies — breaks Railway Linux deploys (fixed in PR #47)."
+            "lastRun": "2026-10-18",
+            "notes": "2026-10-18 Vitest (unit, scheduler, route contract, auth, signup, thread, leave, expenses, engagement, notifications, chat, follow requests, invites, spend visibility): database branch 29 files / 210 tests passed; Warm UI branch 29 files / 211 tests passed; trip-create tip 30 files / 215 tests passed. Flutter widget tests were not run (no Flutter SDK). Do not add platform-specific Rolldown bindings to root dependencies."
         },
-        "lastMergedFeature": "PR #50 Trip expense ledger (merged main 2026-10-09)",
-        "notes": "Expense ledger is on main. Open stack is PR #52 API/DB optimizations (base main), then PR #51 (base feat-api-db-optimizations, head 2474db4): blue accent, Discover search, and trip chat controls. Cloudinary dashboard presets are an ops prerequisite. Universal Links ops remain.",
+        "lastMergedFeature": "PR #51 Warm UI (merged main 2026-10-31)",
+        "notes": "PR #55 and PR #51 are on main. PR #54 (feat-trip-create-ux → main) is next: start-now, optional end, UTC instants, Solo until someone joins then Group. Apply migration 20261014150000_trip_open_ended_schedule when that branch is deployed. PR #56 stays based on feat-trip-create-ux until 54 is merged. Cloudinary dashboard presets and Universal Links ops remain.",
         "mainBranchStable": true,
         "activeStack": [
             {
-                "pr": 52,
-                "branch": "feat-api-db-optimizations",
-                "base": "main"
+                "pr": 54,
+                "branch": "feat-trip-create-ux",
+                "base": "main",
+                "mergeBefore": 56
             },
             {
-                "pr": 51,
-                "branch": "feat-ui-warm-polish",
-                "base": "feat-api-db-optimizations"
+                "pr": 56,
+                "branch": "cursor/docker-stack-refresh-8029",
+                "base": "feat-trip-create-ux"
             }
         ]
     },
@@ -2428,8 +2449,8 @@
                 "basis": [
                     "PR #51"
                 ],
-                "status": "open",
-                "notes": "Head 2474db4 on feat-ui-warm-polish, still based on feat-api-db-optimizations (PR #52). Accent is blue. Includes Discover search and trip chat member controls."
+                "status": "merged",
+                "notes": "Merged to main on 2026-10-31. Accent is blue. Includes Discover search and trip chat member controls."
             },
             {
                 "id": "test-suite-completeness",
@@ -2457,20 +2478,19 @@
                 "id": "prod-gaps-optimizations",
                 "title": "Production gaps & infra optimizations",
                 "basis": [
-                    "IDENTIFIED_ISSUES_AND_FIX_PLANS.md",
-                    "infra_scalability_analysis.md",
                     "Logs/Post-Wayanad.json",
                     "Logs/chikmagalur_logs.json"
                 ],
-                "status": "deferred",
+                "status": "partial-database-work-landed",
                 "highlights": [
-                    "Cloudinary upload presets + transformed delivery URLs",
-                    "Speed up /users/me and trip GET (indexes, lean queries, cache stampede lock)",
-                    "Neon connection resilience (already partial reconnect)",
-                    "Open product issues: trip dates/timezone (#6/#7/#8), continue/replace (#11), thread realtime (#15)",
-                    "Partial: logout-all (#9), share Universal Links ops (#32), avatar quirks (#19/#33)"
+                    "Done on the database branch: Redis fail-soft, stampede lock, hot-path indexes, keyset home feed, lean trip GET",
+                    "Still open: uncached GET /users/me, Neon reconnect, chat Redis Pub/Sub (keep replicas at 1)",
+                    "Cloudinary dashboard presets (tripthread_thread_image, cover, video, avatar)",
+                    "Product still open: continue/replace (#11), realtime thread (#15), location edit (#14), final-post reorder (#30)",
+                    "Dates/timezone (#6/#7/#8) are addressed on the trip-create branch",
+                    "Partial: logout-all (#9), share Universal Links ops (#32), Google avatar (#19), avatar deleted (#33), reply-to-reply (#37)"
                 ],
-                "notes": "Pick up later: /users/me and trip GET query/index work, Cloudinary presets, Neon reconnect, Rajasthan product issues except share (this PR)."
+                "notes": "Do not re-open stampede locking or lean trip GET. Next scale work is a short private cache for /users/me, Neon retry on a closed connection, and TCP Redis Pub/Sub before a second chat replica."
             },
             {
                 "id": "trip-link-share",
@@ -2488,17 +2508,17 @@
             {
                 "number": 6,
                 "title": "Extend trip end date",
-                "status": "Open"
+                "status": "Addressed on feat-trip-create-ux"
             },
             {
                 "number": 7,
                 "title": "Optional / dynamic trip dates",
-                "status": "Open"
+                "status": "Addressed on feat-trip-create-ux"
             },
             {
                 "number": 8,
                 "title": "Start/end time & timezone for scheduler",
-                "status": "Open"
+                "status": "Addressed on feat-trip-create-ux"
             },
             {
                 "number": 9,

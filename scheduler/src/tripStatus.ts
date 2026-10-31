@@ -19,9 +19,11 @@ export type UpdateTripStatusesResult = {
 };
 
 /**
- * Trip start/end dates are stored and compared in UTC (see app trip creation).
- * The scheduler should run at or after 00:00 UTC on the trip's start date for
- * UPCOMING → ONGOING. Cron "0 * * * *" runs at minute 0 each hour (UTC on Railway).
+ * Trip start/end values are absolute UTC instants (see src/lib/tripSchedule.ts).
+ * Null endDate is manual-end only and is not selected by the end query.
+ * Open-ended trips still start when startDate <= now.
+ * Cron "0 * * * *" runs at minute 0 each hour; trip reads apply the same rules
+ * so the app does not wait for the next run.
  */
 export async function updateTripStatuses(
   prisma: PrismaClient,
@@ -126,8 +128,8 @@ export async function updateTripStatuses(
     return tx.trip.updateMany({
       where: {
         startDate: { lte: now },
-        endDate: { gt: now },
         status: TripStatus.UPCOMING,
+        OR: [{ endDate: null }, { endDate: { gt: now } }],
       },
       data: { status: TripStatus.ONGOING },
     });
