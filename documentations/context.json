@@ -2478,8 +2478,6 @@
                 "id": "prod-gaps-optimizations",
                 "title": "Production gaps & infra optimizations",
                 "basis": [
-                    "documentations/remaining-product-issues.md",
-                    "documentations/infra_scalability_analysis.md",
                     "Logs/Post-Wayanad.json",
                     "Logs/chikmagalur_logs.json"
                 ],
