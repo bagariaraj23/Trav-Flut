@@ -8,6 +8,7 @@ import 'package:tripthread/providers/auth_provider.dart';
 import 'package:tripthread/providers/engagement_provider.dart';
 import 'package:tripthread/utils/app_feedback.dart';
 import 'package:tripthread/utils/app_theme.dart';
+import 'package:tripthread/utils/locale_dates.dart';
 import 'package:tripthread/utils/error_handler.dart';
 import 'package:tripthread/utils/user_display_labels.dart';
 import 'package:tripthread/widgets/chat/chat_avatar.dart';
@@ -398,7 +399,7 @@ class _CommentListItemState extends State<CommentListItem> {
     final difference = now.difference(dateTime);
 
     if (difference.inDays > 7) {
-      return '${dateTime.month}/${dateTime.day}';
+      return LocaleDates.monthDay(dateTime.toLocal());
     } else if (difference.inDays > 0) {
       return '${difference.inDays}d';
     } else if (difference.inHours > 0) {

@@ -5,7 +5,6 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:intl/intl.dart';
 import 'package:tripthread/models/chat_conversation.dart';
 import 'package:tripthread/models/chat_message.dart';
 import 'package:tripthread/providers/chat_provider.dart';
@@ -16,6 +15,7 @@ import 'package:tripthread/utils/app_theme.dart';
 import 'package:tripthread/utils/chat_navigation.dart';
 import 'package:tripthread/utils/cloudinary_utils.dart';
 import 'package:tripthread/utils/avatar_utils.dart';
+import 'package:tripthread/utils/locale_dates.dart';
 
 class ChatScreen extends StatefulWidget {
   final String conversationId;
@@ -479,18 +479,7 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   String _getDividerText(DateTime date) {
-    final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
-    final yesterday = today.subtract(const Duration(days: 1));
-    final msgDate = DateTime(date.year, date.month, date.day);
-
-    if (msgDate == today) {
-      return 'Today';
-    } else if (msgDate == yesterday) {
-      return 'Yesterday';
-    } else {
-      return DateFormat('MMMM d, yyyy').format(date);
-    }
+    return LocaleDates.dayHeading(date);
   }
 
   Widget _buildDateDivider(DateTime date) {
@@ -1404,7 +1393,7 @@ class _MessageBubble extends StatelessWidget {
   String _formatTime(String iso) {
     try {
       final d = DateTime.parse(iso);
-      return DateFormat.Hm().format(d);
+      return LocaleDates.timeOfDay(d.toLocal());
     } catch (_) {
       return '';
     }

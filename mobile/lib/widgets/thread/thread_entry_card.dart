@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import 'package:intl/intl.dart';
 import 'package:tripthread/models/trip.dart';
 import 'package:tripthread/utils/app_theme.dart';
+import 'package:tripthread/utils/locale_dates.dart';
 import 'package:tripthread/widgets/engagement/engagement_action_bar.dart';
 import 'package:tripthread/widgets/mention_text.dart';
 import 'package:tripthread/widgets/sheets/comment_bottom_sheet.dart';
@@ -271,7 +271,7 @@ class ThreadEntryCard extends StatelessWidget {
   }
 
   String _metaLine(String? locationLabel) {
-    final when = DateFormat('MMM d, h:mm a').format(entry.createdAt.toLocal());
+    final when = LocaleDates.mediumDateTime(entry.createdAt.toLocal());
     if (locationLabel != null && locationLabel.isNotEmpty) {
       return '$when · $locationLabel';
     }

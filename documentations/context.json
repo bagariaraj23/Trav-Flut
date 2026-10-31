@@ -44,7 +44,8 @@
             "secureStorage": "flutter_secure_storage",
             "mapping": "Mapbox (mapbox_maps_flutter) + geolocator/geocoding",
             "chat": "WebSocketChannel real-time sync with ChatSocketService + ChatProvider provider",
-            "tripExpenses": "ExpenseProvider + TripMoneyPane PageView (thread page 0, Money page 1); add-expense sheet; settle-up mark-as-paid (final, no undo); splits locked after settlement"
+            "tripExpenses": "ExpenseProvider + TripMoneyPane PageView (thread page 0, Money page 1); add-expense sheet; settle-up mark-as-paid (final, no undo); splits locked after settlement",
+            "dateDisplay": "Threads, comments, chats, and trip times use the device locale (language + region) from PlatformDispatcher. en_IN is day/month (20/3/2026, 20 Mar 2026). en_US is month/day (3/20/2026, Mar 20, 2026). en_GB is day/month with 24-hour time. Clock times follow the same locale. Material date pickers use that locale too."
         },
         "scheduler": {
             "type": "Independent cron-executable Node.js TypeScript service",
@@ -939,7 +940,7 @@
             "Comparisons are UTC instants. Null endDate is manual end only. Trip reads apply the same rules so the app does not wait for the hourly run."
         ],
         "observedDifferenceVsBackendFinalizer": "Scheduler has its own inline final-post generation logic and does not call backend TripFinalizerService directly.",
-        "timeStorage": "startDate and endDate are absolute UTC instants. scheduleTimezone labels the zone used when the wall time was picked. Clients convert to the device zone for display. Legacy rows with a null scheduleTimezone and an exact UTC midnight stay date-only in the app.",
+        "timeStorage": "startDate and endDate are absolute UTC instants. scheduleTimezone labels the zone used when the wall time was picked. Clients convert to the device zone, then format with the device locale so India shows day/month and the US shows month/day. Legacy rows with a null scheduleTimezone and an exact UTC midnight stay date-only in the app.",
         "tripType": "Unset type is SOLO. When typeSetByUser is false, participantCount >= 2 promotes the trip to GROUP and a drop back to 1 returns SOLO. COUPLE and FAMILY are never assigned automatically."
     },
     "scriptsAndOps": {

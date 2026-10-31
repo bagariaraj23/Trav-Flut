@@ -1,3 +1,5 @@
+import 'package:tripthread/utils/locale_dates.dart';
+
 class ZoneClock {
   final DateTime local;
   final String label;
@@ -6,21 +8,6 @@ class ZoneClock {
 }
 
 typedef ZoneConverter = ZoneClock Function(DateTime utc);
-
-const _months = [
-  'Jan',
-  'Feb',
-  'Mar',
-  'Apr',
-  'May',
-  'Jun',
-  'Jul',
-  'Aug',
-  'Sep',
-  'Oct',
-  'Nov',
-  'Dec',
-];
 
 bool isLegacyDateOnly(DateTime instant, {String? scheduleTimezone}) {
   if (scheduleTimezone != null && scheduleTimezone.isNotEmpty) return false;
@@ -32,7 +19,8 @@ bool isLegacyDateOnly(DateTime instant, {String? scheduleTimezone}) {
       utc.microsecond == 0;
 }
 
-/// UTC instants render in the viewer's zone. Legacy midnight rows stay a calendar date.
+/// UTC instants render in the viewer's zone and the device region's date order.
+/// Legacy midnight rows stay the stored calendar date, without a clock time.
 String formatTripInstant(
   DateTime instant, {
   String? scheduleTimezone,
@@ -40,17 +28,14 @@ String formatTripInstant(
 }) {
   final utc = instant.toUtc();
   if (isLegacyDateOnly(utc, scheduleTimezone: scheduleTimezone)) {
-    return '${utc.day} ${_months[utc.month - 1]} ${utc.year}';
+    return LocaleDates.mediumDate(DateTime.utc(utc.year, utc.month, utc.day));
   }
 
   final clock = convert?.call(utc) ??
       ZoneClock(local: utc.toLocal(), label: utc.toLocal().timeZoneName);
   final local = clock.local;
-  final hour12 = local.hour % 12 == 0 ? 12 : local.hour % 12;
-  final minute = local.minute.toString().padLeft(2, '0');
-  final period = local.hour >= 12 ? 'PM' : 'AM';
   final zone = clock.label.isEmpty ? '' : ' ${clock.label}';
-  return '${local.day} ${_months[local.month - 1]} ${local.year}, $hour12:$minute $period$zone';
+  return '${LocaleDates.mediumDate(local)}, ${LocaleDates.timeOfDay(local)}$zone';
 }
 
 String formatTripRange(
@@ -73,6 +58,5 @@ String formatTripRange(
 }
 
 String formatLocalDate(DateTime instant) {
-  final local = instant.toLocal();
-  return '${local.day}/${local.month}/${local.year}';
+  return LocaleDates.numericDate(instant.toLocal());
 }
