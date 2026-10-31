@@ -5,12 +5,75 @@ class AppTheme {
   static const Color ink = Color(0xFF1C1917);
   static const Color cream = Color(0xFFFAF8F4);
   static const Color card = Color(0xFFFFFFFF);
-  static const Color accent = Color(0xFFC2692A);
-  static const Color accentDark = Color(0xFFD4773A);
+  /// Brand pair. Change these two to retint buttons, chips, and gradients.
+  static const Color accent = Color(0xFF1D6FE8);
+  static const Color accentDark = Color(0xFF6AA8FF);
   static const Color muted = Color(0xFFEDE7DC);
   static const Color mutedForeground = Color(0xFF78716C);
   static const Color inputFill = Color(0xFFF5F1EB);
-  static const Color accentSoft = Color(0x14C2692A);
+
+  /// Same hue as [accent], at low opacity. Follows [accent] automatically.
+  static Color get accentSoft => accent.withValues(alpha: 0.08);
+
+  /// Darker blend of [accent] into [ink], for gradient mid-stops.
+  static Color get accentDeep => Color.alphaBlend(accent.withValues(alpha: 0.55), ink);
+
+  /// Full brand gradient. Use on dark surfaces.
+  static const LinearGradient accentGradient = LinearGradient(
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+    colors: [accent, accentDark],
+  );
+
+  /// Light mode stays mostly [ink], with a short accent edge.
+  /// Dark mode uses the brand color fading into [ink].
+  static LinearGradient brandWash(Brightness brightness) {
+    if (brightness == Brightness.light) {
+      return LinearGradient(
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+        colors: [
+          ink,
+          Color.alphaBlend(accent.withValues(alpha: 0.28), ink),
+        ],
+      );
+    }
+    return LinearGradient(
+      begin: Alignment.topLeft,
+      end: Alignment.bottomRight,
+      colors: [accent, accentDeep, ink],
+    );
+  }
+
+  /// Initials colors that are not the brand. They stay so avatars stay distinct.
+  static const Color avatarSage = Color(0xFF5C7F67);
+  static const Color avatarOlive = Color(0xFF6B7C3E);
+  static const Color avatarViolet = Color(0xFF7B5EA7);
+  static const Color avatarSlate = Color(0xFF4A7FA5);
+  static const Color avatarStone = Color(0xFF44403C);
+
+  static List<Color> get avatarPalette => [
+        accent,
+        ink,
+        live,
+        upcoming,
+        likeRose,
+        accentDeep,
+        avatarOlive,
+        accentDark,
+      ];
+
+  static List<Color> get chatAvatarPalette => [
+        accent,
+        avatarSage,
+        avatarViolet,
+        avatarSlate,
+        accentDark,
+        mutedForeground,
+        accentDeep,
+        avatarStone,
+      ];
+
   static const Color likeRose = Color(0xFFE11D48);
   static const Color live = Color(0xFF059669);
   static const Color upcoming = Color(0xFFD97706);
@@ -21,6 +84,14 @@ class AppTheme {
   static const Color darkText = Color(0xFFF0EAE0);
   static const Color darkMuted = Color(0xFF2E2720);
   static const Color darkMutedForeground = Color(0xFFA09080);
+
+  /// Placeholder disc behind a missing photo. Light beige in light mode,
+  /// dark brown in dark mode, with a foreground that stays readable on it.
+  static Color avatarFallbackBackground(Brightness brightness) =>
+      brightness == Brightness.dark ? darkMuted : muted;
+
+  static Color avatarFallbackForeground(Brightness brightness) =>
+      brightness == Brightness.dark ? darkText : ink;
 
   /// Selectable FilterChip / ChoiceChip with guaranteed contrast on warm surfaces.
   static Widget selectableChip({
@@ -262,7 +333,7 @@ class AppTheme {
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 0),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(999)),
         side: BorderSide(color: scheme.outlineVariant),
-        // Ensure selected FilterChip / ChoiceChip labels stay white on terracotta.
+        // Selected FilterChip / ChoiceChip labels stay white on the accent.
         brightness: brightness,
       ),
       dialogTheme: DialogThemeData(

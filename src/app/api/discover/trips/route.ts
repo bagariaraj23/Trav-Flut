@@ -57,8 +57,11 @@ export async function GET(request: NextRequest) {
             | "MIXED"
             | null;
 
+          const q = (searchParams.get("q") || "").trim().slice(0, 80);
+          const like = `%${q.replace(/[%_]/g, "")}%`;
+
           console.log(
-            `[API] GET /discover/trips - Filters: status=${status}, mood=${mood}`
+            `[API] GET /discover/trips - Filters: status=${status}, mood=${mood}, q=${q || "none"}`
           );
 
           // Get list of users that current user is following
@@ -125,6 +128,18 @@ export async function GET(request: NextRequest) {
             followedUserIds.length > 0
               ? Prisma.sql`CASE WHEN t."userId" IN (${Prisma.join(followedUserIds)}) THEN 0 ELSE 1 END`
               : Prisma.sql`1`;
+          const searchSql = q
+            ? Prisma.sql`AND (
+                t.title ILIKE ${like}
+                OR COALESCE(t.description, '') ILIKE ${like}
+                OR COALESCE(u.name, '') ILIKE ${like}
+                OR COALESCE(u.username, '') ILIKE ${like}
+                OR EXISTS (
+                  SELECT 1 FROM unnest(t.destinations) AS d
+                  WHERE d ILIKE ${like}
+                )
+              )`
+            : Prisma.empty;
 
           const [totalRows, rankedIds] = await Promise.all([
             prisma.$queryRaw<Array<{ count: bigint }>>`
@@ -135,6 +150,7 @@ export async function GET(request: NextRequest) {
                 AND ${statusSql}
                 ${moodSql}
                 AND ${audienceSql}
+                ${searchSql}
             `,
             prisma.$queryRaw<Array<{ id: string }>>`
               SELECT t.id
@@ -144,6 +160,7 @@ export async function GET(request: NextRequest) {
                 AND ${statusSql}
                 ${moodSql}
                 AND ${audienceSql}
+                ${searchSql}
               ORDER BY
                 ${followedRank},
                 (t."entryCount" + t."participantCount") DESC,

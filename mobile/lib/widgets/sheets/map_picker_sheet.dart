@@ -5,6 +5,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:tripthread/models/place.dart';
 import 'package:tripthread/providers/place_provider.dart';
 import 'package:tripthread/config/app_config.dart';
+import 'package:tripthread/utils/app_theme.dart';
 import 'package:provider/provider.dart';
 
 class MapPickerModal extends StatefulWidget {
@@ -400,7 +401,7 @@ class _MapPickerModalState extends State<MapPickerModal> {
                     }
                   },
                   backgroundColor: Colors.white,
-                  foregroundColor: Theme.of(context).colorScheme.primary,
+                  foregroundColor: AppTheme.ink,
                   child: const Icon(Icons.my_location),
                 ),
               ),
@@ -503,8 +504,10 @@ class _MapPickerModalState extends State<MapPickerModal> {
                           padding: const EdgeInsets.symmetric(vertical: 16),
                           backgroundColor: Theme.of(
                             context,
-                          ).colorScheme.primary,
-                          foregroundColor: Colors.white,
+                          ).colorScheme.secondary,
+                          foregroundColor: Theme.of(
+                            context,
+                          ).colorScheme.onSecondary,
                           disabledBackgroundColor: Theme.of(context)
                               .colorScheme
                               .onSurface

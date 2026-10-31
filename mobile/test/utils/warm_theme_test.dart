@@ -33,7 +33,7 @@ void main() {
     (ByteData? message) async => null,
   );
 
-  test('light theme uses cream surfaces and a terracotta accent', () {
+  test('light theme uses cream surfaces and the accent color', () {
     return withThemeFonts(() async {
       final theme = AppTheme.lightTheme;
       expect(theme.scaffoldBackgroundColor, AppTheme.cream);
@@ -43,7 +43,18 @@ void main() {
     });
   });
 
-  test('dark theme keeps the warm accent on buttons', () {
+  test('brand washes follow the accent and stay ink-led in light mode', () {
+    final light = AppTheme.brandWash(Brightness.light);
+    expect(light.colors.first, AppTheme.ink);
+    expect(
+      AppTheme.accentSoft,
+      AppTheme.accent.withValues(alpha: 0.08),
+    );
+    expect(AppTheme.brandWash(Brightness.dark).colors.first, AppTheme.accent);
+    expect(AppTheme.accentGradient.colors, [AppTheme.accent, AppTheme.accentDark]);
+  });
+
+  test('dark theme keeps the accent on buttons', () {
     return withThemeFonts(() async {
       final theme = AppTheme.darkTheme;
       expect(theme.scaffoldBackgroundColor, AppTheme.darkBackground);

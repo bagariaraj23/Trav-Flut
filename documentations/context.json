@@ -2,9 +2,9 @@
     "project": {
         "name": "TripThread",
         "workspacePath": "/Users/rajbagaria/Desktop/Bolt-Travello/Flut/project",
-        "generatedAt": "2026-10-18",
+        "generatedAt": "2026-10-31",
         "description": "Travel-focused social platform where users create trips, post thread entries (text/media/location/check-ins), split trip expenses and settle up on a Money pane, generate/publish final trip posts, and chat via 1:1 DMs, groups, and trip-scoped rooms (realtime WebSocket).",
-        "lastPRReviewed": "PR #50 merged to main (2026-10-09) — trip expense ledger. Git ancestry is main ← API/DB ← Warm UI ← trip create. Review the database diff as PR #55 (cursor/api-db-performance-8029 → main). PR #52 merged into the rewritten Warm UI branch and cannot be reopened. PR #51 (feat-ui-warm-polish) is still locked in GitHub stack 53 with base feat-expenses-split; do not merge it there — unstack in the GitHub UI, then set the base to feat-api-db-optimizations. PR #54 (feat-trip-create-ux → feat-ui-warm-polish) is create-only. Remaining: documentations/remaining-product-issues.md and documentations/infra_scalability_analysis.md.",
+        "lastPRReviewed": "PR #51 merged to main on 2026-10-31. PR #55 is already on main. Open next: PR #54 trip create (feat-trip-create-ux → main), then PR #56 Docker (cursor/docker-stack-refresh-8029 → feat-trip-create-ux). Apply migration 20261014150000_trip_open_ended_schedule with PR #54. Cloudinary upload presets and Universal Links ops remain.",
         "recentProductionPRs": [
             "https://github.com/bagariaraj23/Trav-Flut/pull/50",
             "https://github.com/bagariaraj23/Trav-Flut/pull/49",
@@ -150,7 +150,7 @@
             "follow",
             "likes/comments/shares (POST /shares shareSource: SYSTEM_SHEET default, no shareCount bump; IN_APP_DM increments — wire from chat share UI; Universal Links still ops-only)",
             "notifications",
-            "chat (merged PR #48: REST /api/chat + WS /chat on server.cjs; DM/GROUP/TRIP; single-node event bus; rate-limit + Redis Pub/Sub + offline push deferred)"
+            "chat (merged PR #48: REST /api/chat + WS /chat on server.cjs; DM/GROUP/TRIP. Trip chats default to the trip title and use the same add/remove/promote/leave controls as groups. Leaving a chat does not leave the trip, and that leave is not undone on the next trip sync. Single-node event bus; rate-limit + Redis Pub/Sub + offline push deferred)"
         ],
         "keyTripFlow": {
             "createTrip": "POST /trips — startDate optional (defaults to now, status ONGOING); endDate optional (null = manual end only); future start stays UPCOMING. Dates are UTC instants. scheduleTimezone is the IANA zone the wall time was chosen in. Omitted type becomes SOLO with typeSetByUser false.",
@@ -316,6 +316,12 @@
                 "path": "/chat/conversations/[id]/read",
                 "methods": [
                     "PATCH"
+                ]
+            },
+            {
+                "path": "/chat/conversations/[id]/leave",
+                "methods": [
+                    "POST"
                 ]
             },
             {
@@ -2232,31 +2238,33 @@
             },
             {
                 "number": 51,
-                "title": "Warm theme polish",
-                "state": "open",
+                "title": "Blue theme, Discover search, and trip chat controls",
+                "state": "merged",
                 "url": "https://github.com/bagariaraj23/Trav-Flut/pull/51",
                 "branch": "feat-ui-warm-polish",
-                "base": "feat-api-db-optimizations",
+                "base": "main",
                 "created_at": "2026-10-04",
-                "notes": "Git parent is the database branch. GitHub PR #51 is still locked to base feat-expenses-split (stack 53); do not merge it there. Warm palette, AppFeedback on feed/discover/profile/notifications/settings/share, rose attention badges, warm avatar fallbacks, trip-palette entry icons.",
+                "updated_at": "2026-10-31",
+                "merged_at": "2026-10-31",
+                "head": "479305b",
+                "notes": "Merged to main. Accent is the blue pair (#1D6FE8 / #6AA8FF). Discover search covers people and trips. Trip chats use the trip name and the same member controls as groups. Back from a chat returns to the screen that opened it. Rejoining a trip restores chat membership; a voluntary chat leave stays until an admin adds that person back.",
                 "keyFeatures": [
-                    "AppTheme warm palette (cream/ink/terracotta), Playfair + DM Sans",
-                    "AppLayout auth spacing + reading width",
-                    "TripCoverPlaceholder, ChatAvatar blank-name fix, outgoing bubble contrast",
-                    "AppFeedback empty/error/success; likeRose badges; warm AvatarUtils palette",
-                    "Flutter tests: warm_theme, chat_avatar, trip_cover_placeholder, like_button"
-                ],
-                "head": "feat-ui-warm-polish"
+                    "Brand pair accent/accentDark drives washes, chips, and gradients; status colors stay separate",
+                    "Discover search across people and trips, with All/People/Trips chips and a short preview",
+                    "Trip chat name defaults to the trip title; settings include add, remove, promote, leave, rename, and photo",
+                    "Leaving a chat does not leave the trip and is not undone by the next trip sync",
+                    "Chat back returns to Messages or the trip; every bubble ripples, edit/delete stays within 15 minutes"
+                ]
             },
             {
                 "number": 54,
                 "title": "Trip create UX",
                 "state": "open",
                 "url": "https://github.com/bagariaraj23/Trav-Flut/pull/54",
-                "base": "feat-ui-warm-polish",
+                "base": "main",
                 "head": "feat-trip-create-ux",
                 "created_at": "2026-10-14",
-                "notes": "Stacked on the Warm UI branch (PR #51). A trip can start now, keep an optional end, and store real UTC instants. Apply migration 20261014150000_trip_open_ended_schedule. Issues 6, 7, and 8 are addressed here.",
+                "notes": "Base is main after PR #51 merged. A trip can start now, keep an optional end, and store real UTC instants. Apply migration 20261014150000_trip_open_ended_schedule when this branch is deployed. Merge before PR #56.",
                 "keyFeatures": [
                     "Optional start and end on create; missing start means ongoing now",
                     "PATCH /trips/[id]/dates and end-on-demand",
@@ -2333,27 +2341,20 @@
             "lastRun": "2026-10-18",
             "notes": "2026-10-18 Vitest (unit, scheduler, route contract, auth, signup, thread, leave, expenses, engagement, notifications, chat, follow requests, invites, spend visibility): database branch 29 files / 210 tests passed; Warm UI branch 29 files / 211 tests passed; trip-create tip 30 files / 215 tests passed. Flutter widget tests were not run (no Flutter SDK). Do not add platform-specific Rolldown bindings to root dependencies."
         },
-        "lastMergedFeature": "PR #50 Trip expense ledger (merged main 2026-10-09)",
-        "notes": "Expense ledger is on main. Git ancestry is main ← feat-api-db-optimizations ← feat-ui-warm-polish ← feat-trip-create-ux. Review the database layer as PR #55 (base main). PR #52 is merged and cannot be reopened. PR #51's GitHub base is still feat-expenses-split until stack 53 is unstacked; the branch itself sits on the database commits. PR #54 is create-only on the Warm UI branch: start-now, optional end, UTC instants, Solo until someone joins then Group. Apply migration 20261014150000_trip_open_ended_schedule. Remaining product and scale items are in documentations/remaining-product-issues.md and documentations/infra_scalability_analysis.md.",
+        "lastMergedFeature": "PR #51 Warm UI (merged main 2026-10-31)",
+        "notes": "PR #55 and PR #51 are on main. PR #54 (feat-trip-create-ux → main) is next: start-now, optional end, UTC instants, Solo until someone joins then Group. Apply migration 20261014150000_trip_open_ended_schedule when that branch is deployed. PR #56 stays based on feat-trip-create-ux until 54 is merged. Cloudinary dashboard presets and Universal Links ops remain.",
         "mainBranchStable": true,
         "activeStack": [
             {
-                "pr": 55,
-                "branch": "cursor/api-db-performance-8029",
-                "base": "main",
-                "sameTreeAs": "feat-api-db-optimizations",
-                "supersedesMergedPr": 52
-            },
-            {
-                "pr": 51,
-                "branch": "feat-ui-warm-polish",
-                "gitBase": "feat-api-db-optimizations",
-                "githubBaseLocked": "feat-expenses-split"
-            },
-            {
                 "pr": 54,
                 "branch": "feat-trip-create-ux",
-                "base": "feat-ui-warm-polish"
+                "base": "main",
+                "mergeBefore": 56
+            },
+            {
+                "pr": 56,
+                "branch": "cursor/docker-stack-refresh-8029",
+                "base": "feat-trip-create-ux"
             }
         ]
     },
@@ -2440,17 +2441,16 @@
         }
     },
     "nextFeaturePipeline": {
-        "updatedAt": "2026-10-18",
+        "updatedAt": "2026-10-31",
         "priorityOrder": [
             {
                 "id": "warm-ui-polish",
-                "title": "Warm theme polish (PR #51)",
+                "title": "Theme, Discover search, and trip chat (PR #51)",
                 "basis": [
-                    "PR #51",
-                    "PR_docs/PR51_DESCRIPTION.md"
+                    "PR #51"
                 ],
-                "status": "open-stacked-on-database-branch",
-                "notes": "Git parent is the database branch. Includes the 2026-10-18 AppFeedback consistency pass. GitHub base is still locked to feat-expenses-split; do not merge there."
+                "status": "merged",
+                "notes": "Merged to main on 2026-10-31. Accent is blue. Includes Discover search and trip chat member controls."
             },
             {
                 "id": "test-suite-completeness",

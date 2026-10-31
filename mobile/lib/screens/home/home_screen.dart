@@ -34,6 +34,18 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   int _currentIndex = 0;
+  bool _appliedRouteTab = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_appliedRouteTab) return;
+    _appliedRouteTab = true;
+    final extra = GoRouterState.of(context).extra;
+    if (extra is Map && extra['tab'] == 'discover') {
+      _currentIndex = 2;
+    }
+  }
 
   @override
   void initState() {
@@ -604,12 +616,20 @@ class _HomeFeedScreenState extends State<HomeFeedScreen> {
                   },
                   child: CircleAvatar(
                     radius: 20,
-                    backgroundColor: AppTheme.muted,
+                    backgroundColor: AppTheme.avatarFallbackBackground(
+                      Theme.of(context).brightness,
+                    ),
                     backgroundImage: post.trip?.user?.avatarUrl != null
                         ? NetworkImage(post.trip!.user!.avatarUrl!)
                         : null,
                     child: post.trip?.user?.avatarUrl == null
-                        ? Icon(Icons.person, color: Colors.white, size: 20)
+                        ? Icon(
+                            Icons.person,
+                            color: AppTheme.avatarFallbackForeground(
+                              Theme.of(context).brightness,
+                            ),
+                            size: 20,
+                          )
                         : null,
                   ),
                 ),
@@ -628,6 +648,8 @@ class _HomeFeedScreenState extends State<HomeFeedScreen> {
                           post.trip?.user?.name ??
                               post.trip?.user?.username ??
                               'Travel Story',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                           style: Theme.of(context).textTheme.titleMedium
                               ?.copyWith(fontWeight: FontWeight.w600),
                         ),
@@ -1263,14 +1285,7 @@ class _TripsTabState extends State<TripsTab> {
       margin: EdgeInsets.all(isLandscape ? 12 : 16),
       padding: EdgeInsets.all(isLandscape ? 12 : 16),
       decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [
-            AppTheme.ink,
-            AppTheme.accent,
-          ],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
+        gradient: AppTheme.brandWash(Theme.of(context).brightness),
         borderRadius: BorderRadius.circular(12),
       ),
       child: Column(
@@ -1341,14 +1356,23 @@ class _TripsTabState extends State<TripsTab> {
                     '/trip/${trip.id}/thread',
                     extra: {'from': '/trip/${trip.id}'},
                   ),
-                  icon: Icon(Icons.add, size: isLandscape ? 16 : 18),
+                  icon: Icon(
+                    Icons.add,
+                    size: isLandscape ? 16 : 18,
+                    color: AppTheme.ink,
+                  ),
                   label: Text(
                     'Add Entry',
-                    style: TextStyle(fontSize: isLandscape ? 12 : 14),
+                    style: TextStyle(
+                      fontSize: isLandscape ? 12 : 14,
+                      color: AppTheme.ink,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.white,
-                    foregroundColor: Theme.of(context).colorScheme.primary,
+                    foregroundColor: AppTheme.ink,
+                    iconColor: AppTheme.ink,
                     padding: EdgeInsets.symmetric(
                       vertical: isLandscape ? 8 : 12,
                     ),
@@ -1751,10 +1775,12 @@ class ProfileTab extends StatelessWidget {
                                 ? Text(
                                     user.name?.substring(0, 1).toUpperCase() ??
                                         'U',
-                                    style: const TextStyle(
+                                    style: TextStyle(
                                       fontSize: 24,
                                       fontWeight: FontWeight.bold,
-                                      color: Colors.white,
+                                      color: Theme.of(context)
+                                          .colorScheme
+                                          .onPrimary,
                                     ),
                                   )
                                 : null,

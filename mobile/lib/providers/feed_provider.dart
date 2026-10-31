@@ -32,6 +32,8 @@ class FeedProvider extends ChangeNotifier {
   String? _discoverTripsError;
   int _discoverTripsPage = 1;
   bool _hasMoreDiscoverTrips = true;
+  int _discoverTripsTotal = 0;
+  String? _discoverTripsQuery;
   Future<void>? _discoverRefreshInFlight;
   String? _discoverRefreshKey;
   int _discoverRequestGeneration = 0;
@@ -49,6 +51,8 @@ class FeedProvider extends ChangeNotifier {
   bool get isDiscoverTripsLoading => _isDiscoverTripsLoading;
   String? get discoverTripsError => _discoverTripsError;
   bool get hasMoreDiscoverTrips => _hasMoreDiscoverTrips;
+  int get discoverTripsTotal => _discoverTripsTotal;
+  String? get discoverTripsQuery => _discoverTripsQuery;
 
   // Update a post in the home feed
   void updatePost(int index, TripFinalPost updatedPost) {
@@ -226,8 +230,14 @@ class FeedProvider extends ChangeNotifier {
     bool refresh = false,
     String? status,
     String? mood,
+    String? search,
+    bool applySearch = false,
   }) {
-    final key = '${status ?? ''}|${mood ?? ''}';
+    if (refresh && applySearch) {
+      final trimmed = search?.trim();
+      _discoverTripsQuery = (trimmed == null || trimmed.isEmpty) ? null : trimmed;
+    }
+    final key = '${status ?? ''}|${mood ?? ''}|${_discoverTripsQuery ?? ''}';
     if (refresh &&
         _discoverRefreshInFlight != null &&
         _discoverRefreshKey == key) {
@@ -239,6 +249,7 @@ class FeedProvider extends ChangeNotifier {
       refresh: refresh,
       status: status,
       mood: mood,
+      search: _discoverTripsQuery,
       generation: generation,
     );
     if (!refresh) return run;
@@ -258,6 +269,7 @@ class FeedProvider extends ChangeNotifier {
     bool refresh = false,
     String? status,
     String? mood,
+    String? search,
     required int generation,
   }) async {
     try {
@@ -265,6 +277,7 @@ class FeedProvider extends ChangeNotifier {
         _discoverTripsPage = 1;
         _discoverTrips.clear();
         _hasMoreDiscoverTrips = true;
+        _discoverTripsTotal = 0;
         _discoverTripsError = null;
         debugPrint(
           '[FeedProvider] Refreshing discover trips, page: $_discoverTripsPage',
@@ -280,13 +293,14 @@ class FeedProvider extends ChangeNotifier {
       notifyListeners();
 
       debugPrint(
-        '[FeedProvider] Loading discover trips, page: $_discoverTripsPage, limit: 20, status: $status, mood: $mood',
+        '[FeedProvider] Loading discover trips, page: $_discoverTripsPage, limit: 20, status: $status, mood: $mood, search: $search',
       );
       final response = await _apiService.getDiscoverTrips(
         page: _discoverTripsPage,
         limit: 20,
         status: status,
         mood: mood,
+        search: search,
         includePrivate: false, // Only fetch public and followed user trips
       );
 
@@ -308,6 +322,10 @@ class FeedProvider extends ChangeNotifier {
 
         final items = data['items'];
         final hasNext = data['hasNext'];
+        final totalRaw = data['total'];
+        if (totalRaw is int) {
+          _discoverTripsTotal = totalRaw;
+        }
 
         if (items is! List || hasNext is! bool) {
           throw Exception('Invalid response data types');
@@ -400,6 +418,8 @@ class FeedProvider extends ChangeNotifier {
     _discoverTrips.clear();
     _discoverTripsPage = 1;
     _hasMoreDiscoverTrips = true;
+    _discoverTripsTotal = 0;
+    _discoverTripsQuery = null;
     _discoverTripsError = null;
     notifyListeners();
   }

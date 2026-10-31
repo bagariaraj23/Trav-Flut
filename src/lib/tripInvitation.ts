@@ -237,7 +237,9 @@ export class TripInvitationService {
       });
 
       try {
-        await ensureTripConversation(request.tripId);
+        await ensureTripConversation(request.tripId, {
+          rejoinUserIds: [request.receiverId],
+        });
       } catch (chatErr) {
         console.error(
           `[WARN] Failed to sync trip chat after invite accept on ${request.tripId}:`,

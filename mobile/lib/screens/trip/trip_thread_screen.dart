@@ -1076,7 +1076,11 @@ class _TripThreadScreenState extends State<TripThreadScreen>
       child: Scaffold(
         resizeToAvoidBottomInset: true,
         appBar: AppBar(
-          title: Text(_trip?.title ?? 'Trip Thread'),
+          title: Text(
+            _trip?.title ?? 'Trip Thread',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
           leading: IconButton(
             icon: const Icon(Icons.arrow_back),
             onPressed: _leaveThread,
@@ -1341,9 +1345,9 @@ class _TripThreadScreenState extends State<TripThreadScreen>
                   child: user?.avatarUrl == null
                       ? Text(
                           user?.name?.substring(0, 1).toUpperCase() ?? 'U',
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 12,
-                            color: Colors.white,
+                            color: Theme.of(context).colorScheme.onPrimary,
                           ),
                         )
                       : null,
@@ -1945,15 +1949,23 @@ class _TripThreadScreenState extends State<TripThreadScreen>
                 children: [
                   CircleAvatar(
                     radius: 16,
-                    backgroundColor: AppTheme.muted,
+                    backgroundColor: AppTheme.avatarFallbackBackground(
+                      Theme.of(context).brightness,
+                    ),
                     backgroundImage: user?.avatarUrl != null
                         ? NetworkImage(user!.avatarUrl!)
                         : null,
                     child: user?.avatarUrl == null
                         ? Text(
-                            (user?.name ?? 'U').substring(0, 1).toUpperCase(),
-                            style: const TextStyle(
-                              color: AppTheme.ink,
+                            (user?.name?.trim().isNotEmpty == true
+                                    ? user!.name!.trim()
+                                    : 'U')
+                                .substring(0, 1)
+                                .toUpperCase(),
+                            style: TextStyle(
+                              color: AppTheme.avatarFallbackForeground(
+                                Theme.of(context).brightness,
+                              ),
                               fontSize: 12,
                               fontWeight: FontWeight.w600,
                             ),
@@ -2035,6 +2047,7 @@ class _TripThreadScreenState extends State<TripThreadScreen>
                         ThreadEntryType.text,
                         ThreadEntryType.media,
                         ThreadEntryType.location,
+                        ThreadEntryType.checkin,
                       ])
                         Expanded(child: _composerTypeTab(type)),
                     ],
@@ -2441,15 +2454,20 @@ class _TripThreadScreenState extends State<TripThreadScreen>
                                         vertical: 4,
                                       ),
                                       decoration: BoxDecoration(
-                                        color: Colors.white12,
+                                        color: Theme.of(context)
+                                            .colorScheme
+                                            .onSurface
+                                            .withValues(alpha: 0.08),
                                         borderRadius: BorderRadius.circular(
                                           999,
                                         ),
                                       ),
                                       child: Text(
                                         '${_pendingMediaBatch.length} more ${_pendingMediaBatch.length == 1 ? 'item' : 'items'} queued',
-                                        style: const TextStyle(
-                                          color: Colors.white,
+                                        style: TextStyle(
+                                          color: Theme.of(context)
+                                              .colorScheme
+                                              .onSurface,
                                           fontSize: 12,
                                           fontWeight: FontWeight.w500,
                                         ),
@@ -2461,7 +2479,10 @@ class _TripThreadScreenState extends State<TripThreadScreen>
                                     padding: const EdgeInsets.only(top: 12.0),
                                     child: LinearProgressIndicator(
                                       value: _uploadProgress?.clamp(0.0, 1.0),
-                                      backgroundColor: Colors.white12,
+                                      backgroundColor: Theme.of(context)
+                                          .colorScheme
+                                          .onSurface
+                                          .withValues(alpha: 0.12),
                                       color: Theme.of(
                                         context,
                                       ).colorScheme.secondary,
