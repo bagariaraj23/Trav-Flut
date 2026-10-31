@@ -13,6 +13,8 @@ import 'package:tripthread/utils/cloudinary_utils.dart';
 import 'package:tripthread/widgets/chat/chat_avatar.dart';
 import 'package:tripthread/widgets/trip_cover_placeholder.dart';
 
+enum _DiscoverResultPane { all, people, trips }
+
 class DiscoverTab extends StatefulWidget {
   const DiscoverTab({super.key});
 
@@ -27,6 +29,10 @@ class _DiscoverTabState extends State<DiscoverTab> {
   Timer? _debounceTimer;
   bool _isSearching = false;
   bool _showUserSearch = false;
+  _DiscoverResultPane _resultPane = _DiscoverResultPane.all;
+
+  static const int _peoplePreviewCount = 3;
+  static const int _tripPreviewCount = 4;
 
   @override
   void initState() {
@@ -58,39 +64,54 @@ class _DiscoverTabState extends State<DiscoverTab> {
   void _onSearchChanged(String query) {
     debugPrint('[DiscoverTab] Search query changed: "$query"');
     _debounceTimer?.cancel();
-    _debounceTimer = Timer(const Duration(milliseconds: 500), () {
-      if (mounted) {
-        setState(() {
-          _isSearching = true;
-          _showUserSearch = query.isNotEmpty;
-        });
+    final trimmed = query.trim();
+    if (trimmed.isEmpty) {
+      _restoreBrowse();
+      return;
+    }
 
-        if (query.isNotEmpty) {
-          debugPrint(
-            '[DiscoverTab] Searching users and trips with query: "$query"',
-          );
-          context.read<UserProvider>().searchUsers(
-            search: query,
-            refresh: true,
-          );
-          context.read<FeedProvider>().loadDiscoverTrips(
-            refresh: true,
-            search: query,
-            applySearch: true,
-          );
-        } else {
-          debugPrint('[DiscoverTab] Empty query, restoring discover trips');
-          context.read<FeedProvider>().loadDiscoverTrips(
-            refresh: true,
-            applySearch: true,
-          );
-        }
-
-        setState(() {
-          _isSearching = false;
-        });
-      }
+    setState(() {
+      _isSearching = true;
     });
+    _debounceTimer = Timer(const Duration(milliseconds: 500), () {
+      if (!mounted || _searchController.text.trim().isEmpty) return;
+      final current = _searchController.text.trim();
+      setState(() {
+        _isSearching = false;
+        _showUserSearch = true;
+      });
+      debugPrint(
+        '[DiscoverTab] Searching users and trips with query: "$current"',
+      );
+      context.read<UserProvider>().searchUsers(
+        search: current,
+        refresh: true,
+      );
+      context.read<FeedProvider>().loadDiscoverTrips(
+        refresh: true,
+        search: current,
+        applySearch: true,
+      );
+    });
+  }
+
+  void _restoreBrowse() {
+    debugPrint('[DiscoverTab] Empty query, restoring discover trips');
+    _debounceTimer?.cancel();
+    setState(() {
+      _isSearching = false;
+      _showUserSearch = false;
+      _resultPane = _DiscoverResultPane.all;
+    });
+    context.read<UserProvider>().resetDiscover();
+    context.read<FeedProvider>().loadDiscoverTrips(
+      refresh: true,
+      applySearch: true,
+    );
+  }
+
+  void _showPane(_DiscoverResultPane pane) {
+    setState(() => _resultPane = pane);
   }
 
   void _onScroll() {
@@ -267,9 +288,7 @@ class _DiscoverTabState extends State<DiscoverTab> {
                           ),
                           onPressed: () {
                             _searchController.clear();
-                            setState(() {
-                              _showUserSearch = false;
-                            });
+                            _restoreBrowse();
                           },
                           padding: const EdgeInsets.all(8),
                           constraints: const BoxConstraints(),
@@ -299,12 +318,9 @@ class _DiscoverTabState extends State<DiscoverTab> {
               ),
             ),
 
-            // Content based on search state
-            Expanded(
-              child: _showUserSearch
-                  ? _buildCombinedSearchResults()
-                  : _buildDiscoverTrips(),
-            ),
+            if (_showUserSearch) _buildResultChips(),
+
+            Expanded(child: _buildDiscoverBody()),
           ],
         ),
         ),
@@ -312,24 +328,197 @@ class _DiscoverTabState extends State<DiscoverTab> {
     );
   }
 
-  Widget _buildCombinedSearchResults() {
-    final titleStyle = Theme.of(context).textTheme.titleSmall?.copyWith(
-      fontWeight: FontWeight.w600,
+  Widget _buildDiscoverBody() {
+    if (!_showUserSearch) return _buildDiscoverTrips();
+    switch (_resultPane) {
+      case _DiscoverResultPane.people:
+        return _buildUserSearchResults();
+      case _DiscoverResultPane.trips:
+        return _buildDiscoverTrips();
+      case _DiscoverResultPane.all:
+        return _buildSearchOverview();
+    }
+  }
+
+  Widget _buildResultChips() {
+    return Consumer2<UserProvider, FeedProvider>(
+      builder: (context, userProvider, feedProvider, child) {
+        return Padding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
+          child: Align(
+            alignment: Alignment.centerLeft,
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: [
+                  _resultChip('All', _DiscoverResultPane.all),
+                  const SizedBox(width: 8),
+                  _resultChip(
+                    _chipLabel('People', userProvider.discoverUsersTotal),
+                    _DiscoverResultPane.people,
+                  ),
+                  const SizedBox(width: 8),
+                  _resultChip(
+                    _chipLabel('Trips', feedProvider.discoverTripsTotal),
+                    _DiscoverResultPane.trips,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
     );
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
-          child: Text('People', style: titleStyle),
+  }
+
+  String _chipLabel(String name, int total) {
+    if (total <= 0) return name;
+    return '$name · $total';
+  }
+
+  Widget _resultChip(String label, _DiscoverResultPane pane) {
+    return AppTheme.selectableChip(
+      context: context,
+      label: label,
+      selected: _resultPane == pane,
+      choice: true,
+      onSelected: (_) => _showPane(pane),
+    );
+  }
+
+  Widget _buildSearchOverview() {
+    return Consumer2<UserProvider, FeedProvider>(
+      builder: (context, userProvider, feedProvider, child) {
+        final people = userProvider.discoverUsers;
+        final peoplePreview = people.length > _peoplePreviewCount
+            ? people.sublist(0, _peoplePreviewCount)
+            : people;
+        final trips = feedProvider.discoverTrips;
+        final tripPreviewCount = trips.length > _tripPreviewCount
+            ? _tripPreviewCount
+            : trips.length;
+        final morePeople = userProvider.discoverUsersTotal > _peoplePreviewCount ||
+            people.length > _peoplePreviewCount;
+        final moreTrips = feedProvider.discoverTripsTotal > _tripPreviewCount ||
+            trips.length > _tripPreviewCount;
+
+        return ListView(
+          padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
+          children: [
+            _sectionHeader('People', userProvider.discoverUsersTotal),
+            if (peoplePreview.isEmpty && userProvider.isDiscoverLoading)
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 24),
+                child: Center(child: CircularProgressIndicator()),
+              )
+            else if (peoplePreview.isEmpty)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                child: Text(
+                  'No people found',
+                  style: TextStyle(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              )
+            else
+              ...peoplePreview.map((user) {
+                return _buildUserCard(
+                  context,
+                  user,
+                  user['isFollowing'] ?? false,
+                  user['isFollowedBy'] ?? false,
+                );
+              }),
+            if (morePeople)
+              _viewAllButton(
+                userProvider.discoverUsersTotal > _peoplePreviewCount
+                    ? 'View all ${userProvider.discoverUsersTotal} people'
+                    : 'View all people',
+                () => _showPane(_DiscoverResultPane.people),
+              ),
+            const SizedBox(height: 8),
+            _sectionHeader('Trips', feedProvider.discoverTripsTotal),
+            if (tripPreviewCount == 0 && feedProvider.isDiscoverTripsLoading)
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 24),
+                child: Center(child: CircularProgressIndicator()),
+              )
+            else if (tripPreviewCount == 0)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                child: Text(
+                  'No trips found',
+                  style: TextStyle(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              )
+            else
+              GridView.builder(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                itemCount: tripPreviewCount,
+                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: 2,
+                  crossAxisSpacing: 12,
+                  mainAxisSpacing: 12,
+                  childAspectRatio: 0.75,
+                ),
+                itemBuilder: (context, index) {
+                  return _buildDiscoverTripCard(context, trips[index]);
+                },
+              ),
+            if (moreTrips)
+              _viewAllButton(
+                feedProvider.discoverTripsTotal > _tripPreviewCount
+                    ? 'View all ${feedProvider.discoverTripsTotal} trips'
+                    : 'View all trips',
+                () => _showPane(_DiscoverResultPane.trips),
+              ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _sectionHeader(String title, int total) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.only(top: 8, bottom: 8),
+      child: Row(
+        children: [
+          Text(
+            title,
+            style: theme.textTheme.titleSmall?.copyWith(
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          if (total > 0) ...[
+            const SizedBox(width: 8),
+            Text(
+              '$total',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _viewAllButton(String label, VoidCallback onPressed) {
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: TextButton(
+        onPressed: onPressed,
+        style: TextButton.styleFrom(
+          foregroundColor: Theme.of(context).colorScheme.secondary,
+          padding: const EdgeInsets.symmetric(horizontal: 0, vertical: 8),
         ),
-        Flexible(child: _buildUserSearchResults(embedded: true)),
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
-          child: Text('Trips', style: titleStyle),
-        ),
-        Flexible(flex: 2, child: _buildDiscoverTrips()),
-      ],
+        child: Text(label),
+      ),
     );
   }
 
@@ -413,7 +602,8 @@ class _DiscoverTabState extends State<DiscoverTab> {
 
         if (feedProvider.discoverTrips.isEmpty &&
             feedProvider.discoverTripsError == null) {
-          final searching = feedProvider.discoverTripsQuery?.isNotEmpty == true;
+          final searching = _searchController.text.trim().isNotEmpty &&
+              feedProvider.discoverTripsQuery?.isNotEmpty == true;
           return AppFeedback.empty(
             context: context,
             icon: searching ? Icons.search_off : Icons.explore_outlined,

@@ -32,6 +32,7 @@ class FeedProvider extends ChangeNotifier {
   String? _discoverTripsError;
   int _discoverTripsPage = 1;
   bool _hasMoreDiscoverTrips = true;
+  int _discoverTripsTotal = 0;
   String? _discoverTripsQuery;
   Future<void>? _discoverRefreshInFlight;
   String? _discoverRefreshKey;
@@ -50,6 +51,7 @@ class FeedProvider extends ChangeNotifier {
   bool get isDiscoverTripsLoading => _isDiscoverTripsLoading;
   String? get discoverTripsError => _discoverTripsError;
   bool get hasMoreDiscoverTrips => _hasMoreDiscoverTrips;
+  int get discoverTripsTotal => _discoverTripsTotal;
   String? get discoverTripsQuery => _discoverTripsQuery;
 
   // Update a post in the home feed
@@ -275,6 +277,7 @@ class FeedProvider extends ChangeNotifier {
         _discoverTripsPage = 1;
         _discoverTrips.clear();
         _hasMoreDiscoverTrips = true;
+        _discoverTripsTotal = 0;
         _discoverTripsError = null;
         debugPrint(
           '[FeedProvider] Refreshing discover trips, page: $_discoverTripsPage',
@@ -319,6 +322,10 @@ class FeedProvider extends ChangeNotifier {
 
         final items = data['items'];
         final hasNext = data['hasNext'];
+        final totalRaw = data['total'];
+        if (totalRaw is int) {
+          _discoverTripsTotal = totalRaw;
+        }
 
         if (items is! List || hasNext is! bool) {
           throw Exception('Invalid response data types');
@@ -411,6 +418,8 @@ class FeedProvider extends ChangeNotifier {
     _discoverTrips.clear();
     _discoverTripsPage = 1;
     _hasMoreDiscoverTrips = true;
+    _discoverTripsTotal = 0;
+    _discoverTripsQuery = null;
     _discoverTripsError = null;
     notifyListeners();
   }
