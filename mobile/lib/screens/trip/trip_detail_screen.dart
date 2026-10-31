@@ -106,41 +106,66 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
     }
   }
 
+  /// Pop back to the screen that opened the trip. A replaced stack uses the
+  /// recorded `from` route, and `/home` keeps `explicitHome` so an ongoing
+  /// trip does not bounce this screen into the thread.
+  void _leaveTrip() {
+    if (!mounted) return;
+    final router = GoRouter.of(context);
+    if (router.canPop()) {
+      context.pop();
+      return;
+    }
+
+    final extra = GoRouterState.of(context).extra;
+    var location = '/home';
+    Object? nextExtra = const {'explicitHome': true};
+    if (extra is Map) {
+      final from = extra['from'];
+      if (from is String &&
+          from.startsWith('/') &&
+          !from.startsWith('//') &&
+          !from.contains('://')) {
+        location = from;
+      }
+      if (location == '/home' && extra['tab'] == 'discover') {
+        nextExtra = const {'explicitHome': true, 'tab': 'discover'};
+      } else if (location != '/home') {
+        nextExtra = null;
+      }
+    }
+    context.go(location, extra: nextExtra);
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
 
+    final landscape =
+        MediaQuery.of(context).orientation == Orientation.landscape;
+
     return PopScope(
       canPop: GoRouter.of(context).canPop(),
       onPopInvokedWithResult: (didPop, result) {
-        if (!didPop) {
-          // No route to pop to — navigate to home instead of exiting app.
-          context.go('/home', extra: {'explicitHome': true});
-        }
+        if (!didPop) _leaveTrip();
       },
       child: Scaffold(
         body: CustomScrollView(
           slivers: [
             SliverAppBar(
-              expandedHeight:
-                  MediaQuery.of(context).orientation == Orientation.landscape
-                  ? 150
-                  : 250,
+              expandedHeight: landscape ? 168 : 250,
               pinned: true,
               leading: IconButton(
                 icon: const Icon(Icons.arrow_back, color: Colors.white),
-                onPressed: () {
-                  // Always go to home with explicitHome to avoid redirect loop back to thread.
-                  context.go('/home', extra: {'explicitHome': true});
-                },
+                onPressed: _leaveTrip,
               ),
               flexibleSpace: FlexibleSpaceBar(
-                titlePadding: const EdgeInsets.only(
+                titlePadding: EdgeInsets.only(
                   left: 16,
                   right: 16,
-                  bottom: 88,
+                  bottom: landscape ? 56 : 88,
                 ),
                 title: Text(
                   _trip?.title ?? 'Trip Not Found',

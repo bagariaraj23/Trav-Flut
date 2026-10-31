@@ -80,7 +80,10 @@ class ThreadEntryCard extends StatelessWidget {
                               onTap: () => context.push('/profile/${entry.authorId}'),
                               child: CircleAvatar(
                                 radius: 16,
-                                backgroundColor: AppTheme.muted,
+                                backgroundColor:
+                                    AppTheme.avatarFallbackBackground(
+                                  Theme.of(context).brightness,
+                                ),
                                 backgroundImage: entry.author.avatarUrl != null
                                     ? NetworkImage(entry.author.avatarUrl!)
                                     : null,
@@ -92,8 +95,11 @@ class ThreadEntryCard extends StatelessWidget {
                                                 .substring(0, 1)
                                                 .toUpperCase()
                                             : 'U',
-                                        style: const TextStyle(
-                                          color: AppTheme.ink,
+                                        style: TextStyle(
+                                          color:
+                                              AppTheme.avatarFallbackForeground(
+                                            Theme.of(context).brightness,
+                                          ),
                                           fontWeight: FontWeight.w600,
                                           fontSize: 13,
                                         ),

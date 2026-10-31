@@ -669,10 +669,14 @@ class _AddParticipantDialogState extends State<AddParticipantDialog> {
                 padding: EdgeInsets.symmetric(vertical: 16),
                 child: Text('No users found'),
               ),
-            Flexible(
-              child: ListView.builder(
-                shrinkWrap: true,
-                itemCount: _searchResults.length,
+            if (_searchResults.isNotEmpty)
+              ConstrainedBox(
+                constraints: BoxConstraints(
+                  maxHeight: MediaQuery.sizeOf(context).height * 0.4,
+                ),
+                child: ListView.builder(
+                  shrinkWrap: true,
+                  itemCount: _searchResults.length,
                 itemBuilder: (context, index) {
                   final user = _searchResults[index];
                   final userId = user['id'] as String;
@@ -690,8 +694,16 @@ class _AddParticipantDialogState extends State<AddParticipantDialog> {
                       username: username,
                       name: name,
                     ),
-                    title: Text(name.isNotEmpty ? name : username),
-                    subtitle: Text(username),
+                    title: Text(
+                      name.isNotEmpty ? name : username,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    subtitle: Text(
+                      username,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                     trailing: isAlreadyMember
                         ? Text(
                             'Member',

@@ -955,6 +955,11 @@ class _ChatScreenState extends State<ChatScreen> {
                 itemBuilder: (context, index) {
                   final user = _mentionSuggestions[index];
                   final label = user.name ?? user.username ?? 'Unknown';
+                  final username = user.username;
+                  final primary = (username != null && username.isNotEmpty)
+                      ? username
+                      : label;
+                  final showSecondary = label.isNotEmpty && label != primary;
                   final initials = AvatarUtils.initialsFromName(
                     user.name ?? user.username ?? '',
                   );
@@ -985,15 +990,23 @@ class _ChatScreenState extends State<ChatScreen> {
                           const SizedBox(width: 10),
                           Expanded(
                             child: Text(
-                              user.username!,
+                              primary,
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                             ),
                           ),
-                          Text(
-                            label,
-                            style: Theme.of(context).textTheme.bodySmall,
-                          ),
+                          if (showSecondary) ...[
+                            const SizedBox(width: 8),
+                            Flexible(
+                              child: Text(
+                                label,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                textAlign: TextAlign.end,
+                                style: Theme.of(context).textTheme.bodySmall,
+                              ),
+                            ),
+                          ],
                         ],
                       ),
                     ),

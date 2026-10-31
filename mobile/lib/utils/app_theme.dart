@@ -85,6 +85,14 @@ class AppTheme {
   static const Color darkMuted = Color(0xFF2E2720);
   static const Color darkMutedForeground = Color(0xFFA09080);
 
+  /// Placeholder disc behind a missing photo. Light beige in light mode,
+  /// dark brown in dark mode, with a foreground that stays readable on it.
+  static Color avatarFallbackBackground(Brightness brightness) =>
+      brightness == Brightness.dark ? darkMuted : muted;
+
+  static Color avatarFallbackForeground(Brightness brightness) =>
+      brightness == Brightness.dark ? darkText : ink;
+
   /// Selectable FilterChip / ChoiceChip with guaranteed contrast on warm surfaces.
   static Widget selectableChip({
     required BuildContext context,
@@ -325,7 +333,7 @@ class AppTheme {
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 0),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(999)),
         side: BorderSide(color: scheme.outlineVariant),
-        // Ensure selected FilterChip / ChoiceChip labels stay white on terracotta.
+        // Selected FilterChip / ChoiceChip labels stay white on the accent.
         brightness: brightness,
       ),
       dialogTheme: DialogThemeData(

@@ -33,6 +33,18 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   int _currentIndex = 0;
+  bool _appliedRouteTab = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_appliedRouteTab) return;
+    _appliedRouteTab = true;
+    final extra = GoRouterState.of(context).extra;
+    if (extra is Map && extra['tab'] == 'discover') {
+      _currentIndex = 2;
+    }
+  }
 
   @override
   void initState() {
@@ -603,12 +615,20 @@ class _HomeFeedScreenState extends State<HomeFeedScreen> {
                   },
                   child: CircleAvatar(
                     radius: 20,
-                    backgroundColor: AppTheme.muted,
+                    backgroundColor: AppTheme.avatarFallbackBackground(
+                      Theme.of(context).brightness,
+                    ),
                     backgroundImage: post.trip?.user?.avatarUrl != null
                         ? NetworkImage(post.trip!.user!.avatarUrl!)
                         : null,
                     child: post.trip?.user?.avatarUrl == null
-                        ? Icon(Icons.person, color: Colors.white, size: 20)
+                        ? Icon(
+                            Icons.person,
+                            color: AppTheme.avatarFallbackForeground(
+                              Theme.of(context).brightness,
+                            ),
+                            size: 20,
+                          )
                         : null,
                   ),
                 ),
@@ -627,6 +647,8 @@ class _HomeFeedScreenState extends State<HomeFeedScreen> {
                           post.trip?.user?.name ??
                               post.trip?.user?.username ??
                               'Travel Story',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                           style: Theme.of(context).textTheme.titleMedium
                               ?.copyWith(fontWeight: FontWeight.w600),
                         ),
