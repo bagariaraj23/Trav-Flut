@@ -13,8 +13,12 @@ import {
   listConversations,
   markConversationRead,
   getOrCreateTripConversation,
+  ensureTripConversation,
+  markTripMemberLeftChat,
+  leaveGroup,
 } from "../../src/lib/services/chat";
 import { ValidationError, AuthorizationError } from "../../src/lib/errors";
+import { TripType } from "@prisma/client";
 
 describe("Chat Service Integration Tests", () => {
   beforeEach(async () => {
@@ -391,6 +395,79 @@ describe("Chat Service Integration Tests", () => {
 
       const synced = await getOrCreateTripConversation(trip.id, owner.id);
       expect(synced.participants).toHaveLength(3);
+    });
+
+    it("allows trip owner who is not in trip_participants to open trip chat", async () => {
+      const owner = await createUser({ email: "trip-owner-only@test.com" });
+      const trip = await createTrip({
+        userId: owner.id,
+        title: "Owner Only Chat",
+        type: TripType.GROUP,
+      });
+
+      const conv = await getOrCreateTripConversation(trip.id, owner.id);
+      expect(conv.type).toBe("TRIP");
+      expect(conv.participants.map((p) => p.userId)).toContain(owner.id);
+    });
+
+    it("rejoins someone who left the trip only when they are added back", async () => {
+      const owner = await createUser({ email: "rejoin-owner@test.com" });
+      const member = await createUser({ email: "rejoin-member@test.com" });
+      const trip = await createTrip({
+        userId: owner.id,
+        title: "Rejoin Trip",
+        type: TripType.GROUP,
+      });
+      await prisma.tripParticipant.create({
+        data: { tripId: trip.id, userId: member.id },
+      });
+
+      await ensureTripConversation(trip.id);
+      await markTripMemberLeftChat(trip.id, member.id);
+      await prisma.tripParticipant.delete({
+        where: { tripId_userId: { tripId: trip.id, userId: member.id } },
+      });
+
+      await prisma.tripParticipant.create({
+        data: { tripId: trip.id, userId: member.id },
+      });
+      await ensureTripConversation(trip.id);
+      const stillOut = await getOrCreateTripConversation(trip.id, owner.id);
+      expect(stillOut.participants.map((p) => p.userId)).not.toContain(member.id);
+
+      await ensureTripConversation(trip.id, { rejoinUserIds: [member.id] });
+      const back = await getOrCreateTripConversation(trip.id, owner.id);
+      expect(back.participants.map((p) => p.userId)).toContain(member.id);
+      expect(back.participants.find((p) => p.userId === member.id)?.role).toBe(
+        "MEMBER"
+      );
+    });
+
+    it("keeps a voluntary chat leave when someone else joins the trip", async () => {
+      const owner = await createUser({ email: "stay-out-owner@test.com" });
+      const member = await createUser({ email: "stay-out-member@test.com" });
+      const newcomer = await createUser({ email: "stay-out-new@test.com" });
+      const trip = await createTrip({
+        userId: owner.id,
+        title: "Stay Out Trip",
+        type: TripType.GROUP,
+      });
+      await prisma.tripParticipant.create({
+        data: { tripId: trip.id, userId: member.id },
+      });
+
+      const conv = await getOrCreateTripConversation(trip.id, member.id);
+      await leaveGroup(conv.id, member.id);
+
+      await prisma.tripParticipant.create({
+        data: { tripId: trip.id, userId: newcomer.id },
+      });
+      await ensureTripConversation(trip.id, { rejoinUserIds: [newcomer.id] });
+
+      const after = await getOrCreateTripConversation(trip.id, owner.id);
+      const ids = after.participants.map((p) => p.userId);
+      expect(ids).toContain(newcomer.id);
+      expect(ids).not.toContain(member.id);
     });
   });
 });

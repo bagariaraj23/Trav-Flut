@@ -11,9 +11,11 @@ import 'package:tripthread/models/chat_message.dart';
 import 'package:tripthread/providers/chat_provider.dart';
 import 'package:tripthread/providers/auth_provider.dart';
 import 'package:tripthread/services/media_service.dart';
+import 'package:tripthread/utils/app_layout.dart';
+import 'package:tripthread/utils/app_theme.dart';
+import 'package:tripthread/utils/chat_navigation.dart';
 import 'package:tripthread/utils/cloudinary_utils.dart';
 import 'package:tripthread/utils/avatar_utils.dart';
-import 'package:tripthread/widgets/chat/chat_avatar.dart';
 
 class ChatScreen extends StatefulWidget {
   final String conversationId;
@@ -161,9 +163,12 @@ class _ChatScreenState extends State<ChatScreen> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted) return;
       final chat = context.read<ChatProvider>();
       await chat.ensureConversationLoaded(widget.conversationId);
+      if (!mounted) return;
       await chat.loadMessages(widget.conversationId);
+      if (!mounted) return;
       chat.markRead(widget.conversationId);
       _scrollController.addListener(_onScroll);
     });
@@ -508,6 +513,10 @@ class _ChatScreenState extends State<ChatScreen> {
     );
   }
 
+  void _leave() {
+    leaveChatRoute(context, fallback: '/chat');
+  }
+
   @override
   Widget build(BuildContext context) {
     final currentUserId = context.watch<AuthProvider>().currentUser?.id ?? '';
@@ -520,7 +529,7 @@ class _ChatScreenState extends State<ChatScreen> {
           title: const Text('Chat'),
           leading: IconButton(
             icon: const Icon(Icons.arrow_back),
-            onPressed: () => context.pop(),
+            onPressed: _leave,
           ),
         );
       }
@@ -528,21 +537,21 @@ class _ChatScreenState extends State<ChatScreen> {
       final other = conversation.participants
           .where((p) => p.userId != currentUserId)
           .toList();
-      final title = conversation.name ??
-          (conversation.type == 'DM' && other.isNotEmpty
-              ? (other.first.name ?? other.first.username ?? 'User')
-              : 'Conversation');
-
       final isGroup = conversation.type == 'GROUP';
       final isTrip = conversation.type == 'TRIP';
+      final title = conversation.name?.trim().isNotEmpty == true
+          ? conversation.name!.trim()
+          : (conversation.type == 'DM' && other.isNotEmpty
+              ? (other.first.name ?? other.first.username ?? 'User')
+              : isTrip
+                  ? 'Trip chat'
+                  : 'Group');
       final otherDisplayName = other.isNotEmpty
           ? (other.first.name ?? other.first.username ?? '')
           : '';
-      final avatarLabel = isGroup
-          ? (conversation.name ?? 'Group')
-          : isTrip
-              ? 'Trip'
-              : otherDisplayName;
+      final avatarLabel = isGroup || isTrip
+          ? (title.isNotEmpty ? title : 'Trip')
+          : otherDisplayName;
       final avatarInitial = AvatarUtils.initialsFromName(avatarLabel);
       final avatarColor = AvatarUtils.colorForKey(
         isGroup || isTrip ? conversation.id : (other.isNotEmpty ? other.first.userId : ''),
@@ -573,10 +582,17 @@ class _ChatScreenState extends State<ChatScreen> {
 
       return AppBar(
         leadingWidth: 48,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          onPressed: _leave,
+        ),
         title: InkWell(
           onTap: () {
-            if (isGroup) {
-              context.push('/chat/${conversation.id}/settings');
+            if (isGroup || isTrip) {
+              context.push(
+                '/chat/${conversation.id}/settings',
+                extra: GoRouterState.of(context).extra,
+              );
             } else if (other.isNotEmpty) {
               context.push('/profile/${other.first.userId}');
             }
@@ -654,21 +670,32 @@ class _ChatScreenState extends State<ChatScreen> {
             ),
           ),
         ),
-        actions: isGroup
+        actions: isGroup || isTrip
             ? [
                 IconButton(
                   icon: const Icon(Icons.info_outline),
-                  onPressed: () => context.push('/chat/${conversation.id}/settings'),
-                  tooltip: 'Group details',
+                  onPressed: () => context.push(
+                    '/chat/${conversation.id}/settings',
+                    extra: GoRouterState.of(context).extra,
+                  ),
+                  tooltip: 'Chat details',
                 ),
               ]
             : null,
       );
     }
 
-    return Scaffold(
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop) return;
+        _leave();
+      },
+      child: Scaffold(
       appBar: buildAppBar(),
-      body: Column(
+      body: AppLayout.reading(
+        context: context,
+        child: Column(
         children: [
           Expanded(
             child: Consumer<ChatProvider>(
@@ -928,6 +955,11 @@ class _ChatScreenState extends State<ChatScreen> {
                 itemBuilder: (context, index) {
                   final user = _mentionSuggestions[index];
                   final label = user.name ?? user.username ?? 'Unknown';
+                  final username = user.username;
+                  final primary = (username != null && username.isNotEmpty)
+                      ? username
+                      : label;
+                  final showSecondary = label.isNotEmpty && label != primary;
                   final initials = AvatarUtils.initialsFromName(
                     user.name ?? user.username ?? '',
                   );
@@ -958,15 +990,23 @@ class _ChatScreenState extends State<ChatScreen> {
                           const SizedBox(width: 10),
                           Expanded(
                             child: Text(
-                              '@${user.username}',
+                              primary,
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                             ),
                           ),
-                          Text(
-                            label,
-                            style: Theme.of(context).textTheme.bodySmall,
-                          ),
+                          if (showSecondary) ...[
+                            const SizedBox(width: 8),
+                            Flexible(
+                              child: Text(
+                                label,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                textAlign: TextAlign.end,
+                                style: Theme.of(context).textTheme.bodySmall,
+                              ),
+                            ),
+                          ],
                         ],
                       ),
                     ),
@@ -1029,6 +1069,8 @@ class _ChatScreenState extends State<ChatScreen> {
             ),
           ),
         ],
+        ),
+      ),
       ),
     );
   }
@@ -1110,40 +1152,40 @@ class _MessageBubble extends StatelessWidget {
       message.sender.name ?? message.sender.username ?? '',
     );
     final avatarColor = AvatarUtils.colorForKey(message.sender.id);
-    final bubble = GestureDetector(
-      onLongPress: onLongPressAction == null || isDeleted ? null : onLongPressAction,
-      child: Container(
-        key: bubbleKey,
-        margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-        constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.68),
-        decoration: BoxDecoration(
-          color: isMe
-              ? Theme.of(context).colorScheme.primaryContainer
-              : Theme.of(context).colorScheme.surfaceContainerHighest,
-          border: isHighlighted
-              ? Border.all(
-                  color: Theme.of(context).colorScheme.primary,
-                  width: 2,
-                )
-              : (isMe
-                  ? null
-                  : Border.all(
-                      color: Theme.of(context).colorScheme.outlineVariant,
-                      width: 1,
-                    )),
-          boxShadow: isMe
-              ? null
-              : [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.04),
-                    blurRadius: 4,
-                    offset: const Offset(0, 2),
-                  ),
-                ],
-          borderRadius: BorderRadius.circular(16),
-        ),
-        child: Column(
+    final scheme = Theme.of(context).colorScheme;
+    final radius = BorderRadius.circular(16);
+    final canAct = onLongPressAction != null && !isDeleted;
+    final bubble = ConstrainedBox(
+      key: bubbleKey,
+      constraints: BoxConstraints(maxWidth: MediaQuery.sizeOf(context).width * 0.68),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        child: Material(
+          color: isMe ? scheme.primary : scheme.surface,
+          shape: RoundedRectangleBorder(
+            borderRadius: radius,
+            side: BorderSide(
+              color: isHighlighted
+                  ? AppTheme.accent
+                  : (isMe ? Colors.transparent : scheme.outlineVariant),
+              width: isHighlighted ? 2 : 1,
+            ),
+          ),
+          clipBehavior: Clip.antiAlias,
+          child: InkWell(
+            onTap: () => FocusScope.of(context).unfocus(),
+            onLongPress: canAct ? onLongPressAction : null,
+            borderRadius: radius,
+            splashFactory: InkRipple.splashFactory,
+            splashColor: isMe
+                ? scheme.onPrimary.withValues(alpha: 0.22)
+                : scheme.onSurface.withValues(alpha: 0.10),
+            highlightColor: isMe
+                ? scheme.onPrimary.withValues(alpha: 0.12)
+                : scheme.onSurface.withValues(alpha: 0.06),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -1175,7 +1217,7 @@ class _MessageBubble extends StatelessWidget {
                                 fontWeight: FontWeight.bold,
                                 fontSize: 11,
                                 color: isMe
-                                    ? Theme.of(context).colorScheme.onPrimaryContainer.withOpacity(0.9)
+                                    ? Theme.of(context).colorScheme.onPrimary.withOpacity(0.9)
                                     : Theme.of(context).colorScheme.onSurfaceVariant.withOpacity(0.9),
                               ),
                         ),
@@ -1185,7 +1227,7 @@ class _MessageBubble extends StatelessWidget {
                           style: Theme.of(context).textTheme.bodySmall?.copyWith(
                                 fontSize: 12,
                                 color: isMe
-                                    ? Theme.of(context).colorScheme.onPrimaryContainer.withOpacity(0.8)
+                                    ? Theme.of(context).colorScheme.onPrimary.withOpacity(0.8)
                                     : Theme.of(context).colorScheme.onSurfaceVariant.withOpacity(0.8),
                               ),
                           maxLines: 2,
@@ -1201,7 +1243,7 @@ class _MessageBubble extends StatelessWidget {
                   style: Theme.of(context).textTheme.bodyLarge?.copyWith(
                         fontStyle: FontStyle.italic,
                         color: isMe
-                            ? Theme.of(context).colorScheme.onPrimaryContainer.withOpacity(0.6)
+                            ? Theme.of(context).colorScheme.onPrimary.withOpacity(0.6)
                             : Theme.of(context).colorScheme.onSurfaceVariant.withOpacity(0.6),
                       ),
                 )
@@ -1262,7 +1304,7 @@ class _MessageBubble extends StatelessWidget {
                       '[${a.type}]',
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
                             color: isMe
-                                ? Theme.of(context).colorScheme.onPrimaryContainer.withOpacity(0.8)
+                                ? Theme.of(context).colorScheme.onPrimary.withOpacity(0.8)
                                 : Theme.of(context).colorScheme.onSurfaceVariant.withOpacity(0.8),
                           ),
                     ),
@@ -1294,7 +1336,7 @@ class _MessageBubble extends StatelessWidget {
                             strokeWidth: 1.5,
                             color: Theme.of(context)
                                 .colorScheme
-                                .onPrimaryContainer
+                                .onPrimary
                                 .withOpacity(0.7),
                           ),
                         ),
@@ -1304,7 +1346,7 @@ class _MessageBubble extends StatelessWidget {
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
                             fontSize: 10,
                             color: isMe
-                                ? Theme.of(context).colorScheme.onPrimaryContainer.withOpacity(0.7)
+                                ? Theme.of(context).colorScheme.onPrimary.withOpacity(0.7)
                                 : Theme.of(context).colorScheme.onSurfaceVariant.withOpacity(0.7),
                           ),
                     ),
@@ -1314,6 +1356,9 @@ class _MessageBubble extends StatelessWidget {
                 ),
               ),
           ],
+        ),
+            ),
+          ),
         ),
       ),
     );
@@ -1375,11 +1420,11 @@ class _MessageBubble extends StatelessWidget {
     final List<InlineSpan> spans = [];
     final textStyle = Theme.of(context).textTheme.bodyLarge?.copyWith(
           color: isMe
-              ? Theme.of(context).colorScheme.onPrimaryContainer
+              ? Theme.of(context).colorScheme.onPrimary
               : Theme.of(context).colorScheme.onSurfaceVariant,
         );
     final mentionColor = isMe
-        ? Theme.of(context).colorScheme.onPrimaryContainer
+        ? Theme.of(context).colorScheme.onPrimary
         : Theme.of(context).colorScheme.primary;
     final mentionStyle = textStyle?.copyWith(
           fontWeight: FontWeight.bold,
@@ -1472,7 +1517,7 @@ class _SeenIndicator extends StatelessWidget {
         label,
         style: Theme.of(context).textTheme.bodySmall?.copyWith(
               fontSize: 10,
-              color: Theme.of(context).colorScheme.primary.withOpacity(0.85),
+              color: Theme.of(context).colorScheme.onPrimary.withOpacity(0.85),
             ),
       ),
     );

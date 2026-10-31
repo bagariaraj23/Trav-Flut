@@ -120,6 +120,8 @@ class UserProvider extends ChangeNotifier {
   String? _discoverError;
   int _discoverPage = 1;
   bool _hasMoreUsers = true;
+  int _discoverUsersTotal = 0;
+  int _discoverSearchGeneration = 0;
 
   List<UnifiedNotificationItem> _unifiedNotifications = [];
   bool _isNotificationsLoading = false;
@@ -137,6 +139,7 @@ class UserProvider extends ChangeNotifier {
   String? get discoverError => _discoverError;
   List<Map<String, dynamic>> get discoverUsers => _discoverUsers;
   bool get hasMoreUsers => _hasMoreUsers;
+  int get discoverUsersTotal => _discoverUsersTotal;
   List<FollowRequestDto> get pendingFollowRequests => _pendingFollowRequests;
   String? get followRequestsError => _followRequestsError;
   bool? get followRequestActionIsAccept => _followRequestActionIsAccept;
@@ -579,35 +582,38 @@ class UserProvider extends ChangeNotifier {
     bool refresh = false,
     bool prioritizeFollowed = false,
   }) async {
+    if (!refresh && (_isDiscoverLoading || !_hasMoreUsers)) return;
     if (refresh) {
       _discoverPage = 1;
       _discoverUsers.clear();
       _hasMoreUsers = true;
+      _discoverUsersTotal = 0;
+      _discoverError = null;
     }
-    if (_isDiscoverLoading || !_hasMoreUsers) return;
+    final generation = ++_discoverSearchGeneration;
     _isDiscoverLoading = true;
     notifyListeners();
     try {
-      final response = await _apiService.searchUsers(
+      final response = await _apiService.searchUsersPage(
         search: search,
         page: _discoverPage,
         prioritizeFollowed: prioritizeFollowed,
       );
+      if (generation != _discoverSearchGeneration) return;
       if (response.success && response.data != null) {
-        _discoverUsers.addAll(response.data!);
-        const int pageSize = 20;
-        _hasMoreUsers = response.data!.length == pageSize;
+        final page = response.data!;
+        _discoverUsers.addAll(page.users);
+        _discoverUsersTotal = page.total;
+        _hasMoreUsers = page.hasNext;
         if (_hasMoreUsers) {
           _discoverPage++;
         }
-        // Fetch detailed follow status for all users to ensure accurate button states
-        // This ensures we have isRequestPending information for each user
-        final userIds = response.data!
+        notifyListeners();
+        final userIds = page.users
             .map((user) => user['id'] as String)
             .where((id) => id.isNotEmpty)
             .toList();
         if (userIds.isNotEmpty) {
-          // Fetch detailed follow status for all users in parallel
           await Future.wait(
             userIds.map((userId) => fetchDetailedFollowStatus(userId)),
           );
@@ -616,10 +622,13 @@ class UserProvider extends ChangeNotifier {
         _discoverError = response.error ?? "Failed to search users";
       }
     } catch (e) {
+      if (generation != _discoverSearchGeneration) return;
       _discoverError = "An error occurred while searching users";
     } finally {
-      _isDiscoverLoading = false;
-      notifyListeners();
+      if (generation == _discoverSearchGeneration) {
+        _isDiscoverLoading = false;
+        notifyListeners();
+      }
     }
   }
 
@@ -679,10 +688,13 @@ class UserProvider extends ChangeNotifier {
   }
 
   void resetDiscover() {
+    _discoverSearchGeneration++;
     _discoverUsers.clear();
     _discoverPage = 1;
     _hasMoreUsers = true;
+    _discoverUsersTotal = 0;
     _discoverError = null;
+    _isDiscoverLoading = false;
     notifyListeners();
   }
 

@@ -6,10 +6,12 @@ import 'package:tripthread/models/comment.dart';
 import 'package:tripthread/providers/comment_provider.dart';
 import 'package:tripthread/providers/auth_provider.dart';
 import 'package:tripthread/providers/engagement_provider.dart';
+import 'package:tripthread/utils/app_feedback.dart';
+import 'package:tripthread/utils/app_theme.dart';
 import 'package:tripthread/utils/error_handler.dart';
 import 'package:tripthread/utils/user_display_labels.dart';
+import 'package:tripthread/widgets/chat/chat_avatar.dart';
 import 'package:tripthread/widgets/mention_text.dart';
-import 'package:cached_network_image/cached_network_image.dart';
 
 class CommentListItem extends StatefulWidget {
   final Comment comment;
@@ -48,6 +50,8 @@ class _CommentListItemState extends State<CommentListItem> {
     final shouldTruncate = text.length > 150;
     final inEditWindow =
         isOwnComment && !_serverRejectedEditWindow && _withinAuthorEditWindow();
+    final scheme = Theme.of(context).colorScheme;
+    final muted = scheme.onSurfaceVariant;
 
     return Dismissible(
       key: Key(widget.comment.id),
@@ -57,8 +61,8 @@ class _CommentListItemState extends State<CommentListItem> {
       background: Container(
         alignment: Alignment.centerRight,
         padding: const EdgeInsets.only(right: 16),
-        color: Colors.red,
-        child: const Icon(Icons.delete, color: Colors.white),
+        color: scheme.error,
+        child: Icon(Icons.delete, color: scheme.onError),
       ),
       confirmDismiss: (direction) async {
         if (direction == DismissDirection.endToStart && isOwnComment) {
@@ -80,24 +84,11 @@ class _CommentListItemState extends State<CommentListItem> {
               onTap: () {
                 context.push('/profile/${widget.comment.userId}');
               },
-              child: CircleAvatar(
+              child: ChatAvatar(
                 radius: 18,
-                backgroundImage:
-                    widget.comment.user?.avatarUrl != null &&
-                        widget.comment.user!.avatarUrl!.isNotEmpty
-                    ? CachedNetworkImageProvider(widget.comment.user!.avatarUrl!)
-                    : null,
-                child:
-                    (widget.comment.user?.avatarUrl == null ||
-                        widget.comment.user!.avatarUrl!.isEmpty)
-                    ? Text(
-                        userAvatarInitial(
-                          username: widget.comment.user?.username,
-                          name: widget.comment.user?.name,
-                        ),
-                        style: const TextStyle(fontSize: 14),
-                      )
-                    : null,
+                avatarUrl: widget.comment.user?.avatarUrl,
+                username: widget.comment.user?.username,
+                name: widget.comment.user?.name,
               ),
             ),
             const SizedBox(width: 12),
@@ -162,7 +153,7 @@ class _CommentListItemState extends State<CommentListItem> {
                         _formatRelativeTime(widget.comment.createdAt),
                         style: Theme.of(
                           context,
-                        ).textTheme.bodySmall?.copyWith(color: Colors.grey),
+                        ).textTheme.bodySmall?.copyWith(color: muted),
                       ),
                     ],
                   ),
@@ -245,7 +236,7 @@ class _CommentListItemState extends State<CommentListItem> {
                               padding: const EdgeInsets.symmetric(horizontal: 8),
                               minimumSize: Size.zero,
                               tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                              foregroundColor: Colors.grey[600],
+                              foregroundColor: muted,
                             ),
                             child: const Text(
                               'Edit',
@@ -267,7 +258,7 @@ class _CommentListItemState extends State<CommentListItem> {
                                   const EdgeInsets.symmetric(horizontal: 8),
                               minimumSize: Size.zero,
                               tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                              foregroundColor: Colors.grey[600],
+                              foregroundColor: muted,
                             ),
                             child: const Text(
                               'Delete',
@@ -301,9 +292,9 @@ class _CommentListItemState extends State<CommentListItem> {
               ),
               TextButton(
                 onPressed: () => Navigator.of(context).pop(true),
-                child: const Text(
+                child: Text(
                   'Delete',
-                  style: TextStyle(color: Colors.red),
+                  style: TextStyle(color: Theme.of(context).colorScheme.error),
                 ),
               ),
             ],
@@ -334,24 +325,18 @@ class _CommentListItemState extends State<CommentListItem> {
         engagementProvider.clearEntity(id);
       }
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Comment deleted')),
-        );
+        AppFeedback.showSuccess(context, 'Comment deleted');
       }
     } catch (e) {
       if (e is ValidationException && mounted) {
         setState(() => _serverRejectedEditWindow = true);
       }
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              e is ValidationException
-                  ? 'Delete window expired for this comment.'
-                  : 'Failed to delete comment: ${e.toString()}',
-            ),
-            backgroundColor: Colors.red,
-          ),
+        AppFeedback.showError(
+          context,
+          e is ValidationException
+              ? 'Delete window expired for this comment.'
+              : 'Failed to delete comment: ${e.toString()}',
         );
       }
     }
@@ -390,24 +375,18 @@ class _CommentListItemState extends State<CommentListItem> {
         final provider = context.read<CommentProvider>();
         await provider.updateComment(widget.comment.id, result);
         if (mounted) {
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(const SnackBar(content: Text('Comment updated')));
+          AppFeedback.showSuccess(context, 'Comment updated');
         }
       } catch (e) {
         if (e is ValidationException && mounted) {
           setState(() => _serverRejectedEditWindow = true);
         }
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                e is ValidationException
-                    ? 'Edit window expired for this comment.'
-                    : 'Failed to update comment: ${e.toString()}',
-              ),
-              backgroundColor: Colors.red,
-            ),
+          AppFeedback.showError(
+            context,
+            e is ValidationException
+                ? 'Edit window expired for this comment.'
+                : 'Failed to update comment: ${e.toString()}',
           );
         }
       }
@@ -450,11 +429,9 @@ class _CommentLikeButton extends StatelessWidget {
       await provider.toggleLike('COMMENT', comment.id);
     } catch (e) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Failed to ${wasLiked ? 'unlike' : 'like'} comment'),
-            backgroundColor: Colors.red,
-          ),
+        AppFeedback.showError(
+          context,
+          'Failed to ${wasLiked ? 'unlike' : 'like'} comment',
         );
       }
     }
@@ -464,6 +441,7 @@ class _CommentLikeButton extends StatelessWidget {
   Widget build(BuildContext context) {
     return Consumer<EngagementProvider>(
       builder: (context, provider, _) {
+        final muted = Theme.of(context).colorScheme.onSurfaceVariant;
         final isLiked = provider.likeStatus.containsKey(comment.id)
             ? provider.isLiked(comment.id)
             : false;
@@ -483,7 +461,7 @@ class _CommentLikeButton extends StatelessWidget {
               icon: Icon(
                 isLiked ? Icons.favorite : Icons.favorite_border,
                 size: _kCommentHeartIconSize,
-                color: isLiked ? Colors.red : Colors.grey,
+                color: isLiked ? AppTheme.likeRose : muted,
               ),
               padding: EdgeInsets.zero,
               constraints: const BoxConstraints.tightFor(width: 44, height: 44),
@@ -498,7 +476,7 @@ class _CommentLikeButton extends StatelessWidget {
                 child: Text(
                   likeCount.toString(),
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: isLiked ? Colors.red : Colors.grey,
+                        color: isLiked ? AppTheme.likeRose : muted,
                         fontWeight:
                             isLiked ? FontWeight.w600 : FontWeight.normal,
                       ),

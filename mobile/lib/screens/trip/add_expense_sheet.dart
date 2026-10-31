@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:tripthread/models/expense.dart';
 import 'package:tripthread/providers/auth_provider.dart';
 import 'package:tripthread/providers/expense_provider.dart';
+import 'package:tripthread/utils/app_theme.dart';
 import 'package:tripthread/utils/money.dart';
 import 'package:tripthread/utils/user_display_labels.dart';
 
@@ -86,7 +87,7 @@ class _AddExpenseSheetState extends State<AddExpenseSheet> {
       widget.summary.members.where((m) => _selectedIds.contains(m.userId)).toList();
 
   String _label(ExpenseMemberBalance m) =>
-      userPrimaryLabel(id: m.userId, username: m.username, name: m.name);
+      userPersonName(id: m.userId, username: m.username, name: m.name);
 
   String _money(int minor) =>
       formatMoneyMinor(minor, currency: widget.summary.currency);
@@ -268,6 +269,34 @@ class _AddExpenseSheetState extends State<AddExpenseSheet> {
     }
   }
 
+  Widget _sheetHandle(BuildContext context) {
+    return Center(
+      child: Container(
+        width: 40,
+        height: 4,
+        margin: const EdgeInsets.only(bottom: 12),
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.outlineVariant,
+          borderRadius: BorderRadius.circular(99),
+        ),
+      ),
+    );
+  }
+
+  Widget _sectionLabel(BuildContext context, String text) {
+    final scheme = Theme.of(context).colorScheme;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Text(
+        text,
+        style: Theme.of(context).textTheme.titleSmall?.copyWith(
+              color: scheme.secondary,
+              fontWeight: FontWeight.w600,
+            ),
+      ),
+    );
+  }
+
   Widget _errorBanner(BuildContext context) {
     if (_formError == null) return const SizedBox.shrink();
     final scheme = Theme.of(context).colorScheme;
@@ -312,18 +341,20 @@ class _AddExpenseSheetState extends State<AddExpenseSheet> {
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
             children: [
-              Center(
-                child: Container(
-                  width: 40,
-                  height: 4,
-                  margin: const EdgeInsets.only(bottom: 12),
-                  decoration: BoxDecoration(
-                    color: Theme.of(context).colorScheme.outlineVariant,
-                    borderRadius: BorderRadius.circular(99),
+              _sheetHandle(context),
+              Row(
+                children: [
+                  Icon(Icons.receipt_long_outlined,
+                      color: Theme.of(context).colorScheme.secondary, size: 26),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      'Add expense',
+                      style: Theme.of(context).textTheme.titleLarge,
+                    ),
                   ),
-                ),
+                ],
               ),
-              Text('Add expense', style: Theme.of(context).textTheme.titleLarge),
               const SizedBox(height: 12),
               _errorBanner(context),
               // 1. Amount
@@ -377,13 +408,14 @@ class _AddExpenseSheetState extends State<AddExpenseSheet> {
                 onChanged: (v) => setState(() => _payerId = v ?? _payerId),
               ),
               const SizedBox(height: 12),
-              Text('Split among', style: Theme.of(context).textTheme.titleSmall),
+              _sectionLabel(context, 'Split among'),
               Wrap(
                 spacing: 8,
                 children: widget.summary.members.map((m) {
                   final selected = _selectedIds.contains(m.userId);
-                  return FilterChip(
-                    label: Text(_label(m)),
+                  return AppTheme.selectableChip(
+                    context: context,
+                    label: _label(m),
                     selected: selected,
                     onSelected: (on) {
                       setState(() {
@@ -402,14 +434,16 @@ class _AddExpenseSheetState extends State<AddExpenseSheet> {
               Wrap(
                 spacing: 8,
                 children: _methods.map((method) {
-                  return ChoiceChip(
-                    label: Text(method == 'EQUAL'
+                  return AppTheme.selectableChip(
+                    context: context,
+                    choice: true,
+                    label: method == 'EQUAL'
                         ? 'Equal'
                         : method == 'EXACT'
                             ? 'Exact'
                             : method == 'PERCENT'
                                 ? '%'
-                                : 'Shares'),
+                                : 'Shares',
                     selected: _splitMethod == method,
                     onSelected: (_) => setState(() {
                       _splitMethod = method;

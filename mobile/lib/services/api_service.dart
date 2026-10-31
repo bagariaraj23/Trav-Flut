@@ -17,6 +17,18 @@ import 'package:tripthread/utils/error_handler.dart';
 import 'package:tripthread/utils/unsettled_balance.dart';
 import 'package:flutter/foundation.dart';
 
+class UserSearchPage {
+  final List<Map<String, dynamic>> users;
+  final bool hasNext;
+  final int total;
+
+  const UserSearchPage({
+    required this.users,
+    required this.hasNext,
+    required this.total,
+  });
+}
+
 class ApiService {
   final Dio _dio;
   final Dio _refreshDio;
@@ -736,7 +748,7 @@ class ApiService {
     }
   }
 
-  Future<ApiResponse<List<Map<String, dynamic>>>> searchUsers({
+  Future<ApiResponse<UserSearchPage>> searchUsersPage({
     String? search,
     int page = 1,
     int limit = 20,
@@ -763,37 +775,61 @@ class ApiService {
         final users = (data['items'] as List<dynamic>)
             .map((user) => Map<String, dynamic>.from(user))
             .toList();
-        final hasNext = data['hasNext'] as bool;
+        final hasNext = data['hasNext'] == true;
+        final totalRaw = data['total'];
+        final total = totalRaw is int
+            ? totalRaw
+            : int.tryParse('$totalRaw') ?? users.length;
 
         debugPrint(
-          '[ApiService] Found ${users.length} users, hasNext: $hasNext',
+          '[ApiService] Found ${users.length} users, total: $total, hasNext: $hasNext',
         );
-        return ApiResponse<List<Map<String, dynamic>>>(
+        return ApiResponse<UserSearchPage>(
           success: true,
-          data: users,
+          data: UserSearchPage(users: users, hasNext: hasNext, total: total),
         );
       } else {
         debugPrint(
           '[ApiService] Search users failed: ${response.data['error']}',
         );
-        return ApiResponse<List<Map<String, dynamic>>>(
+        return ApiResponse<UserSearchPage>(
           success: false,
           error: response.data['error'] ?? 'Failed to search users',
         );
       }
     } on DioException catch (e) {
       debugPrint('[ApiService] Search users DioException: ${e.message}');
-      return ApiResponse<List<Map<String, dynamic>>>(
+      return ApiResponse<UserSearchPage>(
         success: false,
         error: e.response?.data['error'] ?? 'Network error occurred',
       );
     } catch (e) {
       debugPrint('[ApiService] Search users unexpected error: $e');
-      return ApiResponse<List<Map<String, dynamic>>>(
+      return ApiResponse<UserSearchPage>(
         success: false,
         error: 'An unexpected error occurred',
       );
     }
+  }
+
+  Future<ApiResponse<List<Map<String, dynamic>>>> searchUsers({
+    String? search,
+    int page = 1,
+    int limit = 20,
+    bool prioritizeFollowed = false,
+  }) async {
+    final pageResult = await searchUsersPage(
+      search: search,
+      page: page,
+      limit: limit,
+      prioritizeFollowed: prioritizeFollowed,
+    );
+    return ApiResponse<List<Map<String, dynamic>>>(
+      success: pageResult.success,
+      data: pageResult.data?.users,
+      error: pageResult.error,
+      message: pageResult.message,
+    );
   }
 
   Future<ApiResponse<void>> followUser(
@@ -1590,6 +1626,47 @@ class ApiService {
   }
 
   // Feed endpoints
+  Future<ApiResponse<List<dynamic>>> getLiveTrips() async {
+    try {
+      debugPrint('[ApiService] Getting live trips for home story strip');
+      final response = await _dio.get('/feed/live-trips');
+      if (response.data is! Map<String, dynamic>) {
+        return ApiResponse<List<dynamic>>(
+          success: false,
+          error: 'Invalid server response format',
+        );
+      }
+      if (response.data['success'] == true && response.data['data'] != null) {
+        final data = response.data['data'];
+        if (data is! List) {
+          return ApiResponse<List<dynamic>>(
+            success: false,
+            error: 'Invalid live trips payload',
+          );
+        }
+        return ApiResponse<List<dynamic>>(success: true, data: data);
+      }
+      return ApiResponse<List<dynamic>>(
+        success: false,
+        error: response.data['error'] ?? 'Failed to load live trips',
+      );
+    } on DioException catch (e) {
+      debugPrint('[ApiService] Get live trips DioException: ${e.message}');
+      return ApiResponse<List<dynamic>>(
+        success: false,
+        error: e.response?.data is Map
+            ? (e.response!.data['error'] ?? 'Network error occurred')
+            : 'Network error occurred',
+      );
+    } catch (e) {
+      debugPrint('[ApiService] Get live trips unexpected error: $e');
+      return ApiResponse<List<dynamic>>(
+        success: false,
+        error: 'Unknown error occurred',
+      );
+    }
+  }
+
   Future<ApiResponse<Map<String, dynamic>>> getHomeFeed({
     int page = 1,
     int limit = 20,
@@ -1973,17 +2050,19 @@ class ApiService {
     int limit = 20,
     String? status,
     String? mood,
+    String? search,
     bool includePrivate = false,
   }) async {
     try {
       debugPrint(
-        '[ApiService] Getting discover trips: page=$page, limit=$limit, status=$status, mood=$mood',
+        '[ApiService] Getting discover trips: page=$page, limit=$limit, status=$status, mood=$mood, search=$search',
       );
       final queryParams = {
         'page': page.toString(),
         'limit': limit.toString(),
         if (status != null) 'status': status,
         if (mood != null) 'mood': mood,
+        if (search != null && search.trim().isNotEmpty) 'q': search.trim(),
         'includePrivate': includePrivate.toString(),
       };
 

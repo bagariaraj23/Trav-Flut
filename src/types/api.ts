@@ -80,6 +80,13 @@ export interface PaginatedResponse<T> {
   nextCursor?: string | null;
 }
 
+/** Home "Happening Now" story ring: one circle per live traveller. */
+export interface LiveTripStoryResponse {
+  isSelf: boolean;
+  user: UserProfile;
+  trip: TripResponse;
+}
+
 // Trip Types
 export interface TripResponse {
   id: string;
@@ -99,6 +106,10 @@ export interface TripResponse {
     | null;
   type?: "SOLO" | "GROUP" | "COUPLE" | "FAMILY" | null;
   coverMediaId?: string | null;
+  startLocationId?: string | null;
+  endLocationId?: string | null;
+  startLocation?: PlaceResponse | null;
+  endLocation?: PlaceResponse | null;
   status: "UPCOMING" | "ONGOING" | "ENDED";
   createdAt: string;
   updatedAt: string;

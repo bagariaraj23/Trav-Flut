@@ -11,6 +11,7 @@ import {
 import { assertMemberZeroNetOnTrip } from "@/lib/services/expense";
 import { UnsettledBalanceError } from "@/lib/errors";
 import { enforcePresetRateLimit } from "@/lib/rateLimit";
+import { ensureTripConversation, markTripMemberLeftChat } from "@/lib/services/chat";
 
 export async function POST(
   request: NextRequest,
@@ -144,6 +145,16 @@ export async function POST(
     );
     for (const m of dedupedMediaCleanups) {
       await cleanupThreadEntryMedia(m.mediaId, m.mediaPublicId);
+    }
+
+    try {
+      await markTripMemberLeftChat(tripId, userId);
+      await ensureTripConversation(tripId);
+    } catch (chatErr) {
+      console.error(
+        `[WARN] Failed to sync trip chat after leave from ${tripId}:`,
+        chatErr
+      );
     }
 
     return NextResponse.json<ApiResponse<null>>({

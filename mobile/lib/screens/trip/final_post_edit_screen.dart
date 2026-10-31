@@ -5,6 +5,8 @@ import 'package:tripthread/models/trip.dart';
 import 'package:tripthread/providers/auth_provider.dart';
 import 'package:tripthread/providers/final_post_provider.dart';
 import 'package:tripthread/services/trip_service.dart';
+import 'package:tripthread/utils/app_layout.dart';
+import 'package:tripthread/utils/app_theme.dart';
 import 'package:tripthread/utils/cloudinary_utils.dart';
 
 class FinalPostEditScreen extends StatefulWidget {
@@ -169,7 +171,9 @@ class _FinalPostEditScreenState extends State<FinalPostEditScreen> {
       ),
       body: isBusy
           ? const Center(child: CircularProgressIndicator())
-          : RefreshIndicator(
+          : AppLayout.reading(
+              context: context,
+              child: RefreshIndicator(
               onRefresh: () => _refresh(provider),
               child: ListView(
                 padding: const EdgeInsets.all(16),
@@ -238,6 +242,7 @@ class _FinalPostEditScreenState extends State<FinalPostEditScreen> {
                 ],
               ),
             ),
+            ),
       bottomNavigationBar: draft == null
           ? null
           : _buildBottomBar(context, provider, draft),
@@ -267,12 +272,7 @@ class _FinalPostEditScreenState extends State<FinalPostEditScreen> {
             Container(
               height: 180,
               decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [
-                    Theme.of(context).colorScheme.primary,
-                    Theme.of(context).colorScheme.secondary,
-                  ],
-                ),
+                gradient: AppTheme.brandWash(Theme.of(context).brightness),
               ),
               child: const Center(
                 child: Icon(Icons.photo, color: Colors.white, size: 48),

@@ -294,6 +294,7 @@ class ChatProvider with ChangeNotifier {
     final res = await _apiService.getChatConversations(tripId: tripId);
     _loadingConversations = false;
     if (res.success && res.data != null) {
+      _error = null;
       if (tripId != null) {
         // Upsert: merge the trip-filtered results into the full list so that
         // WS events for DMs/other groups still reach their conversations.
@@ -495,10 +496,14 @@ class ChatProvider with ChangeNotifier {
   }
 
   Future<void> ensureConversationLoaded(String conversationId) async {
-    if (_conversations.any((c) => c.id == conversationId)) return;
     final res = await _apiService.getChatConversation(conversationId);
     if (res.success && res.data != null) {
-      _conversations.insert(0, res.data!);
+      final idx = _conversations.indexWhere((c) => c.id == conversationId);
+      if (idx >= 0) {
+        _conversations[idx] = res.data!;
+      } else {
+        _conversations.insert(0, res.data!);
+      }
       notifyListeners();
     }
   }

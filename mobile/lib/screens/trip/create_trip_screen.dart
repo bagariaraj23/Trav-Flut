@@ -10,6 +10,8 @@ import 'package:tripthread/widgets/loading_button.dart';
 import 'dart:io';
 import 'package:tripthread/services/media_service.dart';
 import 'package:tripthread/widgets/place_autocomplete_field.dart';
+import 'package:tripthread/utils/app_layout.dart';
+import 'package:tripthread/utils/app_theme.dart';
 import 'package:tripthread/utils/cloudinary_utils.dart';
 
 class CreateTripScreen extends StatefulWidget {
@@ -279,14 +281,16 @@ class _CreateTripScreenState extends State<CreateTripScreen> {
       },
       child: Scaffold(
         appBar: AppBar(
-          title: const Text('Create Trip'),
+          title: const Text('Plan a New Trip'),
           leading: IconButton(
             icon: const Icon(Icons.close),
             onPressed: () =>
                 context.go('/home', extra: {'explicitHome': true}),
           ),
         ),
-        body: SafeArea(
+        body: AppLayout.reading(
+          context: context,
+          child: SafeArea(
           child: SingleChildScrollView(
             padding: const EdgeInsets.all(16.0),
             child: Form(
@@ -298,41 +302,30 @@ class _CreateTripScreenState extends State<CreateTripScreen> {
                   Container(
                     padding: const EdgeInsets.all(20),
                     decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: [
-                          Theme.of(context).colorScheme.primary,
-                          Theme.of(
-                            context,
-                          ).colorScheme.primary.withValues(alpha: 0.8),
-                        ],
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                      ),
+                      color: Theme.of(context).colorScheme.surface,
                       borderRadius: BorderRadius.circular(16),
+                      border: Border.all(
+                        color: Theme.of(context).colorScheme.outlineVariant,
+                      ),
                     ),
                     child: Column(
                       children: [
-                        const Icon(
+                        Icon(
                           Icons.flight_takeoff,
-                          size: 48,
-                          color: Colors.white,
+                          size: 36,
+                          color: Theme.of(context).colorScheme.secondary,
                         ),
                         const SizedBox(height: 12),
                         Text(
-                          'Ready for Adventure?',
-                          style: Theme.of(context).textTheme.headlineMedium
-                              ?.copyWith(
-                                color: Colors.white,
-                                fontWeight: FontWeight.bold,
+                          'Plan a New Trip',
+                          style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                                color: Theme.of(context).colorScheme.onSurface,
                               ),
                         ),
                         const SizedBox(height: 8),
                         Text(
-                          'Start documenting your journey and create amazing memories',
-                          style: Theme.of(context).textTheme.bodyMedium
-                              ?.copyWith(
-                                color: Colors.white.withValues(alpha: 0.9),
-                              ),
+                          'Document your journey and share updates in real time.',
+                          style: Theme.of(context).textTheme.bodyMedium,
                           textAlign: TextAlign.center,
                         ),
                       ],
@@ -713,8 +706,9 @@ class _CreateTripScreenState extends State<CreateTripScreen> {
                     spacing: 8,
                     children: TripType.values.map((type) {
                       final isSelected = _selectedType == type;
-                      return FilterChip(
-                        label: Text(_getTripTypeLabel(type)),
+                      return AppTheme.selectableChip(
+                        context: context,
+                        label: _getTripTypeLabel(type),
                         selected: isSelected,
                         onSelected: (selected) {
                           setState(() {
@@ -739,15 +733,10 @@ class _CreateTripScreenState extends State<CreateTripScreen> {
                     runSpacing: 8,
                     children: TripMood.values.map((mood) {
                       final isSelected = _selectedMood == mood;
-                      return FilterChip(
-                        label: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text(_getTripMoodEmoji(mood)),
-                            const SizedBox(width: 4),
-                            Text(_getTripMoodLabel(mood)),
-                          ],
-                        ),
+                      return AppTheme.selectableChip(
+                        context: context,
+                        label:
+                            '${_getTripMoodEmoji(mood)} ${_getTripMoodLabel(mood)}',
                         selected: isSelected,
                         onSelected: (selected) {
                           setState(() {
@@ -811,6 +800,7 @@ class _CreateTripScreenState extends State<CreateTripScreen> {
               ),
             ),
           ),
+        ),
         ),
       ),
     );

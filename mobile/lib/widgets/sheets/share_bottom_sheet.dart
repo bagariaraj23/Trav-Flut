@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:tripthread/providers/share_provider.dart';
+import 'package:tripthread/utils/app_feedback.dart';
 
 enum _ShareAction { shareVia, copyLink }
 
@@ -89,14 +90,11 @@ class _ShareBottomSheetState extends State<ShareBottomSheet> {
                           if (context.mounted) {
                             Navigator.of(context).pop();
                           }
-                        } catch (e) {
+                        } catch (_) {
                           if (context.mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content:
-                                    Text('Failed to share: ${e.toString()}'),
-                                backgroundColor: Colors.red,
-                              ),
+                            AppFeedback.showError(
+                              context,
+                              'Couldn’t share that. Try again.',
                             );
                           }
                         }
@@ -123,22 +121,17 @@ class _ShareBottomSheetState extends State<ShareBottomSheet> {
                             ClipboardData(text: clip),
                           );
                           if (context.mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text('Link copied to clipboard'),
-                              ),
+                            AppFeedback.showSuccess(
+                              context,
+                              'Link copied',
                             );
                             Navigator.of(context).pop();
                           }
-                        } catch (e) {
+                        } catch (_) {
                           if (context.mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text(
-                                  'Failed to copy link: ${e.toString()}',
-                                ),
-                                backgroundColor: Colors.red,
-                              ),
+                            AppFeedback.showError(
+                              context,
+                              'Couldn’t copy the link. Try again.',
                             );
                           }
                         }

@@ -2,15 +2,15 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:tripthread/models/chat_conversation.dart';
 import 'package:tripthread/providers/chat_provider.dart';
 import 'package:tripthread/providers/auth_provider.dart';
 import 'package:tripthread/services/media_service.dart';
-import 'package:tripthread/utils/avatar_utils.dart';
+import 'package:tripthread/utils/app_layout.dart';
+import 'package:tripthread/utils/app_theme.dart';
+import 'package:tripthread/utils/chat_navigation.dart';
 import 'package:tripthread/widgets/chat/chat_avatar.dart';
 import 'package:tripthread/services/api_service.dart';
-import 'package:tripthread/utils/user_display_labels.dart';
 
 class GroupSettingsScreen extends StatefulWidget {
   final String conversationId;
@@ -206,6 +206,10 @@ class _GroupSettingsScreenState extends State<GroupSettingsScreen> {
     );
   }
 
+  void _leave() {
+    leaveChatSettings(context, widget.conversationId);
+  }
+
   Future<void> _leaveGroup(ChatConversationSummary conversation, bool isViewerAdmin) async {
     // Guard: sole admin cannot leave while other members remain.
     final activeParticipants = conversation.participants;
@@ -223,11 +227,16 @@ class _GroupSettingsScreenState extends State<GroupSettingsScreen> {
       return;
     }
 
+    final isTripChat = conversation.type == 'TRIP';
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Leave Group'),
-        content: const Text('Are you sure you want to leave this group? You will need to be re-added by an admin.'),
+        title: Text(isTripChat ? 'Leave chat' : 'Leave Group'),
+        content: Text(
+          isTripChat
+              ? 'You will leave this chat and stay on the trip. An admin can add you back.'
+              : 'Are you sure you want to leave this group? You will need to be re-added by an admin.',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
@@ -251,9 +260,7 @@ class _GroupSettingsScreenState extends State<GroupSettingsScreen> {
     if (!mounted) return;
 
     if (ok) {
-      // Pop settings screen and the chat screen so the user lands on the conversations list.
-      context.pop();
-      context.pop();
+      leaveChatRoute(context, fallback: '/chat');
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(chat.error ?? 'Failed to leave group')),
@@ -268,21 +275,33 @@ class _GroupSettingsScreenState extends State<GroupSettingsScreen> {
     final conversation = _currentConversation(chat);
 
     if (conversation == null) {
-      return Scaffold(
+      return PopScope(
+        canPop: false,
+        onPopInvokedWithResult: (didPop, _) {
+          if (didPop) return;
+          _leave();
+        },
+        child: Scaffold(
         appBar: AppBar(
           title: const Text('Group Settings'),
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back),
+            onPressed: _leave,
+          ),
         ),
         body: const Center(
           child: CircularProgressIndicator(),
         ),
+      ),
       );
     }
 
-    final other = conversation.participants
-        .where((p) => p.userId != currentUserId)
-        .toList();
-    final name = conversation.name ?? 'Group Chat';
-    final hasImage = conversation.avatarUrl != null && conversation.avatarUrl!.isNotEmpty;
+    final isTripChat = conversation.type == 'TRIP';
+    final name = conversation.name?.trim().isNotEmpty == true
+        ? conversation.name!.trim()
+        : (isTripChat ? 'Trip chat' : 'Group Chat');
+    final hasImage =
+        conversation.avatarUrl != null && conversation.avatarUrl!.isNotEmpty;
 
     final currentUserParticipant = conversation.participants.firstWhere(
       (p) => p.userId == currentUserId,
@@ -291,14 +310,23 @@ class _GroupSettingsScreenState extends State<GroupSettingsScreen> {
     final isViewerAdmin = currentUserParticipant.role == 'ADMIN';
 
     final avatarLabel = name;
-    final avatarInitial = AvatarUtils.initialsFromName(avatarLabel);
-    final avatarColor = AvatarUtils.colorForKey(conversation.id);
-
-    return Scaffold(
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop) return;
+        _leave();
+      },
+      child: Scaffold(
       appBar: AppBar(
-        title: const Text('Group Details'),
+        title: Text(isTripChat ? 'Chat details' : 'Group Details'),
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          onPressed: _leave,
+        ),
       ),
-      body: SingleChildScrollView(
+      body: AppLayout.reading(
+        context: context,
+        child: SingleChildScrollView(
         child: Column(
           children: [
             const SizedBox(height: 24),
@@ -306,29 +334,17 @@ class _GroupSettingsScreenState extends State<GroupSettingsScreen> {
               child: Stack(
                 clipBehavior: Clip.none,
                 children: [
-                  CircleAvatar(
+                  ChatAvatar(
                     radius: 60,
-                    backgroundColor: avatarColor,
-                    backgroundImage: hasImage
-                        ? CachedNetworkImageProvider(conversation.avatarUrl!)
-                        : null,
-                    child: !hasImage
-                        ? Text(
-                            avatarInitial,
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 48,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          )
-                        : null,
+                    avatarUrl: conversation.avatarUrl,
+                    name: avatarLabel,
                   ),
                   if (isViewerAdmin)
                     Positioned(
                       bottom: 0,
                       right: 0,
                       child: CircleAvatar(
-                        backgroundColor: Theme.of(context).colorScheme.primary,
+                        backgroundColor: Theme.of(context).colorScheme.secondary,
                         child: _uploadingAvatar
                             ? const Padding(
                                 padding: EdgeInsets.all(8.0),
@@ -430,22 +446,13 @@ class _GroupSettingsScreenState extends State<GroupSettingsScreen> {
                 final isMe = participant.userId == currentUserId;
                 final isParticipantAdmin = participant.role == 'ADMIN';
 
-                final pInitials = AvatarUtils.initialsFromName(pDisplayName);
-                final pColor = AvatarUtils.colorForKey(participant.userId);
-
                 return ListTile(
                   onTap: () => context.push('/profile/${participant.userId}'),
-                  leading: CircleAvatar(
-                    backgroundColor: pColor,
-                    backgroundImage: participant.avatarUrl != null && participant.avatarUrl!.isNotEmpty
-                        ? CachedNetworkImageProvider(participant.avatarUrl!)
-                        : null,
-                    child: participant.avatarUrl == null || participant.avatarUrl!.isEmpty
-                        ? Text(
-                            pInitials,
-                            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
-                          )
-                        : null,
+                  leading: ChatAvatar(
+                    radius: 22,
+                    avatarUrl: participant.avatarUrl,
+                    username: participant.username,
+                    name: participant.name ?? participant.username,
                   ),
                   title: Text(
                     isMe ? 'You' : pDisplayName,
@@ -453,7 +460,7 @@ class _GroupSettingsScreenState extends State<GroupSettingsScreen> {
                   ),
                   subtitle: participant.username != null
                       ? Text(
-                          '@${participant.username}',
+                          participant.username!,
                           style: Theme.of(context).textTheme.bodySmall,
                         )
                       : null,
@@ -465,13 +472,15 @@ class _GroupSettingsScreenState extends State<GroupSettingsScreen> {
                           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                           margin: const EdgeInsets.only(right: 8),
                           decoration: BoxDecoration(
-                            color: Theme.of(context).colorScheme.primary.withOpacity(0.1),
+                            color: Theme.of(context).brightness == Brightness.dark
+                                ? AppTheme.darkMuted
+                                : AppTheme.accentSoft,
                             borderRadius: BorderRadius.circular(12),
                           ),
                           child: Text(
                             'Admin',
                             style: TextStyle(
-                              color: Theme.of(context).colorScheme.primary,
+                              color: Theme.of(context).colorScheme.secondary,
                               fontSize: 12,
                               fontWeight: FontWeight.w600,
                             ),
@@ -492,9 +501,9 @@ class _GroupSettingsScreenState extends State<GroupSettingsScreen> {
                                 value: 'promote',
                                 child: Text('Promote to Admin'),
                               ),
-                            const PopupMenuItem(
+                            PopupMenuItem(
                               value: 'remove',
-                              child: Text('Remove from Group'),
+                              child: Text(isTripChat ? 'Remove from chat' : 'Remove from Group'),
                             ),
                           ],
                         ),
@@ -512,14 +521,19 @@ class _GroupSettingsScreenState extends State<GroupSettingsScreen> {
                 color: Theme.of(context).colorScheme.error,
               ),
               title: Text(
-                'Leave Group',
+                isTripChat ? 'Leave chat' : 'Leave Group',
                 style: TextStyle(color: Theme.of(context).colorScheme.error),
               ),
+              subtitle: isTripChat
+                  ? const Text('You stay on the trip')
+                  : null,
               onTap: () => _leaveGroup(conversation, isViewerAdmin),
             ),
             const SizedBox(height: 24),
           ],
         ),
+      ),
+      ),
       ),
     );
   }
@@ -655,10 +669,14 @@ class _AddParticipantDialogState extends State<AddParticipantDialog> {
                 padding: EdgeInsets.symmetric(vertical: 16),
                 child: Text('No users found'),
               ),
-            Flexible(
-              child: ListView.builder(
-                shrinkWrap: true,
-                itemCount: _searchResults.length,
+            if (_searchResults.isNotEmpty)
+              ConstrainedBox(
+                constraints: BoxConstraints(
+                  maxHeight: MediaQuery.sizeOf(context).height * 0.4,
+                ),
+                child: ListView.builder(
+                  shrinkWrap: true,
+                  itemCount: _searchResults.length,
                 itemBuilder: (context, index) {
                   final user = _searchResults[index];
                   final userId = user['id'] as String;
@@ -668,27 +686,31 @@ class _AddParticipantDialogState extends State<AddParticipantDialog> {
 
                   final isAlreadyMember = widget.currentParticipants.any((p) => p.userId == userId);
 
-                  final initials = AvatarUtils.initialsFromName(name.isNotEmpty ? name : username);
-                  final color = AvatarUtils.colorForKey(userId);
-
                   return ListTile(
                     contentPadding: EdgeInsets.zero,
-                    leading: CircleAvatar(
-                      backgroundColor: color,
-                      backgroundImage: avatarUrl != null && avatarUrl.isNotEmpty
-                          ? CachedNetworkImageProvider(avatarUrl)
-                          : null,
-                      child: avatarUrl == null || avatarUrl.isEmpty
-                          ? Text(
-                              initials,
-                              style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
-                            )
-                          : null,
+                    leading: ChatAvatar(
+                      radius: 20,
+                      avatarUrl: avatarUrl,
+                      username: username,
+                      name: name,
                     ),
-                    title: Text(name.isNotEmpty ? name : username),
-                    subtitle: Text('@$username'),
+                    title: Text(
+                      name.isNotEmpty ? name : username,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    subtitle: Text(
+                      username,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                     trailing: isAlreadyMember
-                        ? const Text('Member', style: TextStyle(color: Colors.grey))
+                        ? Text(
+                            'Member',
+                            style: TextStyle(
+                              color: Theme.of(context).colorScheme.onSurfaceVariant,
+                            ),
+                          )
                         : IconButton(
                             icon: const Icon(Icons.add_circle_outline),
                             onPressed: () => _addMember(userId, username),

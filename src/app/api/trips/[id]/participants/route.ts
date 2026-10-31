@@ -6,6 +6,7 @@ import { ApiResponse, TripParticipantResponse } from "@/types/api";
 import { assertMemberZeroNetOnTrip } from "@/lib/services/expense";
 import { UnsettledBalanceError } from "@/lib/errors";
 import { enforcePresetRateLimit } from "@/lib/rateLimit";
+import { ensureTripConversation, markTripMemberLeftChat } from "@/lib/services/chat";
 
 // Add participant to trip
 export async function POST(
@@ -178,6 +179,17 @@ export async function POST(
       },
     };
 
+    try {
+      await ensureTripConversation(tripId, {
+        rejoinUserIds: [validatedData.userId],
+      });
+    } catch (chatErr) {
+      console.error(
+        `[WARN] Failed to sync trip chat after adding participant to ${tripId}:`,
+        chatErr
+      );
+    }
+
     return NextResponse.json<ApiResponse<TripParticipantResponse>>(
       {
         success: true,
@@ -320,6 +332,17 @@ export async function DELETE(
         },
       }),
     ]);
+
+    try {
+      await markTripMemberLeftChat(tripId, userIdToRemove);
+      await ensureTripConversation(tripId);
+    } catch (chatErr) {
+      console.error(
+        `[WARN] Failed to sync trip chat after removing participant from ${tripId}:`,
+        chatErr
+      );
+    }
+
     return NextResponse.json<ApiResponse>({
       success: true,
       message: "Participant and any pending join requests removed successfully",

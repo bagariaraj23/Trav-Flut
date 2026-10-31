@@ -8,14 +8,19 @@ import 'package:tripthread/providers/feed_provider.dart';
 import 'package:tripthread/providers/user_provider.dart';
 import 'package:tripthread/providers/engagement_provider.dart';
 import 'package:tripthread/services/trip_service.dart';
+import 'package:tripthread/models/live_trip_story.dart';
 import 'package:tripthread/models/trip.dart';
 import 'package:tripthread/screens/discover/discover_tab.dart';
+import 'package:tripthread/utils/app_feedback.dart';
+import 'package:tripthread/utils/app_layout.dart';
+import 'package:tripthread/utils/app_theme.dart';
 import 'package:tripthread/utils/cloudinary_utils.dart';
 import 'package:tripthread/widgets/engagement/engagement_action_bar.dart';
 import 'package:tripthread/widgets/sheets/comment_bottom_sheet.dart';
 import 'package:tripthread/widgets/sheets/share_bottom_sheet.dart';
 import 'package:tripthread/widgets/floating_trip_nav_button.dart';
 import 'package:tripthread/widgets/logout_dialog.dart';
+import 'package:tripthread/widgets/trip_cover_placeholder.dart';
 
 class HomeScreen extends StatefulWidget {
   final int initialTab;
@@ -28,6 +33,18 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   int _currentIndex = 0;
+  bool _appliedRouteTab = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_appliedRouteTab) return;
+    _appliedRouteTab = true;
+    final extra = GoRouterState.of(context).extra;
+    if (extra is Map && extra['tab'] == 'discover') {
+      _currentIndex = 2;
+    }
+  }
 
   @override
   void initState() {
@@ -129,7 +146,16 @@ class _HomeScreenState extends State<HomeScreen> {
             const FloatingTripNavButton(),
           ],
         ),
-        bottomNavigationBar: BottomNavigationBar(
+        bottomNavigationBar: DecoratedBox(
+          decoration: BoxDecoration(
+            color: Theme.of(context).scaffoldBackgroundColor,
+            border: Border(
+              top: BorderSide(
+                color: Theme.of(context).colorScheme.outlineVariant,
+              ),
+            ),
+          ),
+          child: BottomNavigationBar(
           currentIndex: _currentIndex,
           onTap: (index) {
             setState(() {
@@ -159,6 +185,7 @@ class _HomeScreenState extends State<HomeScreen> {
               label: 'Profile',
             ),
           ],
+          ),
         ),
       ),
     );
@@ -202,7 +229,9 @@ class _HomeFeedScreenState extends State<HomeFeedScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
         debugPrint('[HomeFeedScreen] Calling loadHomeFeed with refresh=true');
-        context.read<FeedProvider>().loadHomeFeed(refresh: true);
+        final feed = context.read<FeedProvider>();
+        feed.loadHomeFeed(refresh: true);
+        feed.loadLiveTrips();
       }
     });
   }
@@ -271,7 +300,19 @@ class _HomeFeedScreenState extends State<HomeFeedScreen> {
     return Scaffold(
       appBar: AppBar(
         centerTitle: false,
-        title: const Text('TripThread'),
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Home',
+              style: Theme.of(context).appBarTheme.titleTextStyle,
+            ),
+            Text(
+              'Stories from your world',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          ],
+        ),
         actions: [
           IconButton(
             icon: const Icon(Icons.chat_bubble_outline),
@@ -301,7 +342,7 @@ class _HomeFeedScreenState extends State<HomeFeedScreen> {
                       child: Container(
                         padding: const EdgeInsets.all(2),
                         decoration: BoxDecoration(
-                          color: Colors.red,
+                          color: AppTheme.likeRose,
                           borderRadius: BorderRadius.circular(6),
                         ),
                         constraints: const BoxConstraints(
@@ -333,92 +374,217 @@ class _HomeFeedScreenState extends State<HomeFeedScreen> {
 
           if (feedProvider.homeFeedPosts.isEmpty &&
               feedProvider.homeFeedError == null) {
-            return const Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.feed_outlined, size: 64, color: Colors.grey),
-                  SizedBox(height: 16),
-                  Text(
-                    'No posts yet',
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w600,
-                      color: Colors.grey,
+            final liveStories = feedProvider.liveTripStories;
+            return Column(
+              children: [
+                if (liveStories.isNotEmpty)
+                  _buildLiveTripsRow(context, liveStories),
+                Expanded(
+                  child: Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          Icons.feed_outlined,
+                          size: 64,
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        ),
+                        const SizedBox(height: 16),
+                        Text(
+                          'Your feed is quiet',
+                          style: Theme.of(context).textTheme.headlineSmall,
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'Follow travellers or finish a trip to see posts here',
+                          textAlign: TextAlign.center,
+                          style: Theme.of(context).textTheme.bodyMedium,
+                        ),
+                      ],
                     ),
                   ),
-                  SizedBox(height: 8),
-                  Text(
-                    'Follow some travelers to see their amazing stories',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(color: Colors.grey),
-                  ),
-                ],
-              ),
+                ),
+              ],
             );
           }
 
           if (feedProvider.homeFeedError != null) {
-            return Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.error_outline, size: 64, color: Colors.red[300]),
-                  const SizedBox(height: 16),
-                  Text(
-                    'Error loading feed',
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w600,
-                      color: Colors.red[300],
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    feedProvider.homeFeedError!,
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(color: Colors.grey),
-                  ),
-                  const SizedBox(height: 16),
-                  ElevatedButton(
-                    onPressed: () {
-                      feedProvider.clearHomeFeedError();
-                      feedProvider.loadHomeFeed(refresh: true);
-                    },
-                    child: const Text('Retry'),
-                  ),
-                ],
-              ),
+            return AppFeedback.error(
+              context: context,
+              title: 'Couldn’t load your feed',
+              message: feedProvider.homeFeedError!,
+              onRetry: () {
+                feedProvider.clearHomeFeedError();
+                feedProvider.loadHomeFeed(refresh: true);
+                feedProvider.loadLiveTrips();
+              },
             );
           }
 
+          final liveStories = feedProvider.liveTripStories;
+          final headerCount = liveStories.isEmpty ? 0 : 1;
+
           return RefreshIndicator(
             onRefresh: () async {
-              feedProvider.loadHomeFeed(refresh: true);
+              await Future.wait([
+                feedProvider.loadHomeFeed(refresh: true),
+                feedProvider.loadLiveTrips(),
+              ]);
             },
-            child: ListView.builder(
-              controller: _scrollController,
-              padding: const EdgeInsets.symmetric(vertical: 8),
-              itemCount: feedProvider.homeFeedPosts.length + 1,
-              itemBuilder: (context, index) {
-                if (index == feedProvider.homeFeedPosts.length) {
-                  // Loading indicator at the bottom
-                  if (feedProvider.isHomeFeedLoading &&
-                      feedProvider.hasMoreHomeFeedPosts) {
-                    return const Padding(
-                      padding: EdgeInsets.all(16),
-                      child: Center(child: CircularProgressIndicator()),
-                    );
+            child: AppLayout.reading(
+              context: context,
+              child: ListView.builder(
+                controller: _scrollController,
+                padding: const EdgeInsets.symmetric(vertical: 8),
+                itemCount: feedProvider.homeFeedPosts.length + headerCount + 1,
+                itemBuilder: (context, index) {
+                  if (headerCount == 1 && index == 0) {
+                    return _buildLiveTripsRow(context, liveStories);
                   }
-                  return const SizedBox.shrink();
-                }
+                  final postIndex = index - headerCount;
+                  if (postIndex == feedProvider.homeFeedPosts.length) {
+                    if (feedProvider.isHomeFeedLoading &&
+                        feedProvider.hasMoreHomeFeedPosts) {
+                      return const Padding(
+                        padding: EdgeInsets.all(16),
+                        child: Center(child: CircularProgressIndicator()),
+                      );
+                    }
+                    return const SizedBox.shrink();
+                  }
 
-                final post = feedProvider.homeFeedPosts[index];
-                return _buildFinalPostCard(context, post);
-              },
+                  final post = feedProvider.homeFeedPosts[postIndex];
+                  return _buildFinalPostCard(context, post);
+                },
+              ),
             ),
           );
         },
+      ),
+    );
+  }
+
+  Widget _buildLiveTripsRow(
+    BuildContext context,
+    List<LiveTripStory> liveStories,
+  ) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'HAPPENING NOW',
+            style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                  letterSpacing: 1.1,
+                  fontSize: 11,
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+          ),
+          const SizedBox(height: 10),
+          SizedBox(
+            height: 92,
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              itemCount: liveStories.length,
+              separatorBuilder: (_, _) => const SizedBox(width: 12),
+              itemBuilder: (context, index) {
+                final story = liveStories[index];
+                final person = story.user;
+                final label = (person.name ??
+                        person.username ??
+                        story.trip.title)
+                    .split(' ')
+                    .first;
+                return InkWell(
+                  onTap: () => context.push(
+                    '/trip/${story.trip.id}',
+                    extra: {'from': '/home'},
+                  ),
+                  child: SizedBox(
+                    width: 68,
+                    child: Column(
+                      children: [
+                        Stack(
+                          clipBehavior: Clip.none,
+                          children: [
+                            Container(
+                              width: 64,
+                              height: 64,
+                              padding: const EdgeInsets.all(3),
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(18),
+                                border: Border.all(
+                                  color: story.isSelf
+                                      ? AppTheme.accent
+                                      : AppTheme.live,
+                                  width: 2,
+                                ),
+                              ),
+                              child: ClipRRect(
+                                borderRadius: BorderRadius.circular(14),
+                                child: person.avatarUrl != null
+                                    ? Image.network(
+                                        person.avatarUrl!,
+                                        fit: BoxFit.cover,
+                                      )
+                                    : Container(
+                                        color: AppTheme.muted,
+                                        alignment: Alignment.center,
+                                        child: Text(
+                                          label.isEmpty
+                                              ? 'T'
+                                              : label.substring(0, 1),
+                                          style: const TextStyle(
+                                            fontWeight: FontWeight.w600,
+                                            color: AppTheme.ink,
+                                          ),
+                                        ),
+                                      ),
+                              ),
+                            ),
+                            Positioned(
+                              right: -2,
+                              bottom: -2,
+                              child: DecoratedBox(
+                                decoration: const BoxDecoration(
+                                  color: AppTheme.live,
+                                  borderRadius:
+                                      BorderRadius.all(Radius.circular(8)),
+                                ),
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 4,
+                                    vertical: 1,
+                                  ),
+                                  child: Text(
+                                    story.isSelf ? 'YOU' : 'LIVE',
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 8,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          story.isSelf ? 'You' : label,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -431,7 +597,7 @@ class _HomeFeedScreenState extends State<HomeFeedScreen> {
 
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      elevation: 2,
+      elevation: 0,
       clipBehavior: Clip.antiAlias,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: Column(
@@ -449,12 +615,20 @@ class _HomeFeedScreenState extends State<HomeFeedScreen> {
                   },
                   child: CircleAvatar(
                     radius: 20,
-                    backgroundColor: Theme.of(context).colorScheme.primary,
+                    backgroundColor: AppTheme.avatarFallbackBackground(
+                      Theme.of(context).brightness,
+                    ),
                     backgroundImage: post.trip?.user?.avatarUrl != null
                         ? NetworkImage(post.trip!.user!.avatarUrl!)
                         : null,
                     child: post.trip?.user?.avatarUrl == null
-                        ? Icon(Icons.person, color: Colors.white, size: 20)
+                        ? Icon(
+                            Icons.person,
+                            color: AppTheme.avatarFallbackForeground(
+                              Theme.of(context).brightness,
+                            ),
+                            size: 20,
+                          )
                         : null,
                   ),
                 ),
@@ -473,6 +647,8 @@ class _HomeFeedScreenState extends State<HomeFeedScreen> {
                           post.trip?.user?.name ??
                               post.trip?.user?.username ??
                               'Travel Story',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                           style: Theme.of(context).textTheme.titleMedium
                               ?.copyWith(fontWeight: FontWeight.w600),
                         ),
@@ -556,11 +732,13 @@ class _HomeFeedScreenState extends State<HomeFeedScreen> {
                                             ? 0.06
                                             : 0.03,
                                       ),
-                                  child: const Center(
+                                  child: Center(
                                     child: Icon(
                                       Icons.image_not_supported,
                                       size: 48,
-                                      color: Colors.grey,
+                                      color: Theme.of(context)
+                                          .colorScheme
+                                          .onSurfaceVariant,
                                     ),
                                   ),
                                 );
@@ -576,6 +754,13 @@ class _HomeFeedScreenState extends State<HomeFeedScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
+                      if ((post.trip?.title ?? '').trim().isNotEmpty) ...[
+                        Text(
+                          post.trip!.title,
+                          style: Theme.of(context).textTheme.headlineSmall,
+                        ),
+                        const SizedBox(height: 8),
+                      ],
                       Text(
                         post.summaryText,
                         style: Theme.of(context).textTheme.bodyLarge,
@@ -1069,12 +1254,41 @@ class _TripsTabState extends State<TripsTab> {
 
     return Padding(
       padding: const EdgeInsets.all(16),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          ...trips.map((trip) => _buildTripCard(context, trip)),
-          const SizedBox(height: 80), // Bottom padding for FAB
-        ],
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final wide = constraints.maxWidth >= AppLayout.wideBreakpoint;
+          if (!wide) {
+            return Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                ...trips.map((trip) => _buildTripCard(context, trip)),
+                const SizedBox(height: 80),
+              ],
+            );
+          }
+          final rows = <Widget>[];
+          for (var i = 0; i < trips.length; i += 2) {
+            rows.add(
+              Padding(
+                padding: const EdgeInsets.only(bottom: 16),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(child: _buildTripCard(context, trips[i])),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: i + 1 < trips.length
+                          ? _buildTripCard(context, trips[i + 1])
+                          : const SizedBox.shrink(),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          }
+          rows.add(const SizedBox(height: 80));
+          return Column(mainAxisSize: MainAxisSize.min, children: rows);
+        },
       ),
     );
   }
@@ -1087,14 +1301,7 @@ class _TripsTabState extends State<TripsTab> {
       margin: EdgeInsets.all(isLandscape ? 12 : 16),
       padding: EdgeInsets.all(isLandscape ? 12 : 16),
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [
-            Theme.of(context).colorScheme.primary,
-            Theme.of(context).colorScheme.primary.withValues(alpha: 0.8),
-          ],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
+        gradient: AppTheme.brandWash(Theme.of(context).brightness),
         borderRadius: BorderRadius.circular(12),
       ),
       child: Column(
@@ -1165,14 +1372,23 @@ class _TripsTabState extends State<TripsTab> {
                     '/trip/${trip.id}/thread',
                     extra: {'from': '/trip/${trip.id}'},
                   ),
-                  icon: Icon(Icons.add, size: isLandscape ? 16 : 18),
+                  icon: Icon(
+                    Icons.add,
+                    size: isLandscape ? 16 : 18,
+                    color: AppTheme.ink,
+                  ),
                   label: Text(
                     'Add Entry',
-                    style: TextStyle(fontSize: isLandscape ? 12 : 14),
+                    style: TextStyle(
+                      fontSize: isLandscape ? 12 : 14,
+                      color: AppTheme.ink,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.white,
-                    foregroundColor: Theme.of(context).colorScheme.primary,
+                    foregroundColor: AppTheme.ink,
+                    iconColor: AppTheme.ink,
                     padding: EdgeInsets.symmetric(
                       vertical: isLandscape ? 8 : 12,
                     ),
@@ -1214,83 +1430,86 @@ class _TripsTabState extends State<TripsTab> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // Cover image
-            Container(
-              height: 200,
-              decoration: BoxDecoration(
-                borderRadius: const BorderRadius.vertical(
-                  top: Radius.circular(12),
-                ),
-                color: Theme.of(context).colorScheme.onSurface.withValues(
-                  alpha: Theme.of(context).brightness == Brightness.dark
-                      ? 0.06
-                      : 0.03,
-                ),
-              ),
-              child: () {
-                final coverUrl = trip.coverMedia?.url;
-                if (coverUrl == null) {
-                  return _buildPlaceholderImage(context, trip);
-                }
-                return ClipRRect(
-                  borderRadius: const BorderRadius.vertical(
-                    top: Radius.circular(12),
-                  ),
-                  child: Image.network(
-                    buildOptimizedImageUrl(coverUrl, width: 1600),
-                    width: double.infinity,
-                    height: 200,
-                    fit: BoxFit.cover,
-                    errorBuilder: (context, error, stackTrace) {
+            SizedBox(
+              height: 180,
+              width: double.infinity,
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  () {
+                    final coverUrl = trip.coverMedia?.url;
+                    if (coverUrl == null) {
                       return _buildPlaceholderImage(context, trip);
-                    },
+                    }
+                    return Image.network(
+                      buildOptimizedImageUrl(coverUrl, width: 1600),
+                      fit: BoxFit.cover,
+                      errorBuilder: (context, error, stackTrace) {
+                        return _buildPlaceholderImage(context, trip);
+                      },
+                    );
+                  }(),
+                  const DecoratedBox(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [Colors.transparent, Color(0x99000000)],
+                      ),
+                    ),
                   ),
-                );
-              }(),
+                  Positioned(
+                    top: 12,
+                    right: 12,
+                    child: _buildStatusBadge(context, trip.status),
+                  ),
+                  Positioned(
+                    left: 14,
+                    right: 14,
+                    bottom: 12,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          trip.title,
+                          style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                                color: Colors.white,
+                                fontSize: 20,
+                              ),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        if (trip.destinations.isNotEmpty) ...[
+                          const SizedBox(height: 4),
+                          Row(
+                            children: [
+                              const Icon(Icons.place, size: 14, color: Colors.white),
+                              const SizedBox(width: 4),
+                              Expanded(
+                                child: Text(
+                                  trip.destinations.join(' → '),
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 13,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ],
+              ),
             ),
-            // Trip info
             Padding(
               padding: const EdgeInsets.all(16),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          trip.title,
-                          style: Theme.of(context).textTheme.titleLarge
-                              ?.copyWith(fontWeight: FontWeight.bold),
-                          overflow: TextOverflow.ellipsis,
-                          maxLines: 1,
-                        ),
-                      ),
-                      _buildStatusBadge(context, trip.status),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  Row(
-                    children: [
-                      Icon(
-                        Icons.location_on,
-                        size: 16,
-                        color: Theme.of(context).colorScheme.onSurfaceVariant,
-                      ),
-                      const SizedBox(width: 4),
-                      Expanded(
-                        child: Text(
-                          trip.destinations.join(', '),
-                          style: Theme.of(context).textTheme.bodyMedium
-                              ?.copyWith(
-                                color: Theme.of(
-                                  context,
-                                ).colorScheme.onSurfaceVariant,
-                              ),
-                          overflow: TextOverflow.ellipsis,
-                          maxLines: 1,
-                        ),
-                      ),
-                    ],
-                  ),
                   if (trip.description != null) ...[
                     const SizedBox(height: 8),
                     Text(
@@ -1327,42 +1546,17 @@ class _TripsTabState extends State<TripsTab> {
   }
 
   Widget _buildPlaceholderImage(BuildContext context, Trip trip) {
-    return Container(
-      width: double.infinity,
-      height: 200,
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [
-            Theme.of(context).colorScheme.primary,
-            Theme.of(context).colorScheme.primary.withValues(alpha: 0.7),
-          ],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
+    return ClipRRect(
+      borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
+      child: SizedBox(
+        width: double.infinity,
+        height: 180,
+        child: TripCoverPlaceholder(
+          title: trip.title,
+          destination:
+              trip.destinations.isNotEmpty ? trip.destinations.first : null,
+          iconSize: 40,
         ),
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
-      ),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          const Icon(Icons.travel_explore, size: 48, color: Colors.white),
-          const SizedBox(height: 8),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: Text(
-              trip.destinations.isNotEmpty
-                  ? trip.destinations.first
-                  : trip.title,
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-              ),
-              textAlign: TextAlign.center,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-        ],
       ),
     );
   }
@@ -1373,31 +1567,30 @@ class _TripsTabState extends State<TripsTab> {
 
     switch (status) {
       case TripStatus.upcoming:
-        color = Colors.orange;
+        color = AppTheme.upcoming;
         label = 'Upcoming';
         break;
       case TripStatus.ongoing:
-        color = Colors.green;
-        label = 'Ongoing';
+        color = AppTheme.live;
+        label = 'Live';
         break;
       case TripStatus.ended:
-        color = Colors.blue;
-        label = 'Completed';
+        color = AppTheme.ended;
+        label = 'Ended';
         break;
     }
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.1),
+        color: color,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.withValues(alpha: 0.3)),
       ),
       child: Text(
         label,
-        style: TextStyle(
-          color: color,
-          fontWeight: FontWeight.w600,
+        style: const TextStyle(
+          color: Colors.white,
+          fontWeight: FontWeight.w700,
           fontSize: 12,
         ),
       ),
@@ -1483,7 +1676,7 @@ class ProfileTab extends StatelessWidget {
                       child: Container(
                         padding: const EdgeInsets.all(2),
                         decoration: BoxDecoration(
-                          color: Colors.red,
+                          color: AppTheme.likeRose,
                           borderRadius: BorderRadius.circular(6),
                         ),
                         constraints: const BoxConstraints(
@@ -1604,10 +1797,12 @@ class ProfileTab extends StatelessWidget {
                                 ? Text(
                                     user.name?.substring(0, 1).toUpperCase() ??
                                         'U',
-                                    style: const TextStyle(
+                                    style: TextStyle(
                                       fontSize: 24,
                                       fontWeight: FontWeight.bold,
-                                      color: Colors.white,
+                                      color: Theme.of(context)
+                                          .colorScheme
+                                          .onPrimary,
                                     ),
                                   )
                                 : null,
@@ -1627,7 +1822,7 @@ class ProfileTab extends StatelessWidget {
                       if (user.username != null) ...[
                         const SizedBox(height: 4),
                         Text(
-                          '@${user.username}',
+                          user.username!,
                           style: Theme.of(context).textTheme.bodyMedium,
                         ),
                       ],
@@ -1757,53 +1952,21 @@ class ProfileTab extends StatelessWidget {
                           ),
                           const SizedBox(height: 16),
                           if (recentTrips.isEmpty)
-                            Center(
-                              child: Column(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Icon(
-                                    Icons.map_outlined,
-                                    size: 48,
-                                    color: Colors.grey,
-                                  ),
-                                  const SizedBox(height: 12),
-                                  Text(
-                                    'No trips yet',
-                                    style: TextStyle(
-                                      fontSize: 16,
-                                      color: Colors.grey,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 4),
-                                  Builder(
-                                    builder: (context) => Text(
-                                      'Start documenting your adventures!',
-                                      style: TextStyle(
-                                        color: Theme.of(
-                                          context,
-                                        ).colorScheme.onSurfaceVariant,
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
+                            AppFeedback.empty(
+                              context: context,
+                              icon: Icons.map_outlined,
+                              title: 'No trips yet',
+                              subtitle: 'Start documenting your adventures!',
+                              expand: false,
                             )
                           else
                             Column(
                               children: recentTrips.map((trip) {
                                 final theme = Theme.of(context);
-                                final isDark =
-                                    theme.brightness == Brightness.dark;
-                                final cardColor = isDark
-                                    ? theme.colorScheme.surfaceContainerHighest
-                                          .withValues(alpha: 0.65)
-                                    : const Color(0xFF1A1F2B);
-                                final primaryText = isDark
-                                    ? Colors.white
-                                    : Colors.white;
-                                final secondaryText = primaryText.withValues(
-                                  alpha: 0.7,
-                                );
+                                final scheme = theme.colorScheme;
+                                final cardColor = scheme.surfaceContainerHighest;
+                                final primaryText = scheme.onSurface;
+                                final secondaryText = scheme.onSurfaceVariant;
 
                                 final coverUrl = trip.coverMedia?.url;
 
@@ -1822,24 +1985,10 @@ class ProfileTab extends StatelessWidget {
                                       color: cardColor,
                                       borderRadius: BorderRadius.circular(12),
                                       border: Border.all(
-                                        color: isDark
-                                            ? theme.dividerColor.withValues(
-                                                alpha: 0.35,
-                                              )
-                                            : Colors.white.withValues(
-                                                alpha: 0.08,
-                                              ),
+                                        color: scheme.outline.withValues(
+                                          alpha: 0.45,
+                                        ),
                                       ),
-                                      boxShadow: [
-                                        if (!isDark)
-                                          BoxShadow(
-                                            color: Colors.black.withValues(
-                                              alpha: 0.25,
-                                            ),
-                                            blurRadius: 12,
-                                            offset: const Offset(0, 5),
-                                          ),
-                                      ],
                                     ),
                                     child: Row(
                                       children: [
@@ -1864,13 +2013,29 @@ class ProfileTab extends StatelessWidget {
                                                           error,
                                                           stackTrace,
                                                         ) {
-                                                          return _buildRecentTripIcon(
-                                                            primaryText,
+                                                          return TripCoverPlaceholder(
+                                                            title: trip.title,
+                                                            destination: trip
+                                                                    .destinations
+                                                                    .isNotEmpty
+                                                                ? trip
+                                                                    .destinations
+                                                                    .first
+                                                                : null,
+                                                            iconSize: 22,
+                                                            compact: true,
                                                           );
                                                         },
                                                   )
-                                                : _buildRecentTripIcon(
-                                                    primaryText,
+                                                : TripCoverPlaceholder(
+                                                    title: trip.title,
+                                                    destination: trip
+                                                            .destinations
+                                                            .isNotEmpty
+                                                        ? trip.destinations.first
+                                                        : null,
+                                                    iconSize: 22,
+                                                    compact: true,
                                                   ),
                                           ),
                                         ),
@@ -2004,14 +2169,6 @@ class ProfileTab extends StatelessWidget {
           ),
         ),
       ),
-    );
-  }
-
-  Widget _buildRecentTripIcon(Color iconColor) {
-    return Container(
-      color: iconColor.withValues(alpha: 0.12),
-      alignment: Alignment.center,
-      child: Icon(Icons.travel_explore, color: iconColor, size: 28),
     );
   }
 }

@@ -1,12 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:tripthread/models/user.dart';
+import 'package:tripthread/utils/app_feedback.dart';
+import 'package:tripthread/utils/app_layout.dart';
+import 'package:tripthread/utils/chat_navigation.dart';
+import 'package:tripthread/widgets/chat/chat_avatar.dart';
 import 'package:tripthread/providers/chat_provider.dart';
 import 'package:tripthread/providers/auth_provider.dart';
 import 'package:tripthread/services/api_service.dart';
-import 'package:tripthread/utils/avatar_utils.dart';
 
 /// Screen to start a new DM: pick a user (from following), create conversation, then open chat.
 class NewConversationScreen extends StatefulWidget {
@@ -77,7 +79,7 @@ class _NewConversationScreenState extends State<NewConversationScreen> {
     setState(() => _creatingForUserId = null);
     if (conv != null) {
       context.pop();
-      context.push('/chat/${conv.id}');
+      context.push('/chat/${conv.id}', extra: chatReturnExtra('/chat'));
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(chat.error ?? 'Failed to start conversation')),
@@ -124,7 +126,7 @@ class _NewConversationScreenState extends State<NewConversationScreen> {
     setState(() => _creatingGroup = false);
     if (conv != null) {
       context.pop();
-      context.push('/chat/${conv.id}');
+      context.push('/chat/${conv.id}', extra: chatReturnExtra('/chat'));
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(chat.error ?? 'Failed to create group conversation')),
@@ -149,28 +151,24 @@ class _NewConversationScreenState extends State<NewConversationScreen> {
           ),
         ],
       ),
-      body: _loading
+      body: AppLayout.reading(
+        context: context,
+        child: _loading
           ? const Center(child: CircularProgressIndicator())
           : _error != null && _users.isEmpty
-              ? Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Text(_error!, textAlign: TextAlign.center),
-                      const SizedBox(height: 16),
-                      TextButton(
-                        onPressed: _loadUsers,
-                        child: const Text('Retry'),
-                      ),
-                    ],
-                  ),
+              ? AppFeedback.error(
+                  context: context,
+                  title: 'Could not load people',
+                  message: _error!,
+                  onRetry: _loadUsers,
                 )
               : _users.isEmpty
-                  ? const Center(
-                      child: Text(
-                        'Follow someone to start a chat.\nThey will appear here.',
-                        textAlign: TextAlign.center,
-                      ),
+                  ? AppFeedback.empty(
+                      context: context,
+                      icon: Icons.people_outline,
+                      title: 'No one to message yet',
+                      subtitle:
+                          'Follow someone to start a chat.\nThey will appear here.',
                     )
                   : Column(
                       children: [
@@ -183,7 +181,6 @@ class _NewConversationScreenState extends State<NewConversationScreen> {
                                   controller: _groupNameController,
                                   decoration: const InputDecoration(
                                     labelText: 'Group name (optional)',
-                                    border: OutlineInputBorder(),
                                   ),
                                 ),
                                 const SizedBox(height: 8),
@@ -204,31 +201,18 @@ class _NewConversationScreenState extends State<NewConversationScreen> {
                               final user = _users[index];
                               final displayName =
                                   user.name ?? user.username ?? user.email;
-                              final avatarInitial = AvatarUtils.initialsFromName(
-                                user.name ?? user.username ?? '',
-                              );
-                              final avatarColor = AvatarUtils.colorForKey(user.id);
                               final creating = _creatingForUserId == user.id;
                               final selected = _selectedUserIds.contains(user.id);
                               return ListTile(
-                                leading: CircleAvatar(
-                                  backgroundColor: avatarColor,
-                                  backgroundImage: user.avatarUrl != null
-                                      ? CachedNetworkImageProvider(user.avatarUrl!)
-                                      : null,
-                                  child: user.avatarUrl == null
-                                      ? Text(
-                                          avatarInitial,
-                                          style: const TextStyle(
-                                            color: Colors.white,
-                                            fontWeight: FontWeight.w700,
-                                          ),
-                                        )
-                                      : null,
+                                leading: ChatAvatar(
+                                  radius: 22,
+                                  avatarUrl: user.avatarUrl,
+                                  username: user.username,
+                                  name: user.name,
                                 ),
                                 title: Text(displayName),
                                 subtitle: user.username != null
-                                    ? Text('@${user.username}')
+                                    ? Text(user.username!)
                                     : null,
                                 trailing: _groupMode
                                     ? Checkbox(
@@ -256,6 +240,7 @@ class _NewConversationScreenState extends State<NewConversationScreen> {
                         ),
                       ],
                     ),
+      ),
       floatingActionButton: _groupMode
           ? FloatingActionButton.extended(
               onPressed: _creatingGroup ? null : _createGroupConversation,
