@@ -2490,7 +2490,7 @@
                     "Dates/timezone (#6/#7/#8) are addressed on the trip-create branch",
                     "Partial: logout-all (#9), share Universal Links ops (#32), Google avatar (#19), avatar deleted (#33), reply-to-reply (#37)"
                 ],
-                "notes": "Do not re-open stampede locking or lean trip GET. Next scale work is a short private cache for /users/me, Neon retry on a closed connection, and TCP Redis Pub/Sub before a second chat replica. Remaining product issues are listed in documentations/remaining-product-issues.md."
+                "notes": "Do not re-open stampede locking or lean trip GET. Next scale work is a short private cache for /users/me, Neon retry on a closed connection, and TCP Redis Pub/Sub before a second chat replica."
             },
             {
                 "id": "trip-link-share",
