@@ -2,10 +2,12 @@
     "project": {
         "name": "TripThread",
         "workspacePath": "/Users/rajbagaria/Desktop/Bolt-Travello/Flut/project",
-        "generatedAt": "2026-10-31",
+        "generatedAt": "2026-11-01",
         "description": "Travel-focused social platform where users create trips, post thread entries (text/media/location/check-ins), split trip expenses and settle up on a Money pane, generate/publish final trip posts, and chat via 1:1 DMs, groups, and trip-scoped rooms (realtime WebSocket).",
-        "lastPRReviewed": "PR #51 merged to main on 2026-10-31. PR #55 is already on main. Open next: PR #54 trip create (feat-trip-create-ux → main), then PR #56 Docker (cursor/docker-stack-refresh-8029 → feat-trip-create-ux). Apply migration 20261014150000_trip_open_ended_schedule with PR #54. Cloudinary upload presets and Universal Links ops remain.",
+        "lastPRReviewed": "Current work is PR #54 (feat-trip-create-ux → main): https://github.com/bagariaraj23/Trav-Flut/pull/54. It is a draft and mergeable. A trip can start now, keep an optional end, and store UTC instants. Apply migration 20261014150000_trip_open_ended_schedule only when this branch is deployed. PR #55 merged to main on 2026-10-29 (6:13 PM IST). PR #51 merged to main on 2026-10-31 (5:08 PM IST). After 54, merge PR #56.",
         "recentProductionPRs": [
+            "https://github.com/bagariaraj23/Trav-Flut/pull/51",
+            "https://github.com/bagariaraj23/Trav-Flut/pull/55",
             "https://github.com/bagariaraj23/Trav-Flut/pull/50",
             "https://github.com/bagariaraj23/Trav-Flut/pull/49",
             "https://github.com/bagariaraj23/Trav-Flut/pull/48",
@@ -134,7 +136,7 @@
             "Notification model supports unified notifications (likes, comments, follows, mentions)",
             "Conversation model supports DM, GROUP, and TRIP type rooms with dynamic participants and leftAt validation",
             "ChatMessage model supports content, soft deletion with deletedAt, and message replyTo hierarchy",
-            "Hot-path indexes (PR #52): migration 20261004153000_add_hot_path_query_indexes plus 20261004180000_add_remaining_hot_path_indexes (trips userId+createdAt, media tripId, trip_join_requests receiverId+status, conversations updatedAt). Earlier slice covers trip threads, published final posts, notifications, follows, trip status+dates, participant userId, likes, comment replies, media by uploader"
+            "Hot-path indexes (PR #55, merged 2026-10-29): migration 20261004153000_add_hot_path_query_indexes plus 20261004180000_add_remaining_hot_path_indexes (trips userId+createdAt, media tripId, trip_join_requests receiverId+status, conversations updatedAt). Earlier slice covers trip threads, published final posts, notifications, follows, trip status+dates, participant userId, likes, comment replies, media by uploader"
         ]
     },
     "backendApi": {
@@ -1703,6 +1705,39 @@
     "prTracking": {
         "merged": [
             {
+                "number": 51,
+                "title": "Blue theme, Discover search, and trip chat controls",
+                "merged_at": "2026-10-31",
+                "url": "https://github.com/bagariaraj23/Trav-Flut/pull/51",
+                "branch": "feat-ui-warm-polish",
+                "base": "main",
+                "head": "479305b",
+                "keyFeatures": [
+                    "Brand pair accent/accentDark drives washes, chips, and gradients; status colors stay separate",
+                    "Discover search across people and trips",
+                    "Trip chat uses the trip title and the same member controls as a group",
+                    "Leaving a chat does not leave the trip; rejoining a trip restores chat membership"
+                ]
+            },
+            {
+                "number": 55,
+                "title": "API and database performance",
+                "merged_at": "2026-10-29",
+                "url": "https://github.com/bagariaraj23/Trav-Flut/pull/55",
+                "base": "main",
+                "head": "cursor/api-db-performance-8029",
+                "keyFeatures": [
+                    "Redis 250ms deadline and circuit breaker; getOrSet stampede lock",
+                    "Hot-path Prisma indexes, applied on Neon",
+                    "Home feed keyset cursor and denormalized discover ordering",
+                    "Trip detail without an embedded thread",
+                    "Rate-limit presets, Cloudinary upload presets, orphan-media script"
+                ],
+                "productionNotes": [
+                    "Migrations 20261004153000_add_hot_path_query_indexes and 20261004180000_add_remaining_hot_path_indexes were applied on Neon on 2026-10-29"
+                ]
+            },
+            {
                 "number": 50,
                 "title": "Add trip-scoped expense ledger with split math and settle-up",
                 "merged_at": "2026-10-09",
@@ -2220,51 +2255,16 @@
         ],
         "open": [
             {
-                "number": 55,
-                "title": "API and database performance",
-                "state": "open",
-                "url": "https://github.com/bagariaraj23/Trav-Flut/pull/55",
-                "base": "main",
-                "head": "cursor/api-db-performance-8029",
-                "created_at": "2026-10-18",
-                "notes": "Reviewable database diff against main. Same tree as feat-api-db-optimizations. PR #52 merged into the rewritten Warm UI branch and cannot be reopened. Redis fails soft, hot-path indexes, keyset home feed, lean trip reads, and client fetch dedupe.",
-                "keyFeatures": [
-                    "Redis 250ms deadline and circuit breaker; getOrSet stampede lock",
-                    "Hot-path Prisma indexes",
-                    "Home feed keyset cursor and denormalized discover ordering",
-                    "Trip detail without an embedded thread",
-                    "Rate-limit presets, Cloudinary upload presets, orphan-media script"
-                ]
-            },
-            {
-                "number": 51,
-                "title": "Blue theme, Discover search, and trip chat controls",
-                "state": "merged",
-                "url": "https://github.com/bagariaraj23/Trav-Flut/pull/51",
-                "branch": "feat-ui-warm-polish",
-                "base": "main",
-                "created_at": "2026-10-04",
-                "updated_at": "2026-10-31",
-                "merged_at": "2026-10-31",
-                "head": "479305b",
-                "notes": "Merged to main. Accent is the blue pair (#1D6FE8 / #6AA8FF). Discover search covers people and trips. Trip chats use the trip name and the same member controls as groups. Back from a chat returns to the screen that opened it. Rejoining a trip restores chat membership; a voluntary chat leave stays until an admin adds that person back.",
-                "keyFeatures": [
-                    "Brand pair accent/accentDark drives washes, chips, and gradients; status colors stay separate",
-                    "Discover search across people and trips, with All/People/Trips chips and a short preview",
-                    "Trip chat name defaults to the trip title; settings include add, remove, promote, leave, rename, and photo",
-                    "Leaving a chat does not leave the trip and is not undone by the next trip sync",
-                    "Chat back returns to Messages or the trip; every bubble ripples, edit/delete stays within 15 minutes"
-                ]
-            },
-            {
                 "number": 54,
                 "title": "Trip create UX",
                 "state": "open",
+                "draft": true,
+                "mergeable": true,
                 "url": "https://github.com/bagariaraj23/Trav-Flut/pull/54",
                 "base": "main",
                 "head": "feat-trip-create-ux",
                 "created_at": "2026-10-14",
-                "notes": "Base is main after PR #51 merged. A trip can start now, keep an optional end, and store real UTC instants. Apply migration 20261014150000_trip_open_ended_schedule when this branch is deployed. Merge before PR #56.",
+                "notes": "Current work. Base is main. Draft and mergeable. A trip can start now, keep an optional end, and store real UTC instants. Apply migration 20261014150000_trip_open_ended_schedule when this branch is deployed. Merge before PR #56.",
                 "keyFeatures": [
                     "Optional start and end on create; missing start means ongoing now",
                     "PATCH /trips/[id]/dates and end-on-demand",
@@ -2341,8 +2341,8 @@
             "lastRun": "2026-10-18",
             "notes": "2026-10-18 Vitest (unit, scheduler, route contract, auth, signup, thread, leave, expenses, engagement, notifications, chat, follow requests, invites, spend visibility): database branch 29 files / 210 tests passed; Warm UI branch 29 files / 211 tests passed; trip-create tip 30 files / 215 tests passed. Flutter widget tests were not run (no Flutter SDK). Do not add platform-specific Rolldown bindings to root dependencies."
         },
-        "lastMergedFeature": "PR #51 Warm UI (merged main 2026-10-31)",
-        "notes": "PR #55 and PR #51 are on main. PR #54 (feat-trip-create-ux → main) is next: start-now, optional end, UTC instants, Solo until someone joins then Group. Apply migration 20261014150000_trip_open_ended_schedule when that branch is deployed. PR #56 stays based on feat-trip-create-ux until 54 is merged. Cloudinary dashboard presets and Universal Links ops remain.",
+        "lastMergedFeature": "PR #55 API and database performance (merged main 2026-10-29); PR #51 Warm UI (merged main 2026-10-31)",
+        "notes": "Current work is PR #54 (feat-trip-create-ux → main): start-now, optional end, UTC instants, Solo until someone joins then Group. Apply migration 20261014150000_trip_open_ended_schedule when that branch is deployed. PR #56 stays based on feat-trip-create-ux until 54 is merged. Cloudinary dashboard presets and Universal Links ops remain.",
         "mainBranchStable": true,
         "activeStack": [
             {
@@ -2441,7 +2441,7 @@
         }
     },
     "nextFeaturePipeline": {
-        "updatedAt": "2026-10-31",
+        "updatedAt": "2026-11-01",
         "priorityOrder": [
             {
                 "id": "warm-ui-polish",
@@ -2483,7 +2483,7 @@
                 ],
                 "status": "partial-database-work-landed",
                 "highlights": [
-                    "Done on the database branch: Redis fail-soft, stampede lock, hot-path indexes, keyset home feed, lean trip GET",
+                    "Done in merged PR #55: Redis fail-soft, stampede lock, hot-path indexes, keyset home feed, lean trip GET",
                     "Still open: uncached GET /users/me, Neon reconnect, chat Redis Pub/Sub (keep replicas at 1)",
                     "Cloudinary dashboard presets (tripthread_thread_image, cover, video, avatar)",
                     "Product still open: continue/replace (#11), realtime thread (#15), location edit (#14), final-post reorder (#30)",
