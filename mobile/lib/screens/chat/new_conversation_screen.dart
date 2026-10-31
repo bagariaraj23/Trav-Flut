@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:tripthread/models/user.dart';
 import 'package:tripthread/utils/app_feedback.dart';
 import 'package:tripthread/utils/app_layout.dart';
+import 'package:tripthread/utils/chat_navigation.dart';
 import 'package:tripthread/widgets/chat/chat_avatar.dart';
 import 'package:tripthread/providers/chat_provider.dart';
 import 'package:tripthread/providers/auth_provider.dart';
@@ -78,7 +79,7 @@ class _NewConversationScreenState extends State<NewConversationScreen> {
     setState(() => _creatingForUserId = null);
     if (conv != null) {
       context.pop();
-      context.push('/chat/${conv.id}');
+      context.push('/chat/${conv.id}', extra: chatReturnExtra('/chat'));
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(chat.error ?? 'Failed to start conversation')),
@@ -125,7 +126,7 @@ class _NewConversationScreenState extends State<NewConversationScreen> {
     setState(() => _creatingGroup = false);
     if (conv != null) {
       context.pop();
-      context.push('/chat/${conv.id}');
+      context.push('/chat/${conv.id}', extra: chatReturnExtra('/chat'));
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(chat.error ?? 'Failed to create group conversation')),

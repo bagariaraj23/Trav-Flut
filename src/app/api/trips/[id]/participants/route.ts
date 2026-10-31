@@ -6,7 +6,7 @@ import { ApiResponse, TripParticipantResponse } from "@/types/api";
 import { assertMemberZeroNetOnTrip } from "@/lib/services/expense";
 import { UnsettledBalanceError } from "@/lib/errors";
 import { enforcePresetRateLimit } from "@/lib/rateLimit";
-import { ensureTripConversation } from "@/lib/services/chat";
+import { ensureTripConversation, markTripMemberLeftChat } from "@/lib/services/chat";
 
 // Add participant to trip
 export async function POST(
@@ -332,6 +332,7 @@ export async function DELETE(
     ]);
 
     try {
+      await markTripMemberLeftChat(tripId, userIdToRemove);
       await ensureTripConversation(tripId);
     } catch (chatErr) {
       console.error(

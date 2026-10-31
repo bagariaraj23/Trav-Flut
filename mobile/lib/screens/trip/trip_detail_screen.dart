@@ -8,6 +8,7 @@ import 'package:tripthread/models/user.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:tripthread/utils/app_layout.dart';
 import 'package:tripthread/utils/app_theme.dart';
+import 'package:tripthread/utils/chat_navigation.dart';
 import 'package:tripthread/utils/user_display_labels.dart';
 import 'package:tripthread/utils/cloudinary_utils.dart';
 import 'package:tripthread/widgets/loading_button.dart';
@@ -272,7 +273,10 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
                     icon: const Icon(Icons.chat_bubble_outline),
                     tooltip: 'Trip Chat',
                     onPressed: () {
-                      context.push('/chat?tripId=${widget.tripId}');
+                      context.push(
+                        '/chat?tripId=${widget.tripId}',
+                        extra: chatReturnExtra('/trip/${widget.tripId}'),
+                      );
                     },
                   ),
                 if (_trip != null && _isOwnerOrParticipant())

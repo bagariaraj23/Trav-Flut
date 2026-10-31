@@ -8,6 +8,7 @@ import 'package:tripthread/providers/auth_provider.dart';
 import 'package:tripthread/services/media_service.dart';
 import 'package:tripthread/utils/app_layout.dart';
 import 'package:tripthread/utils/app_theme.dart';
+import 'package:tripthread/utils/chat_navigation.dart';
 import 'package:tripthread/widgets/chat/chat_avatar.dart';
 import 'package:tripthread/services/api_service.dart';
 
@@ -205,6 +206,10 @@ class _GroupSettingsScreenState extends State<GroupSettingsScreen> {
     );
   }
 
+  void _leave() {
+    leaveChatSettings(context, widget.conversationId);
+  }
+
   Future<void> _leaveGroup(ChatConversationSummary conversation, bool isViewerAdmin) async {
     // Guard: sole admin cannot leave while other members remain.
     final activeParticipants = conversation.participants;
@@ -222,11 +227,16 @@ class _GroupSettingsScreenState extends State<GroupSettingsScreen> {
       return;
     }
 
+    final isTripChat = conversation.type == 'TRIP';
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Leave Group'),
-        content: const Text('Are you sure you want to leave this group? You will need to be re-added by an admin.'),
+        title: Text(isTripChat ? 'Leave chat' : 'Leave Group'),
+        content: Text(
+          isTripChat
+              ? 'You will leave this chat and stay on the trip. An admin can add you back.'
+              : 'Are you sure you want to leave this group? You will need to be re-added by an admin.',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
@@ -250,9 +260,7 @@ class _GroupSettingsScreenState extends State<GroupSettingsScreen> {
     if (!mounted) return;
 
     if (ok) {
-      // Pop settings screen and the chat screen so the user lands on the conversations list.
-      context.pop();
-      context.pop();
+      leaveChatRoute(context, fallback: '/chat');
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(chat.error ?? 'Failed to leave group')),
@@ -267,17 +275,31 @@ class _GroupSettingsScreenState extends State<GroupSettingsScreen> {
     final conversation = _currentConversation(chat);
 
     if (conversation == null) {
-      return Scaffold(
+      return PopScope(
+        canPop: false,
+        onPopInvokedWithResult: (didPop, _) {
+          if (didPop) return;
+          _leave();
+        },
+        child: Scaffold(
         appBar: AppBar(
           title: const Text('Group Settings'),
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back),
+            onPressed: _leave,
+          ),
         ),
         body: const Center(
           child: CircularProgressIndicator(),
         ),
+      ),
       );
     }
 
-    final name = conversation.name ?? 'Group Chat';
+    final isTripChat = conversation.type == 'TRIP';
+    final name = conversation.name?.trim().isNotEmpty == true
+        ? conversation.name!.trim()
+        : (isTripChat ? 'Trip chat' : 'Group Chat');
     final hasImage =
         conversation.avatarUrl != null && conversation.avatarUrl!.isNotEmpty;
 
@@ -288,9 +310,19 @@ class _GroupSettingsScreenState extends State<GroupSettingsScreen> {
     final isViewerAdmin = currentUserParticipant.role == 'ADMIN';
 
     final avatarLabel = name;
-    return Scaffold(
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop) return;
+        _leave();
+      },
+      child: Scaffold(
       appBar: AppBar(
-        title: const Text('Group Details'),
+        title: Text(isTripChat ? 'Chat details' : 'Group Details'),
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          onPressed: _leave,
+        ),
       ),
       body: AppLayout.reading(
         context: context,
@@ -469,9 +501,9 @@ class _GroupSettingsScreenState extends State<GroupSettingsScreen> {
                                 value: 'promote',
                                 child: Text('Promote to Admin'),
                               ),
-                            const PopupMenuItem(
+                            PopupMenuItem(
                               value: 'remove',
-                              child: Text('Remove from Group'),
+                              child: Text(isTripChat ? 'Remove from chat' : 'Remove from Group'),
                             ),
                           ],
                         ),
@@ -489,14 +521,18 @@ class _GroupSettingsScreenState extends State<GroupSettingsScreen> {
                 color: Theme.of(context).colorScheme.error,
               ),
               title: Text(
-                'Leave Group',
+                isTripChat ? 'Leave chat' : 'Leave Group',
                 style: TextStyle(color: Theme.of(context).colorScheme.error),
               ),
+              subtitle: isTripChat
+                  ? const Text('You stay on the trip')
+                  : null,
               onTap: () => _leaveGroup(conversation, isViewerAdmin),
             ),
             const SizedBox(height: 24),
           ],
         ),
+      ),
       ),
       ),
     );

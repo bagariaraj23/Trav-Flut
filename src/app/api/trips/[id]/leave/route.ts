@@ -11,7 +11,7 @@ import {
 import { assertMemberZeroNetOnTrip } from "@/lib/services/expense";
 import { UnsettledBalanceError } from "@/lib/errors";
 import { enforcePresetRateLimit } from "@/lib/rateLimit";
-import { ensureTripConversation } from "@/lib/services/chat";
+import { ensureTripConversation, markTripMemberLeftChat } from "@/lib/services/chat";
 
 export async function POST(
   request: NextRequest,
@@ -148,6 +148,7 @@ export async function POST(
     }
 
     try {
+      await markTripMemberLeftChat(tripId, userId);
       await ensureTripConversation(tripId);
     } catch (chatErr) {
       console.error(

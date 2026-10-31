@@ -191,6 +191,9 @@ const conversationListInclude = {
       createdAt: true,
     },
   },
+  trip: {
+    select: { title: true },
+  },
 } satisfies Prisma.ConversationInclude
 
 /**
@@ -208,7 +211,9 @@ function formatConversationSummarySync(
     id: conv.id,
     type: conv.type,
     tripId: conv.tripId ?? null,
-    name: conv.name ?? null,
+    name:
+      (typeof conv.name === 'string' && conv.name.trim()) ||
+      (conv.type === 'TRIP' ? conv.trip?.title?.trim() || null : null),
     avatarUrl: conv.avatarUrl ?? null,
     participants: conv.participants
       .filter((p: any) => !p.leftAt)
@@ -375,6 +380,7 @@ export async function ensureTripConversation(tripId: string): Promise<void> {
     select: {
       id: true,
       userId: true,
+      title: true,
       type: true,
       participants: { select: { userId: true } },
     },
@@ -394,6 +400,7 @@ export async function ensureTripConversation(tripId: string): Promise<void> {
       data: {
         type: 'TRIP',
         tripId,
+        name: trip.title,
         participants: {
           create: memberIds.map((uid) => ({
             userId: uid,
@@ -403,6 +410,13 @@ export async function ensureTripConversation(tripId: string): Promise<void> {
       },
     })
     return
+  }
+
+  if (!conv.name?.trim()) {
+    await prisma.conversation.update({
+      where: { id: conv.id },
+      data: { name: trip.title },
+    })
   }
 
   await syncTripConversationParticipants(conv, memberIds)
@@ -421,6 +435,7 @@ export async function getOrCreateTripConversation(
     select: {
       id: true,
       userId: true,
+      title: true,
       type: true,
       participants: { select: { userId: true } },
     },
@@ -444,6 +459,7 @@ export async function getOrCreateTripConversation(
       data: {
         type: 'TRIP',
         tripId,
+        name: trip.title,
         participants: {
           create: memberIds.map((uid) => ({
             userId: uid,
@@ -454,6 +470,12 @@ export async function getOrCreateTripConversation(
       include: conversationListInclude,
     })
   } else {
+    if (!conv.name?.trim()) {
+      await prisma.conversation.update({
+        where: { id: conv.id },
+        data: { name: trip.title },
+      })
+    }
     await syncTripConversationParticipants(conv, memberIds)
     conv = await prisma.conversation.findUnique({
       where: { tripId },
@@ -469,49 +491,39 @@ async function syncTripConversationParticipants(
   conv: { id: string; participants: Array<{ id: string; userId: string; leftAt: Date | null }> },
   tripUserIds: string[]
 ): Promise<void> {
-  const tripUserIdSet = new Set(tripUserIds)
   const conversationId = conv.id
 
-  // 1. Add brand-new members in one batch insert.
+  // Add people who joined the trip and have never been in this chat.
+  // Do not clear leftAt here. Leaving or being removed from the chat stays
+  // until an admin adds that person back. Leaving the trip is handled separately.
   const existingUserIds = new Set(conv.participants.map((p) => p.userId))
   const newMemberIds = tripUserIds.filter((id) => !existingUserIds.has(id))
-  if (newMemberIds.length > 0) {
-    await prisma.conversationParticipant.createMany({
-      data: newMemberIds.map((userId) => ({
-        conversationId,
-        userId,
-        role: 'MEMBER' as const,
-      })),
-      skipDuplicates: true,
-    })
-  }
+  if (newMemberIds.length === 0) return
 
-  // 2. Re-join previously-departed members in one batch update.
-  const rejoinIds = conv.participants
-    .filter((p) => tripUserIdSet.has(p.userId) && p.leftAt !== null)
-    .map((p) => p.id)
-  if (rejoinIds.length > 0) {
-    await prisma.conversationParticipant.updateMany({
-      where: { id: { in: rejoinIds } },
-      data: { leftAt: null, joinedAt: new Date() },
-    })
-  }
+  await prisma.conversationParticipant.createMany({
+    data: newMemberIds.map((userId) => ({
+      conversationId,
+      userId,
+      role: 'MEMBER' as const,
+    })),
+    skipDuplicates: true,
+  })
+  invalidateParticipantCache(conversationId)
+}
 
-  // 3. Soft-remove participants no longer in the trip in one batch update.
-  const departedIds = conv.participants
-    .filter((p) => !tripUserIdSet.has(p.userId) && p.leftAt === null)
-    .map((p) => p.id)
-  if (departedIds.length > 0) {
-    await prisma.conversationParticipant.updateMany({
-      where: { id: { in: departedIds } },
-      data: { leftAt: new Date() },
-    })
-  }
+/** Soft-removes someone from the trip chat when they leave or are removed from the trip. */
+export async function markTripMemberLeftChat(tripId: string, userId: string): Promise<void> {
+  const conv = await prisma.conversation.findUnique({
+    where: { tripId },
+    select: { id: true },
+  })
+  if (!conv) return
 
-  // Any membership change invalidates the participant cache for this conversation.
-  if (newMemberIds.length > 0 || rejoinIds.length > 0 || departedIds.length > 0) {
-    invalidateParticipantCache(conversationId)
-  }
+  const updated = await prisma.conversationParticipant.updateMany({
+    where: { conversationId: conv.id, userId, leftAt: null },
+    data: { leftAt: new Date() },
+  })
+  if (updated.count > 0) invalidateParticipantCache(conv.id)
 }
 
 export async function listConversations(
@@ -1097,7 +1109,9 @@ export async function updateGroupDetails(
   })
 
   if (!conv) throw new NotFoundError('Group not found')
-  if (conv.type !== 'GROUP') throw new ValidationError('Only groups details can be edited')
+  if (conv.type !== 'GROUP' && conv.type !== 'TRIP') {
+    throw new ValidationError('Only group and trip chats can be edited')
+  }
 
   const participant = conv.participants.find((p) => p.userId === userId && !p.leftAt)
   if (!participant) throw new AuthorizationError('Not a participant')
@@ -1126,7 +1140,9 @@ export async function addGroupParticipant(
   })
 
   if (!conv) throw new NotFoundError('Group not found')
-  if (conv.type !== 'GROUP') throw new ValidationError('Only group participants can be managed')
+  if (conv.type !== 'GROUP' && conv.type !== 'TRIP') {
+    throw new ValidationError('Only group and trip chats can be managed')
+  }
 
   const adminParticipant = conv.participants.find((p) => p.userId === adminUserId && !p.leftAt)
   if (!adminParticipant) throw new AuthorizationError('Not a participant')
@@ -1179,7 +1195,9 @@ export async function removeGroupParticipant(
   })
 
   if (!conv) throw new NotFoundError('Group not found')
-  if (conv.type !== 'GROUP') throw new ValidationError('Only group participants can be managed')
+  if (conv.type !== 'GROUP' && conv.type !== 'TRIP') {
+    throw new ValidationError('Only group and trip chats can be managed')
+  }
 
   const adminParticipant = conv.participants.find((p) => p.userId === adminUserId && !p.leftAt)
   if (!adminParticipant) throw new AuthorizationError('Not a participant')
@@ -1210,7 +1228,8 @@ export async function removeGroupParticipant(
 }
 
 /**
- * Allows any active participant to voluntarily leave a GROUP conversation.
+ * Allows any active participant to voluntarily leave a GROUP or TRIP chat.
+ * This does not remove them from the trip itself.
  * Blocked if the user is the sole remaining admin and other members exist —
  * they must promote another member to admin first.
  */
@@ -1224,8 +1243,8 @@ export async function leaveGroup(
   })
 
   if (!conv) throw new NotFoundError('Conversation not found')
-  if (conv.type !== 'GROUP') {
-    throw new ValidationError('Use the trip leave endpoint to leave a TRIP conversation')
+  if (conv.type !== 'GROUP' && conv.type !== 'TRIP') {
+    throw new ValidationError('Only group and trip chats can be left from here')
   }
 
   const activeParticipants = conv.participants.filter((p) => !p.leftAt)
@@ -1261,7 +1280,9 @@ export async function promoteToAdmin(
   })
 
   if (!conv) throw new NotFoundError('Group not found')
-  if (conv.type !== 'GROUP') throw new ValidationError('Only group participants can be managed')
+  if (conv.type !== 'GROUP' && conv.type !== 'TRIP') {
+    throw new ValidationError('Only group and trip chats can be managed')
+  }
 
   const adminParticipant = conv.participants.find((p) => p.userId === adminUserId && !p.leftAt)
   if (!adminParticipant) throw new AuthorizationError('Not a participant')

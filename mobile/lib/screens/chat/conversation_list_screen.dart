@@ -7,6 +7,7 @@ import 'package:tripthread/providers/chat_provider.dart';
 import 'package:tripthread/providers/auth_provider.dart';
 import 'package:tripthread/utils/app_feedback.dart';
 import 'package:tripthread/utils/app_layout.dart';
+import 'package:tripthread/utils/chat_navigation.dart';
 import 'package:tripthread/widgets/chat/chat_avatar.dart';
 
 class ConversationListScreen extends StatefulWidget {
@@ -32,19 +33,42 @@ class _ConversationListScreenState extends State<ConversationListScreen> {
       // the back button from the chat screen returns to the trip detail, not here.
       final tripConvs = chat.getConversationsForTrip(widget.tripId!);
       if (tripConvs.length == 1) {
-        context.pushReplacement('/chat/${tripConvs.first.id}');
+        context.pushReplacement(
+          '/chat/${tripConvs.first.id}',
+          extra: GoRouterState.of(context).extra,
+        );
       }
     });
   }
 
+  void _leave() {
+    final returnTo = chatReturnLocation(context);
+    if (returnTo != null) {
+      context.go(returnTo);
+      return;
+    }
+    if (context.canPop()) {
+      context.pop();
+      return;
+    }
+    context.go('/home');
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    final returnTo = chatReturnLocation(context);
+    return PopScope(
+      canPop: returnTo == null && GoRouter.of(context).canPop(),
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop) return;
+        _leave();
+      },
+      child: Scaffold(
       appBar: AppBar(
         title: Text(widget.tripId == null ? 'Messages' : 'Trip chat'),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
-          onPressed: () => context.pop(),
+          onPressed: _leave,
         ),
         actions: widget.tripId == null
             ? [
@@ -109,7 +133,13 @@ class _ConversationListScreenState extends State<ConversationListScreen> {
                 return _ConversationTile(
                   conversation: c,
                   currentUserId: context.read<AuthProvider>().currentUser?.id ?? '',
-                  onTap: () => context.push('/chat/${c.id}'),
+                  onTap: () => context.push(
+                    '/chat/${c.id}',
+                    extra: widget.tripId == null
+                        ? chatReturnExtra('/chat')
+                        : GoRouterState.of(context).extra ??
+                            chatReturnExtra('/chat?tripId=${widget.tripId}'),
+                  ),
                 );
               },
             ),
@@ -117,6 +147,7 @@ class _ConversationListScreenState extends State<ConversationListScreen> {
         },
       ),
       ),
+    ),
     );
   }
 }
@@ -137,10 +168,13 @@ class _ConversationTile extends StatelessWidget {
     final other = conversation.participants
         .where((p) => p.userId != currentUserId)
         .toList();
-    final title = conversation.name ??
-        (conversation.type == 'DM' && other.isNotEmpty
+    final title = conversation.name?.trim().isNotEmpty == true
+        ? conversation.name!.trim()
+        : (conversation.type == 'DM' && other.isNotEmpty
             ? (other.first.name ?? other.first.username ?? 'User')
-            : 'Conversation');
+            : conversation.type == 'TRIP'
+                ? 'Trip chat'
+                : 'Group');
     final subtitle = conversation.lastMessage?.content ?? '';
     final time = conversation.lastMessage?.createdAt != null
         ? _formatTime(conversation.lastMessage!.createdAt)
@@ -151,11 +185,7 @@ class _ConversationTile extends StatelessWidget {
     final otherDisplayName = other.isNotEmpty
         ? (other.first.name ?? other.first.username ?? '')
         : '';
-    final avatarLabel = isGroup
-        ? (conversation.name ?? 'Group')
-        : isTrip
-            ? 'Trip'
-            : otherDisplayName;
+    final avatarLabel = isGroup || isTrip ? title : otherDisplayName;
     final dmOther = other.isNotEmpty ? other.first : null;
 
     return ListTile(

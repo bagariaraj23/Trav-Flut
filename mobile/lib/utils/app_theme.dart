@@ -6,8 +6,8 @@ class AppTheme {
   static const Color cream = Color(0xFFFAF8F4);
   static const Color card = Color(0xFFFFFFFF);
   /// Brand pair. Change these two to retint buttons, chips, and gradients.
-  static const Color accent = Color(0xFFC2692A);
-  static const Color accentDark = Color(0xFFD4773A);
+  static const Color accent = Color(0xFF1D6FE8);
+  static const Color accentDark = Color(0xFF6AA8FF);
   static const Color muted = Color(0xFFEDE7DC);
   static const Color mutedForeground = Color(0xFF78716C);
   static const Color inputFill = Color(0xFFF5F1EB);

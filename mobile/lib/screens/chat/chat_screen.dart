@@ -13,6 +13,7 @@ import 'package:tripthread/providers/auth_provider.dart';
 import 'package:tripthread/services/media_service.dart';
 import 'package:tripthread/utils/app_layout.dart';
 import 'package:tripthread/utils/app_theme.dart';
+import 'package:tripthread/utils/chat_navigation.dart';
 import 'package:tripthread/utils/cloudinary_utils.dart';
 import 'package:tripthread/utils/avatar_utils.dart';
 
@@ -509,6 +510,10 @@ class _ChatScreenState extends State<ChatScreen> {
     );
   }
 
+  void _leave() {
+    leaveChatRoute(context, fallback: '/chat');
+  }
+
   @override
   Widget build(BuildContext context) {
     final currentUserId = context.watch<AuthProvider>().currentUser?.id ?? '';
@@ -521,7 +526,7 @@ class _ChatScreenState extends State<ChatScreen> {
           title: const Text('Chat'),
           leading: IconButton(
             icon: const Icon(Icons.arrow_back),
-            onPressed: () => context.pop(),
+            onPressed: _leave,
           ),
         );
       }
@@ -529,21 +534,21 @@ class _ChatScreenState extends State<ChatScreen> {
       final other = conversation.participants
           .where((p) => p.userId != currentUserId)
           .toList();
-      final title = conversation.name ??
-          (conversation.type == 'DM' && other.isNotEmpty
-              ? (other.first.name ?? other.first.username ?? 'User')
-              : 'Conversation');
-
       final isGroup = conversation.type == 'GROUP';
       final isTrip = conversation.type == 'TRIP';
+      final title = conversation.name?.trim().isNotEmpty == true
+          ? conversation.name!.trim()
+          : (conversation.type == 'DM' && other.isNotEmpty
+              ? (other.first.name ?? other.first.username ?? 'User')
+              : isTrip
+                  ? 'Trip chat'
+                  : 'Group');
       final otherDisplayName = other.isNotEmpty
           ? (other.first.name ?? other.first.username ?? '')
           : '';
-      final avatarLabel = isGroup
-          ? (conversation.name ?? 'Group')
-          : isTrip
-              ? 'Trip'
-              : otherDisplayName;
+      final avatarLabel = isGroup || isTrip
+          ? (title.isNotEmpty ? title : 'Trip')
+          : otherDisplayName;
       final avatarInitial = AvatarUtils.initialsFromName(avatarLabel);
       final avatarColor = AvatarUtils.colorForKey(
         isGroup || isTrip ? conversation.id : (other.isNotEmpty ? other.first.userId : ''),
@@ -574,10 +579,17 @@ class _ChatScreenState extends State<ChatScreen> {
 
       return AppBar(
         leadingWidth: 48,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          onPressed: _leave,
+        ),
         title: InkWell(
           onTap: () {
-            if (isGroup) {
-              context.push('/chat/${conversation.id}/settings');
+            if (isGroup || isTrip) {
+              context.push(
+                '/chat/${conversation.id}/settings',
+                extra: GoRouterState.of(context).extra,
+              );
             } else if (other.isNotEmpty) {
               context.push('/profile/${other.first.userId}');
             }
@@ -655,19 +667,28 @@ class _ChatScreenState extends State<ChatScreen> {
             ),
           ),
         ),
-        actions: isGroup
+        actions: isGroup || isTrip
             ? [
                 IconButton(
                   icon: const Icon(Icons.info_outline),
-                  onPressed: () => context.push('/chat/${conversation.id}/settings'),
-                  tooltip: 'Group details',
+                  onPressed: () => context.push(
+                    '/chat/${conversation.id}/settings',
+                    extra: GoRouterState.of(context).extra,
+                  ),
+                  tooltip: 'Chat details',
                 ),
               ]
             : null,
       );
     }
 
-    return Scaffold(
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop) return;
+        _leave();
+      },
+      child: Scaffold(
       appBar: buildAppBar(),
       body: AppLayout.reading(
         context: context,
@@ -1034,6 +1055,7 @@ class _ChatScreenState extends State<ChatScreen> {
         ],
         ),
       ),
+      ),
     );
   }
 }
@@ -1114,40 +1136,40 @@ class _MessageBubble extends StatelessWidget {
       message.sender.name ?? message.sender.username ?? '',
     );
     final avatarColor = AvatarUtils.colorForKey(message.sender.id);
-    final bubble = GestureDetector(
-      onLongPress: onLongPressAction == null || isDeleted ? null : onLongPressAction,
-      child: Container(
-        key: bubbleKey,
-        margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-        constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.68),
-        decoration: BoxDecoration(
-          color: isMe
-              ? Theme.of(context).colorScheme.primary
-              : Theme.of(context).colorScheme.surface,
-          border: isHighlighted
-              ? Border.all(
-                  color: AppTheme.accent,
-                  width: 2,
-                )
-              : Border.all(
-                  color: isMe
-                      ? Colors.transparent
-                      : Theme.of(context).colorScheme.outlineVariant,
-                  width: 1,
-                ),
-          boxShadow: isMe
-              ? null
-              : [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.04),
-                    blurRadius: 4,
-                    offset: const Offset(0, 2),
-                  ),
-                ],
-          borderRadius: BorderRadius.circular(16),
-        ),
-        child: Column(
+    final scheme = Theme.of(context).colorScheme;
+    final radius = BorderRadius.circular(16);
+    final canAct = onLongPressAction != null && !isDeleted;
+    final bubble = ConstrainedBox(
+      key: bubbleKey,
+      constraints: BoxConstraints(maxWidth: MediaQuery.sizeOf(context).width * 0.68),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        child: Material(
+          color: isMe ? scheme.primary : scheme.surface,
+          shape: RoundedRectangleBorder(
+            borderRadius: radius,
+            side: BorderSide(
+              color: isHighlighted
+                  ? AppTheme.accent
+                  : (isMe ? Colors.transparent : scheme.outlineVariant),
+              width: isHighlighted ? 2 : 1,
+            ),
+          ),
+          clipBehavior: Clip.antiAlias,
+          child: InkWell(
+            onTap: () => FocusScope.of(context).unfocus(),
+            onLongPress: canAct ? onLongPressAction : null,
+            borderRadius: radius,
+            splashFactory: InkRipple.splashFactory,
+            splashColor: isMe
+                ? scheme.onPrimary.withValues(alpha: 0.22)
+                : scheme.onSurface.withValues(alpha: 0.10),
+            highlightColor: isMe
+                ? scheme.onPrimary.withValues(alpha: 0.12)
+                : scheme.onSurface.withValues(alpha: 0.06),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -1318,6 +1340,9 @@ class _MessageBubble extends StatelessWidget {
                 ),
               ),
           ],
+        ),
+            ),
+          ),
         ),
       ),
     );
