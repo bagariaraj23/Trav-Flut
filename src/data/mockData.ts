@@ -110,7 +110,7 @@ export const mockTrips: TripResponse[] = [
         id: "entry-3",
         tripId: "1",
         authorId: "1",
-        type: "CHECKIN",
+        type: "LOCATION",
         contentText:
           "Peaceful morning at Senso-ji Temple. The contrast between ancient traditions and modern Tokyo is fascinating.",
         locationName: "Senso-ji Temple",
@@ -187,7 +187,7 @@ export const mockTrips: TripResponse[] = [
         id: "entry-7",
         tripId: "2",
         authorId: "1",
-        type: "CHECKIN",
+        type: "LOCATION",
         contentText:
           "Found a hidden beach with turquoise waters. Perfect spot for relaxation and meditation.",
         locationName: "Hidden Bali Beach",

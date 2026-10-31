@@ -205,7 +205,6 @@ const _$ThreadEntryTypeEnumMap = {
   ThreadEntryType.text: 'TEXT',
   ThreadEntryType.media: 'MEDIA',
   ThreadEntryType.location: 'LOCATION',
-  ThreadEntryType.checkin: 'CHECKIN',
 };
 
 TripFinalPost _$TripFinalPostFromJson(Map<String, dynamic> json) =>

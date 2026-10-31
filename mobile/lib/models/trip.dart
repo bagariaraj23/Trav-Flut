@@ -389,8 +389,6 @@ enum ThreadEntryType {
   media,
   @JsonValue('LOCATION')
   location,
-  @JsonValue('CHECKIN')
-  checkin,
 }
 
 enum MediaType {

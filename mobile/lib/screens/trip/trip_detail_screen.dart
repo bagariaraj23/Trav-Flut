@@ -1346,10 +1346,6 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
         icon = Icons.location_on;
         accent = accentOverride ?? AppTheme.live;
         break;
-      case ThreadEntryType.checkin:
-        icon = Icons.check_circle;
-        accent = accentOverride ?? AppTheme.upcoming;
-        break;
     }
 
     return Container(

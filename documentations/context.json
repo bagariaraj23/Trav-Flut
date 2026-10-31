@@ -3,8 +3,8 @@
         "name": "TripThread",
         "workspacePath": "/Users/rajbagaria/Desktop/Bolt-Travello/Flut/project",
         "generatedAt": "2026-11-01",
-        "description": "Travel-focused social platform where users create trips, post thread entries (text/media/location/check-ins), split trip expenses and settle up on a Money pane, generate/publish final trip posts, and chat via 1:1 DMs, groups, and trip-scoped rooms (realtime WebSocket).",
-        "lastPRReviewed": "Current work is PR #54 (feat-trip-create-ux → main): https://github.com/bagariaraj23/Trav-Flut/pull/54. It is a draft and mergeable. A trip can start now, keep an optional end, and store UTC instants. Apply migration 20261014150000_trip_open_ended_schedule only when this branch is deployed. PR #55 merged to main on 2026-10-29 (6:13 PM IST). PR #51 merged to main on 2026-10-31 (5:08 PM IST). After 54, merge PR #56.",
+        "description": "Travel-focused social platform where users create trips, post thread entries (text/media/location), split trip expenses and settle up on a Money pane, generate/publish final trip posts, and chat via 1:1 DMs, groups, and trip-scoped rooms (realtime WebSocket).",
+        "lastPRReviewed": "Current work is PR #54 (feat-trip-create-ux → main): https://github.com/bagariaraj23/Trav-Flut/pull/54. It is a draft and mergeable. A trip can start now, keep an optional end, and store UTC instants. Dates follow the phone region. Thread entries are text, media, and location; check-in is removed. Apply migrations 20261014150000_trip_open_ended_schedule and 20261031120000_remove_checkin_entry_type only when this branch is deployed. PR #55 merged to main on 2026-10-29 (6:13 PM IST). PR #51 merged to main on 2026-10-31 (5:08 PM IST). After 54, merge PR #56.",
         "recentProductionPRs": [
             "https://github.com/bagariaraj23/Trav-Flut/pull/51",
             "https://github.com/bagariaraj23/Trav-Flut/pull/55",
@@ -1157,8 +1157,7 @@
         "threadEntryTypes": [
             "media",
             "text",
-            "location",
-            "check-in"
+            "location"
         ],
         "futureScopeMentioned": [
             "payment logging",
@@ -1445,7 +1444,7 @@
                 {
                     "name": "Thread Entry Creation",
                     "status": "completed",
-                    "description": "Create thread entries with text, media, location, check-ins. Support for user tagging",
+                    "description": "Create thread entries with text, media, and location. Support for user tagging",
                     "pr": 13,
                     "merged": "2025-09-14"
                 },
@@ -1464,9 +1463,9 @@
                     "merged": "2025-11-16"
                 },
                 {
-                    "name": "Place Check-ins",
+                    "name": "Places",
                     "status": "completed",
-                    "description": "Check-in to places, associate places with trips, place sharing"
+                    "description": "Location entries, associate places with trips, place sharing"
                 }
             ]
         },
@@ -2533,7 +2532,7 @@
             },
             {
                 "number": 14,
-                "title": "Location/check-in in-place edit",
+                "title": "Location in-place edit",
                 "status": "Partial"
             },
             {

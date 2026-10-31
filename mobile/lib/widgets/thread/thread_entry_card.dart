@@ -36,8 +36,7 @@ class ThreadEntryCard extends StatelessWidget {
     final locationLabel = entry.place?.name ?? entry.locationName;
     final hasPlace = entry.place != null ||
         entry.locationName != null ||
-        entry.type == ThreadEntryType.location ||
-        entry.type == ThreadEntryType.checkin;
+        entry.type == ThreadEntryType.location;
 
     return Dismissible(
       key: ValueKey('entry-reply-${entry.id}'),
@@ -201,10 +200,8 @@ class ThreadEntryCard extends StatelessWidget {
                                     child: Row(
                                       mainAxisSize: MainAxisSize.min,
                                       children: [
-                                        Icon(
-                                          entry.type == ThreadEntryType.checkin
-                                              ? Icons.near_me
-                                              : Icons.place_outlined,
+                                        const Icon(
+                                          Icons.place_outlined,
                                           size: 14,
                                           color: AppTheme.accent,
                                         ),
@@ -348,7 +345,5 @@ IconData _typeIcon(ThreadEntryType type) {
       return Icons.photo_camera_outlined;
     case ThreadEntryType.location:
       return Icons.place_outlined;
-    case ThreadEntryType.checkin:
-      return Icons.near_me_outlined;
   }
 }
