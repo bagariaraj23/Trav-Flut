@@ -353,7 +353,7 @@ export const createTripSchema = z
 
 export const createThreadEntrySchema = z
   .object({
-    type: z.enum(["TEXT", "MEDIA", "LOCATION", "CHECKIN"]),
+    type: z.enum(["TEXT", "MEDIA", "LOCATION"]),
     contentText: z
       .union([
         z
@@ -458,11 +458,6 @@ export const createThreadEntrySchema = z
         case "MEDIA":
           return !!data.mediaId;
         case "LOCATION":
-          return (
-            !!data.placeId ||
-            (!!data.locationName && data.locationName.length > 0)
-          );
-        case "CHECKIN":
           return (
             !!data.placeId ||
             (!!data.locationName && data.locationName.length > 0)

@@ -3,7 +3,7 @@
         "name": "TripThread",
         "workspacePath": "/Users/rajbagaria/Desktop/Bolt-Travello/Flut/project",
         "generatedAt": "2026-10-18",
-        "description": "Travel-focused social platform where users create trips, post thread entries (text/media/location/check-ins), generate/publish final trip posts, track a private trip expense ledger, and chat via 1:1 DMs, groups, and trip-scoped rooms (realtime WebSocket).",
+        "description": "Travel-focused social platform where users create trips, post thread entries (text/media/location), generate/publish final trip posts, track a private trip expense ledger, and chat via 1:1 DMs, groups, and trip-scoped rooms (realtime WebSocket).",
         "lastPRReviewed": "PR #50 merged to main (2026-10-09) — trip expense ledger. This branch is PR #52 API/DB optimizations (feat-api-db-optimizations → main). PR #51 Warm UI and PR #54 trip create UX stack above it. Cloudinary upload presets must exist in the dashboard (tripthread_thread_image, cover, video, avatar) before signed uploads that include upload_preset succeed. Universal Links ops (TEAMID/SHA-256 + SHARE_LINK_BASE_URL) still remaining.",
         "recentProductionPRs": [
             "https://github.com/bagariaraj23/Trav-Flut/pull/50",
@@ -1143,8 +1143,7 @@
         "threadEntryTypes": [
             "media",
             "text",
-            "location",
-            "check-in"
+            "location"
         ],
         "futureScopeMentioned": [
             "payment logging",
@@ -1422,7 +1421,7 @@
                 {
                     "name": "Thread Entry Creation",
                     "status": "completed",
-                    "description": "Create thread entries with text, media, location, check-ins. Support for user tagging",
+                    "description": "Create thread entries with text, media, and location. Support for user tagging",
                     "pr": 13,
                     "merged": "2025-09-14"
                 },
@@ -1441,9 +1440,9 @@
                     "merged": "2025-11-16"
                 },
                 {
-                    "name": "Place Check-ins",
+                    "name": "Places",
                     "status": "completed",
-                    "description": "Check-in to places, associate places with trips, place sharing"
+                    "description": "Location entries, associate places with trips, place sharing"
                 }
             ]
         },
@@ -2481,7 +2480,7 @@
             },
             {
                 "number": 14,
-                "title": "Location/check-in in-place edit",
+                "title": "Location in-place edit",
                 "status": "Partial"
             },
             {
