@@ -260,7 +260,7 @@ model TripThreadEntry {
   taggedUsers    TripThreadTag[]
   likeCount      Int             @default(0)
   commentCount   Int             @default(0)
-  // Canonical place link for location/check-in entries
+  // Canonical place link for location entries
   placeId        String?
   place          Place?          @relation(fields: [placeId], references: [id])
 
@@ -539,7 +539,6 @@ enum ThreadEntryType {
   TEXT
   MEDIA
   LOCATION
-  CHECKIN
 }
 
 enum MediaType {

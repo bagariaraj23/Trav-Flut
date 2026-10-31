@@ -131,7 +131,7 @@ export interface TripThreadEntryResponse {
   id: string;
   tripId: string;
   authorId: string;
-  type: "TEXT" | "MEDIA" | "LOCATION" | "CHECKIN";
+  type: "TEXT" | "MEDIA" | "LOCATION";
   contentText?: string | null;
   locationName?: string | null;
   gpsCoordinates?: { lat: number | null; lng: number | null } | null;
@@ -218,7 +218,7 @@ export interface CreateTripRequest {
 }
 
 export interface CreateThreadEntryRequest {
-  type: "TEXT" | "MEDIA" | "LOCATION" | "CHECKIN";
+  type: "TEXT" | "MEDIA" | "LOCATION";
   contentText?: string | null;
   mediaId?: string | null;
   locationName?: string | null;

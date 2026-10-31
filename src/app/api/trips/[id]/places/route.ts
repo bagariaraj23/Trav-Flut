@@ -50,7 +50,7 @@ export async function GET(
         },
         threadEntries: {
           where: {
-            type: { in: ["LOCATION", "CHECKIN"] },
+            type: "LOCATION",
             placeId: { not: null },
           },
           select: {
