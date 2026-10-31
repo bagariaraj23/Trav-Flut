@@ -180,7 +180,9 @@ export async function POST(
     };
 
     try {
-      await ensureTripConversation(tripId);
+      await ensureTripConversation(tripId, {
+        rejoinUserIds: [validatedData.userId],
+      });
     } catch (chatErr) {
       console.error(
         `[WARN] Failed to sync trip chat after adding participant to ${tripId}:`,

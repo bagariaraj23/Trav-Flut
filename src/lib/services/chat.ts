@@ -373,8 +373,15 @@ function isTripMember(
 /**
  * Ensure a TRIP conversation exists and membership matches trip owner + participants.
  * Skips SOLO trips (no group chat). Safe to call after create / join / leave.
+ *
+ * `rejoinUserIds` clears leftAt only for those users, and only when they are on
+ * the trip again. Opening the chat does not pass this, so a voluntary chat leave
+ * stays in effect until an admin adds that person back or they rejoin the trip.
  */
-export async function ensureTripConversation(tripId: string): Promise<void> {
+export async function ensureTripConversation(
+  tripId: string,
+  options?: { rejoinUserIds?: string[] }
+): Promise<void> {
   const trip = await prisma.trip.findUnique({
     where: { id: tripId },
     select: {
@@ -419,7 +426,10 @@ export async function ensureTripConversation(tripId: string): Promise<void> {
     })
   }
 
-  await syncTripConversationParticipants(conv, memberIds)
+  await syncTripConversationParticipants(conv, memberIds, {
+    rejoinUserIds: options?.rejoinUserIds,
+    ownerId: trip.userId,
+  })
 }
 
 /**
@@ -476,7 +486,9 @@ export async function getOrCreateTripConversation(
         data: { name: trip.title },
       })
     }
-    await syncTripConversationParticipants(conv, memberIds)
+    await syncTripConversationParticipants(conv, memberIds, {
+      ownerId: trip.userId,
+    })
     conv = await prisma.conversation.findUnique({
       where: { tripId },
       include: conversationListInclude,
@@ -489,25 +501,52 @@ export async function getOrCreateTripConversation(
 
 async function syncTripConversationParticipants(
   conv: { id: string; participants: Array<{ id: string; userId: string; leftAt: Date | null }> },
-  tripUserIds: string[]
+  tripUserIds: string[],
+  options?: { rejoinUserIds?: string[]; ownerId?: string }
 ): Promise<void> {
   const conversationId = conv.id
+  const ownerId = options?.ownerId
+  const tripMemberSet = new Set(tripUserIds)
+  // Only people explicitly added back onto the trip are restored. A voluntary
+  // chat leave stays until an admin uses addGroupParticipant.
+  const rejoinSet = new Set(
+    (options?.rejoinUserIds ?? []).filter((id) => tripMemberSet.has(id))
+  )
+  const existingByUserId = new Map(conv.participants.map((p) => [p.userId, p]))
 
-  // Add people who joined the trip and have never been in this chat.
-  // Do not clear leftAt here. Leaving or being removed from the chat stays
-  // until an admin adds that person back. Leaving the trip is handled separately.
-  const existingUserIds = new Set(conv.participants.map((p) => p.userId))
-  const newMemberIds = tripUserIds.filter((id) => !existingUserIds.has(id))
-  if (newMemberIds.length === 0) return
+  const toRejoin = [...rejoinSet]
+    .map((id) => existingByUserId.get(id))
+    .filter((p): p is { id: string; userId: string; leftAt: Date | null } =>
+      Boolean(p?.leftAt)
+    )
+  const newMemberIds = tripUserIds.filter((id) => !existingByUserId.has(id))
+  if (toRejoin.length === 0 && newMemberIds.length === 0) return
 
-  await prisma.conversationParticipant.createMany({
-    data: newMemberIds.map((userId) => ({
-      conversationId,
-      userId,
-      role: 'MEMBER' as const,
-    })),
-    skipDuplicates: true,
-  })
+  if (toRejoin.length > 0) {
+    await prisma.$transaction(
+      toRejoin.map((p) =>
+        prisma.conversationParticipant.update({
+          where: { id: p.id },
+          data: {
+            leftAt: null,
+            joinedAt: new Date(),
+            role: p.userId === ownerId ? 'ADMIN' : 'MEMBER',
+          },
+        })
+      )
+    )
+  }
+
+  if (newMemberIds.length > 0) {
+    await prisma.conversationParticipant.createMany({
+      data: newMemberIds.map((userId) => ({
+        conversationId,
+        userId,
+        role: (userId === ownerId ? 'ADMIN' : 'MEMBER') as 'ADMIN' | 'MEMBER',
+      })),
+      skipDuplicates: true,
+    })
+  }
   invalidateParticipantCache(conversationId)
 }
 
