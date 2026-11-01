@@ -9,7 +9,7 @@ import {
 } from "@/lib/middleware";
 import { ApiResponse } from "@/types/api";
 import { NotFoundError, ValidationError } from "@/lib/errors";
-import { scheduledEndInstant } from "@/lib/tripSchedule";
+import { endIsLater, scheduledEndInstant } from "@/lib/tripSchedule";
 
 async function handler(
   request: AuthenticatedRequest,
@@ -36,13 +36,17 @@ async function handler(
     if (trip.userId !== userId) {
       throw new ValidationError("Only the trip owner can change the schedule");
     }
-    if (trip.status === TripStatus.ENDED) {
-      throw new ValidationError("An ended trip cannot be rescheduled");
+    const extending = body.extend === true || trip.status === TripStatus.ENDED;
+    if (trip.status === TripStatus.ENDED && body.endDate == null) {
+      throw new ValidationError("Extend the trip with a later end");
     }
 
     const now = new Date();
     let startDate = trip.startDate;
     if (body.startDate !== undefined) {
+      if (trip.status === TripStatus.ENDED) {
+        throw new ValidationError("Start time cannot change after the trip has ended");
+      }
       if (trip.status !== TripStatus.UPCOMING) {
         throw new ValidationError("Start time can only change before the trip starts");
       }
@@ -77,6 +81,9 @@ async function handler(
 
     if (endDate && endDate.getTime() <= startDate.getTime()) {
       throw new ValidationError("End time must be after the start time");
+    }
+    if (extending && trip.endDate && endDate && !endIsLater(trip.endDate, endDate, zone)) {
+      throw new ValidationError("The new end must be later than the current end");
     }
 
     const status =

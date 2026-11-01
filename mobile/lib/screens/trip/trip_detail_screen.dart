@@ -77,28 +77,49 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
     return _trip?.scheduleTimezone;
   }
 
-  Future<void> _changeEnd({bool clear = false}) async {
-    DateTime? picked = _trip?.endDate?.toLocal();
+  Future<void> _changeEnd({bool clear = false, bool extend = false}) async {
+    final currentEnd = _trip?.endDate?.toLocal();
+    DateTime? picked = currentEnd;
     if (!clear) {
       final now = DateTime.now();
+      final today = DateTime(now.year, now.month, now.day);
+      var last = now.add(const Duration(days: 365));
+      if (currentEnd != null && currentEnd.isAfter(last)) {
+        last = currentEnd.add(const Duration(days: 365));
+      }
+      var first = today;
+      if (extend && currentEnd != null) {
+        final endDay = DateTime(currentEnd.year, currentEnd.month, currentEnd.day);
+        if (!endDay.isBefore(today)) first = endDay;
+      }
+      var initial = currentEnd ?? now.add(const Duration(days: 1));
+      if (initial.isBefore(first)) initial = first;
+      if (initial.isAfter(last)) initial = last;
       final date = await showDatePicker(
         context: context,
-        initialDate: picked ?? now.add(const Duration(days: 1)),
-        firstDate: DateTime(now.year, now.month, now.day),
-        lastDate: now.add(const Duration(days: 365)),
+        helpText: extend ? 'Extend the end date' : 'End date',
+        initialDate: initial,
+        firstDate: first,
+        lastDate: last,
       );
       if (date == null || !mounted) return;
       final time = await showTimePicker(
         context: context,
-        helpText: 'End time (optional)',
+        helpText: extend ? 'New end time (optional)' : 'End time (optional)',
         cancelText: 'No time',
         confirmText: 'Set time',
-        initialTime: TimeOfDay.fromDateTime(picked ?? now),
+        initialTime: TimeOfDay.fromDateTime(currentEnd ?? now),
       );
       if (!mounted) return;
       picked = time == null
           ? DateTime(date.year, date.month, date.day, 23, 59, 59)
           : DateTime(date.year, date.month, date.day, time.hour, time.minute);
+      if (extend && currentEnd != null && !picked.isAfter(currentEnd)) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Pick an end later than the current one')),
+        );
+        return;
+      }
     }
 
     final messenger = ScaffoldMessenger.of(context);
@@ -106,12 +127,21 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
       tripId: widget.tripId,
       endDate: clear ? null : picked,
       clearEnd: clear,
+      extend: extend,
       scheduleTimezone: await _deviceZone(),
     );
     if (!mounted) return;
     if (ok) {
       messenger.showSnackBar(
-        SnackBar(content: Text(clear ? 'End time removed' : 'End time updated')),
+        SnackBar(
+          content: Text(
+            clear
+                ? 'End time removed'
+                : extend
+                    ? 'Trip extended'
+                    : 'End time updated',
+          ),
+        ),
       );
       await _loadTrip();
     } else {
@@ -1023,9 +1053,9 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
                 ),
                 const SizedBox(height: 8),
                 OutlinedButton.icon(
-                  onPressed: () => _changeEnd(),
-                  icon: const Icon(Icons.event),
-                  label: Text(_trip!.endDate == null ? 'Set an end' : 'Change end'),
+                  onPressed: () => _changeEnd(extend: _trip!.endDate != null),
+                  icon: Icon(_trip!.endDate == null ? Icons.event : Icons.more_time),
+                  label: Text(_trip!.endDate == null ? 'Set an end' : 'Extend trip'),
                 ),
                 if (_trip!.endDate != null)
                   TextButton(
@@ -1090,9 +1120,9 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
                 ),
                 const SizedBox(height: 8),
                 OutlinedButton.icon(
-                  onPressed: () => _changeEnd(),
-                  icon: const Icon(Icons.event),
-                  label: Text(_trip!.endDate == null ? 'Set an end' : 'Change end'),
+                  onPressed: () => _changeEnd(extend: _trip!.endDate != null),
+                  icon: Icon(_trip!.endDate == null ? Icons.event : Icons.more_time),
+                  label: Text(_trip!.endDate == null ? 'Set an end' : 'Extend trip'),
                 ),
                 if (_trip!.endDate != null)
                   TextButton(
@@ -1139,6 +1169,14 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
                     ),
                   ),
                 ],
+                const SizedBox(height: 8),
+              ],
+              if (isOwner && _trip!.endDate != null) ...[
+                OutlinedButton.icon(
+                  onPressed: () => _changeEnd(extend: true),
+                  icon: const Icon(Icons.more_time),
+                  label: const Text('Extend trip'),
+                ),
                 const SizedBox(height: 8),
               ],
               if (isOwner)

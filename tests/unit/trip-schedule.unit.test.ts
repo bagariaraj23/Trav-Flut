@@ -3,6 +3,7 @@ import { TripStatus, TripType } from "@prisma/client";
 import {
   nextTripStatus,
   resolveAutoTripType,
+  endIsLater,
   resolveTripType,
   scheduledEndInstant,
 } from "../../src/lib/tripSchedule";
@@ -102,6 +103,23 @@ describe("nextTripStatus", () => {
     expect(
       nextTripStatus(trip, new Date("2026-03-20T23:59:59.999Z"))
     ).toBe(TripStatus.ENDED);
+  });
+});
+
+describe("endIsLater", () => {
+  it("accepts a later end and rejects one that is not after the current end", () => {
+    const midnight = new Date("2026-03-19T18:30:00.000Z");
+    const earlierThatDay = new Date("2026-03-20T13:00:00.000Z");
+    const nextDay = new Date("2026-03-20T18:30:00.000Z");
+    expect(endIsLater(midnight, earlierThatDay, "Asia/Kolkata")).toBe(false);
+    expect(endIsLater(midnight, nextDay, "Asia/Kolkata")).toBe(true);
+    expect(
+      endIsLater(
+        earlierThatDay,
+        new Date("2026-03-20T15:00:00.000Z"),
+        "Asia/Kolkata"
+      )
+    ).toBe(true);
   });
 });
 

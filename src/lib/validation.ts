@@ -361,6 +361,7 @@ export const updateTripDatesSchema = z
     startDate: z.string().optional(),
     endDate: z.union([z.string(), z.null()]).optional(),
     scheduleTimezone: ianaTimezoneSchema.optional(),
+    extend: z.boolean().optional(),
   })
   .refine(
     (data) =>

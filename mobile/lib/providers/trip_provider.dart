@@ -173,6 +173,7 @@ class TripProvider extends ChangeNotifier {
     DateTime? startDate,
     DateTime? endDate,
     bool clearEnd = false,
+    bool extend = false,
     String? scheduleTimezone,
   }) async {
     try {
@@ -184,6 +185,7 @@ class TripProvider extends ChangeNotifier {
         startDate: startDate,
         endDate: endDate,
         clearEnd: clearEnd,
+        extend: extend,
         scheduleTimezone: scheduleTimezone,
       );
       _isLoading = false;

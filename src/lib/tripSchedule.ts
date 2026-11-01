@@ -137,6 +137,18 @@ export function scheduledEndInstant(
   return endDate;
 }
 
+/** True when the next end is after the current one, using the same midnight rule. */
+export function endIsLater(
+  currentEnd: Date,
+  nextEnd: Date,
+  scheduleTimezone?: string | null
+): boolean {
+  return (
+    scheduledEndInstant(nextEnd, scheduleTimezone).getTime() >
+    scheduledEndInstant(currentEnd, scheduleTimezone).getTime()
+  );
+}
+
 /**
  * Null endDate means the trip stays open until a manual end.
  * A midnight end date lasts through 11:59:59.999 PM in the trip timezone.

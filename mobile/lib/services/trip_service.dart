@@ -236,6 +236,7 @@ class TripService {
     DateTime? startDate,
     DateTime? endDate,
     bool clearEnd = false,
+    bool extend = false,
     String? scheduleTimezone,
   }) async {
     try {
@@ -248,6 +249,7 @@ class TripService {
       } else if (endDate != null) {
         body['endDate'] = endDate.toUtc().toIso8601String();
       }
+      if (extend) body['extend'] = true;
       if (scheduleTimezone != null && scheduleTimezone.isNotEmpty) {
         body['scheduleTimezone'] = scheduleTimezone;
       }
