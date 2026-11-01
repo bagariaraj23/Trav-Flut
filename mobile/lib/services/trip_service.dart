@@ -231,6 +231,47 @@ class TripService {
     }
   }
 
+  Future<ApiResponse<void>> updateTripDates(
+    String tripId, {
+    DateTime? startDate,
+    DateTime? endDate,
+    bool clearEnd = false,
+    bool extend = false,
+    String? scheduleTimezone,
+  }) async {
+    try {
+      final body = <String, dynamic>{};
+      if (startDate != null) {
+        body['startDate'] = startDate.toUtc().toIso8601String();
+      }
+      if (clearEnd) {
+        body['endDate'] = null;
+      } else if (endDate != null) {
+        body['endDate'] = endDate.toUtc().toIso8601String();
+      }
+      if (extend) body['extend'] = true;
+      if (scheduleTimezone != null && scheduleTimezone.isNotEmpty) {
+        body['scheduleTimezone'] = scheduleTimezone;
+      }
+      final response = await _dio.patch('/trips/$tripId/dates', data: body);
+      final data = response.data;
+      if (data is Map && data['success'] == true) {
+        return const ApiResponse(success: true);
+      }
+      return ApiResponse(
+        success: false,
+        error: data is Map ? data['error'] as String? : 'Could not update the schedule',
+      );
+    } on DioException catch (e) {
+      return ApiResponse(
+        success: false,
+        error: e.response?.data is Map
+            ? (e.response?.data['error'] as String?) ?? 'Network error occurred'
+            : 'Network error occurred',
+      );
+    }
+  }
+
   Future<ApiResponse<Trip>> endTrip(String tripId) async {
     try {
       final response = await _dio.post('/trips/$tripId/end');

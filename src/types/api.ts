@@ -110,6 +110,8 @@ export interface TripResponse {
   endLocationId?: string | null;
   startLocation?: PlaceResponse | null;
   endLocation?: PlaceResponse | null;
+  scheduleTimezone?: string | null;
+  typeSetByUser?: boolean;
   status: "UPCOMING" | "ONGOING" | "ENDED";
   createdAt: string;
   updatedAt: string;
@@ -142,7 +144,7 @@ export interface TripThreadEntryResponse {
   id: string;
   tripId: string;
   authorId: string;
-  type: "TEXT" | "MEDIA" | "LOCATION" | "CHECKIN";
+  type: "TEXT" | "MEDIA" | "LOCATION";
   contentText?: string | null;
   locationName?: string | null;
   gpsCoordinates?: { lat: number | null; lng: number | null } | null;
@@ -215,6 +217,7 @@ export interface CreateTripRequest {
   description?: string | null;
   startDate?: string | null;
   endDate?: string | null;
+  scheduleTimezone?: string | null;
   destinations: string[];
   mood?:
   | "RELAXED"
@@ -229,7 +232,7 @@ export interface CreateTripRequest {
 }
 
 export interface CreateThreadEntryRequest {
-  type: "TEXT" | "MEDIA" | "LOCATION" | "CHECKIN";
+  type: "TEXT" | "MEDIA" | "LOCATION";
   contentText?: string | null;
   mediaId?: string | null;
   locationName?: string | null;

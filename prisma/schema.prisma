@@ -180,10 +180,14 @@ model Trip {
   title            String
   description      String?
   startDate        DateTime
-  endDate          DateTime
+  endDate          DateTime?
+  /// IANA zone the start/end wall times were chosen in. Null on legacy date-only rows.
+  scheduleTimezone String?
   destinations     String[]
   mood             TripMood?
   type             TripType?
+  /// True when the creator chose a type. Auto Solo/Group updates run only when this is false.
+  typeSetByUser    Boolean           @default(false)
   coverMediaId     String?
   status           TripStatus        @default(UPCOMING)
   entryCount       Int               @default(0)
@@ -260,7 +264,7 @@ model TripThreadEntry {
   taggedUsers    TripThreadTag[]
   likeCount      Int             @default(0)
   commentCount   Int             @default(0)
-  // Canonical place link for location/check-in entries
+  // Canonical place link for location entries
   placeId        String?
   place          Place?          @relation(fields: [placeId], references: [id])
 
@@ -539,7 +543,6 @@ enum ThreadEntryType {
   TEXT
   MEDIA
   LOCATION
-  CHECKIN
 }
 
 enum MediaType {

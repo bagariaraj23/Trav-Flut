@@ -246,39 +246,35 @@ export const createTripSchema = z
         );
         return val;
       }),
-    startDate: z.string().refine((date) => {
-      // Try to parse the date string
-      const parsedDate = new Date(date);
-
-      // Check if it's a valid date
-      if (isNaN(parsedDate.getTime())) {
-        console.log(`[DEBUG] Invalid date string received: ${date}`);
-        return false;
-      }
-
-      // Check if it's not in the past
-      const now = new Date();
-      now.setHours(0, 0, 0, 0); // Start of today
-
-      console.log(`[DEBUG] Parsed start date: ${parsedDate.toISOString()}`);
-      console.log(`[DEBUG] Today start: ${now.toISOString()}`);
-      console.log(`[DEBUG] Is valid date: ${parsedDate >= now}`);
-
-      return parsedDate >= now;
-    }, "Start date is required and cannot be in the past"),
-    endDate: z.string().refine((date) => {
-      // Try to parse the date string
-      const parsedDate = new Date(date);
-
-      // Check if it's a valid date
-      if (isNaN(parsedDate.getTime())) {
-        console.log(`[DEBUG] Invalid end date string received: ${date}`);
-        return false;
-      }
-
-      console.log(`[DEBUG] Parsed end date: ${parsedDate.toISOString()}`);
-      return true;
-    }, "End date is required and must be a valid date"),
+    startDate: z
+      .string()
+      .optional()
+      .refine((date) => {
+        if (date == null) return true;
+        const parsedDate = new Date(date);
+        if (isNaN(parsedDate.getTime())) return false;
+        // Two minutes of clock skew so "start now" from the device is not rejected.
+        return parsedDate.getTime() >= Date.now() - 2 * 60 * 1000;
+      }, "Start time cannot be in the past"),
+    endDate: z
+      .string()
+      .optional()
+      .refine((date) => {
+        if (date == null) return true;
+        return !isNaN(new Date(date).getTime());
+      }, "End time must be a valid date"),
+    scheduleTimezone: z
+      .string()
+      .optional()
+      .refine((zone) => {
+        if (zone == null || zone === "") return true;
+        try {
+          Intl.DateTimeFormat("en-US", { timeZone: zone });
+          return true;
+        } catch {
+          return false;
+        }
+      }, "Timezone must be an IANA name"),
     destinationPlaceIds: z
       .array(z.string().uuid("Invalid place id"))
       .min(1, "At least one destination is required")
@@ -339,9 +335,9 @@ export const createTripSchema = z
         console.log(
           `[DEBUG] Date range validation - Start: ${startDate.toISOString()}, End: ${endDate.toISOString()}`
         );
-        console.log(`[DEBUG] Is end after start: ${startDate <= endDate}`);
+        console.log(`[DEBUG] Is end after start: ${startDate < endDate}`);
 
-        return startDate <= endDate;
+        return startDate < endDate;
       }
       return true;
     },
@@ -351,9 +347,33 @@ export const createTripSchema = z
     }
   );
 
+const ianaTimezoneSchema = z.string().refine((zone) => {
+  try {
+    Intl.DateTimeFormat("en-US", { timeZone: zone });
+    return true;
+  } catch {
+    return false;
+  }
+}, "Timezone must be an IANA name");
+
+export const updateTripDatesSchema = z
+  .object({
+    startDate: z.string().optional(),
+    endDate: z.union([z.string(), z.null()]).optional(),
+    scheduleTimezone: ianaTimezoneSchema.optional(),
+    extend: z.boolean().optional(),
+  })
+  .refine(
+    (data) =>
+      data.startDate !== undefined ||
+      data.endDate !== undefined ||
+      data.scheduleTimezone !== undefined,
+    { message: "Provide a start time, an end time, or a timezone" }
+  );
+
 export const createThreadEntrySchema = z
   .object({
-    type: z.enum(["TEXT", "MEDIA", "LOCATION", "CHECKIN"]),
+    type: z.enum(["TEXT", "MEDIA", "LOCATION"]),
     contentText: z
       .union([
         z
@@ -458,11 +478,6 @@ export const createThreadEntrySchema = z
         case "MEDIA":
           return !!data.mediaId;
         case "LOCATION":
-          return (
-            !!data.placeId ||
-            (!!data.locationName && data.locationName.length > 0)
-          );
-        case "CHECKIN":
           return (
             !!data.placeId ||
             (!!data.locationName && data.locationName.length > 0)

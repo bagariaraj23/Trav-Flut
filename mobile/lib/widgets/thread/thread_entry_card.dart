@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import 'package:intl/intl.dart';
 import 'package:tripthread/models/trip.dart';
 import 'package:tripthread/utils/app_theme.dart';
+import 'package:tripthread/utils/locale_dates.dart';
 import 'package:tripthread/widgets/engagement/engagement_action_bar.dart';
 import 'package:tripthread/widgets/mention_text.dart';
 import 'package:tripthread/widgets/sheets/comment_bottom_sheet.dart';
@@ -36,8 +36,7 @@ class ThreadEntryCard extends StatelessWidget {
     final locationLabel = entry.place?.name ?? entry.locationName;
     final hasPlace = entry.place != null ||
         entry.locationName != null ||
-        entry.type == ThreadEntryType.location ||
-        entry.type == ThreadEntryType.checkin;
+        entry.type == ThreadEntryType.location;
 
     return Dismissible(
       key: ValueKey('entry-reply-${entry.id}'),
@@ -201,10 +200,8 @@ class ThreadEntryCard extends StatelessWidget {
                                     child: Row(
                                       mainAxisSize: MainAxisSize.min,
                                       children: [
-                                        Icon(
-                                          entry.type == ThreadEntryType.checkin
-                                              ? Icons.near_me
-                                              : Icons.place_outlined,
+                                        const Icon(
+                                          Icons.place_outlined,
                                           size: 14,
                                           color: AppTheme.accent,
                                         ),
@@ -271,7 +268,7 @@ class ThreadEntryCard extends StatelessWidget {
   }
 
   String _metaLine(String? locationLabel) {
-    final when = DateFormat('MMM d, h:mm a').format(entry.createdAt.toLocal());
+    final when = LocaleDates.mediumDateTime(entry.createdAt.toLocal());
     if (locationLabel != null && locationLabel.isNotEmpty) {
       return '$when · $locationLabel';
     }
@@ -348,7 +345,5 @@ IconData _typeIcon(ThreadEntryType type) {
       return Icons.photo_camera_outlined;
     case ThreadEntryType.location:
       return Icons.place_outlined;
-    case ThreadEntryType.checkin:
-      return Icons.near_me_outlined;
   }
 }

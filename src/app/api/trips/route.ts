@@ -11,8 +11,9 @@ import {
 } from "@/lib/middleware";
 import { PerformanceMonitor, ErrorTracker } from "@/lib/monitoring";
 import { NotFoundError, ConflictError, ValidationError } from "@/lib/errors";
-import { TripStatus } from "@prisma/client";
+import { TripStatus, TripType } from "@prisma/client";
 import { ensureTripConversation } from "@/lib/services/chat";
+import { scheduledEndInstant, syncViewerTripSchedule } from "@/lib/tripSchedule";
 
 // Create a new trip
 export async function POST(request: NextRequest) {
@@ -183,36 +184,31 @@ export async function POST(request: NextRequest) {
 
             // Create trip with transaction for data consistency
             const trip = await prisma.$transaction(async (tx) => {
-              // Normalize dates to UTC midnight to avoid timezone issues
-              // Parse the date string and extract only date components
-              const parsedStartDate = new Date(validatedData.startDate);
-              const parsedEndDate = tripData.endDate ? new Date(tripData.endDate) : parsedStartDate;
-              
-              // Create UTC dates at midnight (00:00:00 UTC) using only date components
-              const normalizedStartDate = new Date(Date.UTC(
-                parsedStartDate.getUTCFullYear(),
-                parsedStartDate.getUTCMonth(),
-                parsedStartDate.getUTCDate(),
-                0, 0, 0, 0
-              ));
-              
-              const normalizedEndDate = new Date(Date.UTC(
-                parsedEndDate.getUTCFullYear(),
-                parsedEndDate.getUTCMonth(),
-                parsedEndDate.getUTCDate(),
-                0, 0, 0, 0
-              ));
-
-              // Calculate trip status based on start date
+              // Store the absolute UTC instant. Missing start means "now".
+              // A midnight end date lasts through 11:59 PM in the trip timezone.
+              // A chosen end time is stored as that instant.
+              // Missing end stays null so only End trip closes it.
+              const startDate = validatedData.startDate
+                ? new Date(validatedData.startDate)
+                : new Date();
               const now = new Date();
-              const today = new Date(Date.UTC(
-                now.getUTCFullYear(),
-                now.getUTCMonth(),
-                now.getUTCDate(),
-                0, 0, 0, 0
-              ));
-
-              const status = normalizedStartDate > today ? TripStatus.UPCOMING : TripStatus.ONGOING;
+              const endDate = validatedData.endDate
+                ? scheduledEndInstant(
+                    new Date(validatedData.endDate),
+                    validatedData.scheduleTimezone ?? null
+                  )
+                : null;
+              if (endDate && endDate.getTime() <= now.getTime()) {
+                throw new ValidationError("End time must be in the future");
+              }
+              if (endDate && endDate.getTime() <= startDate.getTime()) {
+                throw new ValidationError("End time must be after the start time");
+              }
+              const status =
+                startDate.getTime() > now.getTime()
+                  ? TripStatus.UPCOMING
+                  : TripStatus.ONGOING;
+              const typeSetByUser = tripData.type != null;
 
               // Create trip with required fields
               const newTrip = await tx.trip.create({
@@ -220,10 +216,12 @@ export async function POST(request: NextRequest) {
                   title: tripData.title,
                   userId,
                   status,
-                  startDate: normalizedStartDate,
-                  endDate: normalizedEndDate,
+                  startDate,
+                  endDate,
+                  scheduleTimezone: validatedData.scheduleTimezone ?? null,
                   description: tripData.description ?? null,
-                  type: tripData.type ?? null,
+                  type: tripData.type ?? TripType.SOLO,
+                  typeSetByUser,
                   mood: tripData.mood ?? null,
                   coverMediaId,
                   destinations: destinationNames,
@@ -420,6 +418,7 @@ export async function GET(request: NextRequest) {
 
         try {
           const userId = authenticatedReq.user!.userId;
+          await syncViewerTripSchedule(userId);
           const { searchParams } = new URL(authenticatedReq.url);
           const status = searchParams.get("status") as TripStatus | null;
 

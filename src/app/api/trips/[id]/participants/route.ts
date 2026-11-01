@@ -7,6 +7,7 @@ import { assertMemberZeroNetOnTrip } from "@/lib/services/expense";
 import { UnsettledBalanceError } from "@/lib/errors";
 import { enforcePresetRateLimit } from "@/lib/rateLimit";
 import { ensureTripConversation, markTripMemberLeftChat } from "@/lib/services/chat";
+import { applyAutoTripType } from "@/lib/tripSchedule";
 
 // Add participant to trip
 export async function POST(
@@ -136,8 +137,8 @@ export async function POST(
     }
 
     // Add participant and increment participantCount in a transaction
-    const [participant, _] = await prisma.$transaction([
-      prisma.tripParticipant.create({
+    const participant = await prisma.$transaction(async (tx) => {
+      const created = await tx.tripParticipant.create({
         data: {
           tripId,
           userId: validatedData.userId,
@@ -158,12 +159,14 @@ export async function POST(
             },
           },
         },
-      }),
-      prisma.trip.update({
+      });
+      await tx.trip.update({
         where: { id: tripId },
         data: { participantCount: { increment: 1 }, updatedAt: new Date() },
-      }),
-    ]);
+      });
+      await applyAutoTripType(tx, tripId);
+      return created;
+    });
 
     const participantResponse: TripParticipantResponse = {
       ...participant,
@@ -311,27 +314,28 @@ export async function DELETE(
       throw error;
     }
     // Remove participant, delete any pending TripJoinRequest, and decrement participantCount in a transaction
-    await prisma.$transaction([
-      prisma.tripParticipant.delete({
+    await prisma.$transaction(async (tx) => {
+      await tx.tripParticipant.delete({
         where: {
           tripId_userId: {
             tripId,
             userId: userIdToRemove,
           },
         },
-      }),
-      prisma.trip.update({
+      });
+      await tx.trip.update({
         where: { id: tripId },
         data: { participantCount: { decrement: 1 }, updatedAt: new Date() },
-      }),
-      prisma.tripJoinRequest.deleteMany({
+      });
+      await applyAutoTripType(tx, tripId);
+      await tx.tripJoinRequest.deleteMany({
         where: {
           tripId,
           receiverId: userIdToRemove,
           status: "PENDING",
         },
-      }),
-    ]);
+      });
+    });
 
     try {
       await markTripMemberLeftChat(tripId, userIdToRemove);

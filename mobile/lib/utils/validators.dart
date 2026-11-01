@@ -249,7 +249,6 @@ class Validators {
         }
         break;
       case 'LOCATION':
-      case 'CHECKIN':
         break;
       default:
         break;

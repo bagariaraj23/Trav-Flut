@@ -628,33 +628,6 @@ class _TripThreadScreenState extends State<TripThreadScreen>
         case ThreadEntryType.media:
           success = await _handleMediaSubmission(tripProvider);
           break;
-        case ThreadEntryType.checkin:
-          if (_selectedPlace != null) {
-            final text = _textController.text.trim();
-            final taggedUsernames = text.isNotEmpty
-                ? _extractTaggedUsernames(text)
-                : <String>[];
-            final usernamesToSend = taggedUsernames.isNotEmpty
-                ? taggedUsernames
-                : null;
-            success = await tripProvider.addThreadEntryWithPlace(
-              tripId: widget.tripId,
-              type: ThreadEntryType.checkin,
-              contentText: text.isNotEmpty ? text : null,
-              placeId: _selectedPlace!.id,
-              taggedUsernames: usernamesToSend,
-            );
-            if (success) {
-              setState(() {
-                _selectedPlace = null;
-                _locationController.clear();
-                _textController.clear();
-              });
-              _mentionQuery = null;
-              _mentionStartPosition = null;
-            }
-          }
-          break;
       }
 
       if (success) {
@@ -2047,7 +2020,6 @@ class _TripThreadScreenState extends State<TripThreadScreen>
                         ThreadEntryType.text,
                         ThreadEntryType.media,
                         ThreadEntryType.location,
-                        ThreadEntryType.checkin,
                       ])
                         Expanded(child: _composerTypeTab(type)),
                     ],
@@ -2145,8 +2117,7 @@ class _TripThreadScreenState extends State<TripThreadScreen>
                   ],
 
                   // LOCATION SELECTOR - Made scrollable and more spacious
-                  if (_selectedType == ThreadEntryType.location ||
-                      _selectedType == ThreadEntryType.checkin)
+                  if (_selectedType == ThreadEntryType.location)
                     Column(
                       mainAxisSize: MainAxisSize.min,
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -2681,10 +2652,8 @@ class _TripThreadScreenState extends State<TripThreadScreen>
                                 (tripProvider.isLoading ||
                                     _isUploadingMedia ||
                                     _isSubmitting ||
-                                    ((_selectedType ==
-                                                ThreadEntryType.location ||
-                                            _selectedType ==
-                                                ThreadEntryType.checkin) &&
+                                    (_selectedType ==
+                                            ThreadEntryType.location &&
                                         _selectedPlace == null))
                                 ? null
                                 : _addEntry,
@@ -2804,8 +2773,6 @@ class _TripThreadScreenState extends State<TripThreadScreen>
         return Icons.photo_camera_outlined;
       case ThreadEntryType.location:
         return Icons.place_outlined;
-      case ThreadEntryType.checkin:
-        return Icons.near_me_outlined;
     }
   }
 
@@ -2817,8 +2784,6 @@ class _TripThreadScreenState extends State<TripThreadScreen>
         return 'Media';
       case ThreadEntryType.location:
         return 'Location';
-      case ThreadEntryType.checkin:
-        return 'Check-in';
     }
   }
 
@@ -2832,10 +2797,6 @@ class _TripThreadScreenState extends State<TripThreadScreen>
         return _selectedPlace != null
             ? 'Add notes about ${_selectedPlace!.name}...'
             : 'Select a location above...';
-      case ThreadEntryType.checkin:
-        return _selectedPlace != null
-            ? 'How was ${_selectedPlace!.name}?'
-            : 'Select a place to check in...';
     }
   }
 

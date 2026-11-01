@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
 import 'package:another_flushbar/flushbar.dart';
@@ -56,12 +57,14 @@ import 'package:tripthread/providers/chat_provider.dart';
 import 'package:tripthread/providers/expense_provider.dart';
 import 'package:tripthread/screens/share/share_link_screen.dart';
 import 'package:tripthread/utils/app_theme.dart';
+import 'package:tripthread/utils/locale_dates.dart';
 import 'package:tripthread/utils/error_handler.dart';
 import 'package:tripthread/widgets/auth_gate.dart';
 
 void main() async {
   debugPrint('[main] Starting TripThread app initialization');
   WidgetsFlutterBinding.ensureInitialized();
+  await LocaleDates.ensureInitialized();
 
   try {
     debugPrint('[main] Initializing environment configuration');
@@ -809,6 +812,8 @@ class _TripThreadAppRouterState extends State<TripThreadAppRouter> {
       theme: AppTheme.lightTheme,
       darkTheme: AppTheme.darkTheme,
       themeMode: ThemeMode.system,
+      supportedLocales: _regionLocales(),
+      localizationsDelegates: GlobalMaterialLocalizations.delegates,
       routerConfig: router,
       debugShowCheckedModeBanner: false,
       builder: (context, child) {
@@ -852,4 +857,26 @@ class _TripThreadAppRouterState extends State<TripThreadAppRouter> {
       },
     );
   }
+}
+
+/// The phone's locale is listed first so English (India) stays `en_IN`
+/// (date help `dd/mm/yyyy`) instead of falling through to US English.
+/// `en_US` is the fallback when the language has no Material translations.
+List<Locale> _regionLocales() {
+  final device = WidgetsBinding.instance.platformDispatcher.locale;
+  final locales = <Locale>[];
+  final seen = <String>{};
+
+  void add(Locale locale) {
+    final key =
+        '${locale.languageCode}_${locale.scriptCode ?? ''}_${locale.countryCode ?? ''}';
+    if (seen.add(key)) locales.add(locale);
+  }
+
+  add(device);
+  add(const Locale('en', 'US'));
+  for (final code in kMaterialSupportedLanguages) {
+    add(Locale(code));
+  }
+  return locales;
 }
