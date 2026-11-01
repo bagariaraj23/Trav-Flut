@@ -105,9 +105,10 @@ function isUtcMidnight(instant: Date): boolean {
 }
 
 /**
- * A scheduled end lasts through 11:59 PM on the end date in the trip timezone.
+ * A date with no clock time is midnight and lasts through 11:59:59.999 PM
+ * in the trip timezone. A chosen time is kept and the trip ends then.
  * A missing zone keeps a precise instant, except a UTC-midnight date, which
- * lasts through 11:59 PM UTC of that calendar day.
+ * lasts through 11:59:59.999 PM UTC of that calendar day.
  */
 export function scheduledEndInstant(
   endDate: Date,
@@ -116,6 +117,8 @@ export function scheduledEndInstant(
   const zone = validTimeZone(scheduleTimezone);
   if (zone) {
     const day = wallTime(endDate, zone);
+    const dateOnly = day.hour === 0 && day.minute === 0 && day.second === 0;
+    if (!dateOnly) return endDate;
     return zonedWallTimeToUtc(day.year, day.month, day.day, 23, 59, 59, 999, zone);
   }
   if (isUtcMidnight(endDate)) {
@@ -136,7 +139,8 @@ export function scheduledEndInstant(
 
 /**
  * Null endDate means the trip stays open until a manual end.
- * A scheduled end is 11:59:59.999 PM on that date in the trip timezone.
+ * A midnight end date lasts through 11:59:59.999 PM in the trip timezone.
+ * Any other end time is that exact instant.
  * A due end wins over a due start so a fully elapsed window becomes ENDED.
  */
 export function nextTripStatus(

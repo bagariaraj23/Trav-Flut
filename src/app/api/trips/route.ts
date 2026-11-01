@@ -185,7 +185,8 @@ export async function POST(request: NextRequest) {
             // Create trip with transaction for data consistency
             const trip = await prisma.$transaction(async (tx) => {
               // Store the absolute UTC instant. Missing start means "now".
-              // A set end lasts through 11:59 PM on that date in the trip timezone.
+              // A midnight end date lasts through 11:59 PM in the trip timezone.
+              // A chosen end time is stored as that instant.
               // Missing end stays null so only End trip closes it.
               const startDate = validatedData.startDate
                 ? new Date(validatedData.startDate)

@@ -94,7 +94,10 @@ function isUtcMidnight(instant: Date): boolean {
   );
 }
 
-/** 11:59:59.999 PM on the end date in the trip timezone. */
+/**
+ * Midnight is a date with no clock time and lasts through 11:59:59.999 PM
+ * in the trip timezone. Any other time is kept.
+ */
 export function scheduledEndInstant(
   endDate: Date,
   scheduleTimezone?: string | null
@@ -102,6 +105,8 @@ export function scheduledEndInstant(
   const zone = validTimeZone(scheduleTimezone);
   if (zone) {
     const day = wallTime(endDate, zone);
+    const dateOnly = day.hour === 0 && day.minute === 0 && day.second === 0;
+    if (!dateOnly) return endDate;
     return zonedWallTimeToUtc(day.year, day.month, day.day, 23, 59, 59, 999, zone);
   }
   if (isUtcMidnight(endDate)) {

@@ -69,7 +69,9 @@ class _CreateTripScreenState extends State<CreateTripScreen> {
     _mediaService ??= context.read<MediaService>();
   }
 
-  Future<DateTime?> _pickDateTime(DateTime? current) async {
+  /// Date is enough. Confirming the clock sets that time. Dismissing it
+  /// leaves a bare date: the start of that day, or 11:59 PM when this is the end.
+  Future<DateTime?> _pickSchedule(DateTime? current, {required bool isEnd}) async {
     final now = DateTime.now();
     final date = await showDatePicker(
       context: context,
@@ -80,23 +82,18 @@ class _CreateTripScreenState extends State<CreateTripScreen> {
     if (date == null || !mounted) return null;
     final time = await showTimePicker(
       context: context,
+      helpText: isEnd ? 'End time (optional)' : 'Start time (optional)',
+      cancelText: 'No time',
+      confirmText: 'Set time',
       initialTime: TimeOfDay.fromDateTime(current ?? now),
     );
-    if (time == null) return null;
+    if (!mounted) return null;
+    if (time == null) {
+      return isEnd
+          ? DateTime(date.year, date.month, date.day, 23, 59, 59)
+          : DateTime(date.year, date.month, date.day);
+    }
     return DateTime(date.year, date.month, date.day, time.hour, time.minute);
-  }
-
-  /// The scheduler closes the trip after 11:59 PM on this date in the trip zone.
-  Future<DateTime?> _pickEndDate(DateTime? current) async {
-    final now = DateTime.now();
-    final date = await showDatePicker(
-      context: context,
-      initialDate: current ?? now.add(const Duration(days: 1)),
-      firstDate: DateTime(now.year, now.month, now.day),
-      lastDate: now.add(const Duration(days: 365)),
-    );
-    if (date == null || !mounted) return null;
-    return DateTime(date.year, date.month, date.day, 23, 59, 59);
   }
 
   String _scheduleLabel(DateTime? value, String empty) {
@@ -105,9 +102,10 @@ class _CreateTripScreenState extends State<CreateTripScreen> {
   }
 
   Future<void> _selectSchedule(bool isStart) async {
-    final picked = isStart
-        ? await _pickDateTime(_startDate)
-        : await _pickEndDate(_endDate);
+    final picked = await _pickSchedule(
+      isStart ? _startDate : _endDate,
+      isEnd: !isStart,
+    );
     if (picked == null) return;
     setState(() {
       if (isStart) {
@@ -167,7 +165,7 @@ class _CreateTripScreenState extends State<CreateTripScreen> {
     if (_startLater) {
       if (_startDate == null) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Choose a future start date and time')),
+          const SnackBar(content: Text('Choose a future start date')),
         );
         return;
       }
@@ -616,7 +614,7 @@ class _CreateTripScreenState extends State<CreateTripScreen> {
                     title: const Text('Start later'),
                     subtitle: Text(
                       _startLater
-                          ? _scheduleLabel(_startDate, 'Choose a date and time')
+                          ? _scheduleLabel(_startDate, 'Choose a date')
                           : 'Starts now',
                     ),
                     value: _startLater,
@@ -628,7 +626,7 @@ class _CreateTripScreenState extends State<CreateTripScreen> {
                         });
                         return;
                       }
-                      final picked = await _pickDateTime(_startDate);
+                      final picked = await _pickSchedule(_startDate, isEnd: false);
                       if (!mounted) return;
                       setState(() {
                         _startLater = picked != null;
@@ -650,7 +648,7 @@ class _CreateTripScreenState extends State<CreateTripScreen> {
                     subtitle: Text(
                       _setEnd
                           ? _scheduleLabel(_endDate, 'Choose an end date')
-                          : 'Until you tap End trip. A set date ends at 11:59 PM.',
+                          : 'Until you tap End trip. A date with no time ends at 11:59 PM.',
                     ),
                     value: _setEnd,
                     onChanged: (value) async {
@@ -661,7 +659,7 @@ class _CreateTripScreenState extends State<CreateTripScreen> {
                         });
                         return;
                       }
-                      final picked = await _pickEndDate(_endDate);
+                      final picked = await _pickSchedule(_endDate, isEnd: true);
                       if (!mounted) return;
                       setState(() {
                         _setEnd = picked != null;

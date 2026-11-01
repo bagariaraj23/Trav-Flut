@@ -21,7 +21,8 @@ export type UpdateTripStatusesResult = {
 
 /**
  * Trip start/end values are absolute UTC instants (see src/lib/tripSchedule.ts).
- * A scheduled end lasts through 11:59:59.999 PM on that date in scheduleTimezone.
+ * A midnight end date lasts through 11:59:59.999 PM in scheduleTimezone.
+ * A chosen end time ends at that instant.
  * Null endDate is manual-end only. Open-ended trips still start when startDate <= now.
  * Cron "0 * * * *" runs at minute 0 each hour; trip reads apply the same rules
  * so the app does not wait for the next run.

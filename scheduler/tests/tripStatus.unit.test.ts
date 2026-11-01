@@ -43,16 +43,19 @@ function createPrismaMock() {
 }
 
 describe("scheduledEndInstant", () => {
-  test("is 11:59:59.999 PM on the end date in the trip timezone, not midnight", () => {
+  test("moves a midnight end to 11:59 PM and keeps a chosen time", () => {
     expect(
       scheduledEndInstant(new Date("2026-03-19T18:30:00.000Z"), "Asia/Kolkata").toISOString()
     ).toBe("2026-03-20T18:29:59.999Z");
     expect(
       scheduledEndInstant(new Date("2026-03-20T13:00:00.000Z"), "Asia/Kolkata").toISOString()
-    ).toBe("2026-03-20T18:29:59.999Z");
+    ).toBe("2026-03-20T13:00:00.000Z");
+    expect(
+      scheduledEndInstant(new Date("2026-03-20T04:00:00.000Z"), "America/New_York").toISOString()
+    ).toBe("2026-03-21T03:59:59.999Z");
     expect(
       scheduledEndInstant(new Date("2026-03-20T00:00:00.000Z"), "America/New_York").toISOString()
-    ).toBe("2026-03-20T03:59:59.999Z");
+    ).toBe("2026-03-20T00:00:00.000Z");
   });
 });
 

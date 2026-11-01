@@ -42,12 +42,17 @@ describe("nextTripStatus", () => {
     ).toBe(TripStatus.ENDED);
   });
 
-  it("keeps a scheduled trip open until 11:59 PM in the trip timezone", () => {
+  it("ends a chosen time when it is reached and a bare date at 11:59 PM", () => {
     const endOfDay = scheduledEndInstant(
       new Date("2026-03-19T18:30:00.000Z"),
       "Asia/Kolkata"
     );
     expect(endOfDay.toISOString()).toBe("2026-03-20T18:29:59.999Z");
+
+    const chosen = new Date("2026-03-20T13:00:00.000Z");
+    expect(scheduledEndInstant(chosen, "Asia/Kolkata").toISOString()).toBe(
+      chosen.toISOString()
+    );
 
     const trip = {
       status: TripStatus.ONGOING,
@@ -63,13 +68,13 @@ describe("nextTripStatus", () => {
     const dated = {
       status: TripStatus.ONGOING,
       startDate: new Date("2026-03-20T00:00:00.000Z"),
-      endDate: new Date("2026-03-20T13:00:00.000Z"),
+      endDate: chosen,
       scheduleTimezone: "Asia/Kolkata",
     };
     expect(
-      nextTripStatus(dated, new Date("2026-03-20T13:00:00.000Z"))
+      nextTripStatus(dated, new Date("2026-03-20T12:59:00.000Z"))
     ).toBeNull();
-    expect(nextTripStatus(dated, endOfDay)).toBe(TripStatus.ENDED);
+    expect(nextTripStatus(dated, chosen)).toBe(TripStatus.ENDED);
 
     const midnight = new Date("2026-03-19T18:30:00.000Z");
     expect(
