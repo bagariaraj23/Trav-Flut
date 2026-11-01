@@ -46,19 +46,35 @@ export function resolveAutoTripType(participantCount: number): TripType {
   return participantCount >= 2 ? TripType.GROUP : TripType.SOLO;
 }
 
+/**
+ * Couple and Family stay only when the user specified them.
+ * An unset type follows the headcount: one person is Solo, two or more is Group.
+ */
+export function resolveTripType(input: {
+  participantCount: number;
+  typeSetByUser: boolean;
+  currentType: TripType | null;
+}): TripType | null {
+  if (input.typeSetByUser) return input.currentType;
+  return resolveAutoTripType(input.participantCount);
+}
+
 export async function applyAutoTripType(
   db: TripTypeClient,
   tripId: string
 ): Promise<void> {
   const trip = await db.trip.findUnique({
     where: { id: tripId },
-    select: { typeSetByUser: true, participantCount: true },
+    select: { type: true, typeSetByUser: true, participantCount: true },
   });
-  if (!trip || trip.typeSetByUser) return;
+  if (!trip) return;
+
+  const next = resolveTripType(trip);
+  if (next == null || next === trip.type) return;
 
   await db.trip.update({
     where: { id: tripId },
-    data: { type: resolveAutoTripType(trip.participantCount) },
+    data: { type: next },
   });
 }
 

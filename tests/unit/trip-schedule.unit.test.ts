@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { TripStatus, TripType } from "@prisma/client";
-import { nextTripStatus, resolveAutoTripType } from "../../src/lib/tripSchedule";
+import {
+  nextTripStatus,
+  resolveAutoTripType,
+  resolveTripType,
+} from "../../src/lib/tripSchedule";
 
 const istStart = new Date("2026-03-20T13:00:00.000Z");
 
@@ -44,5 +48,53 @@ describe("resolveAutoTripType", () => {
     expect(resolveAutoTripType(2)).toBe(TripType.GROUP);
     expect(resolveAutoTripType(4)).toBe(TripType.GROUP);
     expect(resolveAutoTripType(2)).not.toBe(TripType.COUPLE);
+  });
+});
+
+describe("resolveTripType", () => {
+  it("keeps Couple and Family only when the user specified them", () => {
+    expect(
+      resolveTripType({
+        participantCount: 2,
+        typeSetByUser: true,
+        currentType: TripType.COUPLE,
+      })
+    ).toBe(TripType.COUPLE);
+    expect(
+      resolveTripType({
+        participantCount: 1,
+        typeSetByUser: true,
+        currentType: TripType.COUPLE,
+      })
+    ).toBe(TripType.COUPLE);
+    expect(
+      resolveTripType({
+        participantCount: 4,
+        typeSetByUser: true,
+        currentType: TripType.FAMILY,
+      })
+    ).toBe(TripType.FAMILY);
+
+    expect(
+      resolveTripType({
+        participantCount: 2,
+        typeSetByUser: false,
+        currentType: TripType.COUPLE,
+      })
+    ).toBe(TripType.GROUP);
+    expect(
+      resolveTripType({
+        participantCount: 1,
+        typeSetByUser: false,
+        currentType: TripType.FAMILY,
+      })
+    ).toBe(TripType.SOLO);
+    expect(
+      resolveTripType({
+        participantCount: 2,
+        typeSetByUser: false,
+        currentType: null,
+      })
+    ).toBe(TripType.GROUP);
   });
 });

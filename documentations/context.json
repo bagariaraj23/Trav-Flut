@@ -941,7 +941,7 @@
         ],
         "observedDifferenceVsBackendFinalizer": "Scheduler has its own inline final-post generation logic and does not call backend TripFinalizerService directly.",
         "timeStorage": "startDate and endDate are absolute UTC instants. scheduleTimezone labels the zone used when the wall time was picked. Clients convert to the device zone, then format with the device locale so India shows day/month and the US shows month/day. Legacy rows with a null scheduleTimezone and an exact UTC midnight stay date-only in the app.",
-        "tripType": "Unset type is SOLO. When typeSetByUser is false, participantCount >= 2 promotes the trip to GROUP and a drop back to 1 returns SOLO. COUPLE and FAMILY are never assigned automatically."
+        "tripType": "Unset type is SOLO. When typeSetByUser is false, participantCount >= 2 promotes the trip to GROUP and a drop back to 1 returns SOLO. COUPLE and FAMILY are never assigned from a headcount; they stay only when the user specified the type."
     },
     "scriptsAndOps": {
         "rootScripts": [
