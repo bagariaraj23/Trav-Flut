@@ -1,4 +1,5 @@
 import type { PrismaClient } from "@prisma/client";
+import { scheduledEndInstant } from "./tripEnd";
 
 export enum TripStatus {
   UPCOMING = "UPCOMING",
@@ -20,8 +21,8 @@ export type UpdateTripStatusesResult = {
 
 /**
  * Trip start/end values are absolute UTC instants (see src/lib/tripSchedule.ts).
- * Null endDate is manual-end only and is not selected by the end query.
- * Open-ended trips still start when startDate <= now.
+ * A scheduled end lasts through 11:59:59.999 PM on that date in scheduleTimezone.
+ * Null endDate is manual-end only. Open-ended trips still start when startDate <= now.
  * Cron "0 * * * *" runs at minute 0 each hour; trip reads apply the same rules
  * so the app does not wait for the next run.
  */
@@ -31,17 +32,36 @@ export async function updateTripStatuses(
 ): Promise<UpdateTripStatusesResult> {
   const nowIso = now.toISOString();
 
-  // Find trips that will be ended
-  const tripsToEnd = await prisma.trip.findMany({
+  const dueTrips = await prisma.trip.findMany({
     where: {
-      endDate: { lte: now },
       status: { in: [TripStatus.UPCOMING, TripStatus.ONGOING] },
+      OR: [
+        { endDate: { lte: now } },
+        { status: TripStatus.UPCOMING, startDate: { lte: now } },
+      ],
     },
     select: {
       id: true,
       destinations: true,
       title: true,
+      status: true,
+      startDate: true,
+      endDate: true,
+      scheduleTimezone: true,
     },
+  });
+
+  const tripsToEnd = dueTrips.filter((trip) => {
+    if (!trip.endDate) return false;
+    const end = scheduledEndInstant(trip.endDate, trip.scheduleTimezone);
+    return end.getTime() <= now.getTime();
+  });
+  const tripsToStart = dueTrips.filter((trip) => {
+    if (trip.status !== TripStatus.UPCOMING) return false;
+    if (trip.startDate.getTime() > now.getTime()) return false;
+    if (!trip.endDate) return true;
+    const end = scheduledEndInstant(trip.endDate, trip.scheduleTimezone);
+    return end.getTime() > now.getTime();
   });
 
   // For each trip, atomically: (a) create final post if needed, (b) update status
@@ -123,13 +143,11 @@ export async function updateTripStatuses(
     }
   }
 
-  // Atomically update ongoing trips in one go (safe, read to write, not used for ending)
   const ongoingResult = await prisma.$transaction(async (tx) => {
     return tx.trip.updateMany({
       where: {
-        startDate: { lte: now },
+        id: { in: tripsToStart.map((trip) => trip.id) },
         status: TripStatus.UPCOMING,
-        OR: [{ endDate: null }, { endDate: { gt: now } }],
       },
       data: { status: TripStatus.ONGOING },
     });

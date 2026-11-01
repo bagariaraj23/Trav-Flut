@@ -86,13 +86,28 @@ class _CreateTripScreenState extends State<CreateTripScreen> {
     return DateTime(date.year, date.month, date.day, time.hour, time.minute);
   }
 
+  /// The scheduler closes the trip after 11:59 PM on this date in the trip zone.
+  Future<DateTime?> _pickEndDate(DateTime? current) async {
+    final now = DateTime.now();
+    final date = await showDatePicker(
+      context: context,
+      initialDate: current ?? now.add(const Duration(days: 1)),
+      firstDate: DateTime(now.year, now.month, now.day),
+      lastDate: now.add(const Duration(days: 365)),
+    );
+    if (date == null || !mounted) return null;
+    return DateTime(date.year, date.month, date.day, 23, 59, 59);
+  }
+
   String _scheduleLabel(DateTime? value, String empty) {
     if (value == null) return empty;
     return formatTripInstant(value, scheduleTimezone: _scheduleTimezone);
   }
 
   Future<void> _selectSchedule(bool isStart) async {
-    final picked = await _pickDateTime(isStart ? _startDate : _endDate);
+    final picked = isStart
+        ? await _pickDateTime(_startDate)
+        : await _pickEndDate(_endDate);
     if (picked == null) return;
     setState(() {
       if (isStart) {
@@ -167,7 +182,7 @@ class _CreateTripScreenState extends State<CreateTripScreen> {
     if (_setEnd) {
       if (_endDate == null) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Choose an end date and time')),
+          const SnackBar(content: Text('Choose an end date')),
         );
         return;
       }
@@ -634,8 +649,8 @@ class _CreateTripScreenState extends State<CreateTripScreen> {
                     title: const Text('Set an end'),
                     subtitle: Text(
                       _setEnd
-                          ? _scheduleLabel(_endDate, 'Choose a date and time')
-                          : 'Until you tap End trip',
+                          ? _scheduleLabel(_endDate, 'Choose an end date')
+                          : 'Until you tap End trip. A set date ends at 11:59 PM.',
                     ),
                     value: _setEnd,
                     onChanged: (value) async {
@@ -646,7 +661,7 @@ class _CreateTripScreenState extends State<CreateTripScreen> {
                         });
                         return;
                       }
-                      final picked = await _pickDateTime(_endDate);
+                      final picked = await _pickEndDate(_endDate);
                       if (!mounted) return;
                       setState(() {
                         _setEnd = picked != null;

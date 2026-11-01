@@ -13,7 +13,7 @@ import { PerformanceMonitor, ErrorTracker } from "@/lib/monitoring";
 import { NotFoundError, ConflictError, ValidationError } from "@/lib/errors";
 import { TripStatus, TripType } from "@prisma/client";
 import { ensureTripConversation } from "@/lib/services/chat";
-import { syncViewerTripSchedule } from "@/lib/tripSchedule";
+import { scheduledEndInstant, syncViewerTripSchedule } from "@/lib/tripSchedule";
 
 // Create a new trip
 export async function POST(request: NextRequest) {
@@ -185,14 +185,24 @@ export async function POST(request: NextRequest) {
             // Create trip with transaction for data consistency
             const trip = await prisma.$transaction(async (tx) => {
               // Store the absolute UTC instant. Missing start means "now".
-              // Missing end stays null so only End trip (or a later scheduled end) closes it.
+              // A set end lasts through 11:59 PM on that date in the trip timezone.
+              // Missing end stays null so only End trip closes it.
               const startDate = validatedData.startDate
                 ? new Date(validatedData.startDate)
                 : new Date();
-              const endDate = validatedData.endDate
-                ? new Date(validatedData.endDate)
-                : null;
               const now = new Date();
+              const endDate = validatedData.endDate
+                ? scheduledEndInstant(
+                    new Date(validatedData.endDate),
+                    validatedData.scheduleTimezone ?? null
+                  )
+                : null;
+              if (endDate && endDate.getTime() <= now.getTime()) {
+                throw new ValidationError("End time must be in the future");
+              }
+              if (endDate && endDate.getTime() <= startDate.getTime()) {
+                throw new ValidationError("End time must be after the start time");
+              }
               const status =
                 startDate.getTime() > now.getTime()
                   ? TripStatus.UPCOMING

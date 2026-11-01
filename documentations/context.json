@@ -156,8 +156,8 @@
             "chat (merged PR #48: REST /api/chat + WS /chat on server.cjs; DM/GROUP/TRIP. Trip chats default to the trip title and use the same add/remove/promote/leave controls as groups. Leaving a chat does not leave the trip, and that leave is not undone on the next trip sync. Single-node event bus; rate-limit + Redis Pub/Sub + offline push deferred)"
         ],
         "keyTripFlow": {
-            "createTrip": "POST /trips — startDate optional (defaults to now, status ONGOING); endDate optional (null = manual end only); future start stays UPCOMING. Dates are UTC instants. scheduleTimezone is the IANA zone the wall time was chosen in. Omitted type becomes SOLO with typeSetByUser false.",
-            "updateTripDates": "PATCH /trips/[id]/dates — owner only, not ENDED. startDate only while UPCOMING. endDate may be set or cleared. End must be after start and in the future.",
+            "createTrip": "POST /trips — startDate optional (defaults to now, status ONGOING); endDate optional (null = manual end only). A set end is stored as 11:59:59.999 PM on that date in scheduleTimezone. Future start stays UPCOMING. Dates are UTC instants. scheduleTimezone is the IANA zone the wall time was chosen in. Omitted type becomes SOLO with typeSetByUser false.",
+            "updateTripDates": "PATCH /trips/[id]/dates — owner only, not ENDED. startDate only while UPCOMING. endDate may be set or cleared and is stored as 11:59:59.999 PM on that date in the trip timezone. End must be after start and in the future.",
             "threadEntries": "POST /trips/[id]/entries; GET cursor-paginated page { items, hasMoreOlder, nextOlderCursor } (limit default 30); GET /trips/[id]/entries/[entryId]/context returns a centered window around the target entry for deep-link jumps; DELETE/PATCH /trips/[id]/entries/[entryId] (PATCH: author text edit within 15m, owner may moderate later); shared purge in threadEntryPurge.ts",
             "participantLeave": "POST /trips/[id]/leave { removeMyData: boolean } — non-owner participant leaves; optional purge of author's entries (ONGOING only) now uses bulk cleanup path for scalability; blocked with 409 UNSETTLED_BALANCE when expense net ≠ 0",
             "tripExpenses": "GET/POST /trips/[id]/expenses; GET /trips/[id]/expenses/summary; DELETE /trips/[id]/expenses/[expenseId] (409 after any PAID settlement); POST /trips/[id]/settlements (payee only); DELETE settlements returns 409 (immutable); PATCH /trips/[id]/expense-settings (owner; currency frozen after first live expense)",
@@ -934,13 +934,13 @@
             "scheduler/src/tripStatus.ts"
         ],
         "jobLogic": [
-            "End trips where endDate is set and endDate <= now and status in UPCOMING/ONGOING",
+            "End trips after 11:59:59.999 PM on the end date in scheduleTimezone (UTC for a timezone-less midnight date), when status is UPCOMING or ONGOING. A null endDate is manual end only.",
             "Generate final posts for ended trips if missing",
             "Start trips where startDate <= now and (endDate is null or endDate > now) and status is UPCOMING",
             "Comparisons are UTC instants. Null endDate is manual end only. Trip reads apply the same rules so the app does not wait for the hourly run."
         ],
         "observedDifferenceVsBackendFinalizer": "Scheduler has its own inline final-post generation logic and does not call backend TripFinalizerService directly.",
-        "timeStorage": "startDate and endDate are absolute UTC instants. scheduleTimezone labels the zone used when the wall time was picked. Clients convert to the device zone, then format with the device locale so India shows day/month and the US shows month/day. Legacy rows with a null scheduleTimezone and an exact UTC midnight stay date-only in the app.",
+        "timeStorage": "startDate and endDate are absolute UTC instants. scheduleTimezone labels the zone used when the wall time was picked. A scheduled end lasts through 11:59:59.999 PM on that calendar date in scheduleTimezone, not 00:00. Clients convert to the device zone, then format with the device locale so India shows day/month and the US shows month/day. Legacy rows with a null scheduleTimezone and an exact UTC midnight stay date-only in the app and end at 11:59:59.999 PM UTC of that date.",
         "tripType": "Unset type is SOLO. When typeSetByUser is false, participantCount >= 2 promotes the trip to GROUP and a drop back to 1 returns SOLO. COUPLE and FAMILY are never assigned from a headcount; they stay only when the user specified the type."
     },
     "scriptsAndOps": {

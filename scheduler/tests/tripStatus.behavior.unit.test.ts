@@ -5,6 +5,17 @@ type TripToEnd = {
   id: string;
   title: string;
   destinations: string[];
+  status: "UPCOMING" | "ONGOING";
+  startDate: Date;
+  endDate: Date | null;
+  scheduleTimezone: string | null;
+};
+
+const dueEnd = {
+  status: "ONGOING" as const,
+  startDate: new Date("2026-01-01T00:00:00.000Z"),
+  endDate: new Date("2026-01-02T00:00:00.000Z"),
+  scheduleTimezone: "UTC",
 };
 
 function createPrismaMock(options: {
@@ -89,6 +100,7 @@ describe("updateTripStatuses behavior", () => {
           id: "trip-ended",
           title: "Japan",
           destinations: ["Tokyo", "Kyoto"],
+          ...dueEnd,
         },
       ],
       ongoingCount: 3,
@@ -98,10 +110,21 @@ describe("updateTripStatuses behavior", () => {
 
     expect(prisma.trip.findMany).toHaveBeenCalledWith({
       where: {
-        endDate: { lte: now },
         status: { in: [TripStatus.UPCOMING, TripStatus.ONGOING] },
+        OR: [
+          { endDate: { lte: now } },
+          { status: TripStatus.UPCOMING, startDate: { lte: now } },
+        ],
       },
-      select: { id: true, destinations: true, title: true },
+      select: {
+        id: true,
+        destinations: true,
+        title: true,
+        status: true,
+        startDate: true,
+        endDate: true,
+        scheduleTimezone: true,
+      },
     });
     expect(tx.tripFinalPost.create).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -118,9 +141,8 @@ describe("updateTripStatuses behavior", () => {
     });
     expect(tx.trip.updateMany).toHaveBeenCalledWith({
       where: {
-        startDate: { lte: now },
+        id: { in: [] },
         status: TripStatus.UPCOMING,
-        OR: [{ endDate: null }, { endDate: { gt: now } }],
       },
       data: { status: TripStatus.ONGOING },
     });
@@ -133,7 +155,9 @@ describe("updateTripStatuses behavior", () => {
 
   test("does not create a duplicate final post when one already exists", async () => {
     const { prisma, tx } = createPrismaMock({
-      tripsToEnd: [{ id: "trip-existing", title: "Peru", destinations: ["Lima"] }],
+      tripsToEnd: [
+        { id: "trip-existing", title: "Peru", destinations: ["Lima"], ...dueEnd },
+      ],
       existingFinalPostTripIds: ["trip-existing"],
     });
 
@@ -153,8 +177,8 @@ describe("updateTripStatuses behavior", () => {
     const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
     const { prisma, tx } = createPrismaMock({
       tripsToEnd: [
-        { id: "trip-fails", title: "Fail", destinations: ["A"] },
-        { id: "trip-succeeds", title: "Success", destinations: ["B"] },
+        { id: "trip-fails", title: "Fail", destinations: ["A"], ...dueEnd },
+        { id: "trip-succeeds", title: "Success", destinations: ["B"], ...dueEnd },
       ],
       failTripIds: ["trip-fails"],
     });

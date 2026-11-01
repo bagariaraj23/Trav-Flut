@@ -9,6 +9,7 @@ import {
 } from "@/lib/middleware";
 import { ApiResponse } from "@/types/api";
 import { NotFoundError, ValidationError } from "@/lib/errors";
+import { scheduledEndInstant } from "@/lib/tripSchedule";
 
 async function handler(
   request: AuthenticatedRequest,
@@ -27,6 +28,7 @@ async function handler(
         status: true,
         startDate: true,
         endDate: true,
+        scheduleTimezone: true,
       },
     });
 
@@ -54,6 +56,7 @@ async function handler(
       startDate = parsed;
     }
 
+    const zone = body.scheduleTimezone ?? trip.scheduleTimezone;
     let endDate = trip.endDate;
     if (body.endDate !== undefined) {
       if (body.endDate === null) {
@@ -63,11 +66,13 @@ async function handler(
         if (isNaN(parsed.getTime())) {
           throw new ValidationError("End time must be a valid date");
         }
-        if (parsed.getTime() <= now.getTime()) {
+        endDate = scheduledEndInstant(parsed, zone);
+        if (endDate.getTime() <= now.getTime()) {
           throw new ValidationError("End time must be in the future");
         }
-        endDate = parsed;
       }
+    } else if (body.scheduleTimezone && trip.endDate) {
+      endDate = scheduledEndInstant(trip.endDate, zone);
     }
 
     if (endDate && endDate.getTime() <= startDate.getTime()) {

@@ -88,12 +88,7 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
         lastDate: now.add(const Duration(days: 365)),
       );
       if (date == null || !mounted) return;
-      final time = await showTimePicker(
-        context: context,
-        initialTime: TimeOfDay.fromDateTime(picked ?? now),
-      );
-      if (time == null || !mounted) return;
-      picked = DateTime(date.year, date.month, date.day, time.hour, time.minute);
+      picked = DateTime(date.year, date.month, date.day, 23, 59, 59);
     }
 
     final messenger = ScaffoldMessenger.of(context);
@@ -106,7 +101,11 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
     if (!mounted) return;
     if (ok) {
       messenger.showSnackBar(
-        SnackBar(content: Text(clear ? 'End time removed' : 'End time updated')),
+        SnackBar(
+          content: Text(
+            clear ? 'End time removed' : 'Ends at 11:59 PM on that date',
+          ),
+        ),
       );
       await _loadTrip();
     } else {
