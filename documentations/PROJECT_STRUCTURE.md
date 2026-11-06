@@ -1,10 +1,10 @@
 # TripThread - Complete Project Structure
 
 ## 📋 Overview
-A full-stack social travel application with Next.js backend, Flutter mobile app, and background job scheduler.
-- **Backend**: Next.js 14 (TypeScript) + Prisma ORM + PostgreSQL
-- **Mobile**: Flutter (Dart) with Provider state management
-- **Scheduler**: Node.js (TypeScript) background job worker
+A full-stack social travel application with a Next.js API, a Flutter app, and a trip-status script.
+- **Backend**: Next.js 15 (TypeScript) + Prisma ORM + PostgreSQL. `server.cjs` serves REST and the chat WebSocket.
+- **App**: Flutter (Dart) with Provider. iOS and Android are the phone builds. Local Docker also serves a Flutter web build.
+- **Scheduler**: Node.js (TypeScript) script that runs once and exits. Cron invokes it in production. Local Docker loops it.
 - **Media**: Cloudinary integration for image/video uploads
 - **Total Files**: ~3,000 source files across backend, mobile, and scheduler
 
@@ -15,15 +15,20 @@ A full-stack social travel application with Next.js backend, Flutter mobile app,
 ```
 /project/
 ├── src/                          # Next.js backend (API routes, middleware, utilities)
-├── mobile/                       # Flutter mobile application
-├── scheduler/                    # Background job scheduler
+├── mobile/                       # Flutter app (phone builds and the Docker web UI)
+├── scheduler/                    # Trip-status script (one run, then exit)
 ├── prisma/                       # Database schema & migrations
-├── scripts/                      # Utility scripts
+├── scripts/                      # Utility scripts (including the Docker entrypoint)
 ├── docs/                         # Documentation & templates
-├── .env, .env.local, .env.example  # Environment configurations
+├── documentations/               # Environment, cache, and project-structure docs
+├── docker-compose.yml            # Local full stack: Postgres, API, scheduler, Flutter web
+├── docker-compose.dev.yml        # Local Postgres only (API and Flutter stay on the host)
+├── Dockerfile                    # API image (node server.cjs)
+├── DOCKER_SETUP.md               # Compose services, migrations, networking
+├── QUICKSTART.md                 # Full-stack and hybrid start commands
+├── .env, .env.local, .env.example, docker.env.example
 ├── package.json, tsconfig.json   # Backend dependencies & TypeScript config
 ├── next.config.js, postcss.config.js, tailwind.config.js  # Next.js configs
-├── ARCHITECTURE.md, CLOUDINARY_IMPLEMENTATION.md, ENVIRONMENT_SETUP.md  # Docs
 └── README.md                     # Project overview
 ```
 
@@ -268,6 +273,10 @@ mobile/
 │   ├── manifest.json            # PWA manifest
 │   └── icons/                   # Web app icons
 │
+├── Dockerfile                   # Flutter web image used by docker-compose `web`
+├── nginx.conf                   # Serves the build and proxies /api, /chat, /share
+├── .dockerignore
+│
 ├── macos/, linux/, windows/     # Desktop platform configs
 │
 ├── test/
@@ -278,6 +287,8 @@ mobile/
 └── scripts/
     └── switch_env.sh            # Switch between dev/prod environments
 ```
+
+Screens that cannot compile for the web (Mapbox, `dart:io` video and files) keep a native file and a web file. `if (dart.library.io)` selects the native one on iOS, Android, and tests. The web file lists places or plays video in the browser. Token storage follows the same split: secure storage on the phone, browser local storage in the Docker web UI.
 
 ### Core Flutter Dependencies
 
@@ -303,39 +314,29 @@ mobile/
 
 ### Directory Tree
 
+The scheduler is not a queue. `src/index.ts` connects, calls `updateTripStatuses`, and exits. Open-ended trips (`endDate` null) move to ongoing and stay there until an end is set. There is no BullMQ worker in this tree.
+
+Local Docker (`docker-compose.yml`) starts this container after the API is healthy, then loops `node dist/index.js` every `SCHEDULER_INTERVAL_SECONDS` (default 300). Production cron invokes the same script. See [scheduler/SCHEDULER_ARCHITECTURE.md](../scheduler/SCHEDULER_ARCHITECTURE.md).
+
 ```
 scheduler/
 ├── src/
-│   ├── index.ts                 # Scheduler entry point
-│   ├── tripStatus.ts            # Trip status update logic
-│   │                            # - Check upcoming → ongoing → ended transitions
-│   │                            # - Publish final posts
-│   │                            # - Cleanup stale data
-│   ├── jobs/
-│   │   ├── mediaCleanup.ts      # Cleanup orphaned media
-│   │   ├── tripStatusUpdate.ts  # Cron job for trip status
-│   │   ├── notificationDispatch.ts  # Send notifications
-│   │   └── dataRetention.ts     # GDPR data retention policies
-│   ├── queue/
-│   │   ├── queue.ts             # Job queue implementation (BullMQ or similar)
-│   │   └── workers.ts           # Job workers
-│   ├── config/
-│   │   ├── env.ts               # Environment variables
-│   │   └── db.ts                # Prisma client config
-│   └── utils/
-│       ├── logger.ts            # Logging utility
-│       └── errors.ts            # Error handling
+│   ├── index.ts                 # One-shot entry point
+│   ├── tripStatus.ts            # UPCOMING → ONGOING → ENDED
+│   ├── tripEnd.ts               # End-of-trip final post
+│   └── startup-logger.ts        # Startup diagnostics
 │
 ├── tests/
-│   ├── tripStatus.integration.test.ts  # Trip status job tests
-│   ├── mediaCleanup.test.ts     # Media cleanup tests
-│   └── queue.test.ts            # Queue operation tests
+│   ├── tripStatus.unit.test.ts
+│   └── tripStatus.integration.test.ts
 │
-├── dist/                        # Compiled output (built by TypeScript)
-├── package.json                 # Scheduler dependencies
-├── tsconfig.json                # TypeScript config
-├── jest.config.ts               # Jest testing config
-└── README.md                    # Scheduler documentation
+├── dist/                        # Compiled output
+├── Dockerfile                   # Image used by the Compose scheduler service
+├── package.json
+├── tsconfig.json
+├── README.md
+├── SCHEDULER_ARCHITECTURE.md
+└── MIGRATION_NOTES.md           # Why this replaced BullMQ
 ```
 
 ### Scheduler Responsibilities
@@ -498,7 +499,7 @@ cursor_rules.md                 # Cursor/Copilot AI rules
 
 ### Backend (`package.json` - root)
 
-- **Framework**: `next` 14+
+- **Framework**: `next` 15 (`server.cjs` for REST and chat)
 - **ORM**: `@prisma/client`
 - **HTTP**: `axios`, `node-fetch`
 - **Auth**: `jsonwebtoken`, `bcrypt`
@@ -520,9 +521,8 @@ cursor_rules.md                 # Cursor/Copilot AI rules
 ### Scheduler (`scheduler/package.json`)
 
 - **Runtime**: `node`, `typescript`
-- **Job Queue**: `bullmq` or `agenda`
-- **Database**: `@prisma/client`
-- **Cron**: `node-cron`
+- **Database**: `@prisma/client` (shared schema with the API)
+- **Trigger**: external cron, or the Docker Compose shell loop. The process itself has no timer.
 
 ---
 
@@ -634,7 +634,7 @@ flutter pub run build_runner build  # Generate JSON serialization
 ```bash
 npm run dev              # Dev mode
 npm run build            # Build TypeScript
-npm run start            # Run scheduler
+npm run start            # Run one status pass, then exit
 npm test                 # Run tests
 ```
 
@@ -667,7 +667,8 @@ npx prisma studio                               # Open DB browser
 | Add UI screen | `mobile/lib/screens/[feature]/` |
 | Add data model | `src/app/types/models.ts` or `mobile/lib/models/` |
 | Update DB schema | `prisma/schema.prisma` |
-| Add scheduler job | `scheduler/src/jobs/` |
+| Change trip status rules | `scheduler/src/tripStatus.ts` |
+| Local full stack | `docker-compose.yml`, `DOCKER_SETUP.md` |
 | Fix type errors | `src/types/` or `mobile/lib/models/*.dart` |
 | Auth logic | `src/lib/auth.ts` + `mobile/lib/providers/auth_provider.dart` |
 | API calls | `src/app/api/` + `mobile/lib/services/api_service.dart` |

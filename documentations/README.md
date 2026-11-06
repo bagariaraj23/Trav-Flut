@@ -9,6 +9,16 @@
 
 **Note:** Architecture overview is in the [main README](../README.md#-architecture-overview).
 
+## Local Docker
+
+The full local stack (Postgres, API, scheduler, and the Flutter UI in the browser) is documented in:
+
+- [DOCKER_SETUP.md](../DOCKER_SETUP.md) - Compose services, migrate-on-boot, networking, and troubleshooting
+- [QUICKSTART.md](../QUICKSTART.md) - Full-stack and database-only start commands
+- [README.md](../README.md#-quick-start-with-docker-recommended) - Short start path and ports
+
+Production hosting stays Railway / Railpack. This Compose file is for local runs.
+
 ## Scheduler Documentation
 
 The scheduler is an independent module located in `/scheduler`. See:

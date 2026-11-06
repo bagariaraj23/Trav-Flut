@@ -8,7 +8,7 @@ TripThread uses a microservices architecture with the following components:
 
 ### 1. Main Application (Next.js)
 
-- **Framework**: Next.js 14 with App Router
+- **Framework**: Next.js 15 with App Router (`server.cjs` serves REST and the chat WebSocket)
 - **Language**: TypeScript
 - **Database**: PostgreSQL with Prisma ORM
 - **Authentication**: JWT (Access + Refresh Token)
@@ -25,14 +25,14 @@ TripThread uses a microservices architecture with the following components:
 - Place search and management
 - User management and social features
 
-### 2. Frontend: Flutter Mobile App
+### 2. Frontend: Flutter App
 
-- **Platform**: iOS & Android
+- **Platform**: iOS and Android. The local Docker stack also serves a Flutter web build.
 - **State Management**: Provider
 - **Navigation**: GoRouter
-- **Storage**: Flutter Secure Storage (for JWT tokens)
+- **Storage**: Flutter Secure Storage for JWT tokens on iOS and Android. The web build stores the session in browser local storage.
 - **HTTP Client**: Dio with interceptors
-- **Location Services**: Geolocator, Geocoding
+- **Location Services**: Geolocator, Geocoding, Mapbox on iOS and Android. The web UI lists places and keeps search.
 - **Media**: Image picker, video player, Cloudinary integration
 
 ### 3. Background Job Scheduler (Independent Service)
@@ -40,14 +40,14 @@ TripThread uses a microservices architecture with the following components:
 - **Type**: Independent cron-based service
 - **Purpose**: Automatically updates trip statuses (UPCOMING → ONGOING → ENDED)
 - **Technology**: Node.js + TypeScript
-- **Deployment**: Cron job (Railway, GitHub Actions, or system cron)
+- **Deployment**: One-shot script. Production cron (Railway, GitHub Actions, or system cron) invokes it. Local Docker loops that same script every `SCHEDULER_INTERVAL_SECONDS` (default 300) after the API is healthy.
 - **Zero Redis dependency** - All Redis budget available for API caching
 
-**Key Design Decision:** The scheduler runs as a simple cron-executable script that:
-- Executes once per invocation
+**Key Design Decision:** The scheduler runs as a simple script that:
+- Executes once per invocation and exits
 - Connects directly to PostgreSQL
-- Exits after completion
 - Uses zero Redis commands
+- Leaves the schedule to the caller (cron, or the Compose shell loop)
 
 For detailed scheduler architecture, see [scheduler/SCHEDULER_ARCHITECTURE.md](./scheduler/SCHEDULER_ARCHITECTURE.md).
 
@@ -71,11 +71,14 @@ For detailed scheduler architecture, see [scheduler/SCHEDULER_ARCHITECTURE.md](.
 
 ```
 TripThread/
-├── mobile/                 # Flutter Mobile App
-├── scheduler/              # Trip Status Scheduler (Cron Service)
+├── mobile/                 # Flutter app (iOS, Android, and the Docker web UI)
+├── scheduler/              # Trip status script (cron, or the Docker loop)
 ├── src/                    # Next.js Backend
 ├── prisma/                 # Database schema
 ├── documentations/         # Project documentation
+├── docker-compose.yml      # Postgres + API + scheduler + Flutter web
+├── docker-compose.dev.yml  # Postgres only
+├── DOCKER_SETUP.md
 └── README.md
 ```
 
@@ -108,6 +111,8 @@ TripThread/
 │   ├── android/            # Android platform files
 │   ├── ios/               # iOS platform files
 │   ├── pubspec.yaml
+│   ├── Dockerfile          # Flutter web image (nginx on :8080)
+│   ├── nginx.conf          # Proxies /api, /chat, and /share to the API
 │   └── README.md
 │
 ├── scheduler/              # Trip Status Scheduler (Cron Service)
@@ -406,7 +411,7 @@ cd scheduler
 # Development mode (with watch)
 npm run dev
 
-# Run once (simulates cron)
+# Run once (the same process Docker and cron invoke)
 npm start
 
 # Run tests
@@ -418,10 +423,7 @@ npm run test:e2e
 
 ### Backend
 
-Deploy as a standard Next.js application:
-- Vercel (recommended)
-- Railway
-- Any Node.js hosting platform
+Production is Railway (Railpack) starting `node server.cjs` so REST and the chat WebSocket share one process. Do not use bare `next start`. The Docker Compose file in this repo is for local runs, not that deploy.
 
 ### Mobile
 
@@ -430,10 +432,12 @@ Deploy as a standard Next.js application:
 
 ### Scheduler
 
-Deploy as a cron job:
+Deploy the one-shot script on a schedule:
 - **Railway Cron** (recommended)
 - **GitHub Actions** (scheduled workflows)
 - **System Cron** (Linux/Mac servers)
+
+Local Docker is a separate trigger: it loops the same script every five minutes by default. See [DOCKER_SETUP.md](./DOCKER_SETUP.md).
 
 See [Scheduler README](./scheduler/README.md#deployment) for detailed deployment options.
 
@@ -495,8 +499,8 @@ For detailed cache architecture, see [CACHE.md](./documentations/CACHE.md).
 
 | Component | Technology |
 |-----------|-----------|
-| **Frontend** | Flutter (Dart) |
-| **Backend** | Next.js 14 (TypeScript) |
+| **Frontend** | Flutter (Dart): iOS, Android, and the local Docker web UI |
+| **Backend** | Next.js 15 (TypeScript), `server.cjs` |
 | **Database** | PostgreSQL |
 | **ORM** | Prisma |
 | **Cache** | Redis (Upstash) |
@@ -504,7 +508,7 @@ For detailed cache architecture, see [CACHE.md](./documentations/CACHE.md).
 | **Authentication** | JWT |
 | **Email** | SendGrid |
 | **Location** | Mapbox, Geolocator |
-| **Scheduler** | Node.js + TypeScript (Cron) |
+| **Scheduler** | Node.js + TypeScript (one-shot script; cron or the Docker loop) |
 
 ## 🤝 Contributing
 

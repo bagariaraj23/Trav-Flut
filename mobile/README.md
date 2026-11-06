@@ -6,10 +6,10 @@ Flutter mobile application for TripThread.
 
 ### Prerequisites
 
-- Flutter SDK (latest stable version)
+- Flutter SDK matching `pubspec.yaml` (`>=3.10.0`; the Docker web image uses 3.38.5)
 - Dart SDK
 - Android Studio / Xcode (for mobile development)
-- Backend API running (see main project README)
+- Backend API running (see main project README), or the full Docker stack
 
 ### Environment Setup
 
@@ -32,9 +32,20 @@ cp .env.example .env
 # Install dependencies
 flutter pub get
 
-# Run the app
+# Run the app against a host or Docker API on port 3000
 flutter run
 ```
+
+### Browser UI (Docker)
+
+`docker compose up --build -d` from the repo root builds this app for the web and serves it at [http://localhost:8080](http://localhost:8080) (or `http://127.0.0.1:8080`). nginx proxies `/api`, `/chat`, and `/share` to the API, so the browser stays on one origin. See [DOCKER_SETUP.md](../DOCKER_SETUP.md).
+
+That image bakes `WEB_API_BASE_URL` (default `http://localhost:8080/api`). Rebuild the `web` service after changing it. Phone and emulator builds keep using `mobile/.env` and call the API on port 3000 (`http://10.0.2.2:3000/api` on the Android emulator).
+
+On the web build:
+
+- The interactive Mapbox map and pin dropper stay on iOS and Android. View Trip Map lists places, and search still works.
+- Sign-in stores the session in browser local storage. iOS and Android keep `flutter_secure_storage`.
 
 ## Resources
 
@@ -60,7 +71,7 @@ flutter run
 - **Final Posts**: Edit and publish curated trip summaries with selected media
 - **Social Features**: Follow users, view profiles, discover trips
 - **Media Upload**: Cloudinary integration for images and videos
-- **Location Services**: Place search, location entries, and map integration
+- **Location Services**: Place search, location entries, and map integration (interactive Mapbox on iOS and Android; a place list on the Docker web UI)
 
 ## Documentation
 
