@@ -29,6 +29,9 @@ async function handler(
         startDate: true,
         endDate: true,
         scheduleTimezone: true,
+        finalPost: {
+          select: { id: true },
+        },
       },
     });
 
@@ -37,8 +40,15 @@ async function handler(
       throw new ValidationError("Only the trip owner can change the schedule");
     }
     const extending = body.extend === true || trip.status === TripStatus.ENDED;
-    if (trip.status === TripStatus.ENDED && body.endDate == null) {
-      throw new ValidationError("Extend the trip with a later end");
+    if (trip.status === TripStatus.ENDED) {
+      if (trip.finalPost) {
+        throw new ValidationError(
+          "Cannot extend trip after final post has been generated"
+        );
+      }
+      if (body.endDate == null) {
+        throw new ValidationError("Extend the trip with a later end");
+      }
     }
 
     const now = new Date();

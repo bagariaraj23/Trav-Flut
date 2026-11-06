@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:permission_handler/permission_handler.dart';
 
@@ -94,7 +95,9 @@ class AppPermissions {
       case AppPermissionKind.photos:
         return Permission.photos;
       case AppPermissionKind.videos:
-        return Permission.videos;
+        return defaultTargetPlatform == TargetPlatform.iOS
+            ? Permission.photos
+            : Permission.videos;
     }
   }
 

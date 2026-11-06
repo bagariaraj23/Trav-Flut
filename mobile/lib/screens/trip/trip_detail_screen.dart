@@ -78,6 +78,16 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
   }
 
   Future<void> _changeEnd({bool clear = false, bool extend = false}) async {
+    if (_trip?.status == TripStatus.ended && _trip?.finalPost != null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Cannot extend a trip after its final post has been generated',
+          ),
+        ),
+      );
+      return;
+    }
     final currentEnd = _trip?.endDate?.toLocal();
     DateTime? picked = currentEnd;
     if (!clear) {
@@ -1171,7 +1181,7 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
                 ],
                 const SizedBox(height: 8),
               ],
-              if (isOwner && _trip!.endDate != null) ...[
+              if (isOwner && _trip!.endDate != null && _trip!.finalPost == null) ...[
                 OutlinedButton.icon(
                   onPressed: () => _changeEnd(extend: true),
                   icon: const Icon(Icons.more_time),

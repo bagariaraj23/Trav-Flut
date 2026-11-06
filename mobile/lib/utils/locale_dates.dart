@@ -63,8 +63,9 @@ class LocaleDates {
     final clock = (now ?? DateTime.now()).toLocal();
     final day = DateTime(wall.year, wall.month, wall.day);
     final today = DateTime(clock.year, clock.month, clock.day);
+    final yesterday = DateTime(today.year, today.month, today.day - 1);
     if (day == today) return timeOfDay(wall);
-    if (day == today.subtract(const Duration(days: 1))) return 'Yesterday';
+    if (day == yesterday) return 'Yesterday';
     return monthDay(wall);
   }
 
@@ -74,8 +75,9 @@ class LocaleDates {
     final clock = (now ?? DateTime.now()).toLocal();
     final day = DateTime(wall.year, wall.month, wall.day);
     final today = DateTime(clock.year, clock.month, clock.day);
+    final yesterday = DateTime(today.year, today.month, today.day - 1);
     if (day == today) return 'Today';
-    if (day == today.subtract(const Duration(days: 1))) return 'Yesterday';
+    if (day == yesterday) return 'Yesterday';
     return longDate(wall);
   }
 
