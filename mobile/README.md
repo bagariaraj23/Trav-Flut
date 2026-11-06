@@ -44,7 +44,9 @@ That image bakes `WEB_API_BASE_URL` (default `http://localhost:8080/api`). Rebui
 
 On the web build:
 
-- The interactive Mapbox map and pin dropper stay on iOS and Android. View Trip Map lists places, and search still works.
+- View Trip Map and the pin dropper use `mapbox_maps_flutter` 3.34.2. On web, markers and the route are GeoJSON circle, symbol, and line layers, because the annotation managers throw there. iOS and Android still draw those annotations. The web image needs a real `MAPBOX_ACCESS_TOKEN` build arg; rebuild `web` after changing it.
+- iOS uses Swift Package Manager only (`flutter config --enable-swift-package-manager`) and requires iOS 14.
+- On Linux, `flutter pub get` exits 1 for that iOS plugin because Xcode is missing. `scripts/linux_mapbox_pub_get.sh` (used by the web image and `mobile-tests`) satisfies the check and retries. macOS does not need the script.
 - Sign-in stores the session in browser local storage. iOS and Android keep `flutter_secure_storage`.
 
 ## Resources
@@ -71,7 +73,7 @@ On the web build:
 - **Final Posts**: Edit and publish curated trip summaries with selected media
 - **Social Features**: Follow users, view profiles, discover trips
 - **Media Upload**: Cloudinary integration for images and videos
-- **Location Services**: Place search, location entries, and map integration (interactive Mapbox on iOS and Android; a place list on the Docker web UI)
+- **Location Services**: Place search, location entries, and Mapbox maps on iOS, Android, and the Docker web UI
 
 ## Documentation
 

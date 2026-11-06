@@ -28,7 +28,7 @@ Run PostgreSQL, the API, the scheduler, and the Flutter UI in the browser. You d
    *Builds and starts Postgres, the API (`node server.cjs`), the scheduler, and the Flutter web UI. The API waits for Postgres, then runs `prisma migrate deploy`. The scheduler starts after the API is healthy and loops every `SCHEDULER_INTERVAL_SECONDS` (default 300 seconds).*
 
 4. **Open the app:**
-   * Browser UI: [http://localhost:8080](http://localhost:8080) or [http://127.0.0.1:8080](http://127.0.0.1:8080). Sign up, create a trip, and open it. View Trip Map lists places; the interactive Mapbox map stays on iOS and Android.
+   * Browser UI: [http://localhost:8080](http://localhost:8080) or [http://127.0.0.1:8080](http://127.0.0.1:8080). Sign up, create a trip, and open it. View Trip Map and the pin dropper use Mapbox in the browser once `MAPBOX_ACCESS_TOKEN` is set and the `web` image is rebuilt.
    * API health: [http://localhost:3000/api/health](http://localhost:3000/api/health) and the same path through nginx at [http://localhost:8080/api/health](http://localhost:8080/api/health).
    * Chat: backend logs should show `WebSocket chat endpoint: ws://localhost:3000/chat`. The browser uses the same path on port 8080.
    * Phone or emulator: point `API_BASE_URL` at port 3000 (`http://10.0.2.2:3000/api` on the Android emulator), not at the web container.

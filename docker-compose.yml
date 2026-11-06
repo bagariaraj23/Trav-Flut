@@ -192,12 +192,13 @@ services:
       - ./mobile:/app/mobile
       - flutter_pub_cache:/root/.pub-cache
     # pubspec.yaml bundles mobile/.env (gitignored); tests only need the example values.
-    # --enforce-lockfile keeps the bind-mounted pubspec.lock unchanged.
+    # linux_mapbox_pub_get.sh retries pub get after the SPM-only iOS plugin check
+    # that Flutter raises on Linux. --enforce-lockfile keeps pubspec.lock unchanged.
     command:
       [
         "bash",
         "-lc",
-        "[ -f .env ] || cp .env.example .env; flutter pub get --enforce-lockfile && flutter analyze --no-fatal-infos --no-fatal-warnings && flutter test",
+        "[ -f .env ] || cp .env.example .env; sh scripts/linux_mapbox_pub_get.sh --enforce-lockfile && flutter analyze --no-fatal-infos --no-fatal-warnings && flutter test",
       ]
 
 volumes:

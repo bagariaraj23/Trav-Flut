@@ -35,6 +35,7 @@ class _MapPickerModalState extends State<MapPickerModal> {
   bool _error = false;
   String _errorMessage = '';
   mapbox.Point? _selectedPoint;
+  late final mapbox.Point _initialCenter;
   String? _selectedName;
   bool _isConfirmingLocation = false;
   bool _isDisposed = false;
@@ -44,15 +45,25 @@ class _MapPickerModalState extends State<MapPickerModal> {
   @override
   void initState() {
     super.initState();
-    mapbox.MapboxOptions.setAccessToken(AppConfig.mapboxAccessToken);
+    final token = AppConfig.mapboxAccessToken;
+    if (token.isEmpty) {
+      _initialCenter = mapbox.Point(coordinates: mapbox.Position(0, 20));
+      _loading = false;
+      _error = true;
+      _errorMessage = 'Mapbox access token is not configured.';
+      return;
+    }
+    mapbox.MapboxOptions.setAccessToken(token);
 
     if (widget.initialLat != null && widget.initialLng != null) {
       _selectedPoint = mapbox.Point(
         coordinates: mapbox.Position(widget.initialLng!, widget.initialLat!),
       );
       _selectedName = widget.initialPlaceName;
+      _initialCenter = _selectedPoint!;
       setState(() => _loading = false);
     } else {
+      _initialCenter = mapbox.Point(coordinates: mapbox.Position(0, 20));
       _getCurrentLocation();
     }
   }
@@ -274,50 +285,49 @@ class _MapPickerModalState extends State<MapPickerModal> {
                 : mapbox.MapWidget(
                     key: const ValueKey('mapbox-modal'),
                     styleUri: 'mapbox://styles/mapbox/streets-v12',
-                    cameraOptions: mapbox.CameraOptions(
-                      center:
-                          _selectedPoint ??
-                          mapbox.Point(coordinates: mapbox.Position(0, 20)),
+                    viewport: mapbox.CameraViewportState(
+                      center: _initialCenter,
                       zoom: 15.0,
                     ),
                     onMapCreated: (controller) {
-                      if (!_isDisposed) {
-                        _mapboxMap = controller;
-                        debugPrint('[MapPickerModal] Map created');
-                      }
+                      if (_isDisposed) return;
+                      _mapboxMap = controller;
+                      debugPrint('[MapPickerModal] Map created');
+                      controller.addInteraction(
+                        mapbox.TapInteraction.onMap((context) {
+                          _safeSetState(() {
+                            _selectedPoint = context.point;
+                          });
+                          _mapboxMap?.easeTo(
+                            mapbox.CameraOptions(
+                              center: context.point,
+                              zoom: 15.0,
+                            ),
+                            mapbox.MapAnimationOptions(duration: 300),
+                          );
+                        }),
+                      );
                     },
                     onCameraChangeListener: _onCameraChanged,
-                    onTapListener: (mapbox.MapContentGestureContext context) {
-                      _safeSetState(() {
-                        _selectedPoint = context.point;
-                      });
-
-                      // Animate to tapped location
-                      _mapboxMap?.easeTo(
-                        mapbox.CameraOptions(
-                          center: context.point,
-                          zoom: 15.0,
-                        ),
-                        mapbox.MapAnimationOptions(duration: 300),
-                      );
-                                        },
                   ),
 
             // Pin
             if (!_loading && !_error)
-              Center(
-                child: Transform.translate(
-                  offset: const Offset(0, -22),
-                  child: Icon(
-                    Icons.location_on,
-                    size: 48,
-                    color: AppTheme.accent,
-                    shadows: [
-                      Shadow(
-                        blurRadius: 8,
-                        color: scheme.shadow.withValues(alpha: 0.35),
-                      ),
-                    ],
+              IgnorePointer(
+                child: Center(
+                  child: Transform.translate(
+                    offset: const Offset(0, -22),
+                    child: Icon(
+                      Icons.location_on,
+                      size: 48,
+                      color: AppTheme.accent,
+                      shadows: [
+                        Shadow(
+                          blurRadius: 8,
+                          color: scheme.shadow.withValues(alpha: 0.35),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),

@@ -9,7 +9,10 @@ FROM ghcr.io/cirruslabs/flutter:${FLUTTER_IMAGE_TAG} AS build
 WORKDIR /app
 
 COPY pubspec.yaml pubspec.lock ./
-RUN flutter pub get
+COPY scripts/linux_mapbox_pub_get.sh scripts/linux_mapbox_pub_get.sh
+# Mapbox 3.x is Swift Package Manager only. Linux Flutter exits 1 on that
+# check; the script adds a pub-cache podspec placeholder and retries.
+RUN sh scripts/linux_mapbox_pub_get.sh
 
 COPY . .
 

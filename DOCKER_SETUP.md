@@ -27,7 +27,7 @@ When running the full stack (`npm run docker:up`), the following services are sp
 * Share bridge + Universal Link files: `http://localhost:3000/share/{token}`, `/.well-known/apple-app-site-association`, `/.well-known/assetlinks.json`.
 * Mobile against Docker: set `API_BASE_URL` and `SHARE_LINK_BASE_URL` to the same host (emulator: `http://10.0.2.2:3000`).
 * Browser: open `http://localhost:8080` or `http://127.0.0.1:8080`. The web client follows whichever loopback host you opened, so `/api` and `/chat` stay on that origin. The image still bakes `WEB_API_BASE_URL` (default `http://localhost:8080/api`) for the initial target. Rebuild the `web` service after changing `WEB_API_BASE_URL` or `WEB_SHARE_LINK_BASE_URL`. Sign-in stores the session in browser local storage.
-* The interactive Mapbox map and pin dropper stay on iOS and Android. In the browser, View Trip Map lists the trip's places and place search still works.
+* View Trip Map and the pin dropper render a Mapbox map in the browser. Markers and the route on web are GeoJSON style layers, because Mapbox 3.x annotation managers throw on web. iOS and Android keep those annotation managers. Pass a real `MAPBOX_ACCESS_TOKEN` as a build arg (Compose reads it from `.env`) and rebuild `web`; an empty token shows a configuration message instead of tiles.
 * Put a real `MAPBOX_ACCESS_TOKEN` in `.env` before place search. The API still boots with a local placeholder when it is unset. Uploads need Cloudinary keys; without them the API runs and uploads fail.
 
 ### Schema apply on container start

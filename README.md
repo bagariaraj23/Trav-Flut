@@ -32,7 +32,7 @@ TripThread uses a microservices architecture with the following components:
 - **Navigation**: GoRouter
 - **Storage**: Flutter Secure Storage for JWT tokens on iOS and Android. The web build stores the session in browser local storage.
 - **HTTP Client**: Dio with interceptors
-- **Location Services**: Geolocator, Geocoding, Mapbox on iOS and Android. The web UI lists places and keeps search.
+- **Location Services**: Geolocator, Geocoding, and Mapbox Maps 3.34 (`mapbox_maps_flutter`). The same map and pin dropper render on iOS, Android, and the web UI.
 - **Media**: Image picker, video player, Cloudinary integration
 
 ### 3. Background Job Scheduler (Independent Service)
@@ -206,7 +206,7 @@ npm run docker:up
 
 On boot the backend runs `prisma migrate deploy`. A volume created by the older `db push` entrypoint is baselined once (schema push, then every migration marked applied). Set `DB_SCHEMA_MODE=push` or `skip` to opt out. Put a real `MAPBOX_ACCESS_TOKEN` in `.env` before place search; the stack still boots with a local placeholder.
 
-The interactive Mapbox map and pin dropper stay on iOS and Android. The web UI lists trip places and keeps place search. Rebuild the web image after changing `WEB_API_BASE_URL` (the browser address is baked into the Flutter build).
+View Trip Map and the pin dropper use Mapbox on the web UI as well as on iOS and Android. Put a real `MAPBOX_ACCESS_TOKEN` in `.env` and rebuild the `web` image; the token is baked into the Flutter build, and an empty token shows a configuration message instead of a map. Rebuild that image after changing `WEB_API_BASE_URL` (the browser address is baked in too). iOS builds need Swift Package Manager (`flutter config --enable-swift-package-manager`) and iOS 14.
 
 Run the test suites in containers:
 ```bash

@@ -285,10 +285,11 @@ mobile/
 │   └── integration_tests/
 │
 └── scripts/
-    └── switch_env.sh            # Switch between dev/prod environments
+    ├── switch_env.sh            # Switch between dev/prod environments
+    └── linux_mapbox_pub_get.sh  # Linux pub get workaround for the SPM-only Mapbox iOS plugin
 ```
 
-Screens that cannot compile for the web (Mapbox, `dart:io` video and files) keep a native file and a web file. `if (dart.library.io)` selects the native one on iOS, Android, and tests. The web file lists places or plays video in the browser. Token storage follows the same split: secure storage on the phone, browser local storage in the Docker web UI.
+Screens that cannot compile for the web (`dart:io` video and files) keep a native file and a web file. `if (dart.library.io)` selects the native one on iOS, Android, and tests. The web file plays video in the browser. The trip map and pin dropper share one Mapbox 3.34 implementation: annotation managers on iOS and Android, GeoJSON style layers on web. Token storage follows the same split: secure storage on the phone, browser local storage in the Docker web UI. `scripts/linux_mapbox_pub_get.sh` lets Linux `flutter pub get` succeed with the Swift Package Manager-only iOS plugin.
 
 ### Core Flutter Dependencies
 
