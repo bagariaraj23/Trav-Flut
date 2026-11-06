@@ -61,10 +61,13 @@ class AppPermissions {
   ];
 
   static Future<PermissionStatus> status(AppPermissionKind kind) {
+    if (kIsWeb) return Future.value(PermissionStatus.granted);
     return _permission(kind).status;
   }
 
   static Future<AppPermissionOutcome> ensure(AppPermissionKind kind) async {
+    // The browser prompts inside the file picker and geolocation APIs.
+    if (kIsWeb) return AppPermissionOutcome.granted;
     final permission = _permission(kind);
     var current = await permission.status;
     if (_allowed(current)) return AppPermissionOutcome.granted;

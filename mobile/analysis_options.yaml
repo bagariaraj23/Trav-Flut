@@ -9,6 +9,12 @@
 # packages, and plugins designed to encourage good coding practices.
 include: package:flutter_lints/flutter.yaml
 
+analyzer:
+  exclude:
+    # Imports dart:html and dart:ui_web. flutter analyze on the VM (mobile-tests)
+    # cannot resolve those libraries; flutter build web still compiles this file.
+    - lib/widgets/media/app_video_web.dart
+
 linter:
   # The lint rules applied to this project can be customized in the
   # section below to disable rules from the `package:flutter_lints/flutter.yaml`

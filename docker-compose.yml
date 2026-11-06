@@ -1,5 +1,6 @@
 # TripThread — Complete Application Stack
-# Starts PostgreSQL (dev and test), Next.js Backend API (REST + WebSocket /chat), and the Scheduler Service.
+# Starts PostgreSQL, the Next.js API (REST + WebSocket /chat), the scheduler,
+# and the Flutter UI (web) behind nginx.
 #
 # Usage:
 #   docker compose up --build -d                          # Start the full stack
@@ -73,7 +74,10 @@ services:
       TZ: UTC
       JWT_SECRET: ${JWT_SECRET:-dev-jwt-secret-key-for-local-development}
       JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:-dev-jwt-refresh-secret-key-for-local-development}
+      # Required at process start (src/env.ts). A real token belongs in .env for place search.
+      MAPBOX_ACCESS_TOKEN: ${MAPBOX_ACCESS_TOKEN:-dev-mapbox-token}
       SHARE_LINK_BASE_URL: ${SHARE_LINK_BASE_URL:-http://localhost:3000}
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:8080,http://127.0.0.1:8080,http://localhost:3000,http://127.0.0.1:3000}
       # migrate (default): prisma migrate deploy, baselining volumes created by the old db push entrypoint.
       # push: prisma db push (ALLOW_DATA_LOSS=1 adds --accept-data-loss). skip: no schema apply.
       DB_SCHEMA_MODE: ${DB_SCHEMA_MODE:-migrate}
@@ -92,7 +96,34 @@ services:
       interval: 30s
       timeout: 10s
       retries: 5
-      start_period: 60s
+      start_period: 120s
+    networks:
+      - tripthread-network
+
+  web:
+    build:
+      context: ./mobile
+      dockerfile: Dockerfile
+      args:
+        API_BASE_URL: ${WEB_API_BASE_URL:-http://localhost:8080/api}
+        SHARE_LINK_BASE_URL: ${WEB_SHARE_LINK_BASE_URL:-http://localhost:8080}
+        MAPBOX_ACCESS_TOKEN: ${MAPBOX_ACCESS_TOKEN:-}
+        GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+        FLUTTER_IMAGE_TAG: ${FLUTTER_IMAGE_TAG:-3.38.5}
+    image: tripthread-web:local
+    container_name: tripthread-web
+    restart: unless-stopped
+    ports:
+      - "${WEB_PORT:-8080}:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1/ || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
     networks:
       - tripthread-network
 

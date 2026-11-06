@@ -7,14 +7,15 @@ import 'package:tripthread/providers/trip_provider.dart';
 import 'package:tripthread/models/trip.dart';
 import 'package:tripthread/widgets/custom_text_field.dart';
 import 'package:tripthread/widgets/loading_button.dart';
-import 'dart:io';
+import 'package:image_picker/image_picker.dart';
+import 'package:tripthread/widgets/media/local_file_image.dart';
 import 'package:tripthread/services/media_service.dart';
 import 'package:tripthread/widgets/place_autocomplete_field.dart';
 import 'package:tripthread/utils/app_layout.dart';
 import 'package:tripthread/utils/app_theme.dart';
 import 'package:tripthread/utils/cloudinary_utils.dart';
 import 'package:tripthread/utils/trip_time_format.dart';
-import 'package:flutter_timezone/flutter_timezone.dart';
+import 'package:tripthread/utils/device_timezone.dart';
 
 class CreateTripScreen extends StatefulWidget {
   const CreateTripScreen({super.key});
@@ -49,8 +50,8 @@ class _CreateTripScreenState extends State<CreateTripScreen> {
 
   Future<void> _loadTimezone() async {
     try {
-      final name = (await FlutterTimezone.getLocalTimezone()).identifier;
-      if (!mounted || name.isEmpty) return;
+      final name = await deviceTimezoneIdentifier();
+      if (!mounted || name == null || name.isEmpty) return;
       setState(() => _scheduleTimezone = name);
     } catch (_) {}
   }
@@ -204,7 +205,7 @@ class _CreateTripScreenState extends State<CreateTripScreen> {
       });
       try {
         final uploadedMedia = await mediaService.uploadMediaToCloudinary(
-          file: File(_selectedCoverMedia!.url),
+          file: XFile(_selectedCoverMedia!.url),
           usage: 'trip_cover',
           onProgress: (progress) {
             if (!mounted) return;
@@ -399,8 +400,8 @@ class _CreateTripScreenState extends State<CreateTripScreen> {
                                   width: double.infinity,
                                   fit: BoxFit.cover,
                                 )
-                              : Image.file(
-                                  File(_selectedCoverMedia!.url),
+                              : LocalFileImage(
+                                  path: _selectedCoverMedia!.url,
                                   height: 160,
                                   width: double.infinity,
                                   fit: BoxFit.cover,

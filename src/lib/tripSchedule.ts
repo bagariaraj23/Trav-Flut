@@ -217,7 +217,11 @@ export async function applyAutoTripType(
   });
   if (!trip) return;
 
-  const next = resolveTripType(trip);
+  const next = resolveTripType({
+    participantCount: trip.participantCount,
+    typeSetByUser: trip.typeSetByUser,
+    currentType: trip.type,
+  });
   if (next == null || next === trip.type) return;
 
   await db.trip.update({

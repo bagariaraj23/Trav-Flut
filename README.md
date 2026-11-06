@@ -183,22 +183,25 @@ TripThread/
 
 ### 🐳 Quick Start with Docker (Recommended)
 
-Run the entire backend stack (PostgreSQL databases, Next.js API server, and background scheduler) automatically in Docker without having to configure local databases or Node.js versions on your host:
+Run the application in Docker: PostgreSQL, the API (REST and chat), the trip scheduler, and the Flutter UI in the browser.
 
 ```bash
 # 1. Generate local environment files
 npm run setup:env
 
-# 2. Spin up the complete stack (databases, API backend, scheduler)
+# 2. Spin up the complete stack
 npm run docker:up
 ```
 
-* **API Server**: Accessible at [http://localhost:3000](http://localhost:3000), with WebSocket chat at `ws://localhost:3000/chat`
+* **App**: [http://localhost:8080](http://localhost:8080) (Flutter web). The page proxies `/api` and `/chat` to the API, so sign-in, trip creation, the thread, chat, and expenses use the same origin.
+* **API**: [http://localhost:3000](http://localhost:3000), WebSocket chat at `ws://localhost:3000/chat`. Point a phone or emulator here (`API_BASE_URL=http://10.0.2.2:3000/api` on the Android emulator).
 * **Dev Database**: PostgreSQL at `localhost:5432` (`tripthread_dev`; set `POSTGRES_PORT` if 5432 is taken)
 * **Test Database**: PostgreSQL at `localhost:5433` (`tripthread_test`)
 * **Scheduler**: Starts after the backend is healthy and updates trip statuses every `SCHEDULER_INTERVAL_SECONDS` (default 300)
 
-On boot the backend runs `prisma migrate deploy`. A volume created by the older `db push` entrypoint is baselined once: the schema is pushed, data-only migration steps (such as the `typeSetByUser` backfill) are replayed, and every migration is marked applied. Set `DB_SCHEMA_MODE=push` or `skip` to opt out.
+On boot the backend runs `prisma migrate deploy`. A volume created by the older `db push` entrypoint is baselined once (schema push, then every migration marked applied). Set `DB_SCHEMA_MODE=push` or `skip` to opt out. Put a real `MAPBOX_ACCESS_TOKEN` in `.env` before place search; the stack still boots with a local placeholder.
+
+The interactive Mapbox map and pin dropper stay on iOS and Android. The web UI lists trip places and keeps place search. Rebuild the web image after changing `WEB_API_BASE_URL` (the browser address is baked into the Flutter build).
 
 Run the test suites in containers:
 ```bash
@@ -206,7 +209,7 @@ docker compose --profile test run --rm api-tests     # Vitest unit + integration
 docker compose --profile test run --rm mobile-tests  # flutter analyze + flutter test
 ```
 
-`mobile-tests` uses Flutter 3.38.5 (`FLUTTER_IMAGE_TAG`) so `pub get --enforce-lockfile` leaves `mobile/pubspec.lock` unchanged. It copies `mobile/.env.example` to `mobile/.env` when that file is missing. Some comment and like tests fail on `main` as well; see `documentations/remaining-product-issues.md`.
+`mobile-tests` uses Flutter 3.38.5 (`FLUTTER_IMAGE_TAG`) so `pub get --enforce-lockfile` leaves `mobile/pubspec.lock` unchanged. It copies `mobile/.env.example` to `mobile/.env` when that file is missing.
 
 List or delete orphaned media rows (does not run on deploy):
 ```bash

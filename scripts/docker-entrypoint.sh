@@ -33,9 +33,9 @@ column_exists() {
 }
 
 # Databases created by the old entrypoint (prisma db push) have tables but no
-# _prisma_migrations. Bring the schema up to date, replay data-only migration
-# steps that push cannot run, then mark every migration as applied so later
-# boots use migrate deploy.
+# _prisma_migrations. Push the current schema, replay the data step in
+# 20261014150000_trip_open_ended_schedule (db push cannot run it), then mark
+# every migration applied so later boots use migrate deploy.
 baseline_pushed_database() {
   echo "Existing schema without _prisma_migrations — baselining."
   local had_type_flag=false
@@ -45,7 +45,9 @@ baseline_pushed_database() {
 
   npx prisma db push --skip-generate
 
-  if [ "$had_type_flag" = false ]; then
+  # A push adds typeSetByUser with default false. Trips that already had an
+  # explicit type must keep it, or Couple and Family become auto-promotable.
+  if [ "$had_type_flag" = false ] && column_exists trips typeSetByUser; then
     echo "Backfilling trips.typeSetByUser for trips that already had a type..."
     sql 'UPDATE "trips" SET "typeSetByUser" = true WHERE "type" IS NOT NULL'
   fi

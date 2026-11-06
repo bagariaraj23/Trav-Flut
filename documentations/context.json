@@ -54,17 +54,18 @@
             "redisDependency": "None"
         },
         "dockerization": {
-            "type": "Full-stack containerized local environments via Docker Compose (PR #44)",
-            "status": "Local full-stack complete for chat+share (PR #44 + share-links follow-up). Production remains Railpack, not this Dockerfile.",
-            "pr": 44,
-            "url": "https://github.com/bagariaraj23/Trav-Flut/pull/44",
+            "type": "Full-stack containerized local environments via Docker Compose (PR #44, refreshed in PR #56)",
+            "status": "Local stack runs Postgres, the API, the scheduler, and the Flutter UI in the browser. Production remains Railpack, not this Dockerfile.",
+            "pr": 56,
+            "url": "https://github.com/bagariaraj23/Trav-Flut/pull/56",
             "containers": [
                 "postgres-dev (development database on port 5432)",
                 "postgres-test (test database on port 5433)",
                 "backend (server.cjs: Next.js REST + WebSocket /chat on port 3000)",
-                "scheduler (standalone scheduler looping hourly)"
+                "web (Flutter web on port 8080; nginx proxies /api, /chat, and /share to backend)",
+                "scheduler (trip status every SCHEDULER_INTERVAL_SECONDS, default 300, after the API is healthy)"
             ],
-            "entrypoint": "scripts/docker-entrypoint.sh waits for DB, runs prisma db push (ALLOW_DATA_LOSS=1 required for --accept-data-loss), then exec CMD (node server.cjs).",
+            "entrypoint": "scripts/docker-entrypoint.sh waits for DB, runs prisma migrate deploy (baselining old db-push volumes once), then exec CMD (node server.cjs).",
             "hybridMode": "docker-compose.dev.yml launches only Postgres containers for host-based Next.js development",
             "chatCoverage": {
                 "dockerfileBuild": "npm run build && node scripts/build-server.mjs → dist/chat-ws.cjs at image build",
@@ -72,7 +73,7 @@
                 "share": "SHARE_LINK_BASE_URL passed to backend; /.well-known and /share served by same process",
                 "healthcheck": "HTTP GET /api/health (does not probe WebSocket)",
                 "remaining": [
-                    "Flutter app is not containerized (by design; testers get Firebase APK)",
+                    "Interactive Mapbox maps stay on iOS and Android; the web UI lists places and keeps search",
                     "Chat realtime stays single-container: Redis Pub/Sub still required before scaling replicas",
                     "Compose HTTP healthcheck does not verify /chat WebSocket upgrade"
                 ]
