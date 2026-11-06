@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import 'package:intl/intl.dart';
 import 'package:tripthread/models/trip.dart';
 import 'package:tripthread/utils/app_theme.dart';
+import 'package:tripthread/utils/map_place_label.dart';
+import 'package:tripthread/utils/locale_dates.dart';
 import 'package:tripthread/widgets/engagement/engagement_action_bar.dart';
 import 'package:tripthread/widgets/mention_text.dart';
 import 'package:tripthread/widgets/sheets/comment_bottom_sheet.dart';
@@ -34,10 +35,12 @@ class ThreadEntryCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final locationLabel = entry.place?.name ?? entry.locationName;
-    final hasPlace = entry.place != null ||
+    final showPlaceCard =
+        entry.place != null && entry.type == ThreadEntryType.location;
+    final hasPlace =
+        entry.place != null ||
         entry.locationName != null ||
-        entry.type == ThreadEntryType.location ||
-        entry.type == ThreadEntryType.checkin;
+        entry.type == ThreadEntryType.location;
 
     return Dismissible(
       key: ValueKey('entry-reply-${entry.id}'),
@@ -77,13 +80,14 @@ class ThreadEntryCard extends StatelessWidget {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             GestureDetector(
-                              onTap: () => context.push('/profile/${entry.authorId}'),
+                              onTap: () =>
+                                  context.push('/profile/${entry.authorId}'),
                               child: CircleAvatar(
                                 radius: 16,
                                 backgroundColor:
                                     AppTheme.avatarFallbackBackground(
-                                  Theme.of(context).brightness,
-                                ),
+                                      Theme.of(context).brightness,
+                                    ),
                                 backgroundImage: entry.author.avatarUrl != null
                                     ? NetworkImage(entry.author.avatarUrl!)
                                     : null,
@@ -92,14 +96,14 @@ class ThreadEntryCard extends StatelessWidget {
                                         (entry.author.name != null &&
                                                 entry.author.name!.isNotEmpty)
                                             ? entry.author.name!
-                                                .substring(0, 1)
-                                                .toUpperCase()
+                                                  .substring(0, 1)
+                                                  .toUpperCase()
                                             : 'U',
                                         style: TextStyle(
                                           color:
                                               AppTheme.avatarFallbackForeground(
-                                            Theme.of(context).brightness,
-                                          ),
+                                                Theme.of(context).brightness,
+                                              ),
                                           fontWeight: FontWeight.w600,
                                           fontSize: 13,
                                         ),
@@ -113,8 +117,9 @@ class ThreadEntryCard extends StatelessWidget {
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   GestureDetector(
-                                    onTap: () =>
-                                        context.push('/profile/${entry.authorId}'),
+                                    onTap: () => context.push(
+                                      '/profile/${entry.authorId}',
+                                    ),
                                     child: Text(
                                       entry.author.name ?? 'User',
                                       style: Theme.of(context)
@@ -130,8 +135,12 @@ class ThreadEntryCard extends StatelessWidget {
                                   ),
                                   const SizedBox(height: 2),
                                   Text(
-                                    _metaLine(locationLabel),
-                                    style: Theme.of(context).textTheme.bodySmall,
+                                    _metaLine(
+                                      showPlaceCard ? null : locationLabel,
+                                    ),
+                                    style: Theme.of(
+                                      context,
+                                    ).textTheme.bodySmall,
                                     maxLines: 2,
                                     overflow: TextOverflow.ellipsis,
                                   ),
@@ -140,7 +149,11 @@ class ThreadEntryCard extends StatelessWidget {
                             ),
                             if (!showRail) ...[
                               const SizedBox(width: 6),
-                              Icon(_typeIcon(entry.type), size: 16, color: AppTheme.accent),
+                              Icon(
+                                _typeIcon(entry.type),
+                                size: 16,
+                                color: AppTheme.accent,
+                              ),
                             ],
                             if (canModerate)
                               IconButton(
@@ -164,7 +177,8 @@ class ThreadEntryCard extends StatelessWidget {
                           const SizedBox(height: 12),
                           MentionText(
                             text: entry.contentText!,
-                            style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                            style: Theme.of(context).textTheme.bodyLarge
+                                ?.copyWith(
                                   color: scheme.onSurface,
                                   height: 1.45,
                                 ),
@@ -172,7 +186,13 @@ class ThreadEntryCard extends StatelessWidget {
                           ),
                         ],
                         if (media != null) media!,
-                        if (hasPlace && (locationLabel != null || entry.place != null))
+                        if (showPlaceCard)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 12),
+                            child: _LocationPreview(entry: entry),
+                          )
+                        else if (hasPlace &&
+                            (locationLabel != null || entry.place != null))
                           Padding(
                             padding: const EdgeInsets.only(top: 12),
                             child: Align(
@@ -189,7 +209,8 @@ class ThreadEntryCard extends StatelessWidget {
                                             '/trip/${entry.tripId}/map',
                                             extra: {
                                               'tripTitle': 'Trip Map',
-                                              'initialZoomLocation': entry.place,
+                                              'initialZoomLocation':
+                                                  entry.place,
                                             },
                                           );
                                         },
@@ -201,10 +222,8 @@ class ThreadEntryCard extends StatelessWidget {
                                     child: Row(
                                       mainAxisSize: MainAxisSize.min,
                                       children: [
-                                        Icon(
-                                          entry.type == ThreadEntryType.checkin
-                                              ? Icons.near_me
-                                              : Icons.place_outlined,
+                                        const Icon(
+                                          Icons.place_outlined,
                                           size: 14,
                                           color: AppTheme.accent,
                                         ),
@@ -271,7 +290,7 @@ class ThreadEntryCard extends StatelessWidget {
   }
 
   String _metaLine(String? locationLabel) {
-    final when = DateFormat('MMM d, h:mm a').format(entry.createdAt.toLocal());
+    final when = LocaleDates.mediumDateTime(entry.createdAt.toLocal());
     if (locationLabel != null && locationLabel.isNotEmpty) {
       return '$when · $locationLabel';
     }
@@ -340,6 +359,105 @@ class _TypeRail extends StatelessWidget {
   }
 }
 
+class _LocationPreview extends StatefulWidget {
+  final TripThreadEntry entry;
+
+  const _LocationPreview({required this.entry});
+
+  @override
+  State<_LocationPreview> createState() => _LocationPreviewState();
+}
+
+class _LocationPreviewState extends State<_LocationPreview> {
+  PinLabel? _resolved;
+
+  @override
+  void initState() {
+    super.initState();
+    final place = widget.entry.place;
+    if (place != null && isFallbackPinTitle(place.name)) {
+      labelForPin(place.lat, place.lng).then((label) {
+        if (!mounted) return;
+        setState(() => _resolved = label);
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final place = widget.entry.place!;
+    final title = _resolved?.title ?? place.name;
+    final subtitle = _resolved?.subtitle ?? place.address;
+    final url = mapThumbnailUrl(place.lat, place.lng);
+    final fallback = isFallbackPinTitle(title);
+
+    return Material(
+      color: scheme.surfaceContainerHighest.withValues(alpha: 0.35),
+      borderRadius: BorderRadius.circular(14),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: () {
+          context.push(
+            '/trip/${widget.entry.tripId}/map',
+            extra: {
+              'tripTitle': 'Trip Map',
+              'initialZoomLocation': place,
+            },
+          );
+        },
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (url != null)
+              Image.network(
+                url,
+                height: 132,
+                width: double.infinity,
+                fit: BoxFit.cover,
+                errorBuilder: (_, _, _) => const SizedBox.shrink(),
+              ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    fallback ? fallbackPinTitle : title,
+                    style: TextStyle(
+                      color: scheme.onSurface,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  if (subtitle != null && subtitle.trim().isNotEmpty) ...[
+                    const SizedBox(height: 2),
+                    Text(
+                      subtitle,
+                      style: TextStyle(
+                        color: scheme.onSurfaceVariant,
+                        fontSize: 13,
+                      ),
+                    ),
+                  ] else if (fallback) ...[
+                    const SizedBox(height: 2),
+                    Text(
+                      '${place.lat.toStringAsFixed(5)}, ${place.lng.toStringAsFixed(5)}',
+                      style: TextStyle(
+                        color: scheme.onSurfaceVariant,
+                        fontSize: 13,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 IconData _typeIcon(ThreadEntryType type) {
   switch (type) {
     case ThreadEntryType.text:
@@ -348,7 +466,5 @@ IconData _typeIcon(ThreadEntryType type) {
       return Icons.photo_camera_outlined;
     case ThreadEntryType.location:
       return Icons.place_outlined;
-    case ThreadEntryType.checkin:
-      return Icons.near_me_outlined;
   }
 }

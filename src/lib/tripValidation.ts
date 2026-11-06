@@ -9,6 +9,7 @@ export interface TripConflictInfo {
         title: string;
         startDate: Date;
         endDate: Date | null;
+        scheduleTimezone: string | null;
         status: TripStatus;
     };
     futureTrip?: {
@@ -16,6 +17,7 @@ export interface TripConflictInfo {
         title: string;
         startDate: Date;
         endDate: Date | null;
+        scheduleTimezone: string | null;
         status: TripStatus;
     };
 }
@@ -34,6 +36,7 @@ export async function validateTripStatus(userId: string): Promise<TripConflictIn
             title: true,
             startDate: true,
             endDate: true,
+            scheduleTimezone: true,
             status: true,
         },
     });
@@ -55,6 +58,7 @@ export async function validateTripStatus(userId: string): Promise<TripConflictIn
             title: true,
             startDate: true,
             endDate: true,
+            scheduleTimezone: true,
             status: true,
         },
         orderBy: {
@@ -70,6 +74,7 @@ export async function validateTripStatus(userId: string): Promise<TripConflictIn
             title: ongoingTrip.title,
             startDate: ongoingTrip.startDate,
             endDate: ongoingTrip.endDate,
+            scheduleTimezone: ongoingTrip.scheduleTimezone,
             status: ongoingTrip.status,
         } : undefined,
         futureTrip: futureTrip ? {
@@ -77,6 +82,7 @@ export async function validateTripStatus(userId: string): Promise<TripConflictIn
             title: futureTrip.title,
             startDate: futureTrip.startDate,
             endDate: futureTrip.endDate,
+            scheduleTimezone: futureTrip.scheduleTimezone,
             status: futureTrip.status,
         } : undefined,
     };

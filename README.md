@@ -322,7 +322,7 @@ npm start
 ### Trip Threads
 - Real-time trip documentation
 - Text, media, and location entries
-- Place check-ins and tagging
+- Place tagging on location entries
 - Media uploads (images/videos) via Cloudinary
 - **Final Posts**: Auto-generated trip summaries with curated media
   - Intelligent summary generation from trip entries

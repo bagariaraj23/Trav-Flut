@@ -377,7 +377,8 @@ function buildSummary(trip: TripForFinalizer) {
   const durationDays = Math.max(
     1,
     Math.round(
-      (trip.endDate.getTime() - trip.startDate.getTime()) / MS_IN_DAY
+      ((trip.endDate ?? trip.startDate).getTime() - trip.startDate.getTime()) /
+        MS_IN_DAY
     ) + 1
   );
   const destinations = trip.destinations ?? [];

@@ -60,7 +60,7 @@ flutter run
 - **Final Posts**: Edit and publish curated trip summaries with selected media
 - **Social Features**: Follow users, view profiles, discover trips
 - **Media Upload**: Cloudinary integration for images and videos
-- **Location Services**: Place search, check-ins, and map integration
+- **Location Services**: Place search, location entries, and map integration
 
 ## Documentation
 

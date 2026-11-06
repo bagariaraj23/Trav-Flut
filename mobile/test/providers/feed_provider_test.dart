@@ -63,6 +63,7 @@ class _DiscoverApi extends ApiService {
     int limit = 20,
     String? status,
     String? mood,
+    String? search,
     bool includePrivate = false,
   }) async {
     final key = mood ?? '';

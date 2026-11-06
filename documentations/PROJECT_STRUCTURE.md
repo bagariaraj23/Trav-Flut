@@ -403,7 +403,7 @@ prisma/
 |-------|---------|
 | `User` | Users with auth, profile, deletion tracking |
 | `Trip` | Travel itinerary with dates, destinations, media |
-| `TripThreadEntry` | Timeline entries (text, media, location, checkin) |
+| `TripThreadEntry` | Timeline entries (text, media, location) |
 | `TripParticipant` | Trip member relationships |
 | `TripJoinRequest` | Invitation system for trip participation |
 | `TripFinalPost` | Curated trip summaries with selected media |

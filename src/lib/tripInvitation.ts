@@ -8,6 +8,7 @@ import {
 import { TripJoinRequestStatus } from "@prisma/client";
 import { handlePrismaUniqueError } from "./prismaErrors";
 import { ensureTripConversation } from "./services/chat";
+import { applyAutoTripType } from "./tripSchedule";
 
 export class TripInvitationService {
   // Send a trip invitation
@@ -230,6 +231,7 @@ export class TripInvitationService {
           where: { id: request.tripId },
           data: { participantCount: { increment: 1 } },
         });
+        await applyAutoTripType(tx, request.tripId);
 
         return updated;
       });

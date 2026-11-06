@@ -1,13 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
-import 'package:intl/intl.dart';
 import 'package:tripthread/models/chat_conversation.dart';
 import 'package:tripthread/providers/chat_provider.dart';
 import 'package:tripthread/providers/auth_provider.dart';
 import 'package:tripthread/utils/app_feedback.dart';
 import 'package:tripthread/utils/app_layout.dart';
 import 'package:tripthread/utils/chat_navigation.dart';
+import 'package:tripthread/utils/locale_dates.dart';
 import 'package:tripthread/widgets/chat/chat_avatar.dart';
 
 class ConversationListScreen extends StatefulWidget {
@@ -261,15 +261,7 @@ class _ConversationTile extends StatelessWidget {
 
   String _formatTime(String iso) {
     try {
-      final d = DateTime.parse(iso);
-      final n = DateTime.now();
-      if (d.year == n.year && d.month == n.month && d.day == n.day) {
-        return DateFormat.Hm().format(d);
-      }
-      if (d.year == n.year && d.month == n.month && d.day == n.day - 1) {
-        return 'Yesterday';
-      }
-      return DateFormat.Md().format(d);
+      return LocaleDates.conversationStamp(DateTime.parse(iso));
     } catch (_) {
       return '';
     }

@@ -5,7 +5,9 @@ import 'package:geolocator/geolocator.dart';
 import 'package:tripthread/models/place.dart';
 import 'package:tripthread/providers/place_provider.dart';
 import 'package:tripthread/config/app_config.dart';
+import 'package:tripthread/utils/app_permissions.dart';
 import 'package:tripthread/utils/app_theme.dart';
+import 'package:tripthread/utils/map_place_label.dart';
 import 'package:provider/provider.dart';
 
 class MapPickerModal extends StatefulWidget {
@@ -89,13 +91,11 @@ class _MapPickerModalState extends State<MapPickerModal> {
     });
 
     try {
-      final permission = await Geolocator.checkPermission();
-      if (permission == LocationPermission.denied) {
-        final result = await Geolocator.requestPermission();
-        if (result == LocationPermission.denied ||
-            result == LocationPermission.deniedForever) {
-          throw Exception('Location permission denied');
-        }
+      final access = await AppPermissions.ensure(AppPermissionKind.location);
+      if (access != AppPermissionOutcome.granted) {
+        throw AppPermissionException(
+          AppPermissions.deniedMessage(AppPermissionKind.location),
+        );
       }
 
       _currentPosition =
@@ -127,13 +127,18 @@ class _MapPickerModalState extends State<MapPickerModal> {
           mapbox.MapAnimationOptions(duration: 800),
         );
       }
+    } on AppPermissionException catch (e) {
+      _safeSetState(() {
+        _error = true;
+        _errorMessage = e.message;
+        _loading = false;
+      });
     } catch (e) {
       debugPrint('[MapPickerModal] Error getting location: $e');
       _safeSetState(() {
         _error = true;
         _errorMessage = 'Could not get your location';
         _loading = false;
-        _selectedPoint = mapbox.Point(coordinates: mapbox.Position(0, 20));
       });
     }
   }
@@ -150,13 +155,22 @@ class _MapPickerModalState extends State<MapPickerModal> {
 
     try {
       final placeProvider = context.read<PlaceProvider>();
+      final lat = _selectedPoint!.coordinates.lat.toDouble();
+      final lng = _selectedPoint!.coordinates.lng.toDouble();
+      var name = _selectedName;
+      String? address;
+      if (isFallbackPinTitle(name)) {
+        final label = await labelForPin(lat, lng);
+        name = label.title;
+        address = label.subtitle;
+      }
 
       final placeCandidate = Place(
         id: '',
-        name: _selectedName ?? 'Selected Location',
-        address: null,
-        lat: _selectedPoint!.coordinates.lat.toDouble(),
-        lng: _selectedPoint!.coordinates.lng.toDouble(),
+        name: name ?? fallbackPinTitle,
+        address: address,
+        lat: lat,
+        lng: lng,
         placeType: PlaceType.poi,
         source: PlaceSource.user,
         createdAt: DateTime.now(),
@@ -212,8 +226,9 @@ class _MapPickerModalState extends State<MapPickerModal> {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: scheme.surface,
       body: SafeArea(
         child: Stack(
           children: [
@@ -223,11 +238,11 @@ class _MapPickerModalState extends State<MapPickerModal> {
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        const CircularProgressIndicator(color: Colors.white),
+                        CircularProgressIndicator(color: AppTheme.accent),
                         const SizedBox(height: 16),
-                        const Text(
+                        Text(
                           'Getting your location...',
-                          style: TextStyle(color: Colors.white),
+                          style: TextStyle(color: scheme.onSurface),
                         ),
                       ],
                     ),
@@ -237,15 +252,16 @@ class _MapPickerModalState extends State<MapPickerModal> {
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        const Icon(
+                        Icon(
                           Icons.location_off,
                           size: 64,
-                          color: Colors.white54,
+                          color: scheme.onSurfaceVariant,
                         ),
                         const SizedBox(height: 16),
                         Text(
                           _errorMessage,
-                          style: const TextStyle(color: Colors.white),
+                          style: TextStyle(color: scheme.onSurface),
+                          textAlign: TextAlign.center,
                         ),
                         const SizedBox(height: 16),
                         ElevatedButton(
@@ -289,53 +305,62 @@ class _MapPickerModalState extends State<MapPickerModal> {
 
             // Pin
             if (!_loading && !_error)
-              const Center(
-                child: Icon(
-                  Icons.location_on,
-                  size: 48,
-                  color: Colors.red,
-                  shadows: [Shadow(blurRadius: 8, color: Colors.black45)],
+              Center(
+                child: Transform.translate(
+                  offset: const Offset(0, -22),
+                  child: Icon(
+                    Icons.location_on,
+                    size: 48,
+                    color: AppTheme.accent,
+                    shadows: [
+                      Shadow(
+                        blurRadius: 8,
+                        color: scheme.shadow.withValues(alpha: 0.35),
+                      ),
+                    ],
+                  ),
                 ),
               ),
 
             // Top bar
             Positioned(
-              top: 0,
-              left: 0,
-              right: 0,
-              child: Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: [
-                      Colors.black.withValues(alpha: 0.7),
-                      Colors.transparent,
-                    ],
-                  ),
-                ),
-                child: Row(
-                  children: [
-                    IconButton(
+              top: 12,
+              left: 12,
+              right: 72,
+              child: Row(
+                children: [
+                  Material(
+                    color: scheme.surface,
+                    elevation: 2,
+                    shape: const CircleBorder(),
+                    child: IconButton(
                       onPressed: () => Navigator.pop(context),
-                      icon: const Icon(Icons.close, color: Colors.white),
-                      style: IconButton.styleFrom(
-                        backgroundColor: Colors.black45,
+                      icon: Icon(Icons.close, color: scheme.onSurface),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Material(
+                      color: scheme.surface,
+                      elevation: 2,
+                      borderRadius: BorderRadius.circular(12),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 14,
+                          vertical: 12,
+                        ),
+                        child: Text(
+                          'Select location',
+                          style: TextStyle(
+                            color: scheme.onSurface,
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
                       ),
                     ),
-                    const SizedBox(width: 12),
-                    const Text(
-                      'Select Location',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 20,
-                        fontWeight: FontWeight.w600,
-                        shadows: [Shadow(blurRadius: 4, color: Colors.black45)],
-                      ),
-                    ),
-                  ],
-                ),
+                  ),
+                ],
               ),
             ),
 
@@ -352,6 +377,16 @@ class _MapPickerModalState extends State<MapPickerModal> {
                     final messenger = ScaffoldMessenger.of(context);
                     _safeSetState(() => _loading = true);
                     try {
+                      final access = await AppPermissions.ensure(
+                        AppPermissionKind.location,
+                      );
+                      if (access != AppPermissionOutcome.granted) {
+                        throw AppPermissionException(
+                          AppPermissions.deniedMessage(
+                            AppPermissionKind.location,
+                          ),
+                        );
+                      }
                       final position = await Geolocator.getCurrentPosition(
                         locationSettings: const LocationSettings(
                         accuracy: LocationAccuracy.medium,
@@ -391,6 +426,9 @@ class _MapPickerModalState extends State<MapPickerModal> {
                           content: Text('Please enable location services'),
                         ),
                       );
+                    } on AppPermissionException catch (e) {
+                      _safeSetState(() => _loading = false);
+                      messenger.showSnackBar(SnackBar(content: Text(e.message)));
                     } catch (e) {
                       _safeSetState(() => _loading = false);
                       messenger.showSnackBar(
@@ -400,8 +438,8 @@ class _MapPickerModalState extends State<MapPickerModal> {
                       );
                     }
                   },
-                  backgroundColor: Colors.white,
-                  foregroundColor: AppTheme.ink,
+                  backgroundColor: scheme.surface,
+                  foregroundColor: AppTheme.accent,
                   child: const Icon(Icons.my_location),
                 ),
               ),
@@ -409,72 +447,38 @@ class _MapPickerModalState extends State<MapPickerModal> {
             // Bottom controls
             if (!_loading && !_error)
               Positioned(
-                bottom: 0,
-                left: 0,
-                right: 0,
-                child: Container(
-                  padding: const EdgeInsets.all(20),
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.bottomCenter,
-                      end: Alignment.topCenter,
-                      colors: [
-                        Colors.black.withValues(alpha: 0.9),
-                        Colors.black.withValues(alpha: 0.7),
-                        Colors.transparent,
-                      ],
-                    ),
-                  ),
-                  child: Column(
+                bottom: 16,
+                left: 16,
+                right: 16,
+                child: Material(
+                  color: scheme.surface,
+                  elevation: 6,
+                  borderRadius: BorderRadius.circular(16),
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      // Coordinates
-                      if (_selectedPoint != null)
-                        Container(
-                          padding: const EdgeInsets.all(16),
-                          decoration: BoxDecoration(
-                            color: Colors.white.withValues(alpha: 0.15),
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(
-                              color: Colors.white.withValues(alpha: 0.3),
-                            ),
-                          ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const Text(
-                                'Selected Location:',
-                                style: TextStyle(
-                                  color: Colors.white70,
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w500,
-                                ),
-                              ),
-                              const SizedBox(height: 6),
-                              Row(
-                                children: [
-                                  const Icon(
-                                    Icons.gps_fixed,
-                                    size: 16,
-                                    color: Colors.white,
-                                  ),
-                                  const SizedBox(width: 8),
-                                  Text(
-                                    '${_selectedPoint!.coordinates.lat.toStringAsFixed(6)}, ${_selectedPoint!.coordinates.lng.toStringAsFixed(6)}',
-                                    style: const TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 14,
-                                      fontWeight: FontWeight.w600,
-                                      fontFamily: 'monospace',
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ],
+                      if (_selectedPoint != null) ...[
+                        Text(
+                          'Selected location',
+                          style: TextStyle(
+                            color: scheme.onSurface,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
                           ),
                         ),
-                      const SizedBox(height: 16),
+                        const SizedBox(height: 4),
+                        Text(
+                          '${_selectedPoint!.coordinates.lat.toStringAsFixed(5)}, ${_selectedPoint!.coordinates.lng.toStringAsFixed(5)}',
+                          style: TextStyle(
+                            color: scheme.onSurfaceVariant,
+                            fontSize: 13,
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                      ],
 
                       // Button
                       ElevatedButton.icon(
@@ -518,6 +522,7 @@ class _MapPickerModalState extends State<MapPickerModal> {
                         ),
                       ),
                     ],
+                    ),
                   ),
                 ),
               ),

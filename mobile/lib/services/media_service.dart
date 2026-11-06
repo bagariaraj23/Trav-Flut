@@ -7,6 +7,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:mime/mime.dart';
 import 'package:tripthread/models/trip.dart';
 import 'package:tripthread/services/api_service.dart';
+import 'package:tripthread/utils/app_permissions.dart';
 import 'package:tripthread/utils/validators.dart';
 import 'package:flutter/foundation.dart';
 
@@ -19,9 +20,35 @@ class MediaService {
   MediaService(this._apiService, {Dio? uploadClient})
       : _uploadClient = uploadClient ?? Dio();
 
+  Future<bool> _allow(AppPermissionKind kind) async {
+    final outcome = await AppPermissions.ensure(kind);
+    if (outcome == AppPermissionOutcome.granted) return true;
+    if (outcome == AppPermissionOutcome.permanentlyDenied) {
+      throw AppPermissionException(AppPermissions.deniedMessage(kind));
+    }
+    return false;
+  }
+
+  Future<bool> _allowAny(List<AppPermissionKind> kinds) async {
+    var blocked = false;
+    for (final kind in kinds) {
+      final outcome = await AppPermissions.ensure(kind);
+      if (outcome == AppPermissionOutcome.granted) return true;
+      if (outcome == AppPermissionOutcome.permanentlyDenied) blocked = true;
+    }
+    if (blocked) {
+      throw AppPermissionException(AppPermissions.deniedMessage(kinds.first));
+    }
+    return false;
+  }
+
   /// Pick an image from camera or gallery
   Future<File?> pickImage({bool fromCamera = false}) async {
     try {
+      final allowed = await _allow(
+        fromCamera ? AppPermissionKind.camera : AppPermissionKind.photos,
+      );
+      if (!allowed) return null;
       final XFile? pickedFile = await _imagePicker.pickImage(
         source: fromCamera ? ImageSource.camera : ImageSource.gallery,
         maxWidth: 1920,
@@ -53,6 +80,7 @@ class MediaService {
   /// Pick a video file from gallery
   Future<File?> pickVideo() async {
     try {
+      if (!await _allow(AppPermissionKind.videos)) return null;
       final XFile? pickedFile = await _imagePicker.pickVideo(
         source: ImageSource.gallery,
         maxDuration: const Duration(minutes: 10),
@@ -85,6 +113,12 @@ class MediaService {
     bool allowMultiple = false,
   }) async {
     try {
+      if (!await _allowAny([
+        AppPermissionKind.photos,
+        AppPermissionKind.videos,
+      ])) {
+        return null;
+      }
       final XFile? pickedFile = await _imagePicker.pickMedia(
         imageQuality: 85,
       );
@@ -111,6 +145,12 @@ class MediaService {
 
   Future<List<File>> pickMultipleMedia() async {
     try {
+      if (!await _allowAny([
+        AppPermissionKind.photos,
+        AppPermissionKind.videos,
+      ])) {
+        return [];
+      }
       final result = await FilePicker.platform.pickFiles(
         allowMultiple: true,
         type: FileType.custom,

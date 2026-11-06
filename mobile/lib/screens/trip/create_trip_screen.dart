@@ -13,6 +13,8 @@ import 'package:tripthread/widgets/place_autocomplete_field.dart';
 import 'package:tripthread/utils/app_layout.dart';
 import 'package:tripthread/utils/app_theme.dart';
 import 'package:tripthread/utils/cloudinary_utils.dart';
+import 'package:tripthread/utils/trip_time_format.dart';
+import 'package:flutter_timezone/flutter_timezone.dart';
 
 class CreateTripScreen extends StatefulWidget {
   const CreateTripScreen({super.key});
@@ -33,8 +35,25 @@ class _CreateTripScreenState extends State<CreateTripScreen> {
   final List<Place> _destinations = [];
   DateTime? _startDate;
   DateTime? _endDate;
+  bool _startLater = false;
+  bool _setEnd = false;
+  String? _scheduleTimezone;
   TripMood? _selectedMood;
   TripType? _selectedType;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadTimezone();
+  }
+
+  Future<void> _loadTimezone() async {
+    try {
+      final name = (await FlutterTimezone.getLocalTimezone()).identifier;
+      if (!mounted || name.isEmpty) return;
+      setState(() => _scheduleTimezone = name);
+    } catch (_) {}
+  }
 
   @override
   void dispose() {
@@ -50,33 +69,54 @@ class _CreateTripScreenState extends State<CreateTripScreen> {
     _mediaService ??= context.read<MediaService>();
   }
 
-  Future<void> _selectDate(BuildContext context, bool isStartDate) async {
-    final DateTime now = DateTime.now();
-    final DateTime today = DateTime(now.year, now.month, now.day);
-    final DateTime? picked = await showDatePicker(
+  /// Date is enough. Confirming the clock sets that time. Dismissing it
+  /// leaves a bare date: the start of that day, or 11:59 PM when this is the end.
+  Future<DateTime?> _pickSchedule(DateTime? current, {required bool isEnd}) async {
+    final now = DateTime.now();
+    final date = await showDatePicker(
       context: context,
-      initialDate: isStartDate ? today : (today.add(const Duration(days: 1))),
-      firstDate: isStartDate ? today : today,
+      initialDate: current ?? now.add(const Duration(days: 1)),
+      firstDate: DateTime(now.year, now.month, now.day),
       lastDate: now.add(const Duration(days: 365)),
     );
-
-    if (picked != null) {
-      setState(() {
-        if (isStartDate) {
-          _startDate = picked;
-          debugPrint('[DEBUG] Start date selected: $picked');
-          debugPrint('[DEBUG] Start date ISO: ${picked.toIso8601String()}');
-          if (_endDate != null && _endDate!.isBefore(picked)) {
-            _endDate = null;
-            debugPrint('[DEBUG] End date reset because it was before start date');
-          }
-        } else {
-          _endDate = picked;
-          debugPrint('[DEBUG] End date selected: $picked');
-          debugPrint('[DEBUG] End date ISO: ${picked.toIso8601String()}');
-        }
-      });
+    if (date == null || !mounted) return null;
+    final time = await showTimePicker(
+      context: context,
+      helpText: isEnd ? 'End time (optional)' : 'Start time (optional)',
+      cancelText: 'No time',
+      confirmText: 'Set time',
+      initialTime: TimeOfDay.fromDateTime(current ?? now),
+    );
+    if (!mounted) return null;
+    if (time == null) {
+      return isEnd
+          ? DateTime(date.year, date.month, date.day, 23, 59, 59)
+          : DateTime(date.year, date.month, date.day);
     }
+    return DateTime(date.year, date.month, date.day, time.hour, time.minute);
+  }
+
+  String _scheduleLabel(DateTime? value, String empty) {
+    if (value == null) return empty;
+    return formatTripInstant(value, scheduleTimezone: _scheduleTimezone);
+  }
+
+  Future<void> _selectSchedule(bool isStart) async {
+    final picked = await _pickSchedule(
+      isStart ? _startDate : _endDate,
+      isEnd: !isStart,
+    );
+    if (picked == null) return;
+    setState(() {
+      if (isStart) {
+        _startDate = picked;
+        if (_endDate != null && !_endDate!.isAfter(picked)) {
+          _endDate = null;
+        }
+      } else {
+        _endDate = picked;
+      }
+    });
   }
 
   Future<void> _pickCoverImage({bool fromCamera = false}) async {
@@ -121,59 +161,33 @@ class _CreateTripScreenState extends State<CreateTripScreen> {
       return;
     }
 
-    if (_startDate == null) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Start date is required')));
-      return;
-    }
-
-    if (_endDate == null) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('End date is required')));
-      return;
-    }
-
-    debugPrint('[DEBUG] Creating trip with dates:');
-    debugPrint('[DEBUG] _startDate: $_startDate');
-    debugPrint('[DEBUG] _endDate: $_endDate');
-
-    if (_startDate != null) {
-      debugPrint(
-        '[DEBUG] startDate.toIso8601String(): ${_startDate!.toIso8601String()}',
-      );
-      debugPrint(
-        '[DEBUG] startDate.millisecondsSinceEpoch: ${_startDate!.millisecondsSinceEpoch}',
-      );
-      debugPrint('[DEBUG] startDate timezone offset: ${_startDate!.timeZoneOffset}');
-    }
-
-    if (_endDate != null) {
-      debugPrint(
-        '[DEBUG] endDate.toIso8601String(): ${_endDate!.toIso8601String()}',
-      );
-      debugPrint(
-        '[DEBUG] endDate.millisecondsSinceEpoch: ${_endDate!.millisecondsSinceEpoch}',
-      );
-      debugPrint('[DEBUG] endDate timezone offset: ${_endDate!.timeZoneOffset}');
-    }
-
-    if (_startDate != null) {
-      final now = DateTime.now();
-      final today = DateTime(now.year, now.month, now.day);
-      if (_startDate!.isBefore(today)) {
+    final now = DateTime.now();
+    if (_startLater) {
+      if (_startDate == null) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Start date cannot be in the past')),
+          const SnackBar(content: Text('Choose a future start date')),
+        );
+        return;
+      }
+      if (_startDate!.isBefore(now.subtract(const Duration(minutes: 1)))) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Start time cannot be in the past')),
         );
         return;
       }
     }
 
-    if (_startDate != null && _endDate != null) {
-      if (_endDate!.isBefore(_startDate!)) {
+    if (_setEnd) {
+      if (_endDate == null) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('End date must be after start date')),
+          const SnackBar(content: Text('Choose an end date')),
+        );
+        return;
+      }
+      final start = _startLater ? _startDate! : now;
+      if (!_endDate!.isAfter(start)) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('End time must be after the start')),
         );
         return;
       }
@@ -237,8 +251,9 @@ class _CreateTripScreenState extends State<CreateTripScreen> {
       description: _descriptionController.text.trim().isEmpty
           ? null
           : _descriptionController.text.trim(),
-      startDate: _startDate,
-      endDate: _endDate,
+      startDate: _startLater ? _startDate : null,
+      endDate: _setEnd ? _endDate : null,
+      scheduleTimezone: _scheduleTimezone,
       destinations: _destinations.map((e) => e.name).toList(),
       destinationPlaceIds: _destinations.map((e) => e.id).toList(),
       mood: _selectedMood,
@@ -588,117 +603,92 @@ class _CreateTripScreenState extends State<CreateTripScreen> {
                     ),
                   const SizedBox(height: 16),
 
-                  // Dates
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Start Date',
-                              style: Theme.of(context).textTheme.titleMedium
-                                  ?.copyWith(fontWeight: FontWeight.w600),
-                            ),
-                            const SizedBox(height: 8),
-                            InkWell(
-                              onTap: () => _selectDate(context, true),
-                              child: Container(
-                                padding: const EdgeInsets.all(16),
-                                decoration: BoxDecoration(
-                                  border: Border.all(
-                                    color: Theme.of(context).colorScheme.onSurface.withValues(
-                                      alpha: Theme.of(context).brightness == Brightness.dark ? 0.18 : 0.10,
-                                    ),
-                                  ),
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                                child: Row(
-                                  children: [
-                                    Icon(
-                                      Icons.calendar_today,
-                                      color: Theme.of(context).colorScheme.onSurfaceVariant,
-                                    ),
-                                    const SizedBox(width: 12),
-                                    Expanded(
-                                      child: Text(
-                                        _startDate != null
-                                            ? '${_startDate!.day}/${_startDate!.month}/${_startDate!.year}'
-                                            : 'Select date',
-                                        style: TextStyle(
-                                          color: _startDate != null
-                                              ? null
-                                              : Theme.of(context).colorScheme.onSurfaceVariant,
-                                        ),
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(width: 16),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'End Date',
-                              style: Theme.of(context).textTheme.titleMedium
-                                  ?.copyWith(fontWeight: FontWeight.w600),
-                            ),
-                            const SizedBox(height: 8),
-                            InkWell(
-                              onTap: () => _selectDate(context, false),
-                              child: Container(
-                                padding: const EdgeInsets.all(16),
-                                decoration: BoxDecoration(
-                                  border: Border.all(
-                                    color: Theme.of(context).colorScheme.onSurface.withValues(
-                                      alpha: Theme.of(context).brightness == Brightness.dark ? 0.18 : 0.10,
-                                    ),
-                                  ),
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                                child: Row(
-                                  children: [
-                                    Icon(
-                                      Icons.calendar_today,
-                                      color: Theme.of(context).colorScheme.onSurfaceVariant,
-                                    ),
-                                    const SizedBox(width: 12),
-                                    Expanded(
-                                      child: Text(
-                                        _endDate != null
-                                            ? '${_endDate!.day}/${_endDate!.month}/${_endDate!.year}'
-                                            : 'Select date',
-                                        style: TextStyle(
-                                          color: _endDate != null
-                                              ? null
-                                              : Theme.of(context).colorScheme.onSurfaceVariant,
-                                        ),
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
+                  Text(
+                    'Starts when you create it. End it whenever you are done.',
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
                   ),
-                  const SizedBox(height: 16),
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text('Start later'),
+                    subtitle: Text(
+                      _startLater
+                          ? _scheduleLabel(_startDate, 'Choose a date')
+                          : 'Starts now',
+                    ),
+                    value: _startLater,
+                    onChanged: (value) async {
+                      if (!value) {
+                        setState(() {
+                          _startLater = false;
+                          _startDate = null;
+                        });
+                        return;
+                      }
+                      final picked = await _pickSchedule(_startDate, isEnd: false);
+                      if (!mounted) return;
+                      setState(() {
+                        _startLater = picked != null;
+                        _startDate = picked;
+                      });
+                    },
+                  ),
+                  if (_startLater)
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: TextButton(
+                        onPressed: () => _selectSchedule(true),
+                        child: const Text('Change start'),
+                      ),
+                    ),
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text('Set an end'),
+                    subtitle: Text(
+                      _setEnd
+                          ? _scheduleLabel(_endDate, 'Choose an end date')
+                          : 'Until you tap End trip. A date with no time ends at 11:59 PM.',
+                    ),
+                    value: _setEnd,
+                    onChanged: (value) async {
+                      if (!value) {
+                        setState(() {
+                          _setEnd = false;
+                          _endDate = null;
+                        });
+                        return;
+                      }
+                      final picked = await _pickSchedule(_endDate, isEnd: true);
+                      if (!mounted) return;
+                      setState(() {
+                        _setEnd = picked != null;
+                        _endDate = picked;
+                      });
+                    },
+                  ),
+                  if (_setEnd)
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: TextButton(
+                        onPressed: () => _selectSchedule(false),
+                        child: const Text('Change end'),
+                      ),
+                    ),
+                  const SizedBox(height: 8),
 
                   // Trip Type
                   Text(
                     'Trip Type',
                     style: Theme.of(context).textTheme.titleMedium?.copyWith(
                       fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Leave this unset for Solo. It becomes Group when someone joins. Couple and Family stay only if you choose them.',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
                     ),
                   ),
                   const SizedBox(height: 8),

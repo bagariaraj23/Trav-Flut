@@ -1,3 +1,5 @@
+import 'package:tripthread/utils/locale_dates.dart';
+
 class DateUtils {
   /// Normalizes a date to UTC midnight (00:00:00 UTC)
   static DateTime normalizeToUtcMidnight(DateTime date) {
@@ -19,23 +21,8 @@ class DateUtils {
     return DateTime(utcDate.year, utcDate.month, utcDate.day);
   }
 
-  /// Formats a date for display, ensuring correct date regardless of timezone
+  /// Formats a calendar date in the device region's order.
   static String formatDateForDisplay(DateTime dateTime) {
-    final dateOnly = extractDateOnly(dateTime);
-    final months = [
-      'Jan',
-      'Feb',
-      'Mar',
-      'Apr',
-      'May',
-      'Jun',
-      'Jul',
-      'Aug',
-      'Sep',
-      'Oct',
-      'Nov',
-      'Dec',
-    ];
-    return '${months[dateOnly.month - 1]} ${dateOnly.day}, ${dateOnly.year}';
+    return LocaleDates.mediumDate(extractDateOnly(dateTime));
   }
 }

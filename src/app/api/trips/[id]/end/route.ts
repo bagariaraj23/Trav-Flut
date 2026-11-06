@@ -47,11 +47,16 @@ export async function POST(
             throw new ValidationError("Only trip owner can end the trip");
           }
 
-          if (trip.status !== TripStatus.ONGOING) {
-            throw new ConflictError("Trip is not ongoing");
+          if (
+            trip.status !== TripStatus.ONGOING &&
+            trip.status !== TripStatus.UPCOMING
+          ) {
+            throw new ConflictError("Trip is already ended");
           }
 
-          // Update trip status and generate final post atomically in a transaction
+          const endingBeforeStart = trip.status === TripStatus.UPCOMING;
+
+          // Update trip status and, for a trip that already started, generate the final post.
           const [updatedTrip, finalPost] = await prisma.$transaction(
             async (tx) => {
               // Update trip status
@@ -99,30 +104,32 @@ export async function POST(
                 },
               });
 
-              // Generate final post inside the same transaction
-              // This ensures atomicity and prevents race conditions
-              const generatedFinalPost =
-                await TripFinalizerService.generateFinalPost(
-                  tripId,
-                  userId,
-                  tx
-                );
+              // A trip that never started is cancelled: no final post.
+              const generatedFinalPost = endingBeforeStart
+                ? null
+                : await TripFinalizerService.generateFinalPost(
+                    tripId,
+                    userId,
+                    tx
+                  );
 
-              return [updated, generatedFinalPost];
+              return [updated, generatedFinalPost] as const;
             }
           );
 
-          const finalPostResponse: TripFinalPostResponse = {
-            ...finalPost,
-            caption: finalPost.caption ?? undefined,
-            coverMediaUrl: finalPost.coverMediaUrl ?? undefined,
-            generationStatus: finalPost.generationStatus,
-            publishedAt: finalPost.publishedAt
-              ? finalPost.publishedAt.toISOString()
-              : undefined,
-            createdAt: finalPost.createdAt.toISOString(),
-            updatedAt: finalPost.updatedAt.toISOString(),
-          };
+          const finalPostResponse: TripFinalPostResponse | undefined = finalPost
+            ? {
+                ...finalPost,
+                caption: finalPost.caption ?? undefined,
+                coverMediaUrl: finalPost.coverMediaUrl ?? undefined,
+                generationStatus: finalPost.generationStatus,
+                publishedAt: finalPost.publishedAt
+                  ? finalPost.publishedAt.toISOString()
+                  : undefined,
+                createdAt: finalPost.createdAt.toISOString(),
+                updatedAt: finalPost.updatedAt.toISOString(),
+              }
+            : undefined;
 
           const tripResponse: TripResponse = {
             ...updatedTrip,
@@ -192,7 +199,9 @@ export async function POST(
           return NextResponse.json<ApiResponse<TripResponse>>({
             success: true,
             data: tripResponse,
-            message: "Trip ended successfully and final post generated",
+            message: endingBeforeStart
+              ? "Trip ended before it started"
+              : "Trip ended successfully and final post generated",
           });
         } catch (error) {
           endTimer();
