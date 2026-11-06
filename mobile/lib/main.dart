@@ -45,6 +45,7 @@ import 'package:tripthread/screens/trip/trip_participants_screen.dart';
 import 'package:tripthread/screens/trip/final_post_edit_screen.dart';
 import 'package:tripthread/screens/profile/follow_requests_screen.dart';
 import 'package:tripthread/screens/profile/trip_invitations_screen.dart';
+import 'package:tripthread/screens/settings/permissions_screen.dart';
 import 'package:tripthread/screens/settings/settings_screen.dart';
 import 'package:tripthread/screens/engagement/liked_by_screen.dart';
 import 'package:tripthread/screens/notifications/notifications_screen.dart';
@@ -781,6 +782,10 @@ class _TripThreadAppRouterState extends State<TripThreadAppRouter> {
           GoRoute(
             path: '/settings',
             builder: (context, state) => const SettingsScreen(),
+          ),
+          GoRoute(
+            path: '/settings/permissions',
+            builder: (context, state) => const PermissionsScreen(),
           ),
           GoRoute(
             path: '/likes/:entityType/:entityId',
