@@ -1,12 +1,12 @@
 # Quick Start (Development)
 
-Get the **TripThread API** backend running locally. You have two ways to start the backend services:
+Get TripThread running locally. You have two ways to start:
 
 ---
 
 ## Option A: Full Stack in Docker (Fastest & Recommended)
 
-Run the database, Next.js API, and the scheduler services completely containerized. You do not need to install Node.js, PostgreSQL, or Prisma on your host machine.
+Run PostgreSQL, the API, the scheduler, and the Flutter UI in the browser. You do not need Node.js, PostgreSQL, Prisma, or Flutter on the host. Production deploys stay on Railway; this stack is local.
 
 ### Prerequisites
 * **Docker Desktop** (or Docker Engine + Compose v2)
@@ -25,11 +25,13 @@ Run the database, Next.js API, and the scheduler services completely containeriz
    ```bash
    npm run docker:up
    ```
-   *This builds and launches the databases, Next.js API server, and scheduler service. It automatically checks database readiness, runs Prisma client generation, and executes database pushes.*
+   *Builds and starts Postgres, the API (`node server.cjs`), the scheduler, and the Flutter web UI. The API waits for Postgres, then runs `prisma migrate deploy`. The scheduler starts after the API is healthy and loops every `SCHEDULER_INTERVAL_SECONDS` (default 300 seconds).*
 
-4. **Verify the server:**
-   Open [http://localhost:3000/api/health](http://localhost:3000/api/health) in your browser. You should receive a status check showing the API is connected to the database.
-   Backend logs should also show `WebSocket chat endpoint: ws://localhost:3000/chat` (`server.cjs`). Share bridge: [http://localhost:3000/share/test](http://localhost:3000/share/test).
+4. **Open the app:**
+   * Browser UI: [http://localhost:8080](http://localhost:8080) or [http://127.0.0.1:8080](http://127.0.0.1:8080). Sign up, create a trip, and open it. View Trip Map and the pin dropper use Mapbox in the browser once `MAPBOX_ACCESS_TOKEN` is set and the `web` image is rebuilt.
+   * API health: [http://localhost:3000/api/health](http://localhost:3000/api/health) and the same path through nginx at [http://localhost:8080/api/health](http://localhost:8080/api/health).
+   * Chat: backend logs should show `WebSocket chat endpoint: ws://localhost:3000/chat`. The browser uses the same path on port 8080.
+   * Phone or emulator: point `API_BASE_URL` at port 3000 (`http://10.0.2.2:3000/api` on the Android emulator), not at the web container.
 
 5. **Stop the stack:**
    ```bash
@@ -96,11 +98,12 @@ Ideal when you are modifying database schemas, writing integration tests, or deb
 
 | Command | Stack Mode | Description |
 |---------|------------|-------------|
-| `npm run docker:up` | Full Stack | Build and start database, Next.js, and scheduler |
-| `npm run docker:down` | Full Stack | Stop and remove all containers |
+| `npm run docker:up` | Full Stack | Build and start Postgres, API, scheduler, and Flutter web |
+| `npm run docker:down` | Full Stack | Stop and remove the full-stack containers |
+| `docker compose down -v` | Full Stack | Also delete the full-stack database volumes |
 | `npm run docker:start` | Hybrid | Start dev + test PostgreSQL containers |
 | `npm run docker:stop` | Hybrid | Stop dev + test PostgreSQL containers |
-| `npm run docker:reset` | Hybrid | Wipe dev/test database volumes and restart them |
-| `npm run dev` | Hybrid | Next.js dev server on host |
+| `npm run docker:reset` | Hybrid | Wipe the hybrid Postgres volumes and start them again |
+| `npm run dev` | Hybrid | API + chat server on the host (`server.cjs`) |
 | `npm run db:migrate` | Hybrid | Apply Prisma migrations on dev DB |
 | `npm run test` | Hybrid / Tests | Run integration tests (needs test DB on port 5433) |

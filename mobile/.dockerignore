@@ -1,0 +1,11 @@
+.dart_tool
+build
+android
+ios
+.flutter-plugins
+.flutter-plugins-dependencies
+.idea
+*.iml
+.env
+.env.*
+!.env.example

@@ -1,19 +1,13 @@
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:tripthread/services/token_store.dart';
 
 class StorageService {
   static const String _accessTokenKey = 'access_token';
   static const String _refreshTokenKey = 'refresh_token';
   static const String _userIdKey = 'user_id';
 
-  late final FlutterSecureStorage _storage;
+  final TokenStore _storage = TokenStore();
 
-  Future<void> init() async {
-    _storage = const FlutterSecureStorage(
-      iOptions: IOSOptions(
-        accessibility: KeychainAccessibility.first_unlock_this_device,
-      ),
-    );
-  }
+  Future<void> init() => _storage.init();
 
   // Token management
   Future<void> saveTokens({

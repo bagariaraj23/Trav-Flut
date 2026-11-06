@@ -17,9 +17,10 @@ import 'package:tripthread/screens/trip/trip_money_pane.dart';
 import 'package:tripthread/utils/app_layout.dart';
 import 'package:tripthread/utils/app_theme.dart';
 import 'package:tripthread/widgets/thread/thread_entry_card.dart';
-import 'dart:io';
 import 'package:go_router/go_router.dart';
-import 'package:video_player/video_player.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:tripthread/widgets/media/app_video.dart';
+import 'package:tripthread/widgets/media/local_file_image.dart';
 
 class TripThreadScreen extends StatefulWidget {
   final String tripId;
@@ -55,7 +56,7 @@ class _TripThreadScreenState extends State<TripThreadScreen>
   List<Media> _pendingMediaBatch = [];
   double? _uploadProgress;
   Place? _selectedPlace;
-  VideoPlayerController? _pendingVideoController;
+  AppVideoController? _pendingVideoController;
   bool _pendingVideoInitialized = false;
   bool _isSubmitting = false;
   TripThreadEntry? _replyingToEntry;
@@ -157,10 +158,10 @@ class _TripThreadScreenState extends State<TripThreadScreen>
       _disposePendingVideoController();
 
       final controller = media.url.startsWith('http')
-          ? VideoPlayerController.networkUrl(
+          ? AppVideoController.networkUrl(
               Uri.parse(buildOptimizedVideoUrl(media.url, maxWidth: 1280)),
             )
-          : VideoPlayerController.file(File(media.url));
+          : AppVideoController.file(media.url);
 
       setState(() {
         _selectedMediaForEntry = media;
@@ -944,7 +945,7 @@ class _TripThreadScreenState extends State<TripThreadScreen>
 
     if (!media.url.startsWith('http')) {
       final uploadedMedia = await mediaService.uploadMediaToCloudinary(
-        file: File(media.url),
+        file: XFile(media.url),
         tripId: widget.tripId,
         usage: 'thread_entry',
         onProgress: (progress) {
@@ -2382,7 +2383,6 @@ class _TripThreadScreenState extends State<TripThreadScreen>
                                                 _pendingVideoInitialized
                                                     ? _formatDuration(
                                                         _pendingVideoController!
-                                                            .value
                                                             .duration,
                                                       )
                                                     : 'Loading preview...',
@@ -2822,8 +2822,8 @@ class _TripThreadScreenState extends State<TripThreadScreen>
                 ),
               ),
             )
-          : Image.file(
-              File(media.url),
+          : LocalFileImage(
+              path: media.url,
               fit: BoxFit.cover,
               errorBuilder: (context, error, stackTrace) => Container(
                 color: Theme.of(context).colorScheme.onSurface.withValues(
@@ -2846,9 +2846,9 @@ class _TripThreadScreenState extends State<TripThreadScreen>
             FittedBox(
               fit: BoxFit.cover,
               child: SizedBox(
-                width: _pendingVideoController!.value.size.width,
-                height: _pendingVideoController!.value.size.height,
-                child: VideoPlayer(_pendingVideoController!),
+                width: _pendingVideoController!.size.width,
+                height: _pendingVideoController!.size.height,
+                child: _pendingVideoController!.buildView(),
               ),
             ),
             const Align(
@@ -2986,7 +2986,7 @@ class _TripVideoViewer extends StatefulWidget {
 }
 
 class _TripVideoViewerState extends State<_TripVideoViewer> {
-  VideoPlayerController? _controller;
+  AppVideoController? _controller;
   bool _isInitialized = false;
   bool _isPlaying = true;
   String? _errorMessage;
@@ -3007,7 +3007,7 @@ class _TripVideoViewerState extends State<_TripVideoViewer> {
 
       debugPrint('[TripVideoViewer] Initializing video: $videoUrl');
 
-      _controller = VideoPlayerController.networkUrl(Uri.parse(videoUrl));
+      _controller = AppVideoController.networkUrl(Uri.parse(videoUrl));
 
       await _controller!.initialize();
 
@@ -3047,7 +3047,7 @@ class _TripVideoViewerState extends State<_TripVideoViewer> {
   void _togglePlayback() {
     if (!_isInitialized || _controller == null) return;
     setState(() {
-      if (_controller!.value.isPlaying) {
+      if (_controller!.isPlaying) {
         _controller!.pause();
         _isPlaying = false;
       } else {
@@ -3112,8 +3112,8 @@ class _TripVideoViewerState extends State<_TripVideoViewer> {
                     ? GestureDetector(
                         onTap: _togglePlayback,
                         child: AspectRatio(
-                          aspectRatio: _controller!.value.aspectRatio,
-                          child: VideoPlayer(_controller!),
+                          aspectRatio: _controller!.aspectRatio,
+                          child: _controller!.buildView(),
                         ),
                       )
                     : const CircularProgressIndicator(color: Colors.white),

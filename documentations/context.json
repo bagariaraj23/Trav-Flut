@@ -2,9 +2,9 @@
     "project": {
         "name": "TripThread",
         "workspacePath": "/Users/rajbagaria/Desktop/Bolt-Travello/Flut/project",
-        "generatedAt": "2026-11-06",
+        "generatedAt": "2026-11-07",
         "description": "Travel-focused social platform where users create trips, post thread entries (text/media/location), split trip expenses and settle up on a Money pane, generate/publish final trip posts, and chat via 1:1 DMs, groups, and trip-scoped rooms (realtime WebSocket).",
-        "lastPRReviewed": "Current work is PR #54 (feat-trip-create-ux → main): https://github.com/bagariaraj23/Trav-Flut/pull/54. It is a draft and mergeable, and already contains main (PR #51 and PR #55). A trip can start now, keep an optional end, and store UTC instants. Dates follow the phone region. A dropped pin is named from the device geocoder and a location post shows a Mapbox static thumbnail. Camera, photo, video, and location-while-in-use are requested only when used; there is no background location. Thread entries are text, media, and location; check-in is removed. Apply migrations 20261014150000_trip_open_ended_schedule and 20261031120000_remove_checkin_entry_type only when this branch is deployed. PR #55 merged to main on 2026-10-29 (6:13 PM IST). PR #51 merged to main on 2026-10-31 (5:08 PM IST). PR #56 was refreshed onto this branch on 2026-11-06. Merge 54 before 56.",
+        "lastPRReviewed": "PR #54 (feat-trip-create-ux) is merged to main. Current work is PR #56 (cursor/docker-stack-refresh-8029 → main): https://github.com/bagariaraj23/Trav-Flut/pull/56. It dockerises the current app end to end: Postgres, the API (prisma migrate deploy on boot), the scheduler, and the Flutter UI in the browser on port 8080. A trip can start now, keep an optional end, and store UTC instants. Dates follow the device region. A dropped pin is named from the device geocoder on iOS and Android. Mapbox Maps Flutter 3.34.2 draws the trip map and pin dropper on web as well as on the phone. Camera, photo, video, and location-while-in-use are requested only when used; there is no background location. Thread entries are text, media, and location; check-in is removed. PR #55 merged to main on 2026-10-29 (6:13 PM IST). PR #51 merged to main on 2026-10-31 (5:08 PM IST).",
         "recentProductionPRs": [
             "https://github.com/bagariaraj23/Trav-Flut/pull/51",
             "https://github.com/bagariaraj23/Trav-Flut/pull/55",
@@ -41,8 +41,8 @@
             "navigation": "GoRouter",
             "network": "Dio with token refresh interceptors + retry with exponential backoff",
             "svgRendering": "flutter_svg for branded TripThread logo assets",
-            "secureStorage": "flutter_secure_storage",
-            "mapping": "Mapbox (mapbox_maps_flutter) + geolocator/geocoding. A confirmed pin uses the device geocoder for a neighborhood or street name. Location posts show a Mapbox static thumbnail. Location permission is while-in-use only.",
+            "secureStorage": "flutter_secure_storage on iOS, Android, and desktop. The Docker web UI stores the session in browser local storage (shared_preferences); WebCrypto writes were leaving the splash screen up after login.",
+            "mapping": "Mapbox (mapbox_maps_flutter 3.34.2) + geolocator/geocoding on iOS, Android, and web. A confirmed pin uses the device geocoder for a neighborhood or street name. Location posts show a Mapbox static thumbnail. Location permission is while-in-use only.",
             "chat": "WebSocketChannel real-time sync with ChatSocketService + ChatProvider provider",
             "tripExpenses": "ExpenseProvider + TripMoneyPane PageView (thread page 0, Money page 1); add-expense sheet; settle-up mark-as-paid (final, no undo); splits locked after settlement",
             "dateDisplay": "Threads, comments, chats, and trip times use the device locale (language + region) from PlatformDispatcher. en_IN is day/month (20/3/2026, 20 Mar 2026). en_US is month/day (3/20/2026, Mar 20, 2026). en_GB is day/month with 24-hour time. Clock times follow the same locale. Material date pickers use that locale too."
@@ -50,21 +50,22 @@
         "scheduler": {
             "type": "Independent cron-executable Node.js TypeScript service",
             "purpose": "Auto-transition trip status and auto-finalize ended trips",
-            "executionModel": "Run once per invocation and exit",
+            "executionModel": "The script runs once and exits. Local Docker loops it every SCHEDULER_INTERVAL_SECONDS (default 300) after the API is healthy. Production cron invokes the same script.",
             "redisDependency": "None"
         },
         "dockerization": {
-            "type": "Full-stack containerized local environments via Docker Compose (PR #44)",
-            "status": "Local full-stack complete for chat+share (PR #44 + share-links follow-up). Production remains Railpack, not this Dockerfile.",
-            "pr": 44,
-            "url": "https://github.com/bagariaraj23/Trav-Flut/pull/44",
+            "type": "Full-stack containerized local environments via Docker Compose (PR #44, refreshed in PR #56)",
+            "status": "Local stack runs Postgres, the API, the scheduler, and the Flutter UI in the browser. Production remains Railpack, not this Dockerfile.",
+            "pr": 56,
+            "url": "https://github.com/bagariaraj23/Trav-Flut/pull/56",
             "containers": [
                 "postgres-dev (development database on port 5432)",
                 "postgres-test (test database on port 5433)",
                 "backend (server.cjs: Next.js REST + WebSocket /chat on port 3000)",
-                "scheduler (standalone scheduler looping hourly)"
+                "web (Flutter web on port 8080; nginx proxies /api, /chat, /share, /.well-known, /_next, and the password-reset pages to backend)",
+                "scheduler (trip status every SCHEDULER_INTERVAL_SECONDS, default 300, after the API is healthy)"
             ],
-            "entrypoint": "scripts/docker-entrypoint.sh waits for DB, runs prisma db push (ALLOW_DATA_LOSS=1 required for --accept-data-loss), then exec CMD (node server.cjs).",
+            "entrypoint": "scripts/docker-entrypoint.sh waits for DB, runs prisma migrate deploy (baselining old db-push volumes once), then exec CMD (node server.cjs).",
             "hybridMode": "docker-compose.dev.yml launches only Postgres containers for host-based Next.js development",
             "chatCoverage": {
                 "dockerfileBuild": "npm run build && node scripts/build-server.mjs → dist/chat-ws.cjs at image build",
@@ -72,7 +73,8 @@
                 "share": "SHARE_LINK_BASE_URL passed to backend; /.well-known and /share served by same process",
                 "healthcheck": "HTTP GET /api/health (does not probe WebSocket)",
                 "remaining": [
-                    "Flutter app is not containerized (by design; testers get Firebase APK)",
+                    "Mapbox Maps Flutter 3.34.2 renders the trip map and pin dropper on web. Web markers and the route are GeoJSON style layers because annotation managers throw there. The web image must be rebuilt with a real MAPBOX_ACCESS_TOKEN. iOS requires Swift Package Manager and iOS 14.",
+                    "Web sign-in stores the session in browser local storage; phone builds keep flutter_secure_storage",
                     "Chat realtime stays single-container: Redis Pub/Sub still required before scaling replicas",
                     "Compose HTTP healthcheck does not verify /chat WebSocket upgrade"
                 ]
@@ -806,7 +808,7 @@
             "flow": [
                 "Backend searches via Mapbox Geocode API and deduplicates against local Place DB",
                 "Resolve endpoint canonicalizes place rows with caching + lock",
-                "Mobile map screen renders trip places with Mapbox map widget",
+                "Trip map renders places with mapbox_maps_flutter 3.34.2 on iOS, Android, and web",
                 "A dropped pin is named on the device (neighborhood, then street, then city). The thread card loads one Mapbox static image for that pin.",
                 "Settings → Permissions and data explains location, camera, photos, and videos. The app asks only when that feature is used. Background location is not requested."
             ]
@@ -2364,19 +2366,13 @@
             "notes": "2026-10-18 Vitest (unit, scheduler, route contract, auth, signup, thread, leave, expenses, engagement, notifications, chat, follow requests, invites, spend visibility): database branch 29 files / 210 tests passed; Warm UI branch 29 files / 211 tests passed; trip-create tip 30 files / 215 tests passed. Flutter widget tests were not run (no Flutter SDK). Do not add platform-specific Rolldown bindings to root dependencies."
         },
         "lastMergedFeature": "PR #55 API and database performance (merged main 2026-10-29); PR #51 Warm UI (merged main 2026-10-31)",
-        "notes": "Current work is PR #54 (feat-trip-create-ux → main): start-now, optional end, UTC instants, Solo until someone joins then Group, named map pins with a static thumbnail, and while-in-use permissions. Apply migration 20261014150000_trip_open_ended_schedule when that branch is deployed. PR #56 was refreshed onto this branch on 2026-11-06 and still merges after 54. A road line between saved pins can come later with one cached Mapbox Directions call. A walked-path trace needs background location and stays deferred. Cloudinary dashboard presets and Universal Links ops remain.",
+        "notes": "PR #54 (trip create UX) is merged to main. Current work is PR #56: dockerise the whole application on current main (Postgres, API with migrations, scheduler, and the Flutter UI as a web container). A road line between saved pins can come later with one cached Mapbox Directions call. A walked-path trace needs background location and stays deferred. Cloudinary dashboard presets and Universal Links ops remain.",
         "mainBranchStable": true,
         "activeStack": [
             {
-                "pr": 54,
-                "branch": "feat-trip-create-ux",
-                "base": "main",
-                "mergeBefore": 56
-            },
-            {
                 "pr": 56,
                 "branch": "cursor/docker-stack-refresh-8029",
-                "base": "feat-trip-create-ux"
+                "base": "main"
             }
         ]
     },
@@ -2491,10 +2487,11 @@
                 "title": "Dockerization completeness (post PR #44 + #48)",
                 "basis": [
                     "PR #44",
-                    "PR #48"
+                    "PR #48",
+                    "feat-dockerize refresh (stacked on feat-trip-create-ux, 2026-10-18)"
                 ],
                 "status": "complete-for-local-stack",
-                "notes": "WS /chat documented; Dockerfile CMD node server.cjs; no esbuild at container start; entrypoint without accept-data-loss by default; SHARE_LINK_BASE_URL + /api/health healthcheck. Not remaining: Flutter-in-Docker. Scale-out chat still needs Redis Pub/Sub outside Docker scope."
+                "notes": "PR #56 containerises the current app. Entrypoint DB_SCHEMA_MODE=migrate (default) runs prisma migrate deploy; volumes created by the old db push entrypoint are baselined once (push, replay the typeSetByUser backfill, migrate resolve --applied for every migration). push and skip remain opt-in. Scheduler waits for a healthy backend, then loops the one-shot script every SCHEDULER_INTERVAL_SECONDS (default 300), TZ=UTC. The web service (Flutter 3.38.5, nginx) serves the UI on port 8080 and proxies API, chat, and share. Mapbox Maps Flutter 3.34.2 draws the trip map and pin dropper in that web UI when MAPBOX_ACCESS_TOKEN is baked into the image. Web sign-in uses browser local storage. Test profile: api-tests (Vitest against postgres-test) and mobile-tests (cirruslabs Flutter image: pub get, analyze, test). Scale-out chat still needs Redis Pub/Sub; keep one backend replica. Production stays Railway/Railpack, not this Dockerfile."
             },
             {
                 "id": "prod-gaps-optimizations",

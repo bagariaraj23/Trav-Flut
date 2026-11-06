@@ -121,8 +121,38 @@ class AppConfig {
     return _baseUrl;
   }
 
+  /// Docker web is opened as either `localhost` or `127.0.0.1`. Those are
+  /// different browser origins, so an absolute API URL baked as one of them
+  /// fails CORS when the page is the other. Follow the page when both are
+  /// loopback. Phone builds keep the configured host (emulator `10.0.2.2`).
+  static String _alignLoopbackWithPage(String raw) {
+    if (!kIsWeb) return raw;
+    final api = Uri.tryParse(raw);
+    if (api == null || !api.hasScheme || !_isLoopback(api.host)) return raw;
+    final page = Uri.base;
+    if (!page.hasScheme || !_isLoopback(page.host)) return raw;
+    return api
+        .replace(
+          scheme: page.scheme,
+          host: page.host,
+          port: page.hasPort ? page.port : null,
+        )
+        .toString();
+  }
+
+  static bool _isLoopback(String host) {
+    final normalized = host.toLowerCase();
+    return normalized == 'localhost' ||
+        normalized == '127.0.0.1' ||
+        normalized == '::1' ||
+        normalized == '[::1]';
+  }
+
+  static String get _effectiveApiBaseUrl =>
+      _alignLoopbackWithPage(_resolvedApiBaseUrl);
+
   static String get apiBaseUrl {
-    final resolved = _resolvedApiBaseUrl;
+    final resolved = _effectiveApiBaseUrl;
     if (kDebugMode) {
       debugPrint('[AppConfig] Using API base URL: $resolved');
       if (resolved != _baseUrl) {
@@ -134,7 +164,7 @@ class AppConfig {
 
   /// HTTP(S) origin (no path) for the chat WebSocket; the client appends `/chat`.
   ///
-  /// Matches [_resolvedApiBaseUrl] unless `CHAT_WS_BASE_URL` is set to a different host/port.
+  /// Matches [_effectiveApiBaseUrl] unless `CHAT_WS_BASE_URL` is set to a different host/port.
   static Uri get chatWebSocketHttpOrigin {
     final raw = _chatWsRawOverride;
     if (raw.isNotEmpty) {
@@ -145,7 +175,7 @@ class AppConfig {
         port: parsed.hasPort ? parsed.port : null,
       );
     }
-    final api = Uri.parse(_resolvedApiBaseUrl);
+    final api = Uri.parse(_effectiveApiBaseUrl);
     return Uri(
       scheme: api.scheme,
       host: api.host,
