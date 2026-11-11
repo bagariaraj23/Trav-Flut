@@ -204,7 +204,7 @@ npm run docker:up
 * **Test Database**: PostgreSQL at `localhost:5433` (`tripthread_test`)
 * **Scheduler**: Starts after the backend is healthy and updates trip statuses every `SCHEDULER_INTERVAL_SECONDS` (default 300)
 
-On boot the backend runs `prisma migrate deploy`. A volume created by the older `db push` entrypoint is baselined once (schema push, then schema migrations marked applied). The data migration that rewrites `READY` final posts to `DRAFT` stays unmarked so `migrate deploy` runs it. Set `DB_SCHEMA_MODE=push` or `skip` to opt out. Put a real `MAPBOX_ACCESS_TOKEN` in `.env` before place search; the stack still boots with a local placeholder.
+On boot the backend runs `prisma migrate deploy`, including `20261111120000_personalized_final_posts`, `20261111120000_user_safety_and_conversation_creator`, and `20261113180000_relabel_ready_final_posts_as_draft`. A volume created by the older `db push` entrypoint is baselined once (schema push, then schema migrations marked applied). That data migration stays unmarked so `migrate deploy` rewrites `READY` final posts to `DRAFT`. Set `DB_SCHEMA_MODE=push` or `skip` to opt out. No new Compose service or environment variable is required for personalized final posts, Restrict, Block, or the media screens. Rebuild the `web` image after a Flutter change so port 8080 serves those screens. Put a real `MAPBOX_ACCESS_TOKEN` in `.env` before place search; the stack still boots with a local placeholder.
 
 View Trip Map and the pin dropper use Mapbox on the web UI as well as on iOS and Android. Put a real `MAPBOX_ACCESS_TOKEN` in `.env` and rebuild the `web` image; the token is baked into the Flutter build, and an empty token shows a configuration message instead of a map. Rebuild that image after changing `WEB_API_BASE_URL` (the browser address is baked in too). iOS builds need Swift Package Manager (`flutter config --enable-swift-package-manager`) and iOS 14.
 
@@ -329,6 +329,7 @@ npm start
 - User authentication (JWT with refresh tokens)
 - User profiles with privacy settings
 - Follow/Unfollow system
+- Restrict and Block from a direct-message settings screen and from Settings
 - User search and discovery
 
 ### Trip Management
@@ -351,7 +352,15 @@ npm start
   - Intelligent summary generation from trip entries
   - Media curation (one per day, up to 12 items)
   - Editable before publishing
+  - Photo picker shows the selection order and stops at 10
   - Published final posts appear in home feed
+
+### Chat
+- Direct, group, and trip conversations
+- Restrict stops a direct message both ways and keeps the history
+- Block also stops follows and profile access, and stops the creator of a trip or group from adding the other person
+- Settings lists the people you blocked and the people you restricted
+- Shared photos and videos open in one viewer from a chat and from a trip thread
 
 ### Places & Location
 - Place search and discovery

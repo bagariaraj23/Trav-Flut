@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:tripthread/models/chat_media_item.dart';
 import 'package:tripthread/services/api_service.dart';
+import 'package:tripthread/utils/app_layout.dart';
 
 class SafetyPersonTile extends StatelessWidget {
   const SafetyPersonTile({
@@ -19,10 +20,21 @@ class SafetyPersonTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     return ListTile(
-      title: Text(name),
-      subtitle: Text(detail),
-      trailing: TextButton(onPressed: onUndo, child: Text(undoLabel)),
+      title: Text(name, maxLines: 1, overflow: TextOverflow.ellipsis),
+      subtitle: Text(detail, style: TextStyle(color: scheme.onSurfaceVariant)),
+      trailing: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 148),
+        child: TextButton(
+          onPressed: onUndo,
+          child: Text(
+            undoLabel,
+            maxLines: 2,
+            textAlign: TextAlign.end,
+          ),
+        ),
+      ),
     );
   }
 }
@@ -104,7 +116,9 @@ class _SafetyListScreenState extends State<SafetyListScreen> {
       appBar: AppBar(title: const Text('Blocked and restricted')),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
-          : ListView(
+          : AppLayout.reading(
+              context: context,
+              child: ListView(
               children: [
                 const _SectionTitle('Blocked'),
                 if (_blocked.isEmpty)
@@ -137,6 +151,7 @@ class _SafetyListScreenState extends State<SafetyListScreen> {
                     child: const Text('More restricted'),
                   ),
               ],
+            ),
             ),
     );
   }

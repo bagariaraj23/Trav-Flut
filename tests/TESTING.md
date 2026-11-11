@@ -24,6 +24,7 @@ TripThread has a broad surface area: 85+ backend API routes, 25+ Flutter screens
 | Backend unit | `tests/unit/expense-split.unit.test.ts` | Equal/exact/percent/shares rounding, simplify A→C, net-sum invariant |
 | Backend integration | `tests/integration/trip-expense.integration.test.ts` | Expense CRUD, subset split, payee mark-paid, payer 403, leave/kick/account-delete 409, currency freeze, ended-trip writes |
 | Mobile | `mobile/test/providers/expense_summary_test.dart`, `mobile/test/screens/trip_money_pane_test.dart` | Summary parse, leave UNSETTLED copy, money pane settled UI |
+| Safety and media | `tests/integration/user-safety.integration.test.ts`, `mobile/test/widgets/media_safety_test.dart` | Restrict both ways, Block follow and profile, creator-only trip and group adds, media cursor pages, seek math, grid columns, photo order badge |
 
 ### Current high-level coverage map
 
