@@ -64,8 +64,17 @@ class _MediaGalleryViewerState extends State<MediaGalleryViewer> {
   Widget build(BuildContext context) {
     final item = widget.items[_index];
     final stamp = LocaleDates.mediumDateTime(item.sharedAt.toLocal());
-    return Scaffold(
-      backgroundColor: Colors.black,
+    final seed = Theme.of(context).colorScheme.primary;
+    final dark = Theme.of(context).copyWith(
+      colorScheme: ColorScheme.fromSeed(
+        seedColor: seed,
+        brightness: Brightness.dark,
+      ),
+    );
+    return Theme(
+      data: dark,
+      child: Scaffold(
+      backgroundColor: dark.colorScheme.surface,
       body: SafeArea(
         child: Stack(
           children: [
@@ -106,13 +115,22 @@ class _MediaGalleryViewerState extends State<MediaGalleryViewer> {
                 children: [
                   IconButton(
                     onPressed: () => Navigator.of(context).pop(),
-                    icon: const Icon(Icons.close, color: Colors.white),
-                    style: IconButton.styleFrom(backgroundColor: Colors.black45),
+                    icon: Icon(Icons.close, color: dark.colorScheme.onSurface),
+                    style: IconButton.styleFrom(
+                      backgroundColor: dark.colorScheme.surfaceContainerHighest,
+                    ),
                   ),
                   const Spacer(),
-                  Text(
-                    stamp,
-                    style: const TextStyle(color: Colors.white, fontSize: 13),
+                  Flexible(
+                    child: Text(
+                      stamp,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: dark.colorScheme.onSurface,
+                        fontSize: 13,
+                      ),
+                    ),
                   ),
                 ],
               ),
@@ -120,6 +138,7 @@ class _MediaGalleryViewerState extends State<MediaGalleryViewer> {
           ],
         ),
       ),
+    ),
     );
   }
 }
@@ -223,13 +242,14 @@ class _GalleryVideoPageState extends State<_GalleryVideoPage> {
 
   @override
   Widget build(BuildContext context) {
+    final onSurface = Theme.of(context).colorScheme.onSurface;
     if (_error != null) {
       return Center(
-        child: Text(_error!, style: const TextStyle(color: Colors.white70)),
+        child: Text(_error!, style: TextStyle(color: onSurface)),
       );
     }
     if (!_ready || _controller == null) {
-      return const Center(child: CircularProgressIndicator(color: Colors.white));
+      return Center(child: CircularProgressIndicator(color: onSurface));
     }
     final controller = _controller!;
     return Column(
@@ -266,13 +286,14 @@ class _GalleryVideoPageState extends State<_GalleryVideoPage> {
                   if (mounted) setState(() => _position = target);
                 },
               ),
-              Row(
+              Wrap(
+                crossAxisAlignment: WrapCrossAlignment.center,
                 children: [
                   IconButton(
                     onPressed: _togglePlay,
                     icon: Icon(
                       _playing ? Icons.pause_circle : Icons.play_circle,
-                      color: Colors.white,
+                      color: onSurface,
                       size: 36,
                     ),
                   ),
@@ -282,7 +303,7 @@ class _GalleryVideoPageState extends State<_GalleryVideoPage> {
                       await controller.seekTo(Duration.zero);
                       if (mounted) setState(() => _position = Duration.zero);
                     },
-                    icon: const Icon(Icons.replay, color: Colors.white),
+                    icon: Icon(Icons.replay, color: onSurface),
                   ),
                   IconButton(
                     tooltip: _looping ? 'Loop on' : 'Loop off',
@@ -292,7 +313,9 @@ class _GalleryVideoPageState extends State<_GalleryVideoPage> {
                     },
                     icon: Icon(
                       Icons.loop,
-                      color: _looping ? Colors.white : Colors.white38,
+                      color: _looping
+                          ? onSurface
+                          : onSurface.withValues(alpha: 0.38),
                     ),
                   ),
                   TextButton(
@@ -303,7 +326,7 @@ class _GalleryVideoPageState extends State<_GalleryVideoPage> {
                     },
                     child: Text(
                       '${_speed}x',
-                      style: const TextStyle(color: Colors.white),
+                      style: TextStyle(color: onSurface),
                     ),
                   ),
                 ],

@@ -26,7 +26,7 @@ The project now uses centralized configuration through environment variables ins
 
 Full stack (`docker-compose.yml`):
 
-- `DB_SCHEMA_MODE` defaults to `migrate` (`prisma migrate deploy` when the API container starts). `push` and `skip` are opt-ins. Do not use `push` against the Neon production branch.
+- `DB_SCHEMA_MODE` defaults to `migrate` (`prisma migrate deploy` when the API container starts). That includes `20261111120000_user_safety_and_conversation_creator`. Restrict, Block, and the media screens add no environment variable. Rebuild the web image to serve the new Flutter screens. `push` and `skip` are opt-ins. Do not use `push` against the Neon production branch.
 - `SCHEDULER_INTERVAL_SECONDS` defaults to `300`. The scheduler script still runs once per start; Compose loops it.
 - `WEB_PORT` defaults to `8080`. `WEB_API_BASE_URL` (default `http://localhost:8080/api`) and `WEB_SHARE_LINK_BASE_URL` (default `http://localhost:8080`) are baked into the Flutter web image. Rebuild the `web` service after changing them.
 - `MAPBOX_ACCESS_TOKEN` is required for place search. The API boots with a placeholder when it is empty.

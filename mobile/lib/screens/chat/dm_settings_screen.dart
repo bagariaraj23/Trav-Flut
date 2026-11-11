@@ -156,7 +156,10 @@ class _DmSettingsScreenState extends State<DmSettingsScreen> {
                         onTap: () => _clear(other.userId),
                       ),
                       ListTile(
-                        title: const Text('Block'),
+                        title: Text(
+                          'Block',
+                          style: TextStyle(color: Theme.of(context).colorScheme.error),
+                        ),
                         enabled: !_busy,
                         onTap: () => _set(other.userId, 'BLOCK'),
                       ),
@@ -170,16 +173,22 @@ class _DmSettingsScreenState extends State<DmSettingsScreen> {
                         onTap: () => _set(other.userId, 'RESTRICT'),
                       ),
                       ListTile(
-                        title: const Text('Block'),
+                        title: Text(
+                          'Block',
+                          style: TextStyle(color: Theme.of(context).colorScheme.error),
+                        ),
                         subtitle: const Text(
                           'Stops messages, and they cannot follow you or open your profile.',
                         ),
                         enabled: !_busy,
                         onTap: () => _set(other.userId, 'BLOCK'),
                       ),
-                    ] else
-                      const ListTile(
-                        title: Text("You can't message this person."),
+                    ]                     else
+                      ListTile(
+                        title: Text(
+                          "You can't message this person.",
+                          style: TextStyle(color: Theme.of(context).colorScheme.error),
+                        ),
                       ),
                     ConversationMediaStrip(conversationId: widget.conversationId),
                   ],

@@ -25,7 +25,7 @@ Run PostgreSQL, the API, the scheduler, and the Flutter UI in the browser. You d
    ```bash
    npm run docker:up
    ```
-   *Builds and starts Postgres, the API (`node server.cjs`), the scheduler, and the Flutter web UI. The API waits for Postgres, then runs `prisma migrate deploy`. The scheduler starts after the API is healthy and loops every `SCHEDULER_INTERVAL_SECONDS` (default 300 seconds).*
+   *Builds and starts Postgres, the API (`node server.cjs`), the scheduler, and the Flutter web UI. The API waits for Postgres, then runs `prisma migrate deploy`, including the Restrict and Block migration. Rebuild the web image after a Flutter change. The scheduler starts after the API is healthy and loops every `SCHEDULER_INTERVAL_SECONDS` (default 300 seconds).*
 
 4. **Open the app:**
    * Browser UI: [http://localhost:8080](http://localhost:8080) or [http://127.0.0.1:8080](http://127.0.0.1:8080). Sign up, create a trip, and open it. View Trip Map and the pin dropper use Mapbox in the browser once `MAPBOX_ACCESS_TOKEN` is set and the `web` image is rebuilt.

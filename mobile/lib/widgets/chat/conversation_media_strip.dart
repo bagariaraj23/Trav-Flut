@@ -5,6 +5,7 @@ import 'package:tripthread/models/chat_media_item.dart';
 import 'package:tripthread/services/api_service.dart';
 import 'package:tripthread/utils/cloudinary_utils.dart';
 import 'package:tripthread/widgets/media/media_gallery_viewer.dart';
+import 'package:tripthread/widgets/media/media_seek.dart';
 
 Future<void> openConversationMedia(
   BuildContext context,
@@ -144,8 +145,11 @@ class _ConversationMediaStripState extends State<ConversationMediaStrip> {
             ],
           ),
         ),
-        SizedBox(
-          height: 84,
+        Builder(
+          builder: (context) {
+            final tile = (MediaQuery.sizeOf(context).width / 5.2).clamp(72.0, 120.0);
+            return SizedBox(
+          height: tile,
           child: ListView.separated(
             scrollDirection: Axis.horizontal,
             padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -161,8 +165,8 @@ class _ConversationMediaStripState extends State<ConversationMediaStrip> {
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(8),
                   child: SizedBox(
-                    width: 84,
-                    height: 84,
+                    width: tile,
+                    height: tile,
                     child: Stack(
                       fit: StackFit.expand,
                       children: [
@@ -176,6 +180,8 @@ class _ConversationMediaStripState extends State<ConversationMediaStrip> {
               );
             },
           ),
+        );
+          },
         ),
         const SizedBox(height: 8),
       ],
@@ -266,11 +272,14 @@ class _ChatMediaGridScreenState extends State<ChatMediaGridScreen> {
       appBar: AppBar(title: const Text('Shared media')),
       body: _items.isEmpty && _loading
           ? const Center(child: CircularProgressIndicator())
-          : GridView.builder(
+          : LayoutBuilder(
+              builder: (context, constraints) {
+                final columns = mediaGridColumns(constraints.maxWidth);
+                return GridView.builder(
               controller: _scroll,
               padding: const EdgeInsets.all(8),
-              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 3,
+              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: columns,
                 mainAxisSpacing: 8,
                 crossAxisSpacing: 8,
               ),
@@ -287,6 +296,8 @@ class _ChatMediaGridScreenState extends State<ChatMediaGridScreen> {
                   onTap: () => _open(index),
                   child: CachedNetworkImage(imageUrl: preview, fit: BoxFit.cover),
                 );
+              },
+            );
               },
             ),
     );

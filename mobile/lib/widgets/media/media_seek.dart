@@ -11,6 +11,14 @@ Duration clampSeek(Duration position, Duration delta, Duration total) {
   return next;
 }
 
+/// Three columns on a phone, more as the window widens.
+int mediaGridColumns(double width) {
+  if (width >= 1100) return 6;
+  if (width >= 800) return 5;
+  if (width >= 600) return 4;
+  return 3;
+}
+
 double nextPlaybackSpeed(double current) {
   final index = playbackSpeeds.indexWhere((speed) => (speed - current).abs() < 0.01);
   if (index < 0) return 1;
@@ -52,16 +60,17 @@ class PhotoOrderBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
       decoration: BoxDecoration(
-        color: Colors.black87,
+        color: scheme.primary,
         borderRadius: BorderRadius.circular(10),
       ),
       child: Text(
         '$position',
-        style: const TextStyle(
-          color: Colors.white,
+        style: TextStyle(
+          color: scheme.onPrimary,
           fontSize: 12,
           fontWeight: FontWeight.w700,
         ),

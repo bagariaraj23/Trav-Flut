@@ -56,7 +56,9 @@ src/
 │   │   │   ├── me/route.ts       # GET/PUT/DELETE /users/me (current user, account deletion)
 │   │   │   ├── [id]/stats/route.ts  # User statistics
 │   │   │   ├── [id]/privacy/route.ts  # Toggle privacy
-│   │   │   └── me/delete/route.ts  # Account deletion handler
+│   │   │   ├── me/delete/route.ts  # Account deletion handler
+│   │   │   ├── me/safety/route.ts  # GET people you blocked or restricted
+│   │   │   └── [id]/safety/route.ts  # GET/PUT/DELETE one Restrict or Block row
 │   │   ├── trips/
 │   │   │   ├── route.ts          # GET/POST /trips
 │   │   │   ├── [id]/route.ts     # GET /trips/:id (trip detail)
@@ -220,9 +222,13 @@ mobile/
 │   │   │   └── followers_screen.dart  # Followers/following lists
 │   │   └── settings/
 │   │       ├── settings_screen.dart  # App settings
+│   │       ├── safety_list_screen.dart  # People you blocked or restricted
 │   │       ├── privacy_screen.dart   # Privacy settings
 │   │       ├── notifications_screen.dart
 │   │       └── about_screen.dart     # App info, licenses
+│   │   └── chat/
+│   │       ├── dm_settings_screen.dart  # Restrict, Block, and shared media
+│   │       └── group_settings_screen.dart  # Group members and shared media
 │   │
 │   ├── services/                # API & External Services
 │   │   ├── api_service.dart     # HTTP client (Dio) + API calls
@@ -238,6 +244,11 @@ mobile/
 │   │   ├── trip_card.dart       # Reusable trip card widget
 │   │   ├── user_card.dart       # User profile card
 │   │   ├── media_viewer.dart    # Image/video viewer
+│   │   ├── media/
+│   │   │   ├── media_gallery_viewer.dart  # Shared chat and thread viewer
+│   │   │   └── media_seek.dart  # Seek steps, speeds, and grid columns
+│   │   └── chat/
+│   │       └── conversation_media_strip.dart  # Thumbnail strip and paged grid
 │   │   ├── place_picker.dart    # Place selection dialog
 │   │   ├── avatar_widget.dart   # Avatar with upload
 │   │   └── bottom_sheet_builder.dart
@@ -305,8 +316,7 @@ Screens that cannot compile for the web (`dart:io` video and files) keep a nativ
 | `image_picker` | Photo/video selection |
 | `cloudinary_flutter` | Cloudinary integration |
 | `connectivity_plus` | Network status |
-| `mapbox_maps_flutter` | Map display |
-| `sqflite` | Local database (if used) |
+| `mapbox_maps_flutter` | Map display (3.34.2, iOS, Android, and web) |
 | `intl` | Internationalization |
 
 ---
@@ -505,19 +515,19 @@ cursor_rules.md                 # Cursor/Copilot AI rules
 - **HTTP**: `axios`, `node-fetch`
 - **Auth**: `jsonwebtoken`, `bcrypt`
 - **Validation**: `zod`
-- **Logging**: `winston` or `pino`
-- **Testing**: `jest`, `supertest`
+- **Logging**: `winston`
+- **Testing**: `vitest`, `supertest`
 
 ### Mobile (`pubspec.yaml`)
 
 - **Framework**: `flutter`, `flutter_sdk`
-- **State**: `provider`, `get`
+- **State**: `provider`
 - **Routing**: `go_router`
 - **HTTP**: `dio`
-- **Storage**: `shared_preferences`, `sqflite`
+- **Storage**: `shared_preferences`, `flutter_secure_storage` (browser local storage on web)
 - **Location**: `geolocator`, `geocoding`
 - **Media**: `image_picker`, `video_player`
-- **Maps**: `mapbox_maps_flutter`, `google_maps_flutter`
+- **Maps**: `mapbox_maps_flutter` 3.34.2
 
 ### Scheduler (`scheduler/package.json`)
 

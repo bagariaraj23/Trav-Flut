@@ -18,6 +18,10 @@ void main() {
       const Duration(seconds: 13),
     );
     expect(nextPlaybackSpeed(1), 1.25);
+    expect(mediaGridColumns(360), 3);
+    expect(mediaGridColumns(640), 4);
+    expect(mediaGridColumns(900), 5);
+    expect(mediaGridColumns(1200), 6);
   });
 
   testWidgets('double tap skips five seconds by side', (tester) async {

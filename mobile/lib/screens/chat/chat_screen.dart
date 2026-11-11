@@ -1038,9 +1038,13 @@ class _ChatScreenState extends State<ChatScreen> {
               ),
             ),
           if (_dmClosed)
-            const Padding(
-              padding: EdgeInsets.all(16),
-              child: Text("You can't message this person."),
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Text(
+                "You can't message this person.",
+                textAlign: TextAlign.center,
+                style: TextStyle(color: Theme.of(context).colorScheme.error),
+              ),
             )
           else
           Padding(
