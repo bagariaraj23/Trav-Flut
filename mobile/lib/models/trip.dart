@@ -218,6 +218,7 @@ class TripThreadEntry {
 class TripFinalPost {
   final String id;
   final String tripId;
+  final String? userId;
   final String summaryText;
   final List<String> curatedMedia;
   final String? caption;
@@ -227,6 +228,7 @@ class TripFinalPost {
   final DateTime? publishedAt;
   final DateTime createdAt;
   final DateTime updatedAt;
+  final User? user;
   final Trip? trip;
   @JsonKey(defaultValue: 0)
   final int likeCount;
@@ -240,6 +242,7 @@ class TripFinalPost {
   const TripFinalPost({
     required this.id,
     required this.tripId,
+    this.userId,
     required this.summaryText,
     required this.curatedMedia,
     this.caption,
@@ -249,6 +252,7 @@ class TripFinalPost {
     this.publishedAt,
     required this.createdAt,
     required this.updatedAt,
+    this.user,
     this.trip,
     this.likeCount = 0,
     this.commentCount = 0,
@@ -260,9 +264,16 @@ class TripFinalPost {
       _$TripFinalPostFromJson(json);
   Map<String, dynamic> toJson() => _$TripFinalPostToJson(this);
 
+  /// Person this recap belongs to. Older payloads only had the trip owner.
+  User? get displayAuthor => user ?? trip?.user;
+
+  String? get displayAuthorId =>
+      userId ?? user?.id ?? trip?.user?.id ?? trip?.userId;
+
   TripFinalPost copyWith({
     String? id,
     String? tripId,
+    String? userId,
     String? summaryText,
     List<String>? curatedMedia,
     String? caption,
@@ -272,6 +283,7 @@ class TripFinalPost {
     DateTime? publishedAt,
     DateTime? createdAt,
     DateTime? updatedAt,
+    User? user,
     Trip? trip,
     int? likeCount,
     int? commentCount,
@@ -281,6 +293,7 @@ class TripFinalPost {
     return TripFinalPost(
       id: id ?? this.id,
       tripId: tripId ?? this.tripId,
+      userId: userId ?? this.userId,
       summaryText: summaryText ?? this.summaryText,
       curatedMedia: curatedMedia ?? this.curatedMedia,
       caption: caption ?? this.caption,
@@ -290,6 +303,7 @@ class TripFinalPost {
       publishedAt: publishedAt ?? this.publishedAt,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
+      user: user ?? this.user,
       trip: trip ?? this.trip,
       likeCount: likeCount ?? this.likeCount,
       commentCount: commentCount ?? this.commentCount,

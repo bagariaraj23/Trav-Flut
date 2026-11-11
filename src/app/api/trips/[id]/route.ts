@@ -86,7 +86,10 @@ export async function GET(
               },
             },
           },
-          finalPost: true,
+          finalPosts: {
+            where: { userId: currentUserId },
+            take: 1,
+          },
         },
       });
 
@@ -147,8 +150,10 @@ export async function GET(
             }
           : undefined;
 
+      const ownFinalPost = trip.finalPosts[0];
       const tripResponse: TripResponse = omitHiddenTripSpend({
         ...trip,
+        finalPosts: undefined,
         startDate: trip.startDate?.toISOString() || undefined,
         endDate: trip.endDate?.toISOString() || undefined,
         entryCount: trip.entryCount,
@@ -193,13 +198,13 @@ export async function GET(
             createdAt: trip.coverMedia.createdAt.toISOString(),
           }
           : undefined,
-        finalPost: trip.finalPost
+        finalPost: ownFinalPost
           ? {
-            ...trip.finalPost,
-            createdAt: trip.finalPost.createdAt.toISOString(),
-            updatedAt: trip.finalPost.updatedAt.toISOString(),
-            publishedAt: trip.finalPost.publishedAt?.toISOString() ?? undefined,
-            coverMediaUrl: trip.finalPost.coverMediaUrl ?? undefined,
+            ...ownFinalPost,
+            createdAt: ownFinalPost.createdAt.toISOString(),
+            updatedAt: ownFinalPost.updatedAt.toISOString(),
+            publishedAt: ownFinalPost.publishedAt?.toISOString() ?? undefined,
+            coverMediaUrl: ownFinalPost.coverMediaUrl ?? undefined,
           }
           : undefined,
       }, isOwner || isParticipant);

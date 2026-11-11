@@ -19,15 +19,16 @@ export async function canViewEntity(
       select: {
         id: true,
         tripId: true,
+        userId: true,
         isPublished: true,
+        user: {
+          select: {
+            isPrivate: true,
+          },
+        },
         trip: {
           select: {
             userId: true,
-            user: {
-              select: {
-                isPrivate: true,
-              },
-            },
           },
         },
       },
@@ -35,28 +36,16 @@ export async function canViewEntity(
 
     if (!post) return false;
 
-    // If draft (not published), restrict access to owner and participants only
+    // A draft belongs to its author until they publish it.
     if (!post.isPublished) {
-      if (!userId) return false;
-      if (userId === post.trip.userId) return true;
-
-      const participant = await prisma.tripParticipant.findUnique({
-        where: {
-          tripId_userId: {
-            tripId: post.tripId,
-            userId,
-          },
-        },
-      });
-      return !!participant;
+      return !!userId && userId === post.userId;
     }
 
-    const owner = post.trip.user;
-    if (!owner.isPrivate) return true;
+    if (!post.user.isPrivate) return true;
 
     if (!userId) return false;
 
-    if (userId === post.trip.userId) return true;
+    if (userId === post.userId || userId === post.trip.userId) return true;
 
     const participant = await prisma.tripParticipant.findUnique({
       where: {
@@ -72,7 +61,7 @@ export async function canViewEntity(
       where: {
         followerId_followeeId: {
           followerId: userId,
-          followeeId: post.trip.userId,
+          followeeId: post.userId,
         },
       },
     });
@@ -199,6 +188,7 @@ export async function canDeleteComment(userId: string, commentId: string): Promi
     const post = await prisma.tripFinalPost.findUnique({
       where: { id: comment.entityId },
       select: {
+        userId: true,
         trip: {
           select: {
             userId: true,
@@ -207,7 +197,7 @@ export async function canDeleteComment(userId: string, commentId: string): Promi
       },
     });
 
-    return post?.trip.userId === userId;
+    return post?.userId === userId || post?.trip.userId === userId;
   }
 
   if (comment.entityType === 'TRIP_THREAD_ENTRY') {

@@ -208,6 +208,7 @@ export async function createFinalPost(
   overrides: Partial<{
     tripId: string;
     userId: string;
+    authorId: string;
     isPublished: boolean;
   }> = {}
 ) {
@@ -231,6 +232,7 @@ export async function createFinalPost(
   return prisma.tripFinalPost.create({
     data: {
       tripId: trip.id,
+      userId: overrides.authorId ?? trip.userId,
       summaryText: `Final post summary for testing engagement features. This is a longer summary to meet any validation requirements. ${randomUUID().slice(
         0,
         6

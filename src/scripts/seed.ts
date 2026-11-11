@@ -318,6 +318,7 @@ async function seed(prisma: AppPrismaClient): Promise<void> {
   await prisma.tripFinalPost.create({
     data: {
       tripId: tripTokyo.id,
+      userId: bob.id,
       summaryText:
         "An incredible week exploring Tokyo's vibrant culture, incredible food, and modern marvels. From Shibuya Crossing to Senso-ji Temple, every moment was filled with wonder.",
       curatedMedia: [
@@ -335,6 +336,7 @@ async function seed(prisma: AppPrismaClient): Promise<void> {
   await prisma.tripFinalPost.create({
     data: {
       tripId: tripBali.id,
+      userId: carol.id,
       summaryText:
         "A week of pure bliss in Bali. Temples of Ubud, beaches of Nusa Penida — magical sunsets every evening.",
       curatedMedia: [

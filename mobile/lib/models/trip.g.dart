@@ -211,6 +211,7 @@ TripFinalPost _$TripFinalPostFromJson(Map<String, dynamic> json) =>
     TripFinalPost(
       id: json['id'] as String,
       tripId: json['tripId'] as String,
+      userId: json['userId'] as String?,
       summaryText: json['summaryText'] as String,
       curatedMedia: (json['curatedMedia'] as List<dynamic>)
           .map((e) => e as String)
@@ -229,6 +230,9 @@ TripFinalPost _$TripFinalPostFromJson(Map<String, dynamic> json) =>
           : DateTime.parse(json['publishedAt'] as String),
       createdAt: DateTime.parse(json['createdAt'] as String),
       updatedAt: DateTime.parse(json['updatedAt'] as String),
+      user: json['user'] == null
+          ? null
+          : User.fromJson(json['user'] as Map<String, dynamic>),
       trip: json['trip'] == null
           ? null
           : Trip.fromJson(json['trip'] as Map<String, dynamic>),
@@ -242,6 +246,7 @@ Map<String, dynamic> _$TripFinalPostToJson(TripFinalPost instance) =>
     <String, dynamic>{
       'id': instance.id,
       'tripId': instance.tripId,
+      'userId': instance.userId,
       'summaryText': instance.summaryText,
       'curatedMedia': instance.curatedMedia,
       'caption': instance.caption,
@@ -251,6 +256,7 @@ Map<String, dynamic> _$TripFinalPostToJson(TripFinalPost instance) =>
       'publishedAt': instance.publishedAt?.toIso8601String(),
       'createdAt': instance.createdAt.toIso8601String(),
       'updatedAt': instance.updatedAt.toIso8601String(),
+      'user': instance.user,
       'trip': instance.trip,
       'likeCount': instance.likeCount,
       'commentCount': instance.commentCount,

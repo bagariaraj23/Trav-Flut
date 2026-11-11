@@ -183,6 +183,7 @@ export interface PlaceResponse {
 export interface TripFinalPostResponse {
   id: string;
   tripId: string;
+  userId: string;
   summaryText: string;
   curatedMedia: string[];
   caption?: string | null;
@@ -192,6 +193,8 @@ export interface TripFinalPostResponse {
   publishedAt?: string | null;
   createdAt: string;
   updatedAt: string;
+  /** Author of this personal final post. */
+  user?: UserProfile | null;
   trip?: TripResponse | null;
   likeCount?: number;
   commentCount?: number;
