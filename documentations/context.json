@@ -2,10 +2,12 @@
     "project": {
         "name": "TripThread",
         "workspacePath": "/Users/rajbagaria/Desktop/Bolt-Travello/Flut/project",
-        "generatedAt": "2026-11-07",
+        "generatedAt": "2026-11-11",
         "description": "Travel-focused social platform where users create trips, post thread entries (text/media/location), split trip expenses and settle up on a Money pane, generate/publish final trip posts, and chat via 1:1 DMs, groups, and trip-scoped rooms (realtime WebSocket).",
-        "lastPRReviewed": "PR #54 (feat-trip-create-ux) is merged to main. Current work is PR #56 (cursor/docker-stack-refresh-8029 → main): https://github.com/bagariaraj23/Trav-Flut/pull/56. It dockerises the current app end to end: Postgres, the API (prisma migrate deploy on boot), the scheduler, and the Flutter UI in the browser on port 8080. A trip can start now, keep an optional end, and store UTC instants. Dates follow the device region. A dropped pin is named from the device geocoder on iOS and Android. Mapbox Maps Flutter 3.34.2 draws the trip map and pin dropper on web as well as on the phone. Camera, photo, video, and location-while-in-use are requested only when used; there is no background location. Thread entries are text, media, and location; check-in is removed. PR #55 merged to main on 2026-10-29 (6:13 PM IST). PR #51 merged to main on 2026-10-31 (5:08 PM IST).",
+        "lastPRReviewed": "PR #56 merged to main on 2026-11-11 at 2:44 PM IST (https://github.com/bagariaraj23/Trav-Flut/pull/56, merge commit eec6ed2). Main now runs the full local Docker stack: Postgres, the API (prisma migrate deploy on boot), the scheduler, and the Flutter UI in the browser on port 8080. Mapbox Maps Flutter 3.34.2 draws the trip map and pin dropper on web as well as on the phone. PR #54 (trip create UX) merged on 2026-11-06. A trip can start now, keep an optional end, and store UTC instants. Dates follow the device region. A dropped pin is named from the device geocoder on iOS and Android. Camera, photo, video, and location-while-in-use are requested only when used; there is no background location. Thread entries are text, media, and location; check-in is removed. GitHub has two open pull requests, both drafts: PR #15 (change password, to be discarded) and PR #38 (personalised final posts, next feature, needs a rebase onto this main).",
         "recentProductionPRs": [
+            "https://github.com/bagariaraj23/Trav-Flut/pull/56",
+            "https://github.com/bagariaraj23/Trav-Flut/pull/54",
             "https://github.com/bagariaraj23/Trav-Flut/pull/51",
             "https://github.com/bagariaraj23/Trav-Flut/pull/55",
             "https://github.com/bagariaraj23/Trav-Flut/pull/50",
@@ -1509,7 +1511,7 @@
                     "pr": 38,
                     "state": "open",
                     "planFile": "personalized_final_posts_per_participant_efaf83cd.plan.md",
-                    "notes": "Schema migration to add userId to TripFinalPost, refactor service layer, update API endpoints"
+                    "notes": "Schema migration to add userId to TripFinalPost, refactor service layer, update API endpoints. Draft PR #38 (patch-final-post-update) is the agreed next feature. As of 2026-11-11 it is 172 commits behind main (merge-base 7b487c8, after PR #34) and 3 commits ahead. The plan file named above is not in the repository. The pull request body is still the empty template. Do not implement on that old branch; rebase onto current main first. On main, TripFinalPost is still one post per trip."
                 }
             ]
         },
@@ -1713,6 +1715,45 @@
     },
     "prTracking": {
         "merged": [
+            {
+                "number": 56,
+                "title": "Dockerise the full local stack, including the Flutter web UI",
+                "merged_at": "2026-11-11",
+                "url": "https://github.com/bagariaraj23/Trav-Flut/pull/56",
+                "base": "main",
+                "head": "cursor/docker-stack-refresh-8029",
+                "keyFeatures": [
+                    "Postgres, API, scheduler, and Flutter web UI in Docker Compose",
+                    "Boot runs prisma migrate deploy; old volumes can be baselined once",
+                    "Web UI on port 8080 proxies the API, chat, and share routes",
+                    "Mapbox Maps Flutter 3.34.2 draws trip maps and the pin dropper on web"
+                ]
+            },
+            {
+                "number": 54,
+                "title": "Feat trip create ux",
+                "merged_at": "2026-11-06",
+                "url": "https://github.com/bagariaraj23/Trav-Flut/pull/54",
+                "base": "main",
+                "head": "feat-trip-create-ux",
+                "keyFeatures": [
+                    "Optional start and end on create; missing start means ongoing now",
+                    "UTC instants; dates follow the device region",
+                    "Named map pins and a static thumbnail on location posts",
+                    "While-in-use permissions only; check-in removed"
+                ]
+            },
+            {
+                "number": 35,
+                "title": "Feat ux enhancements",
+                "merged_at": "2026-02-22",
+                "keyFeatures": [
+                    "Username login and lookalike normalization",
+                    "Thread screen auto-open for ongoing trips",
+                    "Per-device and all-device logout",
+                    "TripThread logo and splash"
+                ]
+            },
             {
                 "number": 51,
                 "title": "Blue theme, Discover search, and trip chat controls",
@@ -2264,44 +2305,14 @@
         ],
         "open": [
             {
-                "number": 54,
-                "title": "Trip create UX",
-                "state": "open",
-                "draft": true,
-                "mergeable": true,
-                "url": "https://github.com/bagariaraj23/Trav-Flut/pull/54",
-                "base": "main",
-                "head": "feat-trip-create-ux",
-                "created_at": "2026-10-14",
-                "notes": "Current work. Base is main, including merged PR #51 and PR #55. Draft and mergeable. A trip can start now and keep an optional end (migration 20261014150000_trip_open_ended_schedule). Location posts show a named pin and a static map thumbnail. Permissions are while-in-use only. Merge before PR #56.",
-                "keyFeatures": [
-                    "Optional start and end on create; missing start means ongoing now",
-                    "PATCH /trips/[id]/dates and end-on-demand",
-                    "Unset type stays Solo until someone else joins, then Group",
-                    "Named map pins and a static thumbnail on location posts",
-                    "Settings screen for location, camera, photo, and video access"
-                ]
-            },
-            {
-                "number": 56,
-                "title": "Refresh the Docker stack",
-                "state": "open",
-                "url": "https://github.com/bagariaraj23/Trav-Flut/pull/56",
-                "base": "feat-trip-create-ux",
-                "head": "cursor/docker-stack-refresh-8029",
-                "notes": "Stacked on PR #54. Refreshed onto feat-trip-create-ux on 2026-11-06, including main. Merge only after PR #54.",
-                "keyFeatures": [
-                    "Docker boot runs migrations",
-                    "Scheduler starts after the API"
-                ]
-            },
-            {
                 "number": 38,
                 "title": "personalised final posts",
                 "state": "draft",
                 "url": "https://github.com/bagariaraj23/Trav-Flut/pull/38",
+                "base": "main",
+                "head": "patch-final-post-update",
                 "created_at": "2026-02-20",
-                "notes": "GitHub PR is draft (branch patch-final-post-update); commits include feature, DB migration, tests",
+                "notes": "Agreed next feature. Draft, last updated 2026-02-20. Three commits (feature, DB migration, tests) on a branch whose merge-base with main is 7b487c8. It is 172 commits behind main as of 2026-11-11. Rebase onto current main before continuing. The pull request body is still the empty template, and personalized_final_posts_per_participant_efaf83cd.plan.md is not in the repo.",
                 "keyFeatures": [
                     "Personalized final posts per participant",
                     "Schema migration",
@@ -2309,32 +2320,29 @@
                 ]
             },
             {
+                "number": 15,
+                "title": "Feature/rk/change password",
+                "state": "draft",
+                "url": "https://github.com/bagariaraj23/Trav-Flut/pull/15",
+                "base": "main",
+                "head": "feature/rk/change_password",
+                "updated_at": "2025-09-21",
+                "notes": "Left open on purpose. The owner will discard this pull request later. Do not revive or rebase it."
+            }
+        ],
+        "closedUnmerged": [
+            {
                 "number": 36,
                 "title": "Feat final post",
-                "state": "open",
-                "created_at": "2026-02-17",
-                "keyFeatures": [
-                    "Final post enhancements"
-                ]
+                "state": "closed",
+                "closed_at": "not merged",
+                "notes": "Closed without a merge. It is not an open pull request."
             },
             {
-                "number": 35,
-                "title": "Feat ux enhancements",
-                "state": "open",
-                "created_at": "2026-02-15",
-                "keyFeatures": [
-                    "Username login (email or username)",
-                    "Username normalization (Unicode lookalike → ASCII)",
-                    "Thread screen auto-open for ongoing trips",
-                    "Floating bubble navigation button (draggable, position persists)",
-                    "Enhanced logout (per-device and all-device)",
-                    "Exponential backoff retry logic (mobile + backend)",
-                    "Performance monitoring on all API endpoints",
-                    "User-friendly auth error messages",
-                    "TripThread branded logo integration (SVG assets + flutter_svg)",
-                    "Android/iOS splash screen fixes (replaced Flutter logo with TripThread icon)",
-                    "Merged PR #37 notification features into branch"
-                ]
+                "number": 58,
+                "title": "Remove the check-in thread entry type",
+                "state": "closed",
+                "notes": "Closed without a merge. Check-in removal landed with PR #54."
             }
         ]
     },
@@ -2343,9 +2351,9 @@
         "completedFeatures": 62,
         "inProgressFeatures": 2,
         "plannedFeatures": 3,
-        "totalPRs": 52,
-        "mergedPRs": 47,
-        "openPRs": 6,
+        "totalPRs": 57,
+        "mergedPRs": 53,
+        "openPRs": 2,
         "raceConditionFixes": {
             "total": 17,
             "fixed": 15,
@@ -2365,14 +2373,15 @@
             "lastRun": "2026-10-18",
             "notes": "2026-10-18 Vitest (unit, scheduler, route contract, auth, signup, thread, leave, expenses, engagement, notifications, chat, follow requests, invites, spend visibility): database branch 29 files / 210 tests passed; Warm UI branch 29 files / 211 tests passed; trip-create tip 30 files / 215 tests passed. Flutter widget tests were not run (no Flutter SDK). Do not add platform-specific Rolldown bindings to root dependencies."
         },
-        "lastMergedFeature": "PR #55 API and database performance (merged main 2026-10-29); PR #51 Warm UI (merged main 2026-10-31)",
-        "notes": "PR #54 (trip create UX) is merged to main. Current work is PR #56: dockerise the whole application on current main (Postgres, API with migrations, scheduler, and the Flutter UI as a web container). A road line between saved pins can come later with one cached Mapbox Directions call. A walked-path trace needs background location and stays deferred. Cloudinary dashboard presets and Universal Links ops remain.",
+        "lastMergedFeature": "PR #56 Dockerise the full local stack (merged main 2026-11-11, 2:44 PM IST). PR #54 trip create UX merged 2026-11-06.",
+        "notes": "Main is current through PR #56. The local Docker stack and Mapbox 3.34.2 web maps are on main. Next product work is draft PR #38, personalised final posts, after a rebase onto this main. PR #15 stays open until the owner discards it. A richer video player, photo order on the final post, and media galleries were described on 2026-11-11 and are not approved for a branch yet. A road line between saved pins can come later with one cached Mapbox Directions call. A walked-path trace needs background location and stays deferred. Cloudinary dashboard presets and Universal Links ops remain. Map screenshots with a real Mapbox token were not captured: this environment has no .env token.",
         "mainBranchStable": true,
         "activeStack": [
             {
-                "pr": 56,
-                "branch": "cursor/docker-stack-refresh-8029",
-                "base": "main"
+                "pr": 38,
+                "branch": "patch-final-post-update",
+                "base": "main",
+                "status": "draft-needs-rebase"
             }
         ]
     },
@@ -2491,7 +2500,7 @@
                     "feat-dockerize refresh (stacked on feat-trip-create-ux, 2026-10-18)"
                 ],
                 "status": "complete-for-local-stack",
-                "notes": "PR #56 containerises the current app. Entrypoint DB_SCHEMA_MODE=migrate (default) runs prisma migrate deploy; volumes created by the old db push entrypoint are baselined once (push, replay the typeSetByUser backfill, migrate resolve --applied for every migration). push and skip remain opt-in. Scheduler waits for a healthy backend, then loops the one-shot script every SCHEDULER_INTERVAL_SECONDS (default 300), TZ=UTC. The web service (Flutter 3.38.5, nginx) serves the UI on port 8080 and proxies API, chat, and share. Mapbox Maps Flutter 3.34.2 draws the trip map and pin dropper in that web UI when MAPBOX_ACCESS_TOKEN is baked into the image. Web sign-in uses browser local storage. Test profile: api-tests (Vitest against postgres-test) and mobile-tests (cirruslabs Flutter image: pub get, analyze, test). Scale-out chat still needs Redis Pub/Sub; keep one backend replica. Production stays Railway/Railpack, not this Dockerfile."
+                "notes": "PR #56 merged to main on 2026-11-11. Entrypoint DB_SCHEMA_MODE=migrate (default) runs prisma migrate deploy; volumes created by the old db push entrypoint are baselined once (push, replay the typeSetByUser backfill, migrate resolve --applied for every migration). push and skip remain opt-in. Scheduler waits for a healthy backend, then loops the one-shot script every SCHEDULER_INTERVAL_SECONDS (default 300), TZ=UTC. The web service (Flutter 3.38.5, nginx) serves the UI on port 8080 and proxies API, chat, and share. Mapbox Maps Flutter 3.34.2 draws the trip map and pin dropper in that web UI when MAPBOX_ACCESS_TOKEN is baked into the image. Web sign-in uses browser local storage. Test profile: api-tests (Vitest against postgres-test) and mobile-tests (cirruslabs Flutter image: pub get, analyze, test). Scale-out chat still needs Redis Pub/Sub; keep one backend replica. Production stays Railway/Railpack, not this Dockerfile."
             },
             {
                 "id": "prod-gaps-optimizations",
@@ -2527,17 +2536,17 @@
             {
                 "number": 6,
                 "title": "Extend trip end date",
-                "status": "Addressed on feat-trip-create-ux"
+                "status": "Addressed on main (PR #54)"
             },
             {
                 "number": 7,
                 "title": "Optional / dynamic trip dates",
-                "status": "Addressed on feat-trip-create-ux"
+                "status": "Addressed on main (PR #54)"
             },
             {
                 "number": 8,
                 "title": "Start/end time & timezone for scheduler",
-                "status": "Addressed on feat-trip-create-ux"
+                "status": "Addressed on main (PR #54)"
             },
             {
                 "number": 9,
