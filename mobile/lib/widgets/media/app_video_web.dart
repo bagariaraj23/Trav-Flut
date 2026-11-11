@@ -89,6 +89,26 @@ class AppVideoController {
     _video?.pause();
   }
 
+  Duration get position {
+    final seconds = _video?.currentTime;
+    if (seconds == null || seconds.isNaN || seconds.isInfinite) {
+      return Duration.zero;
+    }
+    return Duration(milliseconds: (seconds * 1000).round());
+  }
+
+  Future<void> seekTo(Duration position) async {
+    final video = _video;
+    if (video == null) return;
+    video.currentTime = position.inMilliseconds / 1000;
+  }
+
+  Future<void> setPlaybackSpeed(double speed) async {
+    final video = _video;
+    if (video == null) return;
+    video.playbackRate = speed;
+  }
+
   bool get isInitialized => _initialized;
 
   bool get isPlaying => _video != null && !_video!.paused && !_video!.ended;

@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma'
 import { ApiResponse, UserProfile } from '@/types/api'
 import { withAuth, AuthenticatedRequest, handleApiError } from '@/lib/middleware'
 import { AuthService } from '@/lib/auth'
+import { isProfileUnavailable } from '@/lib/services/userSafety'
 
 async function handler(
   request: AuthenticatedRequest,
@@ -23,7 +24,7 @@ async function handler(
       select: { id: true, isPrivate: true },
     })
 
-    if (!targetUser) {
+    if (!targetUser || (await isProfileUnavailable(targetUserId, currentUserId))) {
       return NextResponse.json<ApiResponse>(
         {
           success: false,

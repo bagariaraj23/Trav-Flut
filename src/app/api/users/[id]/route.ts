@@ -5,6 +5,7 @@ import { updateProfileSchema } from "@/lib/validation";
 import { ApiResponse, UserProfile, UserStats } from "@/types/api";
 import { handlePrismaUniqueError } from "@/lib/prismaErrors";
 import { PerformanceMonitor } from "@/lib/monitoring";
+import { isProfileUnavailable } from "@/lib/services/userSafety";
 import type { Prisma } from "@prisma/client";
 
 // Get user profile
@@ -43,7 +44,7 @@ export async function GET(
       },
     });
 
-    if (!user) {
+    if (!user || (await isProfileUnavailable(userId, currentUserId))) {
       return NextResponse.json<ApiResponse>(
         {
           success: false,

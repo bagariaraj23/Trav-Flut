@@ -2,6 +2,7 @@ import type { ConversationType, Prisma } from '@prisma/client'
 import { v4 as uuid } from 'uuid'
 import { prisma } from '@/lib/prisma'
 import { NotFoundError, ValidationError, AuthorizationError } from '@/lib/errors'
+import { assertCanDirectMessage, assertCreatorMayAdd } from '@/lib/services/userSafety'
 import { publishChatEvent, type ChatMessagePayload } from '@/lib/chat-events'
 import { LRUCache } from '@/lib/cache'
 
@@ -133,6 +134,7 @@ export async function createConversation(
     if (otherId === userId) throw new ValidationError('Cannot create DM with yourself')
     const existing = await findExistingDM(userId, otherId)
     if (existing) return existing
+    await assertCanDirectMessage(userId, otherId)
     const conv = await prisma.conversation.create({
       data: {
         type: 'DM',
@@ -152,10 +154,14 @@ export async function createConversation(
   const allIds = Array.from(new Set([userId, ...participantIds]))
   if (allIds.length < 2) throw new ValidationError('Group must have at least 2 participants')
   if (allIds.length > 16) throw new ValidationError('Group cannot have more than 16 participants')
+  for (const memberId of allIds) {
+    if (memberId !== userId) await assertCreatorMayAdd(userId, memberId)
+  }
   const conv = await prisma.conversation.create({
     data: {
       type: 'GROUP',
       name: name ?? null,
+      createdById: userId,
       participants: {
         create: allIds.map((id) => ({
           userId: id,
@@ -777,6 +783,7 @@ export async function sendMessage(
   ])
 
   if (!participant || participant.leftAt) throw new AuthorizationError('Not a participant')
+  await assertDmMessagingAllowed(conversationId, userId)
   if (replyToMessageId) {
     if (
       !replyTarget ||
@@ -1005,6 +1012,7 @@ export async function editMessage(
   ])
 
   if (!participant || participant.leftAt) throw new AuthorizationError('Not a participant')
+  await assertDmMessagingAllowed(conversationId, userId)
   if (!existing || existing.conversationId !== conversationId) {
     throw new NotFoundError('Message not found')
   }
@@ -1187,6 +1195,19 @@ export async function addGroupParticipant(
   if (!adminParticipant) throw new AuthorizationError('Not a participant')
   if (adminParticipant.role !== 'ADMIN') throw new AuthorizationError('Only admins can add participants')
 
+  if (conv.type === 'GROUP' && conv.createdById === adminUserId) {
+    await assertCreatorMayAdd(adminUserId, targetUserId)
+  }
+  if (conv.type === 'TRIP' && conv.tripId) {
+    const trip = await prisma.trip.findUnique({
+      where: { id: conv.tripId },
+      select: { userId: true },
+    })
+    if (trip && trip.userId === adminUserId) {
+      await assertCreatorMayAdd(adminUserId, targetUserId)
+    }
+  }
+
   const existing = conv.participants.find((p) => p.userId === targetUserId)
   if (existing && !existing.leftAt) {
     throw new ValidationError('User is already a participant')
@@ -1347,4 +1368,115 @@ export async function promoteToAdmin(
   })
 
   return await formatConversationSummary(updated!, adminUserId)
+}
+
+async function assertDmMessagingAllowed(
+  conversationId: string,
+  userId: string
+): Promise<void> {
+  const conv = await prisma.conversation.findUnique({
+    where: { id: conversationId },
+    select: {
+      type: true,
+      participants: {
+        where: { leftAt: null },
+        select: { userId: true },
+      },
+    },
+  })
+  if (!conv || conv.type !== 'DM') return
+  const other = conv.participants.find((p) => p.userId !== userId)
+  if (!other) return
+  await assertCanDirectMessage(userId, other.userId)
+}
+
+export type ConversationMediaItem = {
+  id: string
+  url: string
+  type: string
+  publicId: string
+  width: number | null
+  height: number | null
+  duration: number | null
+  messageId: string
+  createdAt: string
+}
+
+export async function listConversationMedia(
+  conversationId: string,
+  userId: string,
+  options: { limit?: number; cursor?: string } = {}
+): Promise<{
+  items: ConversationMediaItem[]
+  nextCursor: string | null
+  hasMore: boolean
+}> {
+  const limit = Math.min(Math.max(options.limit ?? 24, 1), 50)
+  const member = await prisma.conversationParticipant.findUnique({
+    where: { conversationId_userId: { conversationId, userId } },
+    select: { leftAt: true },
+  })
+  if (!member || member.leftAt) throw new AuthorizationError('Not a participant')
+
+  let cursorCreatedAt: Date | null = null
+  let cursorId: string | null = null
+  if (options.cursor) {
+    const cursorMedia = await prisma.media.findUnique({
+      where: { id: options.cursor },
+      select: {
+        id: true,
+        createdAt: true,
+        chatMessage: { select: { conversationId: true, deletedAt: true } },
+      },
+    })
+    if (
+      !cursorMedia?.chatMessage ||
+      cursorMedia.chatMessage.conversationId !== conversationId ||
+      cursorMedia.chatMessage.deletedAt
+    ) {
+      throw new ValidationError('Invalid media cursor')
+    }
+    cursorCreatedAt = cursorMedia.createdAt
+    cursorId = cursorMedia.id
+  }
+
+  const rows = await prisma.media.findMany({
+    where: {
+      type: { in: ['IMAGE', 'GIF', 'VIDEO'] },
+      chatMessage: { conversationId, deletedAt: null },
+      ...(cursorCreatedAt && cursorId
+        ? {
+            OR: [
+              { createdAt: { lt: cursorCreatedAt } },
+              { createdAt: cursorCreatedAt, id: { lt: cursorId } },
+            ],
+          }
+        : {}),
+    },
+    orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+    take: limit + 1,
+    include: {
+      chatMessage: { select: { id: true, createdAt: true } },
+    },
+  })
+
+  const hasMore = rows.length > limit
+  const slice = hasMore ? rows.slice(0, limit) : rows
+  return {
+    items: slice.map((row) => ({
+      id: row.id,
+      url: row.url,
+      type: row.type,
+      publicId: row.publicId,
+      width: row.width,
+      height: row.height,
+      duration: row.duration,
+      messageId: row.chatMessage?.id ?? '',
+      createdAt: row.chatMessage
+        ? toISODate(row.chatMessage.createdAt)
+        : toISODate(row.createdAt),
+    })),
+    nextCursor: hasMore && slice.length > 0 ? slice[slice.length - 1].id : null,
+    hasMore,
+  }
 }

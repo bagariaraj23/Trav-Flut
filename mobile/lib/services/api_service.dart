@@ -9,6 +9,7 @@ import 'package:tripthread/models/trip_join_request.dart';
 import 'package:tripthread/models/place.dart';
 import 'package:tripthread/models/unified_notification.dart';
 import 'package:tripthread/models/chat_conversation.dart';
+import 'package:tripthread/models/chat_media_item.dart';
 import 'package:tripthread/models/chat_message.dart';
 import 'package:tripthread/services/storage_service.dart';
 import 'package:tripthread/services/token_refresh_manager.dart';
@@ -3113,6 +3114,113 @@ class ApiService {
         return ApiResponse(success: true, data: c);
       }
       return ApiResponse(success: false, error: response.data['error'] ?? 'Failed to promote participant');
+    } on DioException catch (e) {
+      return ApiResponse(
+        success: false,
+        error: e.response?.data['error'] ?? 'Network error',
+      );
+    } catch (e) {
+      return ApiResponse(success: false, error: 'An unexpected error occurred');
+    }
+  }
+
+  Future<ApiResponse<ChatMediaPage>> getConversationMedia(
+    String conversationId, {
+    int? limit,
+    String? cursor,
+  }) async {
+    try {
+      final query = <String, dynamic>{};
+      if (limit != null) query['limit'] = limit;
+      if (cursor != null) query['cursor'] = cursor;
+      final response = await _dio.get(
+        '/chat/conversations/$conversationId/media',
+        queryParameters: query.isEmpty ? null : query,
+      );
+      if (response.data['success'] == true && response.data['data'] != null) {
+        return ApiResponse(
+          success: true,
+          data: ChatMediaPage.fromJson(response.data['data'] as Map<String, dynamic>),
+        );
+      }
+      return ApiResponse(success: false, error: response.data['error'] ?? 'Failed to load media');
+    } on DioException catch (e) {
+      return ApiResponse(
+        success: false,
+        error: e.response?.data['error'] ?? 'Network error',
+      );
+    } catch (e) {
+      return ApiResponse(success: false, error: 'An unexpected error occurred');
+    }
+  }
+
+  Future<ApiResponse<SafetyPeoplePage>> listSafetyPeople({
+    required String action,
+    String? cursor,
+  }) async {
+    try {
+      final response = await _dio.get(
+        '/users/me/safety',
+        queryParameters: {
+          'action': action,
+          if (cursor != null) 'cursor': cursor,
+        },
+      );
+      if (response.data['success'] == true && response.data['data'] != null) {
+        return ApiResponse(
+          success: true,
+          data: SafetyPeoplePage.fromJson(response.data['data'] as Map<String, dynamic>),
+        );
+      }
+      return ApiResponse(success: false, error: response.data['error'] ?? 'Failed to load');
+    } on DioException catch (e) {
+      return ApiResponse(
+        success: false,
+        error: e.response?.data['error'] ?? 'Network error',
+      );
+    } catch (e) {
+      return ApiResponse(success: false, error: 'An unexpected error occurred');
+    }
+  }
+
+  Future<ApiResponse<Map<String, dynamic>>> getSafetyPair(String userId) async {
+    try {
+      final response = await _dio.get('/users/$userId/safety');
+      if (response.data['success'] == true && response.data['data'] != null) {
+        return ApiResponse(
+          success: true,
+          data: Map<String, dynamic>.from(response.data['data'] as Map),
+        );
+      }
+      return ApiResponse(success: false, error: response.data['error'] ?? 'Failed to load');
+    } on DioException catch (e) {
+      return ApiResponse(
+        success: false,
+        error: e.response?.data['error'] ?? 'Network error',
+      );
+    } catch (e) {
+      return ApiResponse(success: false, error: 'An unexpected error occurred');
+    }
+  }
+
+  Future<ApiResponse<void>> setSafety(String userId, String action) async {
+    try {
+      await _dio.put('/users/$userId/safety', data: {'action': action});
+      return const ApiResponse(success: true);
+    } on DioException catch (e) {
+      return ApiResponse(
+        success: false,
+        error: e.response?.data['error'] ?? 'Network error',
+      );
+    } catch (e) {
+      return ApiResponse(success: false, error: 'An unexpected error occurred');
+    }
+  }
+
+  Future<ApiResponse<void>> clearSafety(String userId) async {
+    try {
+      await _dio.delete('/users/$userId/safety');
+      return const ApiResponse(success: true);
     } on DioException catch (e) {
       return ApiResponse(
         success: false,

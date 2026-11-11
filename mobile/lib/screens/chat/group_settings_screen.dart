@@ -10,6 +10,7 @@ import 'package:tripthread/utils/app_layout.dart';
 import 'package:tripthread/utils/app_theme.dart';
 import 'package:tripthread/utils/chat_navigation.dart';
 import 'package:tripthread/widgets/chat/chat_avatar.dart';
+import 'package:tripthread/widgets/chat/conversation_media_strip.dart';
 import 'package:tripthread/services/api_service.dart';
 
 class GroupSettingsScreen extends StatefulWidget {
@@ -415,6 +416,7 @@ class _GroupSettingsScreenState extends State<GroupSettingsScreen> {
                   ),
             ),
             const SizedBox(height: 24),
+            ConversationMediaStrip(conversationId: widget.conversationId),
             const Divider(),
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
