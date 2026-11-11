@@ -56,10 +56,13 @@ class _FinalPostEditScreenState extends State<FinalPostEditScreen> {
     if (response.success && response.data != null) {
       final trip = response.data!;
       final authId = context.read<AuthProvider>().currentUser?.id;
-      final isOwner = authId != null && trip.userId == authId;
+      final isMember = authId != null &&
+          (trip.userId == authId ||
+              (trip.participants?.any((participant) => participant.userId == authId) ??
+                  false));
       final entries = await _loadAllThreadEntries(tripService);
       if (!mounted) return;
-      context.read<FinalPostProvider>().setTripOwner(isOwner);
+      context.read<FinalPostProvider>().setCanEdit(isMember);
       setState(() {
         _trip = trip;
         _threadEntries = entries;
@@ -68,7 +71,7 @@ class _FinalPostEditScreenState extends State<FinalPostEditScreen> {
       });
     } else {
       if (mounted) {
-        context.read<FinalPostProvider>().setTripOwner(false);
+        context.read<FinalPostProvider>().setCanEdit(false);
       }
       setState(() {
         _tripError = response.error ?? 'Failed to load trip details';
@@ -147,7 +150,7 @@ class _FinalPostEditScreenState extends State<FinalPostEditScreen> {
     _syncControllers(draft);
 
     final isBusy = provider.isLoading || draft == null || _isTripLoading;
-    final canEditContent = draft != null && provider.isTripOwner;
+    final canEditContent = draft != null && provider.canEdit;
 
     return Scaffold(
       appBar: AppBar(
@@ -365,7 +368,7 @@ class _FinalPostEditScreenState extends State<FinalPostEditScreen> {
                 ),
                 tooltip: editable
                     ? 'Edit $title'
-                    : 'Only the trip owner can edit',
+                    : 'Only you can edit your final post',
                 onPressed: editable ? onToggleEdit : null,
               )
             ],
@@ -399,7 +402,7 @@ class _FinalPostEditScreenState extends State<FinalPostEditScreen> {
   Widget _buildMediaSelector(
       FinalPostProvider provider, TripFinalPost draft) {
     final mediaItems = _mediaItems;
-    final locked = !provider.isTripOwner;
+    final locked = !provider.canEdit;
 
     return Card(
       child: Padding(
@@ -430,20 +433,21 @@ class _FinalPostEditScreenState extends State<FinalPostEditScreen> {
               ],
             ),
             const SizedBox(height: 12),
-            if (locked)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 8),
-                child: Text(
-                  'Only the trip owner can change photos.',
-                  style: Theme.of(context)
-                      .textTheme
-                      .bodySmall
-                      ?.copyWith(color: Theme.of(context).hintColor),
-                ),
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Text(
+                locked
+                    ? 'Only you can change the photos on your final post.'
+                    : 'The first draft uses photos you uploaded and photos you are in. You can add any photo from the trip.',
+                style: Theme.of(context)
+                    .textTheme
+                    .bodySmall
+                    ?.copyWith(color: Theme.of(context).hintColor),
               ),
+            ),
             if (mediaItems.isEmpty)
               const Text(
-                  'Add photos to your trip thread to curate them here.')
+                  'Photos from this trip show up here.')
             else
               SizedBox(
                 height: 110,
@@ -578,7 +582,7 @@ class _FinalPostEditScreenState extends State<FinalPostEditScreen> {
   Widget _buildBottomBar(
       BuildContext context, FinalPostProvider provider, TripFinalPost draft) {
     if (draft.isPublished) {
-      if (!provider.isTripOwner) {
+      if (!provider.canEdit) {
         return SafeArea(
           child: Padding(
             padding: const EdgeInsets.all(16),

@@ -78,28 +78,22 @@ export async function GET(request: NextRequest) {
           const whereClause: any = {
             isPublished: true,
             OR: [
-              // Posts from current user (always show own posts)
+              // The viewer's own published recaps
               {
-                trip: {
-                  userId: currentUserId,
-                },
+                userId: currentUserId,
               },
-              // Posts from followed users
+              // Recaps from people the viewer follows
               ...(followedUserIds.length > 0
                 ? [
                     {
-                      trip: {
-                        userId: { in: followedUserIds },
-                      },
+                      userId: { in: followedUserIds },
                     },
                   ]
                 : []),
-              // Posts from public users (not private)
+              // Recaps from public profiles
               {
-                trip: {
-                  user: {
-                    isPrivate: false,
-                  },
+                user: {
+                  isPrivate: false,
                 },
               },
             ],
@@ -139,6 +133,19 @@ export async function GET(request: NextRequest) {
             prisma.tripFinalPost.findMany({
               where: cursorWhere,
               include: {
+                user: {
+                  select: {
+                    id: true,
+                    email: true,
+                    username: true,
+                    name: true,
+                    avatarUrl: true,
+                    bio: true,
+                    isPrivate: true,
+                    createdAt: true,
+                    updatedAt: true,
+                  },
+                },
                 trip: {
                   include: {
                     user: {
@@ -187,6 +194,7 @@ export async function GET(request: NextRequest) {
           })[] = finalPosts.map((post) => ({
             id: post.id,
             tripId: post.tripId,
+            userId: post.userId,
             summaryText: post.summaryText,
             curatedMedia: post.curatedMedia,
             caption: post.caption ?? undefined,
@@ -202,6 +210,17 @@ export async function GET(request: NextRequest) {
             commentCount: post.commentCount,
             shareCount: post.shareCount,
             hasLiked: likeStatusMap[post.id] || false,
+            user: post.user
+              ? {
+                  ...post.user,
+                  username: post.user.username ?? undefined,
+                  name: post.user.name ?? undefined,
+                  avatarUrl: post.user.avatarUrl ?? undefined,
+                  bio: post.user.bio ?? undefined,
+                  createdAt: post.user.createdAt.toISOString(),
+                  updatedAt: post.user.updatedAt.toISOString(),
+                }
+              : undefined,
             trip: omitHiddenTripSpend({
               ...post.trip,
               startDate: post.trip.startDate?.toISOString() || undefined,

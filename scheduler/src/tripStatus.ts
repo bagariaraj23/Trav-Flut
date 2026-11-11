@@ -69,53 +69,85 @@ export async function updateTripStatuses(
   for (const trip of tripsToEnd) {
     try {
       await prisma.$transaction(async (tx) => {
-        // Check if final post already exists (inside transaction)
-        const existingFinalPost = await tx.tripFinalPost.findUnique({
-          where: { tripId: trip.id },
-        });
-
-        if (!existingFinalPost) {
-          // Generate final post using inline implementation
-          // This matches TripFinalizerService.generateFinalPost logic for consistency
-          // Fetch full trip with thread entries for summary (inside tx)
-          const tripData = await tx.trip.findUnique({
-            where: { id: trip.id },
-            include: {
-              threadEntries: {
-                where: { type: "MEDIA", mediaId: { not: null } },
-                include: { media: true },
-                orderBy: { createdAt: "asc" },
+        // Personal draft for the owner and each participant. Kept inline so the
+        // scheduler build does not import the API service.
+        const tripData = await tx.trip.findUnique({
+          where: { id: trip.id },
+          include: {
+            participants: { select: { userId: true } },
+            threadEntries: {
+              include: {
+                media: true,
+                taggedUsers: { select: { taggedUserId: true } },
               },
+              orderBy: { createdAt: "asc" },
             },
-          });
-          if (!tripData) throw new Error("Trip not found");
+          },
+        });
+        if (!tripData) throw new Error("Trip not found");
 
-          // Fetch all thread entries for full summary
-          const allThreadEntries = await tx.tripThreadEntry.findMany({
-            where: { tripId: trip.id },
-            orderBy: { createdAt: "asc" },
-          });
-          const textEntries = allThreadEntries.filter(
+        const memberIds = [
+          ...new Set([
+            tripData.userId,
+            ...(tripData.participants ?? []).map(
+              (participant) => participant.userId
+            ),
+          ]),
+        ];
+        const existingPosts = await tx.tripFinalPost.findMany({
+          where: { tripId: trip.id, userId: { in: memberIds } },
+          select: { userId: true },
+        });
+        const alreadyDrafted = new Set(existingPosts.map((post) => post.userId));
+        const entries = tripData.threadEntries ?? [];
+        const titleTrim = trip.title?.trim() ?? "";
+        const destLabel =
+          trip.destinations?.length > 0
+            ? trip.destinations.join(", ")
+            : titleTrim || "your trip";
+
+        for (const memberId of memberIds) {
+          if (alreadyDrafted.has(memberId)) continue;
+          const involvesMember = (entry: (typeof entries)[number]) =>
+            entry.authorId === memberId ||
+            entry.media?.uploadedById === memberId ||
+            (entry.taggedUsers ?? []).some(
+              (tag) => tag.taggedUserId === memberId
+            );
+          const ownEntries = entries.filter(
+            (entry) =>
+              entry.authorId === memberId ||
+              entry.media?.uploadedById === memberId
+          );
+          const photoEntries = [
+            ...ownEntries,
+            ...entries.filter(
+              (entry) =>
+                involvesMember(entry) &&
+                entry.authorId !== memberId &&
+                entry.media?.uploadedById !== memberId
+            ),
+          ];
+          const textEntries = ownEntries.filter(
             (entry) => entry.type === "TEXT" && entry.contentText
           );
-          const mediaEntries = (tripData.threadEntries || []).filter(
-            (entry) => entry.type === "MEDIA" && entry.mediaId
+          const mediaEntries = photoEntries.filter(
+            (entry) =>
+              entry.media?.url &&
+              (entry.media.type == null || entry.media.type === "IMAGE")
           );
-          const locationEntries = allThreadEntries.filter(
+          const locationEntries = ownEntries.filter(
             (entry) => entry.type === "LOCATION" && entry.locationName
           );
-          const titleTrim = trip.title?.trim() ?? "";
-          const destLabel =
-            trip.destinations?.length > 0
-              ? trip.destinations.join(", ")
-              : titleTrim || "your trip";
-          let summaryText = `Amazing trip to ${destLabel}! `;
+          let summaryText = `Your trip to ${destLabel}! `;
           if (locationEntries.length > 0)
-            summaryText += `Visited ${locationEntries.length} amazing places. `;
+            summaryText += `You visited ${locationEntries.length} places. `;
           if (textEntries.length > 0)
-            summaryText += `Shared ${textEntries.length} memorable moments. `;
+            summaryText += `You shared ${textEntries.length} notes. `;
           if (mediaEntries.length > 0)
-            summaryText += `Captured ${mediaEntries.length} beautiful memories.`;
+            summaryText += `You kept ${mediaEntries.length} photos.`;
+          else
+            summaryText += "Add the photos you took before you publish.";
           const curatedMedia = mediaEntries
             .slice(0, 6)
             .map((entry) => entry.media?.url)
@@ -123,6 +155,7 @@ export async function updateTripStatuses(
           await tx.tripFinalPost.create({
             data: {
               tripId: trip.id,
+              userId: memberId,
               summaryText,
               curatedMedia,
               caption: `My trip to ${titleTrim || destLabel} was incredible! 🌟`,

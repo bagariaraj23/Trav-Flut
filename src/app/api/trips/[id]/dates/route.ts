@@ -29,8 +29,9 @@ async function handler(
         startDate: true,
         endDate: true,
         scheduleTimezone: true,
-        finalPost: {
+        finalPosts: {
           select: { id: true },
+          take: 1,
         },
       },
     });
@@ -41,9 +42,9 @@ async function handler(
     }
     const extending = body.extend === true || trip.status === TripStatus.ENDED;
     if (trip.status === TripStatus.ENDED) {
-      if (trip.finalPost) {
+      if (trip.finalPosts.length > 0) {
         throw new ValidationError(
-          "Cannot extend trip after final post has been generated"
+          "Cannot extend trip after a final post has been generated"
         );
       }
       if (body.endDate == null) {

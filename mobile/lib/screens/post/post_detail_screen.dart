@@ -166,7 +166,7 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
     final uid = context.watch<AuthProvider>().currentUser?.id;
     final isOwner = _post != null &&
         uid != null &&
-        (_post!.trip?.userId == uid || _post!.trip?.user?.id == uid);
+        _post!.displayAuthorId == uid;
 
     return Scaffold(
       appBar: AppBar(
@@ -252,9 +252,9 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
               children: [
                 ChatAvatar(
                   radius: 20,
-                  avatarUrl: post.trip?.user?.avatarUrl,
-                  username: post.trip?.user?.username,
-                  name: post.trip?.user?.name,
+                  avatarUrl: post.displayAuthor?.avatarUrl,
+                  username: post.displayAuthor?.username,
+                  name: post.displayAuthor?.name,
                 ),
                 const SizedBox(width: 12),
                 Expanded(
@@ -262,8 +262,8 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        post.trip?.user?.name ??
-                            post.trip?.user?.username ??
+                        post.displayAuthor?.name ??
+                            post.displayAuthor?.username ??
                             'Travel Story',
                         style: Theme.of(context)
                             .textTheme

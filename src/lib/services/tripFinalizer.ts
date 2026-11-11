@@ -18,6 +18,21 @@ const MIN_SUMMARY_LENGTH = 50;
 const MIN_MEDIA_COUNT = 1;
 const MAX_MEDIA_COUNT = 10;
 
+const finalPostSelect = {
+  id: true,
+  tripId: true,
+  userId: true,
+  summaryText: true,
+  curatedMedia: true,
+  caption: true,
+  coverMediaUrl: true,
+  generationStatus: true,
+  isPublished: true,
+  publishedAt: true,
+  createdAt: true,
+  updatedAt: true,
+} as const;
+
 type FinalPostUpdates = {
   summaryText?: string;
   curatedMedia?: string[];
@@ -25,42 +40,29 @@ type FinalPostUpdates = {
   coverMediaUrl?: string | null;
 };
 
+type DbClient = PrismaTransactionClient | typeof prisma;
+
 export class TripFinalizerService {
   /**
-   * Generate final post for a trip. Can work with or without a transaction client.
-   * @param tripId - The trip ID
-   * @param userId - The user ID (optional for scheduler/system operations)
-   * @param tx - Optional transaction client for atomic operations (same type as prisma for extended client compatibility)
+   * Draft a personal final post for one member.
+   * Photos come from media that member uploaded or posted. Calling again returns the existing draft.
    */
   static async generateFinalPost(
     tripId: string,
-    userId?: string,
-    tx?: PrismaTransactionClient | typeof prisma
+    userId: string,
+    tx?: DbClient
   ) {
     const db = tx || prisma;
+    await this.assertCanAuthor(db, tripId, userId);
 
-    // Check if final post already exists (inside transaction if provided)
     const existing = await db.tripFinalPost.findUnique({
-      where: { tripId },
-      select: {
-        id: true,
-        tripId: true,
-        summaryText: true,
-        curatedMedia: true,
-        caption: true,
-        coverMediaUrl: true,
-        generationStatus: true,
-        isPublished: true,
-        publishedAt: true,
-        createdAt: true,
-        updatedAt: true,
-      },
+      where: { tripId_userId: { tripId, userId } },
+      select: finalPostSelect,
     });
     if (existing) {
       return existing;
     }
 
-    // Fetch trip with all necessary data (inside transaction if provided)
     const trip = await db.trip.findUnique({
       where: { id: tripId },
       include: {
@@ -68,6 +70,7 @@ export class TripFinalizerService {
           include: {
             media: true,
             place: true,
+            taggedUsers: { select: { taggedUserId: true } },
           },
           orderBy: { createdAt: "asc" },
         },
@@ -79,61 +82,60 @@ export class TripFinalizerService {
       throw new NotFoundError("Trip not found");
     }
 
-    // Only check authorization if userId is provided (skip for scheduler)
-    if (userId && trip.userId !== userId) {
-      throw new AuthorizationError("Only the trip owner can finalize the trip");
-    }
-
     const typedTrip = trip as TripForFinalizer;
+    const summaryText = buildSummary(typedTrip, userId);
+    const curatedMedia = selectCuratedMedia(typedTrip, userId);
+    const coverMediaUrl = curatedMedia[0] ?? null;
+    const caption = generateDefaultCaption(typedTrip, userId);
 
-    const summaryText = buildSummary(typedTrip);
-    const curatedMedia = selectCuratedMedia(typedTrip);
-    const coverMediaUrl =
-      curatedMedia[0] ?? typedTrip.media.find((m) => !!m.url)?.url ?? null;
-    const caption = generateDefaultCaption(typedTrip);
-
-    // Create final post (inside transaction if provided)
     return db.tripFinalPost.create({
       data: {
         tripId,
+        userId,
         summaryText,
         curatedMedia,
         caption,
         coverMediaUrl,
         generationStatus: GenerationStatus.READY,
       },
-      select: {
-        id: true,
-        tripId: true,
-        summaryText: true,
-        curatedMedia: true,
-        caption: true,
-        coverMediaUrl: true,
-        generationStatus: true,
-        isPublished: true,
-        publishedAt: true,
-        createdAt: true,
-        updatedAt: true,
-      },
+      select: finalPostSelect,
     });
   }
 
-  static async getFinalPost(tripId: string) {
-    const finalPost = await prisma.tripFinalPost.findUnique({
-      where: { tripId },
+  /** Draft a personal post for the owner and every current participant. */
+  static async generateFinalPostsForMembers(tripId: string, tx?: DbClient) {
+    const db = tx || prisma;
+    const trip = await db.trip.findUnique({
+      where: { id: tripId },
       select: {
-        id: true,
-        tripId: true,
-        summaryText: true,
-        curatedMedia: true,
-        caption: true,
-        coverMediaUrl: true,
-        generationStatus: true,
-        isPublished: true,
-        publishedAt: true,
-        createdAt: true,
-        updatedAt: true,
+        userId: true,
+        participants: { select: { userId: true } },
       },
+    });
+
+    if (!trip) {
+      throw new NotFoundError("Trip not found");
+    }
+
+    const memberIds = [
+      ...new Set([
+        trip.userId,
+        ...trip.participants.map((participant) => participant.userId),
+      ]),
+    ];
+    const posts = [];
+    for (const memberId of memberIds) {
+      posts.push(await this.generateFinalPost(tripId, memberId, db));
+    }
+    return posts;
+  }
+
+  static async getFinalPost(tripId: string, userId: string) {
+    await this.assertCanAuthor(prisma, tripId, userId);
+
+    const finalPost = await prisma.tripFinalPost.findUnique({
+      where: { tripId_userId: { tripId, userId } },
+      select: finalPostSelect,
     });
 
     if (!finalPost) {
@@ -143,15 +145,21 @@ export class TripFinalizerService {
     return finalPost;
   }
 
-  static async updateFinalPost(tripId: string, updates: FinalPostUpdates) {
-    // Wrap in transaction to prevent race conditions
+  static async updateFinalPost(
+    tripId: string,
+    userId: string,
+    updates: FinalPostUpdates
+  ) {
     return await prisma.$transaction(async (tx) => {
-      // Check if final post exists and is not published (inside transaction)
+      await this.assertCanAuthor(tx, tripId, userId);
+
       const finalPost = await tx.tripFinalPost.findUnique({
-        where: { tripId },
+        where: { tripId_userId: { tripId, userId } },
         select: {
           id: true,
           isPublished: true,
+          curatedMedia: true,
+          coverMediaUrl: true,
         },
       });
 
@@ -160,7 +168,6 @@ export class TripFinalizerService {
       }
 
       const wasPublished = finalPost.isPublished;
-
       const data: FinalPostUpdates = {};
 
       if (typeof updates.summaryText === "string") {
@@ -175,9 +182,6 @@ export class TripFinalizerService {
         if (data.curatedMedia.length > MAX_MEDIA_COUNT) {
           data.curatedMedia = data.curatedMedia.slice(0, MAX_MEDIA_COUNT);
         }
-        if (!data.curatedMedia.length && data.summaryText?.length) {
-          // allow text-only drafts
-        }
       }
 
       if (updates.caption !== undefined) {
@@ -190,9 +194,8 @@ export class TripFinalizerService {
         data.coverMediaUrl = data.curatedMedia[0];
       }
 
-      // Update final post (inside transaction)
       return tx.tripFinalPost.update({
-        where: { tripId },
+        where: { tripId_userId: { tripId, userId } },
         data: {
           ...data,
           generationStatus: wasPublished
@@ -200,137 +203,130 @@ export class TripFinalizerService {
             : GenerationStatus.READY,
           updatedAt: new Date(),
         },
-        select: {
-          id: true,
-          tripId: true,
-          summaryText: true,
-          curatedMedia: true,
-          caption: true,
-          coverMediaUrl: true,
-          generationStatus: true,
-          isPublished: true,
-          publishedAt: true,
-          createdAt: true,
-          updatedAt: true,
-        },
+        select: finalPostSelect,
       });
     });
   }
 
   static async publishFinalPost(tripId: string, userId: string) {
-    // Wrap in transaction to prevent race conditions
     return await prisma.$transaction(async (tx) => {
-      // Fetch trip and final post (inside transaction)
-      const trip = await tx.trip.findUnique({
-        where: { id: tripId },
+      await this.assertCanAuthor(tx, tripId, userId);
+
+      const finalPost = await tx.tripFinalPost.findUnique({
+        where: { tripId_userId: { tripId, userId } },
         select: {
           id: true,
-          userId: true,
-          finalPost: {
-            select: {
-              id: true,
-              isPublished: true,
-              summaryText: true,
-              curatedMedia: true,
-              coverMediaUrl: true,
-            },
-          },
+          isPublished: true,
+          summaryText: true,
+          curatedMedia: true,
+          coverMediaUrl: true,
         },
       });
 
-      if (!trip) {
-        throw new NotFoundError("Trip not found");
-      }
-
-      if (trip.userId !== userId) {
-        throw new AuthorizationError("Only the trip owner can publish");
-      }
-
-      if (!trip.finalPost) {
+      if (!finalPost) {
         throw new NotFoundError("Final post not found");
       }
 
-      if (trip.finalPost.isPublished) {
+      if (finalPost.isPublished) {
         throw new ConflictError("Final post has already been published");
       }
 
-      if (!trip.finalPost.summaryText?.trim()) {
+      if (!finalPost.summaryText?.trim()) {
         throw new ValidationError("Summary text is required to publish");
       }
 
-      if (trip.finalPost.summaryText.trim().length < MIN_SUMMARY_LENGTH) {
+      if (finalPost.summaryText.trim().length < MIN_SUMMARY_LENGTH) {
         throw new ValidationError(
           `Summary must be at least ${MIN_SUMMARY_LENGTH} characters`
         );
       }
 
       if (
-        (!trip.finalPost.curatedMedia ||
-          trip.finalPost.curatedMedia.length < MIN_MEDIA_COUNT) &&
-        !trip.finalPost.coverMediaUrl
+        (!finalPost.curatedMedia ||
+          finalPost.curatedMedia.length < MIN_MEDIA_COUNT) &&
+        !finalPost.coverMediaUrl
       ) {
         throw new ValidationError(
-          `Select at least ${MIN_MEDIA_COUNT} media item before publishing`
+          `Select at least ${MIN_MEDIA_COUNT} photo before publishing`
         );
       }
 
-      // Update final post (inside transaction)
       return tx.tripFinalPost.update({
-        where: { tripId },
+        where: { tripId_userId: { tripId, userId } },
         data: {
           isPublished: true,
           publishedAt: new Date(),
           generationStatus: GenerationStatus.PUBLISHED,
           updatedAt: new Date(),
         },
-        select: {
-          id: true,
-          tripId: true,
-          summaryText: true,
-          curatedMedia: true,
-          caption: true,
-          coverMediaUrl: true,
-          generationStatus: true,
-          isPublished: true,
-          publishedAt: true,
-          createdAt: true,
-          updatedAt: true,
-        },
+        select: finalPostSelect,
       });
     });
   }
 
-  /** Owner only. Removes final post row and engagement (likes, comments, shares, notifications). */
+  /** The author removes their own post and its likes, comments, shares, and notifications. */
   static async deleteFinalPost(tripId: string, userId: string) {
     await prisma.$transaction(async (tx) => {
-      const trip = await tx.trip.findUnique({
-        where: { id: tripId },
-        select: {
-          userId: true,
-          finalPost: { select: { id: true } },
-        },
+      await this.assertCanAuthor(tx, tripId, userId);
+
+      const finalPost = await tx.tripFinalPost.findUnique({
+        where: { tripId_userId: { tripId, userId } },
+        select: { id: true },
       });
 
-      if (!trip) {
-        throw new NotFoundError("Trip not found");
-      }
-
-      if (trip.userId !== userId) {
-        throw new AuthorizationError(
-          "Only the trip owner can delete the final post"
-        );
-      }
-
-      if (!trip.finalPost) {
+      if (!finalPost) {
         throw new NotFoundError("Final post not found");
       }
 
-      await deleteEngagementForTripFinalPost(tx, trip.finalPost.id);
+      await deleteEngagementForTripFinalPost(tx, finalPost.id);
 
       await tx.tripFinalPost.delete({
-        where: { tripId },
+        where: { tripId_userId: { tripId, userId } },
       });
     });
+  }
+
+  /**
+   * The trip owner, a current participant, or someone who already has a post
+   * on this trip (for example after leaving) can manage that person's post.
+   */
+  private static async assertCanAuthor(
+    db: DbClient,
+    tripId: string,
+    userId: string
+  ) {
+    const trip = await db.trip.findUnique({
+      where: { id: tripId },
+      select: { id: true, userId: true },
+    });
+
+    if (!trip) {
+      throw new NotFoundError("Trip not found");
+    }
+
+    if (trip.userId === userId) {
+      return;
+    }
+
+    const participant = await db.tripParticipant.findUnique({
+      where: { tripId_userId: { tripId, userId } },
+      select: { id: true },
+    });
+    if (participant) {
+      return;
+    }
+
+    const ownPost = await db.tripFinalPost.findUnique({
+      where: { tripId_userId: { tripId, userId } },
+      select: { id: true },
+    });
+    if (ownPost) {
+      return;
+    }
+
+    throw new AuthorizationError(
+      "Only people on this trip can create their own final post"
+    );
   }
 }
 
@@ -373,7 +369,11 @@ async function deleteEngagementForTripFinalPost(
   });
 }
 
-function buildSummary(trip: TripForFinalizer) {
+function ownEntries(trip: TripForFinalizer, userId: string) {
+  return trip.threadEntries.filter((entry) => entry.authorId === userId);
+}
+
+function buildSummary(trip: TripForFinalizer, userId: string) {
   const durationDays = Math.max(
     1,
     Math.round(
@@ -382,9 +382,10 @@ function buildSummary(trip: TripForFinalizer) {
     ) + 1
   );
   const destinations = trip.destinations ?? [];
+  const entries = ownEntries(trip, userId);
   const locationSet = new Set<string>();
 
-  trip.threadEntries.forEach((entry) => {
+  entries.forEach((entry) => {
     if (entry.place?.name) {
       locationSet.add(entry.place.name);
     } else if (entry.locationName) {
@@ -393,7 +394,7 @@ function buildSummary(trip: TripForFinalizer) {
   });
 
   const highlightedLocations = Array.from(locationSet).slice(0, 3);
-  const textEntries = trip.threadEntries
+  const textEntries = entries
     .filter((entry) => entry.contentText)
     .sort(
       (a, b) =>
@@ -412,73 +413,116 @@ function buildSummary(trip: TripForFinalizer) {
 
   const opening =
     destinations.length === 0
-        ? `${tripTitle || "your trip"} was a ${durationDays}-day adventure.`
-        : `${tripTitle || destinationLabel} was a ${durationDays}-day adventure through ${destinationLabel}.`;
+      ? `${tripTitle || "Your trip"} was your ${durationDays}-day trip.`
+      : `${tripTitle || destinationLabel} was your ${durationDays}-day trip through ${destinationLabel}.`;
 
   const summaryParts = [
     opening,
     highlightedLocations.length
-      ? `Highlights included ${highlightedLocations.join(", ")}.`
-      : undefined,
-    // entryCount
-    //   ? `We shared ${entryCount} moments and saved ${mediaCount} favorite photos along the way.`
-    //   : undefined,
+      ? `Your highlights included ${highlightedLocations.join(", ")}.`
+      : "This recap uses the notes and photos you added yourself.",
     textEntries.join(" "),
   ].filter(Boolean);
 
-  return summaryParts.join(" ").trim();
+  let summary = summaryParts.join(" ").trim();
+  if (summary.length < MIN_SUMMARY_LENGTH) {
+    summary = `${summary} Edit it, keep your own photos, and publish when it feels like yours.`;
+  }
+  return summary.trim();
 }
 
-function selectCuratedMedia(trip: TripForFinalizer) {
-  const mediaEntries = trip.threadEntries
-    .filter(
-      (entry) =>
-        entry.media &&
-        entry.media.type === MediaType.IMAGE &&
-        entry.media.processingStatus !== MediaProcessingStatus.FAILED &&
-        !!entry.media.url
-    )
-    .map((entry) => ({
-      url: entry.media!.url as string,
-      createdAt: entry.createdAt,
-    }));
-
-  if (!mediaEntries.length) {
-    return [];
-  }
-
-  const sorted = mediaEntries.sort(
-    (a, b) => a.createdAt.getTime() - b.createdAt.getTime()
+function selectCuratedMedia(trip: TripForFinalizer, userId: string) {
+  const own = mediaFromEntries(
+    trip.threadEntries.filter((entry) => postedOrUploadedBy(entry, userId))
   );
-  const selected: string[] = [];
-  const perDay = new Set<string>();
-  const extras: string[] = [];
+  const tagged = mediaFromEntries(
+    trip.threadEntries.filter(
+      (entry) =>
+        !postedOrUploadedBy(entry, userId) && entryIncludesUser(entry, userId)
+    )
+  );
 
-  for (const item of sorted) {
-    const dayKey = item.createdAt.toISOString().substring(0, 10);
-    if (
-      !perDay.has(dayKey) &&
-      selected.length < MAX_MEDIA_COUNT
-    ) {
-      selected.push(item.url);
-      perDay.add(dayKey);
-    } else {
-      extras.push(item.url);
-    }
+  const selected = takePhotos(own);
+  for (const url of takePhotos(tagged)) {
+    if (selected.length >= MAX_MEDIA_COUNT) break;
+    if (!selected.includes(url)) selected.push(url);
   }
 
-  for (const url of extras) {
-    if (selected.length >= MAX_MEDIA_COUNT) {
-      break;
-    }
-    selected.push(url);
+  for (const media of trip.media) {
+    if (selected.length >= MAX_MEDIA_COUNT) break;
+    if (media.uploadedById !== userId) continue;
+    const url = usableImageUrl(media);
+    if (url && !selected.includes(url)) selected.push(url);
   }
 
   return selected;
 }
 
-function generateDefaultCaption(trip: TripForFinalizer) {
+function postedOrUploadedBy(entry: ThreadEntryWithExtras, userId: string) {
+  return entry.authorId === userId || entry.media?.uploadedById === userId;
+}
+
+function entryIncludesUser(entry: ThreadEntryWithExtras, userId: string) {
+  return (entry.taggedUsers ?? []).some((tag) => tag.taggedUserId === userId);
+}
+
+function mediaFromEntries(entries: ThreadEntryWithExtras[]) {
+  return entries.flatMap((entry) => {
+    const url = usableImageUrl(entry.media);
+    return url ? [{ url, createdAt: entry.createdAt }] : [];
+  });
+}
+
+function takePhotos(items: { url: string; createdAt: Date }[]) {
+  const selected: string[] = [];
+  const perDay = new Set<string>();
+  const extras: string[] = [];
+  const sorted = [...items].sort(
+    (a, b) => a.createdAt.getTime() - b.createdAt.getTime()
+  );
+
+  for (const item of sorted) {
+    const dayKey = item.createdAt.toISOString().substring(0, 10);
+    if (!perDay.has(dayKey) && selected.length < MAX_MEDIA_COUNT) {
+      selected.push(item.url);
+      perDay.add(dayKey);
+    } else if (!selected.includes(item.url)) {
+      extras.push(item.url);
+    }
+  }
+
+  for (const url of extras) {
+    if (selected.length >= MAX_MEDIA_COUNT) break;
+    if (!selected.includes(url)) selected.push(url);
+  }
+
+  return selected;
+}
+
+function usableImageUrl(
+  media: {
+    url: string | null;
+    type: MediaType;
+    processingStatus: MediaProcessingStatus;
+  } | null
+) {
+  if (
+    !media?.url ||
+    media.type !== MediaType.IMAGE ||
+    media.processingStatus === MediaProcessingStatus.FAILED
+  ) {
+    return null;
+  }
+  return media.url;
+}
+
+function generateDefaultCaption(trip: TripForFinalizer, userId: string) {
+  const ownPlace = ownEntries(trip, userId).find(
+    (entry) => entry.place?.name || entry.locationName
+  );
   const primaryDestination =
+    ownPlace?.place?.name?.trim() ||
+    ownPlace?.locationName?.trim() ||
     trip.destinations[0]?.trim() ||
     trip.title?.trim() ||
     "your trip";
@@ -508,15 +552,21 @@ function sanitizeMedia(urls: string[]) {
     .filter((url): url is string => !!url);
 }
 
+type TripMedia = {
+  url: string | null;
+  type: MediaType;
+  processingStatus: MediaProcessingStatus;
+  uploadedById: string;
+};
+
 type TripForFinalizer = Trip & {
   threadEntries: ThreadEntryWithExtras[];
-  media: {
-    url: string | null;
-  }[];
+  media: TripMedia[];
 };
 
 type ThreadEntryWithExtras = {
   id: string;
+  authorId: string;
   contentText: string | null;
   createdAt: Date;
   mediaId: string | null;
@@ -525,9 +575,10 @@ type ThreadEntryWithExtras = {
     url: string | null;
     type: MediaType;
     processingStatus: MediaProcessingStatus;
+    uploadedById: string;
   } | null;
+  taggedUsers?: { taggedUserId: string }[];
   place: {
     name: string;
   } | null;
 };
-

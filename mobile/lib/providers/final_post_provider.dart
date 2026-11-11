@@ -13,7 +13,7 @@ class FinalPostProvider extends ChangeNotifier {
 
   TripFinalPost? _draft;
   String? _tripId;
-  bool _isTripOwner = false;
+  bool _canEdit = false;
   bool _isLoading = false;
   bool _isSaving = false;
   bool _isPublishing = false;
@@ -21,16 +21,15 @@ class FinalPostProvider extends ChangeNotifier {
   final Map<String, dynamic> _pendingUpdates = {};
 
   TripFinalPost? get draft => _draft;
-  bool get isTripOwner => _isTripOwner;
-  bool get _canEdit => _draft != null && _isTripOwner;
+  bool get canEdit => _canEdit;
   bool get isLoading => _isLoading;
   bool get isSaving => _isSaving;
   bool get isPublishing => _isPublishing;
   String? get error => _error;
 
-  void setTripOwner(bool isOwner) {
-    if (_isTripOwner == isOwner) return;
-    _isTripOwner = isOwner;
+  void setCanEdit(bool value) {
+    if (_canEdit == value) return;
+    _canEdit = value;
     notifyListeners();
   }
 
