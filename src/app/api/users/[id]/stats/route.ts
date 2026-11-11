@@ -8,6 +8,7 @@ import {
   AuthenticatedRequest,
 } from "@/lib/middleware";
 import { PerformanceMonitor, ErrorTracker } from "@/lib/monitoring";
+import { isProfileUnavailable } from "@/lib/services/userSafety";
 
 // Get user statistics (trip, follower, and following counts)
 export async function GET(
@@ -25,6 +26,14 @@ export async function GET(
 
           try {
             const userId = id;
+            if (
+              await isProfileUnavailable(userId, authenticatedReq.user!.userId)
+            ) {
+              return NextResponse.json<ApiResponse>(
+                { success: false, error: "User not found" },
+                { status: 404 }
+              );
+            }
 
             const [followerCount, followingCount, tripCount] = await Promise.all([
               prisma.follow.count({

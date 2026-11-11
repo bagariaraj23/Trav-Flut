@@ -4,6 +4,7 @@ import { AuthService } from "@/lib/auth";
 import { ApiResponse, TripResponse } from "@/types/api";
 import { TripStatus } from "@prisma/client";
 import { omitHiddenTripSpend } from "@/lib/tripSpendVisibility";
+import { isProfileUnavailable } from "@/lib/services/userSafety";
 
 /**
  * Trips visible on a user's profile: trips they own or joined as participant.
@@ -40,7 +41,7 @@ export async function GET(
       select: { id: true, isPrivate: true },
     });
 
-    if (!profileUser) {
+    if (!profileUser || (await isProfileUnavailable(profileUserId, viewerId))) {
       return NextResponse.json<ApiResponse>(
         { success: false, error: "User not found" },
         { status: 404 }

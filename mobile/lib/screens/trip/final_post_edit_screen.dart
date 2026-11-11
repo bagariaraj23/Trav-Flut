@@ -8,6 +8,7 @@ import 'package:tripthread/services/trip_service.dart';
 import 'package:tripthread/utils/app_layout.dart';
 import 'package:tripthread/utils/app_theme.dart';
 import 'package:tripthread/utils/cloudinary_utils.dart';
+import 'package:tripthread/widgets/media/media_seek.dart';
 import 'package:tripthread/utils/trip_time_format.dart';
 
 class FinalPostEditScreen extends StatefulWidget {
@@ -460,9 +461,20 @@ class _FinalPostEditScreenState extends State<FinalPostEditScreen> {
                     final url = media.url;
                     final isSelected = draft.curatedMedia.contains(url);
                     final isCover = draft.coverMediaUrl == url;
+                    final order = draft.curatedMedia.indexOf(url);
                     return GestureDetector(
-                      onTap:
-                          locked ? null : () => provider.toggleMedia(url),
+                      onTap: locked
+                          ? null
+                          : () {
+                              final ok = provider.toggleMedia(url);
+                              if (!ok &&
+                                  provider.error != null &&
+                                  context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(content: Text(provider.error!)),
+                                );
+                              }
+                            },
                       onLongPress:
                           locked ? null : () => _handleSetCover(provider, url),
                       child: Stack(
@@ -476,6 +488,12 @@ class _FinalPostEditScreenState extends State<FinalPostEditScreen> {
                               fit: BoxFit.cover,
                             ),
                           ),
+                          if (isSelected && order >= 0)
+                            Positioned(
+                              top: 8,
+                              left: 8,
+                              child: PhotoOrderBadge(position: order + 1),
+                            ),
                           if (isSelected)
                             Positioned.fill(
                               child: Container(

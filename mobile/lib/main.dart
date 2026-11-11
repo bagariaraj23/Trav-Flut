@@ -46,6 +46,7 @@ import 'package:tripthread/screens/trip/final_post_edit_screen.dart';
 import 'package:tripthread/screens/profile/follow_requests_screen.dart';
 import 'package:tripthread/screens/profile/trip_invitations_screen.dart';
 import 'package:tripthread/screens/settings/permissions_screen.dart';
+import 'package:tripthread/screens/settings/safety_list_screen.dart';
 import 'package:tripthread/screens/settings/settings_screen.dart';
 import 'package:tripthread/screens/engagement/liked_by_screen.dart';
 import 'package:tripthread/screens/notifications/notifications_screen.dart';
@@ -53,7 +54,7 @@ import 'package:tripthread/screens/post/post_detail_screen.dart';
 import 'package:tripthread/screens/chat/conversation_list_screen.dart';
 import 'package:tripthread/screens/chat/chat_screen.dart';
 import 'package:tripthread/screens/chat/new_conversation_screen.dart';
-import 'package:tripthread/screens/chat/group_settings_screen.dart';
+import 'package:tripthread/screens/chat/dm_settings_screen.dart';
 import 'package:tripthread/providers/chat_provider.dart';
 import 'package:tripthread/providers/expense_provider.dart';
 import 'package:tripthread/screens/share/share_link_screen.dart';
@@ -741,7 +742,7 @@ class _TripThreadAppRouterState extends State<TripThreadAppRouter> {
             path: '/chat/:conversationId/settings',
             builder: (context, state) {
               final conversationId = state.pathParameters['conversationId']!;
-              return GroupSettingsScreen(conversationId: conversationId);
+              return ChatSettingsScreen(conversationId: conversationId);
             },
           ),
           GoRoute(
@@ -786,6 +787,10 @@ class _TripThreadAppRouterState extends State<TripThreadAppRouter> {
           GoRoute(
             path: '/settings/permissions',
             builder: (context, state) => const PermissionsScreen(),
+          ),
+          GoRoute(
+            path: '/settings/safety',
+            builder: (context, state) => const SafetyListScreen(),
           ),
           GoRoute(
             path: '/likes/:entityType/:entityId',

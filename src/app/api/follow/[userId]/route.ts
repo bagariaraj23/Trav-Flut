@@ -132,6 +132,17 @@ export async function POST(
             if (!followee) return { code: "NOT_FOUND" };
             if (followerId === followeeId) return { code: "SELF_FOLLOW" };
 
+            const blockedByThem = await tx.userSafetyRelation.findUnique({
+              where: {
+                actorId_targetId: {
+                  actorId: followeeId,
+                  targetId: followerId,
+                },
+              },
+              select: { action: true },
+            });
+            if (blockedByThem?.action === "BLOCK") return { code: "BLOCKED" };
+
             // Already following?
             const existingFollow = await tx.follow.findUnique({
               where: {
@@ -214,6 +225,12 @@ export async function POST(
             return NextResponse.json(
               { success: false, error: "Cannot follow yourself" },
               { status: 400 }
+            );
+          }
+          if (result.code === "BLOCKED") {
+            return NextResponse.json(
+              { success: false, error: "You can't follow this person." },
+              { status: 403 }
             );
           }
           if (result.code === "ALREADY_FOLLOW") {

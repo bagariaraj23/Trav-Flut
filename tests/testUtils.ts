@@ -73,6 +73,7 @@ export async function cleanDb() {
     prisma.tripParticipant.deleteMany(),
     prisma.followRequest.deleteMany(),
     prisma.follow.deleteMany(),
+    prisma.userSafetyRelation.deleteMany(),
     prisma.jWTRefreshToken.deleteMany(),
     prisma.oAuthAccount.deleteMany(),
     prisma.passwordReset.deleteMany(),

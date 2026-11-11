@@ -50,6 +50,9 @@ model User {
   settlementsFrom          TripSettlement[]  @relation("SettlementFrom")
   settlementsTo            TripSettlement[]  @relation("SettlementTo")
   recordedSettlements      TripSettlement[]  @relation("SettlementRecordedBy")
+  safetyActions            UserSafetyRelation[] @relation("SafetyActor")
+  safetyTargets            UserSafetyRelation[] @relation("SafetyTarget")
+  createdConversations     Conversation[]    @relation("ConversationCreator")
 
   @@map("users")
 }
@@ -160,6 +163,29 @@ model FollowRequest {
   @@unique([followerId, followeeId])
   @@index([followeeId, status, createdAt(sort: Desc)])
   @@map("follow_requests")
+}
+
+enum UserSafetyAction {
+  RESTRICT
+  BLOCK
+}
+
+// One row per actor. RESTRICT stops direct messages both ways.
+// BLOCK does that and also stops the target following or opening the actor.
+model UserSafetyRelation {
+  id        String           @id @default(uuid())
+  actorId   String
+  targetId  String
+  action    UserSafetyAction
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+  actor     User             @relation("SafetyActor", fields: [actorId], references: [id], onDelete: Cascade)
+  target    User             @relation("SafetyTarget", fields: [targetId], references: [id], onDelete: Cascade)
+
+  @@unique([actorId, targetId])
+  @@index([actorId, action, createdAt(sort: Desc), id(sort: Desc)])
+  @@index([targetId, action])
+  @@map("user_safety_relations")
 }
 
 model JWTRefreshToken {
@@ -431,15 +457,17 @@ enum ConversationParticipantRole {
 }
 
 model Conversation {
-  id        String             @id @default(uuid())
-  type      ConversationType
-  tripId    String?            @unique
-  name      String?
-  avatarUrl String?
-  createdAt DateTime           @default(now())
-  updatedAt DateTime           @updatedAt
+  id          String             @id @default(uuid())
+  type        ConversationType
+  tripId      String?            @unique
+  name        String?
+  avatarUrl   String?
+  createdById String?
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
 
   trip         Trip?                    @relation("TripConversation", fields: [tripId], references: [id], onDelete: Cascade)
+  createdBy    User?                    @relation("ConversationCreator", fields: [createdById], references: [id], onDelete: SetNull)
   participants ConversationParticipant[]
   messages     ChatMessage[]
 
