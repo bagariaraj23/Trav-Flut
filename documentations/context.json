@@ -4,7 +4,7 @@
         "workspacePath": "/Users/rajbagaria/Desktop/Bolt-Travello/Flut/project",
         "generatedAt": "2026-11-11",
         "description": "Travel-focused social platform where users create trips, post thread entries (text/media/location), split trip expenses and settle up on a Money pane, generate/publish final trip posts, and chat via 1:1 DMs, groups, and trip-scoped rooms (realtime WebSocket).",
-        "lastPRReviewed": "PR #56 merged to main on 2026-11-11 (2:44 PM IST). Main runs the full local Docker stack and Mapbox Maps Flutter 3.34.2. Current work is cursor/media-restrict-block-aa71: Restrict and Block, a DM settings screen, conversation media, a shared viewer, and final-post photo order. Restrict stops a direct message both ways and keeps history. Block also stops follows and profile access, and stops the creator of a trip or group from adding the other person. A trip or group someone else created can include both. Settings lists the people you blocked and the people you restricted. Open drafts remain PR #15 (to be discarded) and PR #38 (personalised final posts, 172 commits behind main).",
+        "lastPRReviewed": "PR #56 merged to main on 2026-11-11 (2:44 PM IST). Main runs the full local Docker stack and Mapbox Maps Flutter 3.34.2. Current work is PR #62 (cursor/media-restrict-block-aa71): Restrict and Block, a DM settings screen, conversation media, a shared viewer, and final-post photo order. Restrict stops a direct message both ways and keeps history. Block also stops follows and profile access, and stops the creator of a trip or group from adding the other person. A trip or group someone else created can include both. Settings lists the people you blocked and the people you restricted. Open drafts remain PR #15 (to be discarded) and PR #38 (personalised final posts, 172 commits behind main).",
         "recentProductionPRs": [
             "https://github.com/bagariaraj23/Trav-Flut/pull/56",
             "https://github.com/bagariaraj23/Trav-Flut/pull/54",
@@ -2318,6 +2318,21 @@
         ],
         "open": [
             {
+                "number": 62,
+                "title": "Add Restrict, Block, and shared media tools",
+                "state": "open",
+                "url": "https://github.com/bagariaraj23/Trav-Flut/pull/62",
+                "base": "main",
+                "head": "cursor/media-restrict-block-aa71",
+                "notes": "Current work. Restrict and Block, conversation media, the shared viewer, and final-post photo order. Rebuild the web image. The new migration is applied by migrate deploy.",
+                "keyFeatures": [
+                    "Restrict stops a direct message both ways and keeps history",
+                    "Block also stops follows, profile access, and creator adds",
+                    "A trip or group someone else created can include both people",
+                    "Shared media viewer and final-post selection order"
+                ]
+            },
+            {
                 "number": 38,
                 "title": "personalised final posts",
                 "state": "draft",
@@ -2346,7 +2361,7 @@
         "plannedFeatures": 3,
         "totalPRs": 52,
         "mergedPRs": 47,
-        "openPRs": 2,
+        "openPRs": 3,
         "raceConditionFixes": {
             "total": 17,
             "fixed": 15,
@@ -2367,10 +2382,11 @@
             "notes": "2026-11-11: user-safety and chat integration tests passed (25). Flutter media_safety_test passed in the Flutter 3.38.5 container. Do not add platform-specific Rolldown bindings to root dependencies."
         },
         "lastMergedFeature": "PR #56 Dockerise the full local stack (merged main 2026-11-11, 2:44 PM IST). PR #54 trip create UX merged 2026-11-06.",
-        "notes": "Main includes the Docker stack and Mapbox 3.34.2. Current branch cursor/media-restrict-block-aa71 adds Restrict, Block, conversation media, the shared viewer, and final-post photo order. Rebuild the web image to see those screens at port 8080. The new migration is applied by the existing migrate-on-boot path. Open drafts are PR #15 and PR #38. A road line between saved pins can come later with one cached Mapbox Directions call. A walked-path trace needs background location and stays deferred. Cloudinary dashboard presets and Universal Links ops remain.",
+        "notes": "Main includes the Docker stack and Mapbox 3.34.2. PR #62 (cursor/media-restrict-block-aa71) adds Restrict, Block, conversation media, the shared viewer, and final-post photo order. Rebuild the web image to see those screens at port 8080. The new migration is applied by the existing migrate-on-boot path. Open drafts are PR #15 and PR #38. A road line between saved pins can come later with one cached Mapbox Directions call. A walked-path trace needs background location and stays deferred. Cloudinary dashboard presets and Universal Links ops remain.",
         "mainBranchStable": true,
         "activeStack": [
             {
+                "pr": 62,
                 "branch": "cursor/media-restrict-block-aa71",
                 "base": "main"
             }
