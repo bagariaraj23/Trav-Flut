@@ -70,6 +70,7 @@ export class TripFinalizerService {
           include: {
             media: true,
             place: true,
+            taggedUsers: { select: { taggedUserId: true } },
           },
           orderBy: { createdAt: "asc" },
         },
@@ -168,12 +169,6 @@ export class TripFinalizerService {
 
       const wasPublished = finalPost.isPublished;
       const data: FinalPostUpdates = {};
-      const ownedUrls = await urlsOwnedByUser(tx, tripId, userId);
-      const alreadyOnPost = new Set(
-        [...finalPost.curatedMedia, finalPost.coverMediaUrl].filter(
-          (url): url is string => !!url
-        )
-      );
 
       if (typeof updates.summaryText === "string") {
         if (!updates.summaryText.trim()) {
@@ -187,7 +182,6 @@ export class TripFinalizerService {
         if (data.curatedMedia.length > MAX_MEDIA_COUNT) {
           data.curatedMedia = data.curatedMedia.slice(0, MAX_MEDIA_COUNT);
         }
-        assertOwnedPhotos(data.curatedMedia, ownedUrls, alreadyOnPost);
       }
 
       if (updates.caption !== undefined) {
@@ -195,11 +189,7 @@ export class TripFinalizerService {
       }
 
       if (updates.coverMediaUrl !== undefined) {
-        const cover = updates.coverMediaUrl || null;
-        if (cover) {
-          assertOwnedPhotos([cover], ownedUrls, alreadyOnPost);
-        }
-        data.coverMediaUrl = cover;
+        data.coverMediaUrl = updates.coverMediaUrl || null;
       } else if (data.curatedMedia && data.curatedMedia.length > 0) {
         data.coverMediaUrl = data.curatedMedia[0];
       }
@@ -257,19 +247,8 @@ export class TripFinalizerService {
         !finalPost.coverMediaUrl
       ) {
         throw new ValidationError(
-          `Select at least ${MIN_MEDIA_COUNT} photo you uploaded before publishing`
+          `Select at least ${MIN_MEDIA_COUNT} photo before publishing`
         );
-      }
-
-      const ownedUrls = await urlsOwnedByUser(tx, tripId, userId);
-      const alreadyOnPost = new Set(
-        [...(finalPost.curatedMedia ?? []), finalPost.coverMediaUrl].filter(
-          (url): url is string => !!url
-        )
-      );
-      assertOwnedPhotos(finalPost.curatedMedia ?? [], ownedUrls, alreadyOnPost);
-      if (finalPost.coverMediaUrl) {
-        assertOwnedPhotos([finalPost.coverMediaUrl], ownedUrls, alreadyOnPost);
       }
 
       return tx.tripFinalPost.update({
@@ -347,43 +326,6 @@ export class TripFinalizerService {
 
     throw new AuthorizationError(
       "Only people on this trip can create their own final post"
-    );
-  }
-}
-
-async function urlsOwnedByUser(db: DbClient, tripId: string, userId: string) {
-  const [uploaded, posted] = await Promise.all([
-    db.media.findMany({
-      where: { tripId, uploadedById: userId },
-      select: { url: true },
-    }),
-    db.tripThreadEntry.findMany({
-      where: { tripId, authorId: userId, mediaId: { not: null } },
-      select: { media: { select: { url: true } } },
-    }),
-  ]);
-
-  const urls = new Set<string>();
-  for (const media of uploaded) {
-    if (media.url) urls.add(media.url);
-  }
-  for (const entry of posted) {
-    if (entry.media?.url) urls.add(entry.media.url);
-  }
-  return urls;
-}
-
-function assertOwnedPhotos(
-  urls: string[],
-  owned: Set<string>,
-  alreadyOnPost: Set<string>
-) {
-  const rejected = urls.filter(
-    (url) => !owned.has(url) && !alreadyOnPost.has(url)
-  );
-  if (rejected.length > 0) {
-    throw new ValidationError(
-      "Choose photos you uploaded or posted yourself"
     );
   }
 }
@@ -490,15 +432,52 @@ function buildSummary(trip: TripForFinalizer, userId: string) {
 }
 
 function selectCuratedMedia(trip: TripForFinalizer, userId: string) {
-  const mediaEntries = trip.threadEntries.flatMap((entry) => {
-    const url = ownedImageUrl(entry, userId);
+  const own = mediaFromEntries(
+    trip.threadEntries.filter((entry) => postedOrUploadedBy(entry, userId))
+  );
+  const tagged = mediaFromEntries(
+    trip.threadEntries.filter(
+      (entry) =>
+        !postedOrUploadedBy(entry, userId) && entryIncludesUser(entry, userId)
+    )
+  );
+
+  const selected = takePhotos(own);
+  for (const url of takePhotos(tagged)) {
+    if (selected.length >= MAX_MEDIA_COUNT) break;
+    if (!selected.includes(url)) selected.push(url);
+  }
+
+  for (const media of trip.media) {
+    if (selected.length >= MAX_MEDIA_COUNT) break;
+    if (media.uploadedById !== userId) continue;
+    const url = usableImageUrl(media);
+    if (url && !selected.includes(url)) selected.push(url);
+  }
+
+  return selected;
+}
+
+function postedOrUploadedBy(entry: ThreadEntryWithExtras, userId: string) {
+  return entry.authorId === userId || entry.media?.uploadedById === userId;
+}
+
+function entryIncludesUser(entry: ThreadEntryWithExtras, userId: string) {
+  return (entry.taggedUsers ?? []).some((tag) => tag.taggedUserId === userId);
+}
+
+function mediaFromEntries(entries: ThreadEntryWithExtras[]) {
+  return entries.flatMap((entry) => {
+    const url = usableImageUrl(entry.media);
     return url ? [{ url, createdAt: entry.createdAt }] : [];
   });
+}
 
+function takePhotos(items: { url: string; createdAt: Date }[]) {
   const selected: string[] = [];
   const perDay = new Set<string>();
   const extras: string[] = [];
-  const sorted = [...mediaEntries].sort(
+  const sorted = [...items].sort(
     (a, b) => a.createdAt.getTime() - b.createdAt.getTime()
   );
 
@@ -517,21 +496,7 @@ function selectCuratedMedia(trip: TripForFinalizer, userId: string) {
     if (!selected.includes(url)) selected.push(url);
   }
 
-  for (const media of trip.media) {
-    if (selected.length >= MAX_MEDIA_COUNT) break;
-    if (media.uploadedById !== userId) continue;
-    const url = usableImageUrl(media);
-    if (url && !selected.includes(url)) selected.push(url);
-  }
-
   return selected;
-}
-
-function ownedImageUrl(entry: ThreadEntryWithExtras, userId: string) {
-  if (entry.authorId !== userId && entry.media?.uploadedById !== userId) {
-    return null;
-  }
-  return usableImageUrl(entry.media);
 }
 
 function usableImageUrl(
@@ -612,6 +577,7 @@ type ThreadEntryWithExtras = {
     processingStatus: MediaProcessingStatus;
     uploadedById: string;
   } | null;
+  taggedUsers?: { taggedUserId: string }[];
   place: {
     name: string;
   } | null;

@@ -120,20 +120,11 @@ class _FinalPostEditScreenState extends State<FinalPostEditScreen> {
   }
 
   List<Media> get _mediaItems {
-    final authId = context.read<AuthProvider>().currentUser?.id;
     final entries = _threadEntries;
     final items = entries
-        .where((entry) {
-          final media = entry.media;
-          if (media == null ||
-              media.type != MediaType.image ||
-              media.url.isEmpty ||
-              authId == null) {
-            return false;
-          }
-          return media.uploadedById == authId || entry.authorId == authId;
-        })
-        .map((entry) => entry.media!)
+        .map((entry) => entry.media)
+        .whereType<Media>()
+        .where((media) => media.type == MediaType.image && media.url.isNotEmpty)
         .toList();
     final seen = <String>{};
     return items.where((media) {
@@ -447,7 +438,7 @@ class _FinalPostEditScreenState extends State<FinalPostEditScreen> {
               child: Text(
                 locked
                     ? 'Only you can change the photos on your final post.'
-                    : 'Only photos you uploaded are listed.',
+                    : 'The first draft uses photos you uploaded and photos you are in. You can add any photo from the trip.',
                 style: Theme.of(context)
                     .textTheme
                     .bodySmall
@@ -456,7 +447,7 @@ class _FinalPostEditScreenState extends State<FinalPostEditScreen> {
             ),
             if (mediaItems.isEmpty)
               const Text(
-                  'Photos you uploaded on this trip show up here.')
+                  'Photos from this trip show up here.')
             else
               SizedBox(
                 height: 110,

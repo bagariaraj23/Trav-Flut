@@ -96,7 +96,23 @@ export async function POST(
                   threadEntries: {
                     include: {
                       media: true,
-                      taggedUsers: true,
+                      taggedUsers: {
+                        include: {
+                          taggedUser: {
+                            select: {
+                              id: true,
+                              email: true,
+                              username: true,
+                              name: true,
+                              avatarUrl: true,
+                              bio: true,
+                              isPrivate: true,
+                              createdAt: true,
+                              updatedAt: true,
+                            },
+                          },
+                        },
+                      },
                       author: true,
                     },
                     orderBy: { createdAt: "asc" },

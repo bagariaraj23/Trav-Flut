@@ -76,7 +76,10 @@ export async function updateTripStatuses(
           include: {
             participants: { select: { userId: true } },
             threadEntries: {
-              include: { media: true },
+              include: {
+                media: true,
+                taggedUsers: { select: { taggedUserId: true } },
+              },
               orderBy: { createdAt: "asc" },
             },
           },
@@ -105,15 +108,30 @@ export async function updateTripStatuses(
 
         for (const memberId of memberIds) {
           if (alreadyDrafted.has(memberId)) continue;
+          const involvesMember = (entry: (typeof entries)[number]) =>
+            entry.authorId === memberId ||
+            entry.media?.uploadedById === memberId ||
+            (entry.taggedUsers ?? []).some(
+              (tag) => tag.taggedUserId === memberId
+            );
           const ownEntries = entries.filter(
             (entry) =>
               entry.authorId === memberId ||
               entry.media?.uploadedById === memberId
           );
+          const photoEntries = [
+            ...ownEntries,
+            ...entries.filter(
+              (entry) =>
+                involvesMember(entry) &&
+                entry.authorId !== memberId &&
+                entry.media?.uploadedById !== memberId
+            ),
+          ];
           const textEntries = ownEntries.filter(
             (entry) => entry.type === "TEXT" && entry.contentText
           );
-          const mediaEntries = ownEntries.filter(
+          const mediaEntries = photoEntries.filter(
             (entry) =>
               entry.media?.url &&
               (entry.media.type == null || entry.media.type === "IMAGE")
@@ -127,7 +145,7 @@ export async function updateTripStatuses(
           if (textEntries.length > 0)
             summaryText += `You shared ${textEntries.length} notes. `;
           if (mediaEntries.length > 0)
-            summaryText += `You kept ${mediaEntries.length} of your photos.`;
+            summaryText += `You kept ${mediaEntries.length} photos.`;
           else
             summaryText += "Add the photos you took before you publish.";
           const curatedMedia = mediaEntries
