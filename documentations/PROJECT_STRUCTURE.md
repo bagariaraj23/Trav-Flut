@@ -505,19 +505,19 @@ cursor_rules.md                 # Cursor/Copilot AI rules
 - **HTTP**: `axios`, `node-fetch`
 - **Auth**: `jsonwebtoken`, `bcrypt`
 - **Validation**: `zod`
-- **Logging**: `winston` or `pino`
-- **Testing**: `jest`, `supertest`
+- **Logging**: `winston`
+- **Testing**: `vitest`, `supertest`
 
 ### Mobile (`pubspec.yaml`)
 
 - **Framework**: `flutter`, `flutter_sdk`
-- **State**: `provider`, `get`
+- **State**: `provider`
 - **Routing**: `go_router`
 - **HTTP**: `dio`
-- **Storage**: `shared_preferences`, `sqflite`
+- **Storage**: `shared_preferences`
 - **Location**: `geolocator`, `geocoding`
 - **Media**: `image_picker`, `video_player`
-- **Maps**: `mapbox_maps_flutter`, `google_maps_flutter`
+- **Maps**: `mapbox_maps_flutter` 3.34.2
 
 ### Scheduler (`scheduler/package.json`)
 
