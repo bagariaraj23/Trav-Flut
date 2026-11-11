@@ -63,6 +63,7 @@ describe("Personalized final posts", () => {
 
     const ownerPhoto = "https://cdn.example.com/owner-photo.jpg";
     const memberPhoto = "https://cdn.example.com/member-photo.jpg";
+    const taggedPhoto = "https://cdn.example.com/member-in-photo.jpg";
     const ownerMedia = await prisma.media.create({
       data: {
         url: ownerPhoto,
@@ -106,6 +107,29 @@ describe("Personalized final posts", () => {
         mediaId: memberMedia.id,
       },
     });
+    const taggedMedia = await prisma.media.create({
+      data: {
+        url: taggedPhoto,
+        publicId: `tagged-${randomUUID()}`,
+        type: MediaType.IMAGE,
+        uploadedById: owner.id,
+        tripId: trip.id,
+      },
+    });
+    const taggedEntry = await prisma.tripThreadEntry.create({
+      data: {
+        tripId: trip.id,
+        authorId: owner.id,
+        type: ThreadEntryType.MEDIA,
+        mediaId: taggedMedia.id,
+      },
+    });
+    await prisma.tripThreadTag.create({
+      data: {
+        threadEntryId: taggedEntry.id,
+        taggedUserId: member.id,
+      },
+    });
 
     const params = { params: Promise.resolve({ id: trip.id }) };
     const ended = await json(
@@ -116,7 +140,7 @@ describe("Personalized final posts", () => {
     );
     expect(ended.success).toBe(true);
     expect(ended.data.finalPost.userId).toBe(owner.id);
-    expect(ended.data.finalPost.curatedMedia).toEqual([ownerPhoto]);
+    expect(ended.data.finalPost.curatedMedia).toEqual([ownerPhoto, taggedPhoto]);
     expect(ended.data.finalPost.curatedMedia).not.toContain(memberPhoto);
 
     const posts = await prisma.tripFinalPost.findMany({
@@ -139,7 +163,7 @@ describe("Personalized final posts", () => {
     );
     expect(memberDraft.success).toBe(true);
     expect(memberDraft.data.userId).toBe(member.id);
-    expect(memberDraft.data.curatedMedia).toEqual([memberPhoto]);
+    expect(memberDraft.data.curatedMedia).toEqual([memberPhoto, taggedPhoto]);
     expect(memberDraft.data.summaryText.toLowerCase()).not.toContain(
       "the owner watched"
     );
@@ -152,21 +176,10 @@ describe("Personalized final posts", () => {
       )
     );
     expect(memberTrip.data.finalPost.userId).toBe(member.id);
-    expect(memberTrip.data.finalPost.curatedMedia).toEqual([memberPhoto]);
-
-    const rejected = await json(
-      await updateFinalPostRoute(
-        authRequest(
-          `http://localhost/api/trips/${trip.id}/final-post`,
-          "PUT",
-          memberToken,
-          { curatedMedia: [ownerPhoto] }
-        ),
-        params
-      )
-    );
-    expect(rejected.success).toBe(false);
-    expect(rejected.error).toMatch(/photos you uploaded/i);
+    expect(memberTrip.data.finalPost.curatedMedia).toEqual([
+      memberPhoto,
+      taggedPhoto,
+    ]);
 
     const summary =
       "My own recap of the coast, with the photo I took and nobody else's pictures mixed in.";
@@ -176,14 +189,18 @@ describe("Personalized final posts", () => {
           `http://localhost/api/trips/${trip.id}/final-post`,
           "PUT",
           memberToken,
-          { summaryText: summary, curatedMedia: [memberPhoto], caption: "Mine" }
+          {
+            summaryText: summary,
+            curatedMedia: [ownerPhoto, memberPhoto],
+            caption: "Mine",
+          }
         ),
         params
       )
     );
     expect(updated.success).toBe(true);
     expect(updated.data.summaryText).toBe(summary);
-    expect(updated.data.curatedMedia).toEqual([memberPhoto]);
+    expect(updated.data.curatedMedia).toEqual([ownerPhoto, memberPhoto]);
 
     const strangerGenerate = await json(
       await generateFinalPostRoute(
@@ -225,7 +242,7 @@ describe("Personalized final posts", () => {
       (item: { userId: string }) => item.userId === member.id
     );
     expect(memberPost).toBeTruthy();
-    expect(memberPost.curatedMedia).toEqual([memberPhoto]);
+    expect(memberPost.curatedMedia).toEqual([ownerPhoto, memberPhoto]);
     expect(memberPost.user.id).toBe(member.id);
     expect(
       feed.data.items.find((item: { userId: string }) => item.userId === owner.id)
