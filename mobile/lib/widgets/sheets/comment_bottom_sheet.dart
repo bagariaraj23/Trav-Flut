@@ -314,6 +314,7 @@ class _CommentBottomSheetState extends State<CommentBottomSheet> {
                                         (reply) => CommentListItem(
                                           comment: reply,
                                           isReply: true,
+                                          onReplyTap: () => _startReply(reply.id),
                                         ),
                                       ),
                                     if (isExpanded && replies.isEmpty && provider.isLoadingReplies(comment.id))

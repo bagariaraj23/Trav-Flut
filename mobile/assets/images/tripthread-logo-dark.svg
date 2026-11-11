@@ -1,0 +1,42 @@
+<svg width="220" height="48" viewBox="0 0 220 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- TripThread Logo – Full (Dark Mode) -->
+
+  <!-- Icon: Curved thread with 3 connected journey nodes -->
+  <path
+    d="M8 34C12 28 16 18 24 18C32 18 28 30 36 26"
+    stroke="url(#tt-grad-dark)"
+    stroke-width="2.8"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  />
+  <circle cx="8" cy="34" r="3.5" fill="#38BDF8" />
+  <circle cx="24" cy="18" r="3" fill="#2DD4BF" />
+  <circle cx="36" cy="26" r="3.5" fill="#5EEAD4" />
+  <path
+    d="M36 29.5L36 33"
+    stroke="#5EEAD4"
+    stroke-width="2"
+    stroke-linecap="round"
+  />
+  <path
+    d="M36 26C38 24 40 20 42 18"
+    stroke="#5EEAD4"
+    stroke-width="2"
+    stroke-linecap="round"
+    stroke-dasharray="1.5 3"
+    opacity="0.4"
+  />
+
+  <!-- Wordmark (white text for dark backgrounds) -->
+  <text x="54" y="33" font-family="'Nunito', 'Poppins', 'Inter', system-ui, -apple-system, sans-serif" font-size="22" font-weight="800" letter-spacing="-0.3" fill="#F1F5F9">
+    Trip<tspan fill="#38BDF8">Thread</tspan>
+  </text>
+
+  <defs>
+    <linearGradient id="tt-grad-dark" x1="8" y1="34" x2="42" y2="18" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#38BDF8" />
+      <stop offset="0.5" stop-color="#2DD4BF" />
+      <stop offset="1" stop-color="#5EEAD4" />
+    </linearGradient>
+  </defs>
+</svg>

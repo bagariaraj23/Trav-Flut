@@ -66,3 +66,21 @@ android {
 flutter {
     source = "../.."
 }
+
+// Ensure shared_preferences_android uses the Java legacy plugin in the registrant, but avoid double-replacing
+tasks.whenTaskAdded {
+    if (name == "compileDebugJavaWithJavac" || name == "compileReleaseJavaWithJavac") {
+        val registrant = layout.projectDirectory.file("src/main/java/io/flutter/plugins/GeneratedPluginRegistrant.java")
+        doFirst {
+            val file = registrant.asFile
+            if (file.exists()) {
+                val original = "new io.flutter.plugins.sharedpreferences.SharedPreferencesPlugin()"
+                val legacy = "new io.flutter.plugins.sharedpreferences.LegacySharedPreferencesPlugin()"
+                val text = file.readText()
+                if (text.contains(original)) {
+                    file.writeText(text.replace(original, legacy))
+                }
+            }
+        }
+    }
+}

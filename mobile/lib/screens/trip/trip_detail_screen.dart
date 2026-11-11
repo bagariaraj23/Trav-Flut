@@ -4,9 +4,20 @@ import 'package:go_router/go_router.dart';
 import 'package:tripthread/providers/trip_provider.dart';
 import 'package:tripthread/providers/auth_provider.dart';
 import 'package:tripthread/models/trip.dart';
+import 'package:tripthread/models/user.dart';
+import 'package:google_fonts/google_fonts.dart';
+import 'package:tripthread/utils/app_layout.dart';
+import 'package:tripthread/utils/app_theme.dart';
+import 'package:tripthread/utils/trip_time_format.dart';
+import 'package:tripthread/utils/device_timezone.dart';
+import 'package:tripthread/utils/chat_navigation.dart';
+import 'package:tripthread/utils/user_display_labels.dart';
 import 'package:tripthread/utils/cloudinary_utils.dart';
 import 'package:tripthread/widgets/loading_button.dart';
+import 'package:tripthread/widgets/mention_text.dart';
+import 'package:tripthread/widgets/trip_cover_placeholder.dart';
 import 'package:tripthread/services/media_service.dart';
+import 'package:tripthread/services/trip_service.dart';
 
 class TripDetailScreen extends StatefulWidget {
   final String tripId;
@@ -19,6 +30,7 @@ class TripDetailScreen extends StatefulWidget {
 
 class _TripDetailScreenState extends State<TripDetailScreen> {
   Trip? _trip;
+  List<TripThreadEntry> _previewEntries = const [];
   bool _isLoading = true;
   MediaService? _mediaService;
   bool _isUpdatingCover = false;
@@ -38,23 +50,131 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
 
   Future<void> _loadTrip() async {
     final tripProvider = context.read<TripProvider>();
+    final tripService = context.read<TripService>();
     final trip = await tripProvider.getTrip(widget.tripId);
+    var preview = const <TripThreadEntry>[];
+    if (trip != null) {
+      final page = await tripService.getThreadEntries(widget.tripId, limit: 3);
+      if (page.success && page.data != null) {
+        preview = page.data!.items;
+      }
+    }
 
     if (mounted) {
       setState(() {
         _trip = trip;
+        _previewEntries = preview;
         _isLoading = false;
       });
     }
   }
 
+  Future<String?> _deviceZone() async {
+    try {
+      final name = await deviceTimezoneIdentifier();
+      if (name != null && name.isNotEmpty) return name;
+    } catch (_) {}
+    return _trip?.scheduleTimezone;
+  }
+
+  Future<void> _changeEnd({bool clear = false, bool extend = false}) async {
+    if (_trip?.status == TripStatus.ended && _trip?.finalPost != null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Cannot extend a trip after its final post has been generated',
+          ),
+        ),
+      );
+      return;
+    }
+    final currentEnd = _trip?.endDate?.toLocal();
+    DateTime? picked = currentEnd;
+    if (!clear) {
+      final now = DateTime.now();
+      final today = DateTime(now.year, now.month, now.day);
+      var last = now.add(const Duration(days: 365));
+      if (currentEnd != null && currentEnd.isAfter(last)) {
+        last = currentEnd.add(const Duration(days: 365));
+      }
+      var first = today;
+      if (extend && currentEnd != null) {
+        final endDay = DateTime(currentEnd.year, currentEnd.month, currentEnd.day);
+        if (!endDay.isBefore(today)) first = endDay;
+      }
+      var initial = currentEnd ?? now.add(const Duration(days: 1));
+      if (initial.isBefore(first)) initial = first;
+      if (initial.isAfter(last)) initial = last;
+      final date = await showDatePicker(
+        context: context,
+        helpText: extend ? 'Extend the end date' : 'End date',
+        initialDate: initial,
+        firstDate: first,
+        lastDate: last,
+      );
+      if (date == null || !mounted) return;
+      final time = await showTimePicker(
+        context: context,
+        helpText: extend ? 'New end time (optional)' : 'End time (optional)',
+        cancelText: 'No time',
+        confirmText: 'Set time',
+        initialTime: TimeOfDay.fromDateTime(currentEnd ?? now),
+      );
+      if (!mounted) return;
+      picked = time == null
+          ? DateTime(date.year, date.month, date.day, 23, 59, 59)
+          : DateTime(date.year, date.month, date.day, time.hour, time.minute);
+      if (extend && currentEnd != null && !picked.isAfter(currentEnd)) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Pick an end later than the current one')),
+        );
+        return;
+      }
+    }
+
+    final messenger = ScaffoldMessenger.of(context);
+    final ok = await context.read<TripProvider>().updateTripDates(
+      tripId: widget.tripId,
+      endDate: clear ? null : picked,
+      clearEnd: clear,
+      extend: extend,
+      scheduleTimezone: await _deviceZone(),
+    );
+    if (!mounted) return;
+    if (ok) {
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(
+            clear
+                ? 'End time removed'
+                : extend
+                    ? 'Trip extended'
+                    : 'End time updated',
+          ),
+        ),
+      );
+      await _loadTrip();
+    } else {
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(
+            context.read<TripProvider>().error ?? 'Could not update the end time',
+          ),
+        ),
+      );
+    }
+  }
+
   Future<void> _endTrip() async {
+    final beforeStart = _trip?.status == TripStatus.upcoming;
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('End Trip'),
-        content: const Text(
-          'Are you sure you want to end this trip? This will generate your final post.',
+        title: Text(beforeStart ? 'End trip before it starts?' : 'End Trip'),
+        content: Text(
+          beforeStart
+              ? 'This cancels the trip. A final post is not created.'
+              : 'Are you sure you want to end this trip? This will generate your final post.',
         ),
         actions: [
           TextButton(
@@ -78,13 +198,48 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
       if (!mounted) return;
       if (success) {
         messenger.showSnackBar(
-          const SnackBar(content: Text('Trip ended successfully! 🎉')),
+          SnackBar(
+            content: Text(
+              beforeStart ? 'Trip ended' : 'Trip ended successfully!',
+            ),
+          ),
         );
         await _loadTrip();
-        if (!mounted) return;
+        if (!mounted || beforeStart) return;
         navigator.go('/trip/${widget.tripId}/final-post');
       }
     }
+  }
+
+  /// Pop back to the screen that opened the trip. A replaced stack uses the
+  /// recorded `from` route, and `/home` keeps `explicitHome` so an ongoing
+  /// trip does not bounce this screen into the thread.
+  void _leaveTrip() {
+    if (!mounted) return;
+    final router = GoRouter.of(context);
+    if (router.canPop()) {
+      context.pop();
+      return;
+    }
+
+    final extra = GoRouterState.of(context).extra;
+    var location = '/home';
+    Object? nextExtra = const {'explicitHome': true};
+    if (extra is Map) {
+      final from = extra['from'];
+      if (from is String &&
+          from.startsWith('/') &&
+          !from.startsWith('//') &&
+          !from.contains('://')) {
+        location = from;
+      }
+      if (location == '/home' && extra['tab'] == 'discover') {
+        nextExtra = const {'explicitHome': true, 'tab': 'discover'};
+      } else if (location != '/home') {
+        nextExtra = null;
+      }
+    }
+    context.go(location, extra: nextExtra);
   }
 
   @override
@@ -93,48 +248,37 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
 
+    final landscape =
+        MediaQuery.of(context).orientation == Orientation.landscape;
+
     return PopScope(
-      canPop: true,
+      canPop: GoRouter.of(context).canPop(),
       onPopInvokedWithResult: (didPop, result) {
-        if (!didPop) {
-          if (context.canPop()) {
-            context.pop();
-          } else {
-            context.go('/home');
-          }
-        }
+        if (!didPop) _leaveTrip();
       },
       child: Scaffold(
         body: CustomScrollView(
           slivers: [
             SliverAppBar(
-              expandedHeight:
-                  MediaQuery.of(context).orientation == Orientation.landscape
-                  ? 150
-                  : 250,
+              expandedHeight: landscape ? 168 : 250,
               pinned: true,
               leading: IconButton(
                 icon: const Icon(Icons.arrow_back, color: Colors.white),
-                onPressed: () {
-                  if (context.canPop()) {
-                    context.pop();
-                  } else {
-                    context.go('/home');
-                  }
-                },
+                onPressed: _leaveTrip,
               ),
               flexibleSpace: FlexibleSpaceBar(
-                titlePadding: const EdgeInsets.only(
+                titlePadding: EdgeInsets.only(
                   left: 16,
                   right: 16,
-                  bottom: 16,
+                  bottom: landscape ? 56 : 88,
                 ),
                 title: Text(
                   _trip?.title ?? 'Trip Not Found',
-                  style: const TextStyle(
+                  style: GoogleFonts.playfairDisplay(
                     color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                    shadows: [
+                    fontWeight: FontWeight.w600,
+                    fontSize: 18,
+                    shadows: const [
                       Shadow(
                         offset: Offset(0, 1),
                         blurRadius: 3,
@@ -180,67 +324,40 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
                               ),
                             ),
                           ),
+                          if (_trip != null)
+                            Positioned(
+                              left: 16,
+                              right: 16,
+                              bottom: 12,
+                              child: Wrap(
+                                spacing: 8,
+                                runSpacing: 8,
+                                children: [
+                                  _buildStatusBadge(_trip!.status),
+                                  _glassChip(
+                                    Icons.calendar_today,
+                                    _formatDateRange(
+                                      _trip!.startDate,
+                                      _trip!.endDate,
+                                    ),
+                                  ),
+                                  if (_destinationLabel.isNotEmpty)
+                                    _glassChip(
+                                      Icons.place,
+                                      _destinationLabel,
+                                    ),
+                                ],
+                              ),
+                            ),
                         ],
                       ),
                     ),
-                    // Floating avatar button in top right (only for other users' trips)
-                    if (_trip?.user != null && !_isOwner())
-                      Positioned(
-                        top: MediaQuery.of(context).padding.top + 12,
-                        right: 12,
-                        child: Material(
-                          color: Colors.transparent,
-                          child: InkWell(
-                            onTap: () {
-                              context.push('/profile/${_trip!.user!.id}');
-                            },
-                            customBorder: const CircleBorder(),
-                            borderRadius: BorderRadius.circular(20),
-                            child: Container(
-                              padding: const EdgeInsets.all(1.5),
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                color: Colors.white,
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: Colors.black.withValues(alpha: 0.15),
-                                    blurRadius: 8,
-                                    offset: const Offset(0, 2),
-                                    spreadRadius: 0,
-                                  ),
-                                ],
-                              ),
-                              child: CircleAvatar(
-                                radius: 15,
-                                backgroundColor: Theme.of(
-                                  context,
-                                ).colorScheme.primary,
-                                backgroundImage: _trip!.user!.avatarUrl != null
-                                    ? NetworkImage(_trip!.user!.avatarUrl!)
-                                    : null,
-                                child: _trip!.user!.avatarUrl == null
-                                    ? Text(
-                                        _trip!.user!.name
-                                                ?.substring(0, 1)
-                                                .toUpperCase() ??
-                                            'U',
-                                        style: const TextStyle(
-                                          fontSize: 11,
-                                          fontWeight: FontWeight.w600,
-                                          color: Colors.white,
-                                        ),
-                                      )
-                                    : null,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
                     if (_isUpdatingCover)
                       Positioned.fill(
                         child: Container(
                           color: Colors.black45,
                           child: Column(
+                            mainAxisSize: MainAxisSize.min,
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
                               SizedBox(
@@ -281,13 +398,30 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
                 ),
               ),
               actions: [
-                if (_canEditCover)
+                if (_trip != null && _isOwnerOrParticipant())
                   IconButton(
-                    icon: const Icon(Icons.photo_camera_back_outlined),
-                    tooltip: _trip?.coverMedia == null
-                        ? 'Add Cover Photo'
-                        : 'Change Cover Photo',
-                    onPressed: _isUpdatingCover ? null : _showCoverOptions,
+                    icon: const Icon(Icons.chat_bubble_outline),
+                    tooltip: 'Trip Chat',
+                    onPressed: () {
+                      context.push(
+                        '/chat?tripId=${widget.tripId}',
+                        extra: chatReturnExtra('/trip/${widget.tripId}'),
+                      );
+                    },
+                  ),
+                if (_trip != null && _isOwnerOrParticipant())
+                  IconButton(
+                    icon: const Icon(Icons.currency_rupee),
+                    tooltip: 'Expenses',
+                    onPressed: () {
+                      context.push(
+                        '/trip/${widget.tripId}/thread',
+                        extra: {
+                          'from': '/trip/${widget.tripId}',
+                          'pane': 'money',
+                        },
+                      );
+                    },
                   ),
                 if (_trip != null &&
                     _trip!.status == TripStatus.ongoing &&
@@ -301,6 +435,14 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
                         extra: {'from': '/trip/${widget.tripId}'},
                       );
                     },
+                  ),
+                if (_canEditCover)
+                  IconButton(
+                    icon: const Icon(Icons.photo_camera_back_outlined),
+                    tooltip: _trip?.coverMedia == null
+                        ? 'Add Cover Photo'
+                        : 'Change Cover Photo',
+                    onPressed: _isUpdatingCover ? null : _showCoverOptions,
                   ),
               ],
             ),
@@ -341,9 +483,11 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
               )
             else
               SliverToBoxAdapter(
-                child: Padding(
+                child: AppLayout.reading(
+                  context: context,
                   padding: const EdgeInsets.all(16),
                   child: Column(
+                    mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       _buildTripInfoCard(),
@@ -362,26 +506,19 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
   }
 
   Widget _buildDefaultCover() {
-    return Container(
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [
-            Theme.of(context).colorScheme.primary,
-            Theme.of(context).colorScheme.primary.withValues(alpha: 0.8),
-          ],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-      ),
-      child: const Center(
-        child: Icon(Icons.travel_explore, size: 80, color: Colors.white),
-      ),
+    return TripCoverPlaceholder(
+      title: _trip?.title,
+      destination: _trip != null && _trip!.destinations.isNotEmpty
+          ? _trip!.destinations.first
+          : null,
+      iconSize: 64,
     );
   }
 
   bool get _canEditCover =>
       _trip != null &&
-      _trip!.status == TripStatus.ongoing &&
+      (_trip!.status == TripStatus.ongoing ||
+          _trip!.status == TripStatus.ended) &&
       _isOwnerOrParticipant();
 
   void _showCoverOptions() {
@@ -389,30 +526,66 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
     showModalBottomSheet<void>(
       context: context,
       builder: (context) {
-        return SafeArea(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              ListTile(
-                leading: const Icon(Icons.photo_library_outlined),
-                title: const Text('Choose from gallery'),
-                onTap: () {
-                  Navigator.of(context).pop();
-                  _changeCover(fromCamera: false);
-                },
-              ),
-              ListTile(
-                leading: const Icon(Icons.photo_camera_outlined),
-                title: const Text('Take a photo'),
-                onTap: () {
-                  Navigator.of(context).pop();
-                  _changeCover(fromCamera: true);
-                },
-              ),
-            ],
+        final theme = Theme.of(context);
+        return Material(
+          color: theme.colorScheme.surface,
+          child: SafeArea(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _buildCoverOptionTile(
+                  context: context,
+                  icon: Icons.photo_library_outlined,
+                  label: 'Choose from gallery',
+                  onTap: () {
+                    Navigator.of(context).pop();
+                    _changeCover(fromCamera: false);
+                  },
+                ),
+                _buildCoverOptionTile(
+                  context: context,
+                  icon: Icons.photo_camera_outlined,
+                  label: 'Take a photo',
+                  onTap: () {
+                    Navigator.of(context).pop();
+                    _changeCover(fromCamera: true);
+                  },
+                ),
+              ],
+            ),
           ),
         );
       },
+    );
+  }
+
+  Widget _buildCoverOptionTile({
+    required BuildContext context,
+    required IconData icon,
+    required String label,
+    required VoidCallback onTap,
+  }) {
+    final theme = Theme.of(context);
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+          child: Row(
+            children: [
+              Icon(icon, size: 24, color: theme.colorScheme.onSurface),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Text(
+                  label,
+                  style: theme.textTheme.titleMedium,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 
@@ -489,38 +662,167 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
+          mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Status Badge
-            Row(
-              children: [
-                _buildStatusBadge(_trip!.status),
-                const Spacer(),
-                if (_trip!.mood != null) _buildMoodChip(_trip!.mood!),
-              ],
-            ),
-
-            const SizedBox(height: 12),
-
-            // Destinations
-            Row(
-              children: [
-                Icon(
-                  Icons.location_on,
-                  color: Theme.of(context).colorScheme.onSurfaceVariant,
-                  size: 20,
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    _trip!.destinations.join(', '),
-                    style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                      fontWeight: FontWeight.w500,
+            if (_trip!.user != null)
+              Row(
+                children: [
+                  InkWell(
+                    onTap: () => context.push('/profile/${_trip!.user!.id}'),
+                    borderRadius: BorderRadius.circular(12),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 2),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          CircleAvatar(
+                            radius: 18,
+                            backgroundColor: AppTheme.muted,
+                            backgroundImage: _trip!.user!.avatarUrl != null
+                                ? NetworkImage(_trip!.user!.avatarUrl!)
+                                : null,
+                            child: _trip!.user!.avatarUrl == null
+                                ? Text(
+                                    userAvatarInitial(
+                                      name: _trip!.user!.name,
+                                    ),
+                                    style: const TextStyle(
+                                      color: AppTheme.ink,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  )
+                                : null,
+                          ),
+                          const SizedBox(width: 10),
+                          ConstrainedBox(
+                            constraints: BoxConstraints(
+                              maxWidth:
+                                  MediaQuery.of(context).size.width * 0.45,
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  _trip!.user!.name ??
+                                      _trip!.user!.username ??
+                                      'Traveller',
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .titleMedium
+                                      ?.copyWith(
+                                        fontWeight: FontWeight.w600,
+                                        color: Theme.of(context)
+                                            .colorScheme
+                                            .onSurface,
+                                      ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                if (_trip!.user!.username != null)
+                                  Text(
+                                    _trip!.user!.username!,
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .bodySmall,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
-                ),
-              ],
-            ),
+                  const Spacer(),
+                  if (_trip!.mood != null) _buildMoodChip(_trip!.mood!),
+                ],
+              ),
+            if ((_trip!.participants ?? []).isNotEmpty) ...[
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  SizedBox(
+                    height: 28,
+                    width:
+                        ((_trip!.participants!.length.clamp(1, 5)) * 18.0) + 10,
+                    child: Stack(
+                      children: [
+                        for (var i = 0;
+                            i < _trip!.participants!.length.clamp(0, 5);
+                            i++)
+                          Positioned(
+                            left: i * 18,
+                            child: CircleAvatar(
+                              radius: 14,
+                              backgroundColor:
+                                  Theme.of(context).colorScheme.surface,
+                              child: CircleAvatar(
+                                radius: 12,
+                                backgroundColor: AppTheme.muted,
+                                backgroundImage: _trip!
+                                            .participants![i]
+                                            .user
+                                            ?.avatarUrl !=
+                                        null
+                                    ? NetworkImage(_trip!
+                                        .participants![i].user!.avatarUrl!)
+                                    : null,
+                                child: _trip!.participants![i].user
+                                            ?.avatarUrl ==
+                                        null
+                                    ? Text(
+                                        userAvatarInitial(
+                                          name: _trip!
+                                              .participants![i].user?.name,
+                                        ),
+                                        style: const TextStyle(
+                                          fontSize: 10,
+                                          color: AppTheme.ink,
+                                        ),
+                                      )
+                                    : null,
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      '${_trip!.participantCount} ${_trip!.participantCount == 1 ? 'traveller' : 'travellers'} · ${_trip!.entryCount} ${_trip!.entryCount == 1 ? 'update' : 'updates'}',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+
+            if (_destinationLabel.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Icon(
+                    Icons.location_on,
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    size: 20,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      _destinationLabel,
+                      style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                            fontWeight: FontWeight.w500,
+                          ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
+            ],
 
             if (_trip!.description != null) ...[
               const SizedBox(height: 12),
@@ -541,43 +843,63 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
                   size: 20,
                 ),
                 const SizedBox(width: 8),
-                Text(
-                  _formatDateRange(_trip!.startDate, _trip!.endDate),
-                  style: Theme.of(context).textTheme.bodyMedium,
+                Expanded(
+                  child: Text(
+                    _formatDateRange(_trip!.startDate, _trip!.endDate),
+                    style: Theme.of(context).textTheme.bodyMedium,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
               ],
             ),
 
             const SizedBox(height: 12),
 
-            // Stats
-            Row(
-              children: [
-                _buildStatItem(
-                  Icons.photo_library,
-                  '${_trip!.entryCount}',
-                  'Entries',
-                ),
-                const SizedBox(width: 24),
-                _buildStatItem(
-                  Icons.people,
-                  '${_trip!.participantCount}',
-                  'Participants',
-                ),
-                if (_trip!.type != null) ...[
-                  const SizedBox(width: 24),
+            // Stats — single horizontal row
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: [
                   _buildStatItem(
-                    Icons.group,
-                    _getTripTypeLabel(_trip!.type!),
-                    'Type',
+                    Icons.photo_library,
+                    '${_trip!.entryCount}',
+                    'Entries',
                   ),
+                  const SizedBox(width: 16),
+                  _buildStatItem(
+                    Icons.people,
+                    '${_trip!.participantCount}',
+                    'Participants',
+                  ),
+                  if (_trip!.type != null) ...[
+                    const SizedBox(width: 16),
+                    _buildStatItem(
+                      Icons.group,
+                      _getTripTypeLabel(_trip!.type!),
+                      'Type',
+                    ),
+                  ],
                 ],
-              ],
+              ),
             ),
           ],
         ),
       ),
     );
+  }
+
+  String get _destinationLabel {
+    final trip = _trip;
+    if (trip == null) return '';
+    if (trip.destinations.isNotEmpty) {
+      return trip.destinations.join(' → ');
+    }
+    final endName = trip.endLocation?.name.trim();
+    if (endName != null && endName.isNotEmpty) return endName;
+    final startName = trip.startLocation?.name.trim();
+    if (startName != null && startName.isNotEmpty) return startName;
+    return '';
   }
 
   bool _isOwner() {
@@ -595,6 +917,72 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
 
   bool _isOwnerOrParticipant() {
     return _isOwner() || _isParticipant();
+  }
+
+  Future<void> _leaveTripAsParticipant() async {
+    final tripProvider = context.read<TripProvider>();
+    final choice = await showDialog<_TripDetailLeaveChoice>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Leave trip?'),
+        content: const Text(
+          'You will be removed as a participant.\n\n'
+          'Keep your thread entries visible to others on this trip, '
+          'or remove all entries you posted? '
+          '(Removing entries is only allowed while the trip is ongoing.)',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, _TripDetailLeaveChoice.cancel),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () =>
+                Navigator.pop(ctx, _TripDetailLeaveChoice.keepEntries),
+            child: const Text('Keep my entries'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: Theme.of(ctx).colorScheme.error,
+            ),
+            onPressed: () =>
+                Navigator.pop(ctx, _TripDetailLeaveChoice.removeEntries),
+            child: const Text('Remove my entries'),
+          ),
+        ],
+      ),
+    );
+
+    if (choice == null || choice == _TripDetailLeaveChoice.cancel) {
+      return;
+    }
+
+    final removeMyData = choice == _TripDetailLeaveChoice.removeEntries;
+    final ok = await tripProvider.leaveTrip(
+      widget.tripId,
+      removeMyData: removeMyData,
+    );
+
+    if (!mounted) return;
+    final err = tripProvider.error;
+    if (ok) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            removeMyData
+                ? 'You left the trip; your entries were removed.'
+                : 'You left the trip.',
+          ),
+        ),
+      );
+      context.go('/trips');
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(err ?? 'Could not leave trip'),
+        ),
+      );
+    }
   }
 
   Widget _buildTripActions() {
@@ -625,11 +1013,68 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
               },
               icon: const Icon(Icons.map),
               label: const Text('View Trip Map'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Theme.of(context).colorScheme.secondary,
-              ),
             ),
             const SizedBox(height: 8),
+            if (_trip!.status == TripStatus.upcoming &&
+                _isOwnerOrParticipant()) ...[
+              ElevatedButton.icon(
+                onPressed: () {
+                  context.push(
+                    '/trip/${widget.tripId}/thread',
+                    extra: {
+                      'from': '/trip/${widget.tripId}',
+                      'pane': 'money',
+                    },
+                  );
+                },
+                icon: const Icon(Icons.currency_rupee),
+                label: const Text('Expenses'),
+              ),
+              const SizedBox(height: 8),
+              ElevatedButton.icon(
+                onPressed: () {
+                  context.push(
+                    '/trip/${widget.tripId}/participants',
+                    extra: {'from': '/trip/${widget.tripId}'},
+                  );
+                },
+                icon: const Icon(Icons.people),
+                label: Text(
+                  isOwner ? 'Manage Participants' : 'View Participants',
+                ),
+              ),
+              if (!isOwner && _isParticipant()) ...[
+                const SizedBox(height: 8),
+                OutlinedButton.icon(
+                  onPressed: _leaveTripAsParticipant,
+                  icon: const Icon(Icons.logout),
+                  label: const Text('Leave trip'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: Theme.of(context).colorScheme.error,
+                  ),
+                ),
+              ],
+              if (isOwner) ...[
+                const SizedBox(height: 8),
+                OutlinedButton.icon(
+                  onPressed: _endTrip,
+                  icon: const Icon(Icons.stop_circle_outlined),
+                  label: const Text('End trip'),
+                ),
+                const SizedBox(height: 8),
+                OutlinedButton.icon(
+                  onPressed: () => _changeEnd(extend: _trip!.endDate != null),
+                  icon: Icon(_trip!.endDate == null ? Icons.event : Icons.more_time),
+                  label: Text(_trip!.endDate == null ? 'Set an end' : 'Extend trip'),
+                ),
+                if (_trip!.endDate != null)
+                  TextButton(
+                    onPressed: () => _changeEnd(clear: true),
+                    child: const Text('Remove end time'),
+                  ),
+              ],
+              const SizedBox(height: 8),
+            ],
             if (_trip!.status == TripStatus.ongoing) ...[
               ElevatedButton.icon(
                 onPressed: () {
@@ -638,22 +1083,38 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
                     extra: {'from': '/trip/${widget.tripId}'},
                   );
                 },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Theme.of(context).colorScheme.secondary,
+                  foregroundColor: Theme.of(context).colorScheme.onSecondary,
+                ),
                 icon: const Icon(Icons.add),
                 label: const Text('Add Entry'),
               ),
-              // Owner-only actions
-              if (isOwner) ...[
-                const SizedBox(height: 8),
-                ElevatedButton.icon(
-                  onPressed: () {
-                    context.push(
-                      '/trip/${widget.tripId}/participants',
-                      extra: {'from': '/trip/${widget.tripId}'},
-                    );
-                  },
-                  icon: const Icon(Icons.people),
-                  label: const Text('Manage Participants'),
+              const SizedBox(height: 8),
+              ElevatedButton.icon(
+                onPressed: () {
+                  context.push(
+                    '/trip/${widget.tripId}/participants',
+                    extra: {'from': '/trip/${widget.tripId}'},
+                  );
+                },
+                icon: const Icon(Icons.people),
+                label: Text(
+                  isOwner ? 'Manage Participants' : 'View Participants',
                 ),
+              ),
+              if (!isOwner && _isParticipant()) ...[
+                const SizedBox(height: 8),
+                OutlinedButton.icon(
+                  onPressed: _leaveTripAsParticipant,
+                  icon: const Icon(Icons.logout),
+                  label: const Text('Leave trip'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: Theme.of(context).colorScheme.error,
+                  ),
+                ),
+              ],
+              if (isOwner) ...[
                 const SizedBox(height: 8),
                 Consumer<TripProvider>(
                   builder: (context, tripProvider, child) {
@@ -667,17 +1128,81 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
                     );
                   },
                 ),
+                const SizedBox(height: 8),
+                OutlinedButton.icon(
+                  onPressed: () => _changeEnd(extend: _trip!.endDate != null),
+                  icon: Icon(_trip!.endDate == null ? Icons.event : Icons.more_time),
+                  label: Text(_trip!.endDate == null ? 'Set an end' : 'Extend trip'),
+                ),
+                if (_trip!.endDate != null)
+                  TextButton(
+                    onPressed: () => _changeEnd(clear: true),
+                    child: const Text('Remove end time'),
+                  ),
               ],
             ] else if (_trip!.status == TripStatus.ended) ...[
-              ElevatedButton.icon(
-                onPressed: () {
-                  context.go('/trip/${widget.tripId}/final-post');
-                },
-                icon: const Icon(Icons.auto_awesome),
-                label: Text(_trip!.finalPost != null
-                    ? 'View My Final Post'
-                    : 'Generate My Final Post'),
-              ),
+              if (_isOwnerOrParticipant()) ...[
+                ElevatedButton.icon(
+                  onPressed: () {
+                    context.push(
+                      '/trip/${widget.tripId}/thread',
+                      extra: {
+                        'from': '/trip/${widget.tripId}',
+                        'pane': 'money',
+                      },
+                    );
+                  },
+                  icon: const Icon(Icons.currency_rupee),
+                  label: const Text('Expenses'),
+                ),
+                const SizedBox(height: 8),
+                ElevatedButton.icon(
+                  onPressed: () {
+                    context.push(
+                      '/trip/${widget.tripId}/participants',
+                      extra: {'from': '/trip/${widget.tripId}'},
+                    );
+                  },
+                  icon: const Icon(Icons.people),
+                  label: Text(
+                    isOwner ? 'Manage Participants' : 'View Participants',
+                  ),
+                ),
+                if (!isOwner && _isParticipant()) ...[
+                  const SizedBox(height: 8),
+                  OutlinedButton.icon(
+                    onPressed: _leaveTripAsParticipant,
+                    icon: const Icon(Icons.logout),
+                    label: const Text('Leave trip'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Theme.of(context).colorScheme.error,
+                    ),
+                  ),
+                ],
+                const SizedBox(height: 8),
+              ],
+              if (isOwner && _trip!.endDate != null && _trip!.finalPost == null) ...[
+                OutlinedButton.icon(
+                  onPressed: () => _changeEnd(extend: true),
+                  icon: const Icon(Icons.more_time),
+                  label: const Text('Extend trip'),
+                ),
+                const SizedBox(height: 8),
+              ],
+              if (_isOwnerOrParticipant())
+                ElevatedButton.icon(
+                  onPressed: () {
+                    context.go('/trip/${widget.tripId}/final-post');
+                  },
+                  icon: const Icon(Icons.auto_awesome),
+                  label: Text(
+                    _trip!.finalPost == null
+                        ? 'Create your final post'
+                        : _trip!.finalPost!.isPublished
+                            ? 'Your final post'
+                            : 'Edit your final post',
+                  ),
+                ),
             ],
           ],
         ),
@@ -686,12 +1211,13 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
   }
 
   Widget _buildThreadSection() {
-    final entries = _trip!.threadEntries ?? [];
+    final entries = _previewEntries;
 
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
+          mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
@@ -719,6 +1245,7 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
             if (entries.isEmpty)
               Center(
                 child: Column(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
                     Icon(
                       Icons.timeline,
@@ -755,9 +1282,20 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
     );
   }
 
+  Map<String, String> _usernameToUserIdFromTagged(List<User>? tagged) {
+    if (tagged == null || tagged.isEmpty) return {};
+    final map = <String, String>{};
+    for (final u in tagged) {
+      if (u.username != null && u.username!.isNotEmpty) {
+        map[u.username!] = u.id;
+      }
+    }
+    return map;
+  }
+
   Widget _buildThreadEntryPreview(TripThreadEntry entry) {
     final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
+    final scheme = theme.colorScheme;
     final mediaUrl = entry.media?.url;
     final hasMedia =
         entry.type == ThreadEntryType.media &&
@@ -766,13 +1304,9 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
 
     final String? previewUrl = hasMedia ? mediaUrl : null;
 
-    final cardColor = isDark
-        ? theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.65)
-        : const Color(0xFF12161D);
-    final primaryTextColor = isDark
-        ? theme.colorScheme.onSurface
-        : Colors.white;
-    final secondaryTextColor = primaryTextColor.withValues(alpha: 0.7);
+    final cardColor = scheme.surfaceContainerHighest;
+    final primaryTextColor = scheme.onSurface;
+    final secondaryTextColor = scheme.onSurfaceVariant;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -781,18 +1315,8 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
         color: cardColor,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: isDark
-              ? theme.dividerColor.withValues(alpha: 0.35)
-              : Colors.white.withValues(alpha: 0.08),
+          color: scheme.outline.withValues(alpha: 0.45),
         ),
-        boxShadow: [
-          if (!isDark)
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.35),
-              blurRadius: 14,
-              offset: const Offset(0, 6),
-            ),
-        ],
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -808,8 +1332,8 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
               children: [
                 if (entry.contentText != null &&
                     entry.contentText!.trim().isNotEmpty)
-                  Text(
-                    entry.contentText!,
+                  MentionText(
+                    text: entry.contentText!,
                     style: theme.textTheme.bodyMedium?.copyWith(
                       color: primaryTextColor,
                       fontWeight: FontWeight.w500,
@@ -817,6 +1341,7 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
                     ),
                     maxLines: 3,
                     overflow: TextOverflow.ellipsis,
+                    usernameToUserId: _usernameToUserIdFromTagged(entry.taggedUsers),
                   ),
                 if (entry.locationName != null)
                   Padding(
@@ -854,22 +1379,19 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
     IconData icon;
     Color accent;
 
+    final scheme = Theme.of(context).colorScheme;
     switch (type) {
       case ThreadEntryType.text:
         icon = Icons.text_fields;
-        accent = accentOverride ?? Colors.blueAccent;
+        accent = accentOverride ?? scheme.primary;
         break;
       case ThreadEntryType.media:
         icon = Icons.photo_camera;
-        accent = accentOverride ?? Colors.lightGreenAccent.shade200;
+        accent = accentOverride ?? scheme.secondary;
         break;
       case ThreadEntryType.location:
         icon = Icons.location_on;
-        accent = accentOverride ?? Colors.redAccent;
-        break;
-      case ThreadEntryType.checkin:
-        icon = Icons.check_circle;
-        accent = accentOverride ?? Colors.orangeAccent;
+        accent = accentOverride ?? AppTheme.live;
         break;
     }
 
@@ -932,36 +1454,72 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
     );
   }
 
+  Widget _glassChip(IconData icon, String label) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: Colors.black.withValues(alpha: 0.55),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.35)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 14, color: Colors.white),
+          const SizedBox(width: 6),
+          Flexible(
+            child: Text(
+              label,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildStatusBadge(TripStatus status) {
     Color color;
     String label;
 
     switch (status) {
       case TripStatus.upcoming:
-        color = Colors.orange;
+        color = AppTheme.upcoming;
         label = 'Upcoming';
         break;
       case TripStatus.ongoing:
-        color = Colors.green;
-        label = 'Ongoing';
+        color = AppTheme.live;
+        label = 'Live';
         break;
       case TripStatus.ended:
-        color = Colors.blue;
-        label = 'Completed';
+        color = AppTheme.ended;
+        label = 'Ended';
         break;
     }
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.1),
+        color: color,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: color.withValues(alpha: 0.3)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.25),
+            blurRadius: 6,
+            offset: const Offset(0, 2),
+          ),
+        ],
       ),
       child: Text(
         label,
-        style: TextStyle(
-          color: color,
+        style: const TextStyle(
+          color: Colors.white,
           fontWeight: FontWeight.w600,
           fontSize: 12,
         ),
@@ -988,48 +1546,29 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
   }
 
   Widget _buildStatItem(IconData icon, String value, String label) {
+    final scheme = Theme.of(context).colorScheme;
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(
-          icon,
-          size: 16,
-          color: Theme.of(context).colorScheme.onSurfaceVariant,
-        ),
-        const SizedBox(width: 4),
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              value,
-              style: Theme.of(
-                context,
-              ).textTheme.bodySmall?.copyWith(fontWeight: FontWeight.w600),
-            ),
-            Text(
-              label,
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                color: Theme.of(context).colorScheme.onSurfaceVariant,
-                fontSize: 10,
+        Icon(icon, size: 16, color: scheme.onSurfaceVariant),
+        const SizedBox(width: 6),
+        Text(
+          '$value $label',
+          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                fontWeight: FontWeight.w600,
+                color: scheme.onSurface,
               ),
-            ),
-          ],
         ),
       ],
     );
   }
 
   String _formatDateRange(DateTime? start, DateTime? end) {
-    if (start == null && end == null) return 'Dates not set';
-    if (start == null) return 'Until ${_formatDate(end!)}';
-    if (end == null) return 'From ${_formatDate(start)}';
-    return '${_formatDate(start)} - ${_formatDate(end)}';
-  }
-
-  String _formatDate(DateTime date) {
-    // Extract only date components to avoid timezone issues
-    final dateOnly = DateTime.utc(date.year, date.month, date.day);
-    return '${dateOnly.day}/${dateOnly.month}/${dateOnly.year}';
+    return formatTripRange(
+      start,
+      end,
+      scheduleTimezone: _trip?.scheduleTimezone,
+    );
   }
 
   String _formatDateTime(DateTime dateTime) {
@@ -1094,3 +1633,5 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
     }
   }
 }
+
+enum _TripDetailLeaveChoice { cancel, keepEntries, removeEntries }

@@ -2,9 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import 'package:tripthread/models/trip.dart';
+import 'package:tripthread/providers/auth_provider.dart';
 import 'package:tripthread/providers/final_post_provider.dart';
 import 'package:tripthread/services/trip_service.dart';
+import 'package:tripthread/utils/app_layout.dart';
+import 'package:tripthread/utils/app_theme.dart';
 import 'package:tripthread/utils/cloudinary_utils.dart';
+import 'package:tripthread/utils/trip_time_format.dart';
 
 class FinalPostEditScreen extends StatefulWidget {
   final String tripId;
@@ -17,6 +21,7 @@ class FinalPostEditScreen extends StatefulWidget {
 
 class _FinalPostEditScreenState extends State<FinalPostEditScreen> {
   Trip? _trip;
+  List<TripThreadEntry> _threadEntries = const [];
   bool _isTripLoading = true;
   String? _tripError;
   final TextEditingController _summaryController = TextEditingController();
@@ -49,12 +54,25 @@ class _FinalPostEditScreenState extends State<FinalPostEditScreen> {
     if (!mounted) return;
 
     if (response.success && response.data != null) {
+      final trip = response.data!;
+      final authId = context.read<AuthProvider>().currentUser?.id;
+      final isMember = authId != null &&
+          (trip.userId == authId ||
+              (trip.participants?.any((participant) => participant.userId == authId) ??
+                  false));
+      final entries = await _loadAllThreadEntries(tripService);
+      if (!mounted) return;
+      context.read<FinalPostProvider>().setCanEdit(isMember);
       setState(() {
-        _trip = response.data;
+        _trip = trip;
+        _threadEntries = entries;
         _isTripLoading = false;
         _tripError = null;
       });
     } else {
+      if (mounted) {
+        context.read<FinalPostProvider>().setCanEdit(false);
+      }
       setState(() {
         _tripError = response.error ?? 'Failed to load trip details';
         _isTripLoading = false;
@@ -83,12 +101,39 @@ class _FinalPostEditScreenState extends State<FinalPostEditScreen> {
     );
   }
 
+  Future<List<TripThreadEntry>> _loadAllThreadEntries(TripService tripService) async {
+    final collected = <TripThreadEntry>[];
+    String? cursor;
+    for (var page = 0; page < 20; page++) {
+      final response = await tripService.getThreadEntries(
+        widget.tripId,
+        limit: 50,
+        olderThanCursor: cursor,
+      );
+      if (!response.success || response.data == null) break;
+      collected.addAll(response.data!.items);
+      final next = response.data!.nextOlderCursor;
+      if (!response.data!.hasMoreOlder || next == null || next.isEmpty) break;
+      cursor = next;
+    }
+    return collected;
+  }
+
   List<Media> get _mediaItems {
-    final entries = _trip?.threadEntries ?? [];
+    final authId = context.read<AuthProvider>().currentUser?.id;
+    final entries = _threadEntries;
     final items = entries
-        .map((entry) => entry.media)
-        .whereType<Media>()
-        .where((media) => media.type == MediaType.image && media.url.isNotEmpty)
+        .where((entry) {
+          final media = entry.media;
+          if (media == null ||
+              media.type != MediaType.image ||
+              media.url.isEmpty ||
+              authId == null) {
+            return false;
+          }
+          return media.uploadedById == authId || entry.authorId == authId;
+        })
+        .map((entry) => entry.media!)
         .toList();
     final seen = <String>{};
     return items.where((media) {
@@ -114,7 +159,7 @@ class _FinalPostEditScreenState extends State<FinalPostEditScreen> {
     _syncControllers(draft);
 
     final isBusy = provider.isLoading || draft == null || _isTripLoading;
-    final isEditableDraft = draft != null && !draft.isPublished;
+    final canEditContent = draft != null && provider.canEdit;
 
     return Scaffold(
       appBar: AppBar(
@@ -139,7 +184,9 @@ class _FinalPostEditScreenState extends State<FinalPostEditScreen> {
       ),
       body: isBusy
           ? const Center(child: CircularProgressIndicator())
-          : RefreshIndicator(
+          : AppLayout.reading(
+              context: context,
+              child: RefreshIndicator(
               onRefresh: () => _refresh(provider),
               child: ListView(
                 padding: const EdgeInsets.all(16),
@@ -175,10 +222,10 @@ class _FinalPostEditScreenState extends State<FinalPostEditScreen> {
                     onChanged: provider.updateSummary,
                     minLines: 5,
                     maxLines: 10,
-                    editable: isEditableDraft,
+                    editable: canEditContent,
                     isEditing: _isSummaryEditing,
                     onToggleEdit: () {
-                      if (!isEditableDraft) return;
+                      if (!canEditContent) return;
                       setState(() => _isSummaryEditing = true);
                       Future.microtask(() => _summaryFocus.requestFocus());
                     },
@@ -192,10 +239,10 @@ class _FinalPostEditScreenState extends State<FinalPostEditScreen> {
                     onChanged: provider.updateCaption,
                     minLines: 2,
                     maxLines: 4,
-                    editable: isEditableDraft,
+                    editable: canEditContent,
                     isEditing: _isCaptionEditing,
                     onToggleEdit: () {
-                      if (!isEditableDraft) return;
+                      if (!canEditContent) return;
                       setState(() => _isCaptionEditing = true);
                       Future.microtask(() => _captionFocus.requestFocus());
                     },
@@ -207,6 +254,7 @@ class _FinalPostEditScreenState extends State<FinalPostEditScreen> {
                   const SizedBox(height: 80),
                 ],
               ),
+            ),
             ),
       bottomNavigationBar: draft == null
           ? null
@@ -237,12 +285,7 @@ class _FinalPostEditScreenState extends State<FinalPostEditScreen> {
             Container(
               height: 180,
               decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [
-                    Theme.of(context).colorScheme.primary,
-                    Theme.of(context).colorScheme.secondary,
-                  ],
-                ),
+                gradient: AppTheme.brandWash(Theme.of(context).brightness),
               ),
               child: const Center(
                 child: Icon(Icons.photo, color: Colors.white, size: 48),
@@ -334,7 +377,7 @@ class _FinalPostEditScreenState extends State<FinalPostEditScreen> {
                 ),
                 tooltip: editable
                     ? 'Edit $title'
-                    : 'Editing disabled after publish',
+                    : 'Only you can edit your final post',
                 onPressed: editable ? onToggleEdit : null,
               )
             ],
@@ -368,7 +411,7 @@ class _FinalPostEditScreenState extends State<FinalPostEditScreen> {
   Widget _buildMediaSelector(
       FinalPostProvider provider, TripFinalPost draft) {
     final mediaItems = _mediaItems;
-    final locked = draft.isPublished;
+    final locked = !provider.canEdit;
 
     return Card(
       child: Padding(
@@ -399,20 +442,21 @@ class _FinalPostEditScreenState extends State<FinalPostEditScreen> {
               ],
             ),
             const SizedBox(height: 12),
-            if (locked)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 8),
-                child: Text(
-                  'Photos are locked after publishing.',
-                  style: Theme.of(context)
-                      .textTheme
-                      .bodySmall
-                      ?.copyWith(color: Theme.of(context).hintColor),
-                ),
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Text(
+                locked
+                    ? 'Only you can change the photos on your final post.'
+                    : 'Only photos you uploaded are listed.',
+                style: Theme.of(context)
+                    .textTheme
+                    .bodySmall
+                    ?.copyWith(color: Theme.of(context).hintColor),
               ),
+            ),
             if (mediaItems.isEmpty)
               const Text(
-                  'Add photos to your trip thread to curate them here.')
+                  'Photos you uploaded on this trip show up here.')
             else
               SizedBox(
                 height: 110,
@@ -517,7 +561,11 @@ class _FinalPostEditScreenState extends State<FinalPostEditScreen> {
                 _MetadataChip(
                   icon: Icons.calendar_month,
                   label:
-                      '${_trip!.startDate.toLocal().toShortDateString()} - ${_trip!.endDate.toLocal().toShortDateString()}',
+                      formatTripRange(
+                        _trip!.startDate,
+                        _trip!.endDate,
+                        scheduleTimezone: _trip!.scheduleTimezone,
+                      ),
                 ),
                 if (_trip!.destinations.isNotEmpty)
                   _MetadataChip(
@@ -543,16 +591,61 @@ class _FinalPostEditScreenState extends State<FinalPostEditScreen> {
   Widget _buildBottomBar(
       BuildContext context, FinalPostProvider provider, TripFinalPost draft) {
     if (draft.isPublished) {
+      if (!provider.canEdit) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: ElevatedButton.icon(
+              onPressed: () => context.push('/post/TRIP_FINAL_POST/${draft.id}'),
+              icon: const Icon(Icons.visibility),
+              label: const Text('View post'),
+              style: ElevatedButton.styleFrom(
+                minimumSize: const Size.fromHeight(48),
+              ),
+            ),
+          ),
+        );
+      }
       return SafeArea(
         child: Padding(
           padding: const EdgeInsets.all(16),
-          child: ElevatedButton.icon(
-            onPressed: () => context.go('/home'),
-            icon: const Icon(Icons.check_circle),
-            label: const Text('View Published Post'),
-            style: ElevatedButton.styleFrom(
-              minimumSize: const Size.fromHeight(48),
-            ),
+          child: Row(
+            children: [
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: provider.isSaving
+                      ? null
+                      : () async {
+                          final messenger = ScaffoldMessenger.of(context);
+                          final success = await provider.saveDraft();
+                          if (!mounted) return;
+                          if (success) {
+                            messenger.showSnackBar(
+                              const SnackBar(content: Text('Changes saved')),
+                            );
+                          }
+                        },
+                  child: provider.isSaving
+                      ? const SizedBox(
+                          height: 20,
+                          width: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Text('Save changes'),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: ElevatedButton(
+                  onPressed: () =>
+                      context.push('/post/TRIP_FINAL_POST/${draft.id}'),
+                  style: ElevatedButton.styleFrom(
+                    minimumSize: const Size.fromHeight(48),
+                  ),
+                  child: const Text('View post'),
+                ),
+              ),
+            ],
           ),
         ),
       );
@@ -595,7 +688,7 @@ class _FinalPostEditScreenState extends State<FinalPostEditScreen> {
                     ? null
                     : () async {
                         final messenger = ScaffoldMessenger.of(context);
-                        final navigator = context;
+                        final router = GoRouter.of(context);
                         final success = await provider.publish();
                         if (!mounted) return;
                         if (success) {
@@ -604,7 +697,7 @@ class _FinalPostEditScreenState extends State<FinalPostEditScreen> {
                               content: Text('Trip published to your feed!'),
                             ),
                           );
-                          navigator.go('/home');
+                          router.go('/home');
                         }
                       },
                 style: ElevatedButton.styleFrom(
@@ -644,14 +737,6 @@ class _MetadataChip extends StatelessWidget {
       avatar: Icon(icon, size: 18),
       label: Text(label),
     );
-  }
-}
-
-extension _DateFormatting on DateTime {
-  String toShortDateString() {
-    return '${day.toString().padLeft(2, '0')}/'
-        '${month.toString().padLeft(2, '0')}/'
-        '${year.toString()}';
   }
 }
 

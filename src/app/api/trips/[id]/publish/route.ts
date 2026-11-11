@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
 import { ApiResponse, TripFinalPostResponse } from "@/types/api";
 import { TripFinalizerService } from "@/lib/services/tripFinalizer";
 import {
@@ -8,7 +7,6 @@ import {
   withLogging,
   handleApiError,
 } from "@/lib/middleware";
-import { AuthorizationError, NotFoundError } from "@/lib/errors";
 
 function toResponse(
   finalPost: Awaited<ReturnType<typeof TripFinalizerService.publishFinalPost>>
@@ -26,32 +24,6 @@ function toResponse(
   };
 }
 
-async function ensureParticipantOrOwner(tripId: string, userId: string) {
-  const trip = await prisma.trip.findUnique({
-    where: { id: tripId },
-    select: {
-      id: true,
-      userId: true,
-      participants: {
-        where: { userId },
-        select: { id: true },
-        take: 1,
-      },
-    },
-  });
-
-  if (!trip) {
-    throw new NotFoundError("Trip not found");
-  }
-
-  const isOwner = trip.userId === userId;
-  const isParticipant = trip.participants.length > 0;
-
-  if (!isOwner && !isParticipant) {
-    throw new AuthorizationError("Only trip participants can publish final post");
-  }
-}
-
 // Publish final post
 export async function POST(
   request: NextRequest,
@@ -64,8 +36,6 @@ export async function POST(
           const { id } = await params;
           const tripId = id;
           const userId = authenticatedReq.user!.userId;
-
-          await ensureParticipantOrOwner(tripId, userId);
 
           const published = await TripFinalizerService.publishFinalPost(
             tripId,

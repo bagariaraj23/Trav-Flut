@@ -1,37 +1,47 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { withAuth, withRateLimit, withLogging } from "@/lib/middleware";
+import { withAuth, withRateLimit, withLogging, handleApiError } from "@/lib/middleware";
 import { ApiResponse, UserProfile } from "@/types/api";
 import { CloudinaryService } from "@/lib/cloudinary";
 import { updateProfileSchema } from "@/lib/validation";
 import { handlePrismaUniqueError } from "@/lib/prismaErrors";
+import { PerformanceMonitor } from "@/lib/monitoring";
+import { assertUserHasNoUnsettledTrips } from "@/lib/services/expense";
 
 // Get current user profile
 export async function GET(request: NextRequest) {
   const loggedHandler = withLogging(async (req) => {
-    return withRateLimit(req, async (rateLimitedReq) => {
+    return withRateLimit(req, "read_hot", async (rateLimitedReq) => {
       return withAuth(rateLimitedReq, async (authenticatedReq) => {
+        const endTimer = PerformanceMonitor.getInstance().startTimer("get_user_profile");
         try {
           const currentUserId = authenticatedReq.user!.userId;
           console.log(`[API] GET /users/me - User: ${currentUserId}`);
 
           // Get current user with profile details and oauthAccounts for profileComplete
-          const user = await prisma.user.findUnique({
-            where: { id: currentUserId },
-            select: {
-              id: true,
-              email: true,
-              username: true,
-              name: true,
-              avatarUrl: true,
-              bio: true,
-              isPrivate: true,
-              createdAt: true,
-              updatedAt: true,
-              password: true,
-              oauthAccounts: { select: { id: true, provider: true } },
-            },
-          });
+          const [user, passwordRows] = await Promise.all([
+            prisma.user.findUnique({
+              where: { id: currentUserId },
+              select: {
+                id: true,
+                email: true,
+                username: true,
+                name: true,
+                avatarUrl: true,
+                bio: true,
+                isPrivate: true,
+                createdAt: true,
+                updatedAt: true,
+                oauthAccounts: { select: { id: true, provider: true } },
+              },
+            }),
+            prisma.$queryRaw<Array<{ hasPassword: boolean }>>`
+              SELECT ("password" IS NOT NULL) AS "hasPassword"
+              FROM "users"
+              WHERE id = ${currentUserId}
+            `,
+          ]);
+          const hasPassword = passwordRows[0]?.hasPassword === true;
 
           if (!user) {
             console.error(
@@ -52,13 +62,13 @@ export async function GET(request: NextRequest) {
 
           const profileComplete =
             user.username != null &&
-            (user.password != null || user.oauthAccounts.length === 0);
+            (hasPassword || user.oauthAccounts.length === 0);
 
           const hasGoogleLinked = user.oauthAccounts.some(
             (a) => a.provider === "GOOGLE"
           );
 
-          const { password: _p, oauthAccounts: _oa, ...userFields } = user;
+          const { oauthAccounts: _oa, ...userFields } = user;
           const userResponse: UserProfile = {
             ...userFields,
             username: user.username ?? undefined,
@@ -76,27 +86,26 @@ export async function GET(request: NextRequest) {
             data: userResponse,
           });
         } catch (error: any) {
-          console.error(`[API] GET /users/me - Error:`, error);
-          return NextResponse.json<ApiResponse>(
-            {
-              success: false,
-              error: "Internal server error",
-            },
-            { status: 500 }
-          );
+          return handleApiError(error, {
+            endpoint: "GET /users/me",
+            userId: authenticatedReq.user?.userId,
+          });
+        } finally {
+          endTimer();
         }
       });
     });
   });
-  
+
   return await loggedHandler(request);
 }
 
 // Update current user profile
 export async function PUT(request: NextRequest) {
   const loggedHandler = withLogging(async (req) => {
-    return withRateLimit(req, async (rateLimitedReq) => {
+    return withRateLimit(req, "write", async (rateLimitedReq) => {
       return withAuth(rateLimitedReq, async (authenticatedReq) => {
+        const endTimer = PerformanceMonitor.getInstance().startTimer("update_user_profile");
         try {
           const currentUserId = authenticatedReq.user!.userId;
           let body: Record<string, unknown>;
@@ -114,7 +123,7 @@ export async function PUT(request: NextRequest) {
               { status: 400 }
             );
           }
-          
+
           // Validate all profile data using schema (handles name, username, bio, avatarUrl, isPrivate)
           let validatedData;
           try {
@@ -131,7 +140,7 @@ export async function PUT(request: NextRequest) {
             }
             throw error;
           }
-          
+
           // Additional validation: name is mandatory when provided in body
           if ("name" in body && (!validatedData.name || validatedData.name.length < 1)) {
             return NextResponse.json<ApiResponse>(
@@ -139,12 +148,12 @@ export async function PUT(request: NextRequest) {
               { status: 400 }
             );
           }
-          
+
           const { name, username, bio, avatarUrl, isPrivate } = validatedData;
           // When updating profile details (name, username, or bio), username is required
           const hasProfileDetailUpdate =
             "name" in body || "username" in body || "bio" in body;
-          
+
           // Use transaction to prevent race condition and ensure username requirement check is atomic
           let updatedUser;
           try {
@@ -161,7 +170,7 @@ export async function PUT(request: NextRequest) {
                   throw new Error("Username is required to update profile details.");
                 }
               }
-              
+
               // Perform update inside transaction
               return await tx.user.update({
                 where: { id: currentUserId },
@@ -197,7 +206,7 @@ export async function PUT(request: NextRequest) {
                 { status: 400 }
               );
             }
-            
+
             // Handle unique constraint violations
             const message = handlePrismaUniqueError(error, { username: "Username" });
             if (message) {
@@ -225,14 +234,35 @@ export async function PUT(request: NextRequest) {
             data: userResponse,
           });
         } catch (error: any) {
-          console.error(`[API] PUT /users/me - Error:`, error);
-          return NextResponse.json<ApiResponse>(
-            {
-              success: false,
-              error: "Internal server error",
-            },
-            { status: 500 }
-          );
+          // Handle username requirement error
+          if (error.message === "Username is required to update profile details.") {
+            return NextResponse.json<ApiResponse>(
+              {
+                success: false,
+                error: error.message,
+              },
+              { status: 400 }
+            );
+          }
+
+          // Handle unique constraint violations
+          const message = handlePrismaUniqueError(error, { username: "Username" });
+          if (message) {
+            return NextResponse.json<ApiResponse>(
+              {
+                success: false,
+                error: message,
+              },
+              { status: 400 }
+            );
+          }
+
+          return handleApiError(error, {
+            endpoint: "PUT /users/me",
+            userId: authenticatedReq.user?.userId,
+          });
+        } finally {
+          endTimer();
         }
       });
     });
@@ -243,11 +273,14 @@ export async function PUT(request: NextRequest) {
 // Delete current user account (soft delete)
 export async function DELETE(request: NextRequest) {
   const loggedHandler = withLogging(async (req) => {
-    return withRateLimit(req, async (rateLimitedReq) => {
+    return withRateLimit(req, "write", async (rateLimitedReq) => {
       return withAuth(rateLimitedReq, async (authenticatedReq) => {
+        const endTimer = PerformanceMonitor.getInstance().startTimer("delete_user_account");
         try {
           const currentUserId = authenticatedReq.user!.userId;
           console.log(`[API] DELETE /users/me - User: ${currentUserId}`);
+
+          await assertUserHasNoUnsettledTrips(currentUserId);
 
           // Erase user and related personal data in a single transaction.
           // Collect media publicIds to optionally delete remote assets after the DB transaction.
@@ -369,14 +402,12 @@ export async function DELETE(request: NextRequest) {
             message: "Account deleted successfully",
           });
         } catch (error: any) {
-          console.error(`[API] DELETE /users/me - Error:`, error);
-          return NextResponse.json<ApiResponse>(
-            {
-              success: false,
-              error: "Internal server error",
-            },
-            { status: 500 }
-          );
+          return handleApiError(error, {
+            endpoint: "DELETE /users/me",
+            userId: authenticatedReq.user?.userId,
+          });
+        } finally {
+          endTimer();
         }
       });
     });

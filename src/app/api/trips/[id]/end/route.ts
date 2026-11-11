@@ -1,11 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { ApiResponse, TripResponse } from "@/types/api";
+import { ApiResponse, TripFinalPostResponse, TripResponse } from "@/types/api";
+import { TripFinalizerService } from "@/lib/services/tripFinalizer";
 import {
   withAuth,
   withRateLimit,
   withLogging,
   handleApiError,
+  AuthenticatedRequest,
 } from "@/lib/middleware";
 import { PerformanceMonitor, ErrorTracker } from "@/lib/monitoring";
 import { NotFoundError, ConflictError, ValidationError } from "@/lib/errors";
@@ -45,54 +47,91 @@ export async function POST(
             throw new ValidationError("Only trip owner can end the trip");
           }
 
-          if (trip.status !== TripStatus.ONGOING) {
-            throw new ConflictError("Trip is not ongoing");
+          if (
+            trip.status !== TripStatus.ONGOING &&
+            trip.status !== TripStatus.UPCOMING
+          ) {
+            throw new ConflictError("Trip is already ended");
           }
 
-          // Update trip status only. Personalized final posts are generated per participant on demand.
-          const updatedTrip = await prisma.trip.update({
-            where: { id: tripId },
-            data: {
-              status: TripStatus.ENDED,
-              endDate: new Date(),
-              updatedAt: new Date(),
-            },
-            include: {
-              user: {
-                select: {
-                  id: true,
-                  email: true,
-                  username: true,
-                  name: true,
-                  avatarUrl: true,
-                  bio: true,
-                  isPrivate: true,
-                  createdAt: true,
-                  updatedAt: true,
+          const endingBeforeStart = trip.status === TripStatus.UPCOMING;
+
+          // Update trip status and, for a trip that already started, generate the final post.
+          const [updatedTrip, finalPost] = await prisma.$transaction(
+            async (tx) => {
+              // Update trip status
+              const updated = await tx.trip.update({
+                where: { id: tripId },
+                data: {
+                  status: TripStatus.ENDED,
+                  endDate: new Date(),
+                  updatedAt: new Date(),
                 },
-              },
-              _count: {
-                select: {
-                  threadEntries: true,
-                  media: true,
-                  participants: true,
-                },
-              },
-              participants: {
                 include: {
-                  user: true,
+                  user: {
+                    select: {
+                      id: true,
+                      email: true,
+                      username: true,
+                      name: true,
+                      avatarUrl: true,
+                      bio: true,
+                      isPrivate: true,
+                      createdAt: true,
+                      updatedAt: true,
+                    },
+                  },
+                  _count: {
+                    select: {
+                      threadEntries: true,
+                      media: true,
+                      participants: true,
+                    },
+                  },
+                  participants: {
+                    include: {
+                      user: true,
+                    },
+                  },
+                  threadEntries: {
+                    include: {
+                      media: true,
+                      taggedUsers: true,
+                      author: true,
+                    },
+                    orderBy: { createdAt: "asc" },
+                  },
                 },
-              },
-              threadEntries: {
-                include: {
-                  media: true,
-                  taggedUsers: true,
-                  author: true,
-                },
-                orderBy: { createdAt: "asc" },
-              },
-            },
-          });
+              });
+
+              // A trip that never started is cancelled: no final post.
+              // A trip that ran gets one personal draft per member.
+              const generatedPosts = endingBeforeStart
+                ? []
+                : await TripFinalizerService.generateFinalPostsForMembers(
+                    tripId,
+                    tx
+                  );
+              const generatedFinalPost =
+                generatedPosts.find((post) => post.userId === userId) ?? null;
+
+              return [updated, generatedFinalPost] as const;
+            }
+          );
+
+          const finalPostResponse: TripFinalPostResponse | undefined = finalPost
+            ? {
+                ...finalPost,
+                caption: finalPost.caption ?? undefined,
+                coverMediaUrl: finalPost.coverMediaUrl ?? undefined,
+                generationStatus: finalPost.generationStatus,
+                publishedAt: finalPost.publishedAt
+                  ? finalPost.publishedAt.toISOString()
+                  : undefined,
+                createdAt: finalPost.createdAt.toISOString(),
+                updatedAt: finalPost.updatedAt.toISOString(),
+              }
+            : undefined;
 
           const tripResponse: TripResponse = {
             ...updatedTrip,
@@ -111,6 +150,7 @@ export async function POST(
                   updatedAt: updatedTrip.user.updatedAt.toISOString(),
                 }
               : undefined,
+            finalPost: finalPostResponse,
             description: updatedTrip.description ?? undefined,
             mood: updatedTrip.mood ?? undefined,
             type: updatedTrip.type ?? undefined,
@@ -161,7 +201,9 @@ export async function POST(
           return NextResponse.json<ApiResponse<TripResponse>>({
             success: true,
             data: tripResponse,
-            message: "Trip ended successfully",
+            message: endingBeforeStart
+              ? "Trip ended before it started"
+              : "Trip ended successfully and final post generated",
           });
         } catch (error) {
           endTimer();

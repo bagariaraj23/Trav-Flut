@@ -1,11 +1,17 @@
 import { NextRequest } from "next/server";
 import { z } from "zod";
 import { ok, badRequest, serverError } from "@/lib/response-helpers";
-import { AuthenticatedRequest, withAuth } from "@/lib/middleware";
+import { AuthenticatedRequest, withAuth, withLogging, withRateLimit } from "@/lib/middleware";
 import { prisma } from "@/lib/prisma";
 import { CloudinaryService } from "@/lib/cloudinary";
 
-const mediaUsageEnum = z.enum(["trip_cover", "thread_entry", "general"]);
+const mediaUsageEnum = z.enum([
+  "trip_cover",
+  "thread_entry",
+  "general",
+  "chat",
+  "group_avatar",
+]);
 
 const signatureSchema = z.object({
   filename: z.string().min(1).max(255),
@@ -107,5 +113,9 @@ async function handler(request: AuthenticatedRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  return withAuth(request, handler);
+  return withLogging(async (req) => {
+    return withRateLimit(req, "media_upload", async (limited) => {
+      return withAuth(limited, handler);
+    });
+  })(request);
 }

@@ -1,0 +1,269 @@
+import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import 'package:go_router/go_router.dart';
+import 'package:tripthread/models/chat_conversation.dart';
+import 'package:tripthread/providers/chat_provider.dart';
+import 'package:tripthread/providers/auth_provider.dart';
+import 'package:tripthread/utils/app_feedback.dart';
+import 'package:tripthread/utils/app_layout.dart';
+import 'package:tripthread/utils/chat_navigation.dart';
+import 'package:tripthread/utils/locale_dates.dart';
+import 'package:tripthread/widgets/chat/chat_avatar.dart';
+
+class ConversationListScreen extends StatefulWidget {
+  final String? tripId;
+
+  const ConversationListScreen({super.key, this.tripId});
+
+  @override
+  State<ConversationListScreen> createState() => _ConversationListScreenState();
+}
+
+class _ConversationListScreenState extends State<ConversationListScreen> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted) return;
+      final chat = context.read<ChatProvider>();
+      await chat.loadConversations(tripId: widget.tripId);
+      if (!mounted || widget.tripId == null) return;
+      // For trip-scoped views, skip the list and go directly to the chat screen
+      // (the TRIP conversation was created/fetched above). Use pushReplacement so
+      // the back button from the chat screen returns to the trip detail, not here.
+      final tripConvs = chat.getConversationsForTrip(widget.tripId!);
+      if (tripConvs.length == 1) {
+        context.pushReplacement(
+          '/chat/${tripConvs.first.id}',
+          extra: GoRouterState.of(context).extra,
+        );
+      }
+    });
+  }
+
+  void _leave() {
+    final returnTo = chatReturnLocation(context);
+    if (returnTo != null) {
+      context.go(returnTo);
+      return;
+    }
+    if (context.canPop()) {
+      context.pop();
+      return;
+    }
+    context.go('/home');
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final returnTo = chatReturnLocation(context);
+    return PopScope(
+      canPop: returnTo == null && GoRouter.of(context).canPop(),
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop) return;
+        _leave();
+      },
+      child: Scaffold(
+      appBar: AppBar(
+        title: Text(widget.tripId == null ? 'Messages' : 'Trip chat'),
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          onPressed: _leave,
+        ),
+        actions: widget.tripId == null
+            ? [
+                IconButton(
+                  icon: const Icon(Icons.add_comment),
+                  tooltip: 'New chat',
+                  onPressed: () => context.push('/chat/new'),
+                ),
+              ]
+            : null,
+      ),
+      body: AppLayout.reading(
+        context: context,
+        child: Consumer<ChatProvider>(
+        builder: (context, chat, _) {
+          // Use trip-filtered list when scoped to a trip; full list otherwise.
+          final list = widget.tripId != null
+              ? chat.getConversationsForTrip(widget.tripId!)
+              : chat.conversations;
+
+          if (chat.loadingConversations && list.isEmpty) {
+            return const Center(child: CircularProgressIndicator());
+          }
+          if (chat.error != null && list.isEmpty) {
+            return Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(chat.error!, textAlign: TextAlign.center),
+                  const SizedBox(height: 16),
+                  TextButton(
+                    onPressed: () => chat.loadConversations(tripId: widget.tripId),
+                    child: const Text('Retry'),
+                  ),
+                ],
+              ),
+            );
+          }
+          if (list.isEmpty) {
+            return AppFeedback.empty(
+              context: context,
+              icon: Icons.chat_bubble_outline,
+              title: 'No conversations yet',
+              subtitle: widget.tripId == null
+                  ? 'Start a trip chat or message a friend.'
+                  : 'Trip chat will appear once you are a participant.',
+              action: widget.tripId == null
+                  ? FilledButton.icon(
+                      onPressed: () => context.push('/chat/new'),
+                      icon: const Icon(Icons.add_comment),
+                      label: const Text('New chat'),
+                    )
+                  : null,
+            );
+          }
+          return RefreshIndicator(
+            onRefresh: () => chat.loadConversations(tripId: widget.tripId),
+            child: ListView.builder(
+              itemCount: list.length,
+              itemBuilder: (context, index) {
+                final c = list[index];
+                return _ConversationTile(
+                  conversation: c,
+                  currentUserId: context.read<AuthProvider>().currentUser?.id ?? '',
+                  onTap: () => context.push(
+                    '/chat/${c.id}',
+                    extra: widget.tripId == null
+                        ? chatReturnExtra('/chat')
+                        : GoRouterState.of(context).extra ??
+                            chatReturnExtra('/chat?tripId=${widget.tripId}'),
+                  ),
+                );
+              },
+            ),
+          );
+        },
+      ),
+      ),
+    ),
+    );
+  }
+}
+
+class _ConversationTile extends StatelessWidget {
+  final ChatConversationSummary conversation;
+  final String currentUserId;
+  final VoidCallback onTap;
+
+  const _ConversationTile({
+    required this.conversation,
+    required this.currentUserId,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final other = conversation.participants
+        .where((p) => p.userId != currentUserId)
+        .toList();
+    final title = conversation.name?.trim().isNotEmpty == true
+        ? conversation.name!.trim()
+        : (conversation.type == 'DM' && other.isNotEmpty
+            ? (other.first.name ?? other.first.username ?? 'User')
+            : conversation.type == 'TRIP'
+                ? 'Trip chat'
+                : 'Group');
+    final subtitle = conversation.lastMessage?.content ?? '';
+    final time = conversation.lastMessage?.createdAt != null
+        ? _formatTime(conversation.lastMessage!.createdAt)
+        : '';
+    final unread = conversation.unreadCount > 0;
+    final isGroup = conversation.type == 'GROUP';
+    final isTrip = conversation.type == 'TRIP';
+    final otherDisplayName = other.isNotEmpty
+        ? (other.first.name ?? other.first.username ?? '')
+        : '';
+    final avatarLabel = isGroup || isTrip ? title : otherDisplayName;
+    final dmOther = other.isNotEmpty ? other.first : null;
+
+    return ListTile(
+      leading: ChatAvatar(
+        radius: 22,
+        avatarUrl: (isGroup || isTrip)
+            ? conversation.avatarUrl
+            : dmOther?.avatarUrl,
+        username: isGroup || isTrip ? null : dmOther?.username,
+        name: isGroup || isTrip ? avatarLabel : (dmOther?.name ?? dmOther?.username),
+      ),
+      title: Row(
+        children: [
+          Expanded(
+            child: Text(
+              title,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontWeight: unread ? FontWeight.bold : FontWeight.normal,
+              ),
+            ),
+          ),
+          if (isGroup || isTrip)
+            Container(
+              margin: const EdgeInsets.only(left: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Text(
+                isGroup ? 'GROUP' : 'TRIP',
+                style: Theme.of(context).textTheme.labelSmall,
+              ),
+            ),
+        ],
+      ),
+      subtitle: Text(
+        subtitle,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: TextStyle(
+          fontWeight: unread ? FontWeight.w600 : FontWeight.normal,
+        ),
+      ),
+      trailing: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          if (time.isNotEmpty) Text(time, style: Theme.of(context).textTheme.bodySmall),
+          if (unread)
+            Container(
+              margin: const EdgeInsets.only(top: 4),
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.secondary,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Text(
+                '${conversation.unreadCount}',
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.onSecondary,
+                  fontSize: 12,
+                ),
+              ),
+            ),
+        ],
+      ),
+      onTap: onTap,
+    );
+  }
+
+  String _formatTime(String iso) {
+    try {
+      return LocaleDates.conversationStamp(DateTime.parse(iso));
+    } catch (_) {
+      return '';
+    }
+  }
+}

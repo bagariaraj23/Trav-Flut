@@ -97,8 +97,57 @@ export const signupSchema = z.object({
 export const loginSchema = z.object({
   email: z
     .string()
-    .email("Please enter a valid email address")
-    .transform((email) => normalizeEmailForLookup(email)),
+    .min(1, "Email or username is required")
+    .transform((input) => {
+      const trimmed = input.trim();
+      // Check if input contains '@' to determine if it's an email
+      if (trimmed.includes("@")) {
+        // Validate and normalize as email
+        const emailSchema = z.string().email("Please enter a valid email address");
+        const validatedEmail = emailSchema.parse(trimmed);
+        return normalizeEmailForLookup(validatedEmail);
+      } else {
+        // Validate and normalize as username
+        const normalized = normalizeUsernameToAscii(trimmed);
+        if (normalized.length < 3) {
+          throw new z.ZodError([
+            {
+              code: "too_small",
+              minimum: 3,
+              type: "string",
+              inclusive: true,
+              exact: false,
+              message: "Username must be at least 3 characters",
+              path: ["email"],
+            },
+          ]);
+        }
+        if (normalized.length > 30) {
+          throw new z.ZodError([
+            {
+              code: "too_big",
+              maximum: 30,
+              type: "string",
+              inclusive: true,
+              exact: false,
+              message: "Username must be less than 30 characters",
+              path: ["email"],
+            },
+          ]);
+        }
+        if (!/^[a-zA-Z0-9_]+$/.test(normalized)) {
+          throw new z.ZodError([
+            {
+              code: "invalid_string",
+              validation: "regex",
+              message: "Username can only contain letters, numbers, and underscores",
+              path: ["email"],
+            },
+          ]);
+        }
+        return normalized.toLowerCase();
+      }
+    }),
   password: z
     .string()
     .min(1, "Password is required")
@@ -197,39 +246,35 @@ export const createTripSchema = z
         );
         return val;
       }),
-    startDate: z.string().refine((date) => {
-      // Try to parse the date string
-      const parsedDate = new Date(date);
-
-      // Check if it's a valid date
-      if (isNaN(parsedDate.getTime())) {
-        console.log(`[DEBUG] Invalid date string received: ${date}`);
-        return false;
-      }
-
-      // Check if it's not in the past
-      const now = new Date();
-      now.setHours(0, 0, 0, 0); // Start of today
-
-      console.log(`[DEBUG] Parsed start date: ${parsedDate.toISOString()}`);
-      console.log(`[DEBUG] Today start: ${now.toISOString()}`);
-      console.log(`[DEBUG] Is valid date: ${parsedDate >= now}`);
-
-      return parsedDate >= now;
-    }, "Start date is required and cannot be in the past"),
-    endDate: z.string().refine((date) => {
-      // Try to parse the date string
-      const parsedDate = new Date(date);
-
-      // Check if it's a valid date
-      if (isNaN(parsedDate.getTime())) {
-        console.log(`[DEBUG] Invalid end date string received: ${date}`);
-        return false;
-      }
-
-      console.log(`[DEBUG] Parsed end date: ${parsedDate.toISOString()}`);
-      return true;
-    }, "End date is required and must be a valid date"),
+    startDate: z
+      .string()
+      .optional()
+      .refine((date) => {
+        if (date == null) return true;
+        const parsedDate = new Date(date);
+        if (isNaN(parsedDate.getTime())) return false;
+        // Two minutes of clock skew so "start now" from the device is not rejected.
+        return parsedDate.getTime() >= Date.now() - 2 * 60 * 1000;
+      }, "Start time cannot be in the past"),
+    endDate: z
+      .string()
+      .optional()
+      .refine((date) => {
+        if (date == null) return true;
+        return !isNaN(new Date(date).getTime());
+      }, "End time must be a valid date"),
+    scheduleTimezone: z
+      .string()
+      .optional()
+      .refine((zone) => {
+        if (zone == null || zone === "") return true;
+        try {
+          Intl.DateTimeFormat("en-US", { timeZone: zone });
+          return true;
+        } catch {
+          return false;
+        }
+      }, "Timezone must be an IANA name"),
     destinationPlaceIds: z
       .array(z.string().uuid("Invalid place id"))
       .min(1, "At least one destination is required")
@@ -290,9 +335,9 @@ export const createTripSchema = z
         console.log(
           `[DEBUG] Date range validation - Start: ${startDate.toISOString()}, End: ${endDate.toISOString()}`
         );
-        console.log(`[DEBUG] Is end after start: ${startDate <= endDate}`);
+        console.log(`[DEBUG] Is end after start: ${startDate < endDate}`);
 
-        return startDate <= endDate;
+        return startDate < endDate;
       }
       return true;
     },
@@ -302,9 +347,33 @@ export const createTripSchema = z
     }
   );
 
+const ianaTimezoneSchema = z.string().refine((zone) => {
+  try {
+    Intl.DateTimeFormat("en-US", { timeZone: zone });
+    return true;
+  } catch {
+    return false;
+  }
+}, "Timezone must be an IANA name");
+
+export const updateTripDatesSchema = z
+  .object({
+    startDate: z.string().optional(),
+    endDate: z.union([z.string(), z.null()]).optional(),
+    scheduleTimezone: ianaTimezoneSchema.optional(),
+    extend: z.boolean().optional(),
+  })
+  .refine(
+    (data) =>
+      data.startDate !== undefined ||
+      data.endDate !== undefined ||
+      data.scheduleTimezone !== undefined,
+    { message: "Provide a start time, an end time, or a timezone" }
+  );
+
 export const createThreadEntrySchema = z
   .object({
-    type: z.enum(["TEXT", "MEDIA", "LOCATION", "CHECKIN"]),
+    type: z.enum(["TEXT", "MEDIA", "LOCATION"]),
     contentText: z
       .union([
         z
@@ -413,11 +482,6 @@ export const createThreadEntrySchema = z
             !!data.placeId ||
             (!!data.locationName && data.locationName.length > 0)
           );
-        case "CHECKIN":
-          return (
-            !!data.placeId ||
-            (!!data.locationName && data.locationName.length > 0)
-          );
         default:
           return false;
       }
@@ -426,6 +490,23 @@ export const createThreadEntrySchema = z
       message: "Required fields missing for entry type",
     }
   );
+
+export const patchThreadEntryTextSchema = z.object({
+  contentText: z
+    .string()
+    .min(1, "Content is required")
+    .max(1000, "Content must be less than 1000 characters")
+    .transform((text) => {
+      const trimmed = text.trim();
+      if (trimmed.length === 0) return trimmed;
+      return trimmed.charAt(0).toUpperCase() + trimmed.slice(1);
+    }),
+});
+
+/** Participant self-leave: if true, purge author's thread entries (ongoing trips only). */
+export const leaveTripSchema = z.object({
+  removeMyData: z.boolean(),
+});
 
 export const addParticipantSchema = z.object({
   userId: z.string().uuid("Invalid user ID format"),
@@ -536,6 +617,7 @@ export const createShareSchema = z.object({
   entityType: z.enum(["TRIP_FINAL_POST"]),
   entityId: z.string().uuid("Invalid entity ID format"),
   shareType: z.enum(["DEEP_LINK", "WEB_LINK", "EXTERNAL"]),
+  shareSource: z.enum(["SYSTEM_SHEET", "IN_APP_DM"]).optional().default("SYSTEM_SHEET"),
   expiresAt: z
     .string()
     .datetime()
@@ -544,4 +626,104 @@ export const createShareSchema = z.object({
     .refine((date) => !date || date > new Date(), {
       message: "Expiration date must be in the future",
     }),
+});
+
+export const EXPENSE_CURRENCY_VALUES = [
+  "INR",
+  "USD",
+  "EUR",
+  "AED",
+  "GBP",
+  "SGD",
+  "AUD",
+  "CAD",
+] as const;
+
+const expenseShareInput = z.object({
+  userId: z.string().uuid("Invalid user ID"),
+  shareMinor: z.number().int().min(0),
+});
+
+const expensePercentInput = z.object({
+  userId: z.string().uuid("Invalid user ID"),
+  bps: z.number().int().min(0).max(10000),
+});
+
+const expenseWeightInput = z.object({
+  userId: z.string().uuid("Invalid user ID"),
+  weight: z.number().int().min(0),
+});
+
+export const createExpenseSchema = z
+  .object({
+    title: z
+      .string()
+      .min(1, "Title is required")
+      .max(80, "Title must be less than 80 characters")
+      .transform((t) => t.trim()),
+    category: z.enum([
+      "FOOD",
+      "STAY",
+      "TRANSPORT",
+      "ACTIVITIES",
+      "SHOPPING",
+      "OTHER",
+    ]),
+    amountMinor: z
+      .number()
+      .int()
+      .min(1, "Amount must be at least 1")
+      .max(1_000_000_000, "Amount exceeds the maximum"),
+    payerId: z.string().uuid("Invalid payer ID"),
+    splitMethod: z.enum(["EQUAL", "EXACT", "PERCENT", "SHARES"]),
+    memberIds: z
+      .array(z.string().uuid("Invalid user ID"))
+      .min(1, "Select at least one person to split with"),
+    shares: z.array(expenseShareInput).optional(),
+    percentBps: z.array(expensePercentInput).optional(),
+    weights: z.array(expenseWeightInput).optional(),
+    note: z
+      .string()
+      .max(500, "Note must be less than 500 characters")
+      .transform((t) => t.trim())
+      .optional()
+      .nullable(),
+  })
+  .superRefine((data, ctx) => {
+    if (data.splitMethod === "EXACT" && (!data.shares || data.shares.length === 0)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Exact split requires share amounts",
+        path: ["shares"],
+      });
+    }
+    if (data.splitMethod === "PERCENT" && (!data.percentBps || data.percentBps.length === 0)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Percent split requires percentages",
+        path: ["percentBps"],
+      });
+    }
+    if (data.splitMethod === "SHARES" && (!data.weights || data.weights.length === 0)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Shares split requires weights",
+        path: ["weights"],
+      });
+    }
+  });
+
+export const createSettlementSchema = z.object({
+  fromUserId: z.string().uuid("Invalid payer ID"),
+  toUserId: z.string().uuid("Invalid payee ID"),
+  amountMinor: z
+    .number()
+    .int()
+    .min(1, "Amount must be at least 1")
+    .max(1_000_000_000, "Amount exceeds the maximum"),
+});
+
+export const updateExpenseSettingsSchema = z.object({
+  expenseCurrency: z.enum(EXPENSE_CURRENCY_VALUES).optional(),
+  spendVisibleOnDiscover: z.boolean().optional(),
 });

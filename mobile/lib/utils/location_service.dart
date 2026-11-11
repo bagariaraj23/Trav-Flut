@@ -1,23 +1,13 @@
 import 'package:flutter/foundation.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:tripthread/utils/app_permissions.dart';
 
 class LocationService {
   Future<Position?> getCurrentLocation() async {
     try {
-      // Check permission
-      final permission = await Geolocator.checkPermission();
-      if (permission == LocationPermission.denied) {
-        final requested = await Geolocator.requestPermission();
-        if (requested == LocationPermission.denied) {
-          return null;
-        }
-      }
+      final access = await AppPermissions.ensure(AppPermissionKind.location);
+      if (access != AppPermissionOutcome.granted) return null;
 
-      if (permission == LocationPermission.deniedForever) {
-        return null;
-      }
-
-      // Get location
       return await Geolocator.getCurrentPosition(
         locationSettings: const LocationSettings(
           accuracy: LocationAccuracy.medium,

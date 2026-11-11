@@ -18,10 +18,17 @@ export async function canViewEntity(
       where: { id: entityId },
       select: {
         id: true,
+        tripId: true,
         userId: true,
+        isPublished: true,
         user: {
           select: {
             isPrivate: true,
+          },
+        },
+        trip: {
+          select: {
+            userId: true,
           },
         },
       },
@@ -29,12 +36,26 @@ export async function canViewEntity(
 
     if (!post) return false;
 
-    const owner = post.user;
-    if (!owner.isPrivate) return true;
+    // A draft belongs to its author until they publish it.
+    if (!post.isPublished) {
+      return !!userId && userId === post.userId;
+    }
+
+    if (!post.user.isPrivate) return true;
 
     if (!userId) return false;
 
-    if (userId === post.userId) return true;
+    if (userId === post.userId || userId === post.trip.userId) return true;
+
+    const participant = await prisma.tripParticipant.findUnique({
+      where: {
+        tripId_userId: {
+          tripId: post.tripId,
+          userId,
+        },
+      },
+    });
+    if (participant) return true;
 
     const follow = await prisma.follow.findUnique({
       where: {
@@ -53,6 +74,7 @@ export async function canViewEntity(
       where: { id: entityId },
       select: {
         id: true,
+        tripId: true,
         trip: {
           select: {
             userId: true,
@@ -74,6 +96,16 @@ export async function canViewEntity(
     if (!userId) return false;
 
     if (userId === entry.trip.userId) return true;
+
+    const participant = await prisma.tripParticipant.findUnique({
+      where: {
+        tripId_userId: {
+          tripId: entry.tripId,
+          userId,
+        },
+      },
+    });
+    if (participant) return true;
 
     const follow = await prisma.follow.findUnique({
       where: {
@@ -157,10 +189,15 @@ export async function canDeleteComment(userId: string, commentId: string): Promi
       where: { id: comment.entityId },
       select: {
         userId: true,
+        trip: {
+          select: {
+            userId: true,
+          },
+        },
       },
     });
 
-    return post?.userId === userId;
+    return post?.userId === userId || post?.trip.userId === userId;
   }
 
   if (comment.entityType === 'TRIP_THREAD_ENTRY') {

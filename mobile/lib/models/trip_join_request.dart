@@ -53,6 +53,7 @@ class TripJoinRequestTrip {
   final String status;
   final DateTime? startDate;
   final DateTime? endDate;
+  final String? scheduleTimezone;
 
   const TripJoinRequestTrip({
     required this.id,
@@ -63,6 +64,7 @@ class TripJoinRequestTrip {
     required this.status,
     this.startDate,
     this.endDate,
+    this.scheduleTimezone,
   });
 
   factory TripJoinRequestTrip.fromJson(Map<String, dynamic> json) =>

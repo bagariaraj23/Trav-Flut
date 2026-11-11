@@ -2,14 +2,16 @@ name: tripthread
 description: "TripThread - Travel Social Media Platform"
 publish_to: "none"
 
-version: 1.0.0+1
+version: 1.0.0+5
 
 environment:
-  sdk: ">=3.8.0 <4.0.0"
-  flutter: ">=3.10.0"
+  sdk: ">=3.10.0 <4.0.0"
+  flutter: ">=3.38.1"
 
 dependencies:
   flutter:
+    sdk: flutter
+  flutter_localizations:
     sdk: flutter
 
   # State Management
@@ -21,11 +23,15 @@ dependencies:
   # Secure Storage
   flutter_secure_storage: ^10.0.0
 
+  # Local cache for user metadata (non-sensitive)
+  shared_preferences: ^2.2.2
+
   # Navigation
   go_router: ^17.0.1
 
   # UI Components
   cupertino_icons: ^1.0.6
+  google_fonts: ^6.3.2
 
   # Form Validation
   form_field_validator: ^1.1.0
@@ -48,13 +54,15 @@ dependencies:
   flutter_dotenv: ^6.0.0
 
   # Maps & Location
-  mapbox_maps_flutter: ^2.9.1
+  mapbox_maps_flutter: ^3.34.2
   geolocator: ^14.0.2
   geocoding: ^4.0.0
+  permission_handler: ^13.0.2
 
   # Connectivity
   connectivity_plus: ^7.0.0
   jwt_decoder: ^2.0.1
+  web_socket_channel: ^3.0.1
 
   # Deep Links
   app_links: ^7.0.0
@@ -62,11 +70,14 @@ dependencies:
   # Sharing
   share_plus: ^10.1.3
 
+  flutter_svg: ^2.0.17
   another_flushbar: ^1.12.30
   firebase_core: ^4.3.0
   google_sign_in: ^6.2.2
   http_parser: ^4.1.2 
   crypto: ^3.0.7
+  uuid: ^4.5.1
+  flutter_timezone: ^5.1.1
 
 dev_dependencies:
   flutter_test:

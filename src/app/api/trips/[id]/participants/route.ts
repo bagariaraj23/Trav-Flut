@@ -3,12 +3,19 @@ import { prisma } from "@/lib/prisma";
 import { AuthService } from "@/lib/auth";
 import { addParticipantSchema } from "@/lib/validation";
 import { ApiResponse, TripParticipantResponse } from "@/types/api";
+import { assertMemberZeroNetOnTrip } from "@/lib/services/expense";
+import { UnsettledBalanceError } from "@/lib/errors";
+import { enforcePresetRateLimit } from "@/lib/rateLimit";
+import { ensureTripConversation, markTripMemberLeftChat } from "@/lib/services/chat";
+import { applyAutoTripType } from "@/lib/tripSchedule";
 
 // Add participant to trip
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const limited = await enforcePresetRateLimit(request, "write");
+  if (limited) return limited;
   try {
     const { id } = await params;
     const tripId = id;
@@ -69,6 +76,31 @@ export async function POST(
       );
     }
 
+    const ownerProfile = await prisma.user.findUnique({
+      where: { id: trip.userId },
+      select: { isPrivate: true },
+    });
+    if (ownerProfile?.isPrivate) {
+      const follow = await prisma.follow.findUnique({
+        where: {
+          followerId_followeeId: {
+            followerId: validatedData.userId,
+            followeeId: trip.userId,
+          },
+        },
+      });
+      if (!follow) {
+        return NextResponse.json<ApiResponse>(
+          {
+            success: false,
+            error:
+              "User must follow the private trip owner before they can be added as a participant.",
+          },
+          { status: 403 }
+        );
+      }
+    }
+
     // Check if user to be added exists
     const userToAdd = await prisma.user.findUnique({
       where: { id: validatedData.userId },
@@ -105,8 +137,8 @@ export async function POST(
     }
 
     // Add participant and increment participantCount in a transaction
-    const [participant, _] = await prisma.$transaction([
-      prisma.tripParticipant.create({
+    const participant = await prisma.$transaction(async (tx) => {
+      const created = await tx.tripParticipant.create({
         data: {
           tripId,
           userId: validatedData.userId,
@@ -127,12 +159,14 @@ export async function POST(
             },
           },
         },
-      }),
-      prisma.trip.update({
+      });
+      await tx.trip.update({
         where: { id: tripId },
         data: { participantCount: { increment: 1 }, updatedAt: new Date() },
-      }),
-    ]);
+      });
+      await applyAutoTripType(tx, tripId);
+      return created;
+    });
 
     const participantResponse: TripParticipantResponse = {
       ...participant,
@@ -147,6 +181,17 @@ export async function POST(
         updatedAt: participant.user.updatedAt.toISOString(),
       },
     };
+
+    try {
+      await ensureTripConversation(tripId, {
+        rejoinUserIds: [validatedData.userId],
+      });
+    } catch (chatErr) {
+      console.error(
+        `[WARN] Failed to sync trip chat after adding participant to ${tripId}:`,
+        chatErr
+      );
+    }
 
     return NextResponse.json<ApiResponse<TripParticipantResponse>>(
       {
@@ -183,6 +228,8 @@ export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const limited = await enforcePresetRateLimit(request, "write");
+  if (limited) return limited;
   try {
     const { id } = await params;
     const tripId = id;
@@ -250,28 +297,56 @@ export async function DELETE(
         { status: 400 }
       );
     }
+
+    try {
+      await assertMemberZeroNetOnTrip(tripId, userIdToRemove);
+    } catch (error) {
+      if (error instanceof UnsettledBalanceError) {
+        return NextResponse.json<ApiResponse>(
+          {
+            success: false,
+            error: error.message,
+            meta: { code: error.code, netMinor: error.netMinor },
+          },
+          { status: 409 }
+        );
+      }
+      throw error;
+    }
     // Remove participant, delete any pending TripJoinRequest, and decrement participantCount in a transaction
-    await prisma.$transaction([
-      prisma.tripParticipant.delete({
+    await prisma.$transaction(async (tx) => {
+      await tx.tripParticipant.delete({
         where: {
           tripId_userId: {
             tripId,
             userId: userIdToRemove,
           },
         },
-      }),
-      prisma.trip.update({
+      });
+      await tx.trip.update({
         where: { id: tripId },
         data: { participantCount: { decrement: 1 }, updatedAt: new Date() },
-      }),
-      prisma.tripJoinRequest.deleteMany({
+      });
+      await applyAutoTripType(tx, tripId);
+      await tx.tripJoinRequest.deleteMany({
         where: {
           tripId,
           receiverId: userIdToRemove,
           status: "PENDING",
         },
-      }),
-    ]);
+      });
+    });
+
+    try {
+      await markTripMemberLeftChat(tripId, userIdToRemove);
+      await ensureTripConversation(tripId);
+    } catch (chatErr) {
+      console.error(
+        `[WARN] Failed to sync trip chat after removing participant from ${tripId}:`,
+        chatErr
+      );
+    }
+
     return NextResponse.json<ApiResponse>({
       success: true,
       message: "Participant and any pending join requests removed successfully",
@@ -293,6 +368,8 @@ export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const limited = await enforcePresetRateLimit(request, "read_hot");
+  if (limited) return limited;
   try {
     const { id } = await params;
     const tripId = id;
@@ -373,42 +450,83 @@ export async function GET(
       }
     }
 
-    // Get participants
+    const userSelect = {
+      id: true,
+      email: true,
+      username: true,
+      name: true,
+      avatarUrl: true,
+      bio: true,
+      isPrivate: true,
+      createdAt: true,
+      updatedAt: true,
+    } as const;
+
+    // Owner is stored on trips.userId and is often NOT in trip_participants.
+    // Include them first so "Current Participants" always shows the trip owner.
+    const tripWithOwner = await prisma.trip.findUnique({
+      where: { id: tripId },
+      select: {
+        id: true,
+        userId: true,
+        createdAt: true,
+        user: { select: userSelect },
+      },
+    });
+
     const participants = await prisma.tripParticipant.findMany({
       where: { tripId },
       include: {
-        user: {
-          select: {
-            id: true,
-            email: true,
-            username: true,
-            name: true,
-            avatarUrl: true,
-            bio: true,
-            isPrivate: true,
-            createdAt: true,
-            updatedAt: true,
-          },
-        },
+        user: { select: userSelect },
       },
       orderBy: { joinedAt: "asc" },
     });
 
-    const participantsResponse: TripParticipantResponse[] = participants.map(
-      (participant) => ({
+    const serializeUser = (user: {
+      id: string;
+      email: string;
+      username: string | null;
+      name: string | null;
+      avatarUrl: string | null;
+      bio: string | null;
+      isPrivate: boolean;
+      createdAt: Date;
+      updatedAt: Date;
+    }) => ({
+      ...user,
+      username: user.username || null,
+      name: user.name || null,
+      avatarUrl: user.avatarUrl || null,
+      bio: user.bio || null,
+      createdAt: user.createdAt.toISOString(),
+      updatedAt: user.updatedAt.toISOString(),
+    });
+
+    const participantsResponse: TripParticipantResponse[] = [];
+
+    if (tripWithOwner?.user) {
+      const ownerAlreadyListed = participants.some(
+        (p) => p.userId === tripWithOwner.userId
+      );
+      if (!ownerAlreadyListed) {
+        participantsResponse.push({
+          id: `owner-${tripWithOwner.id}`,
+          tripId: tripWithOwner.id,
+          userId: tripWithOwner.userId,
+          role: "owner",
+          joinedAt: tripWithOwner.createdAt.toISOString(),
+          user: serializeUser(tripWithOwner.user),
+        });
+      }
+    }
+
+    for (const participant of participants) {
+      participantsResponse.push({
         ...participant,
         joinedAt: participant.joinedAt.toISOString(),
-        user: {
-          ...participant.user,
-          username: participant.user.username || null,
-          name: participant.user.name || null,
-          avatarUrl: participant.user.avatarUrl || null,
-          bio: participant.user.bio || null,
-          createdAt: participant.user.createdAt.toISOString(),
-          updatedAt: participant.user.updatedAt.toISOString(),
-        },
-      })
-    );
+        user: serializeUser(participant.user),
+      });
+    }
 
     return NextResponse.json<ApiResponse<TripParticipantResponse[]>>({
       success: true,

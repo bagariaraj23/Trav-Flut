@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { ok, serverError } from "@/lib/response-helpers";
-import { withAuth, AuthenticatedRequest } from "@/lib/middleware";
+import { withAuth, AuthenticatedRequest, withLogging } from "@/lib/middleware";
 import { prisma } from "@/lib/prisma";
 
 async function handler(request: AuthenticatedRequest) {
@@ -60,5 +60,7 @@ async function handler(request: AuthenticatedRequest) {
 }
 
 export async function GET(request: NextRequest) {
-  return withAuth(request, handler);
+  return withLogging(async (req) => {
+    return withAuth(req, handler);
+  })(request);
 }

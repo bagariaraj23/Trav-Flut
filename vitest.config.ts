@@ -11,7 +11,11 @@ export default defineConfig({
   test: {
     globals: true,
     environment: "node",
-    include: ["tests/**/*.test.ts", "scheduler/tests/**/*.test.ts"],
+    include: [
+      "tests/**/*.test.ts",
+      "scheduler/tests/**/*.test.ts",
+      "src/app/test/**/*.test.ts",
+    ],
     setupFiles: ["./tests/setupTests.ts"],
     // Run test files serially to avoid transaction isolation issues
     fileParallelism: false, // Disable parallel file execution

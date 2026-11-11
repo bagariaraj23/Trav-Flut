@@ -6,10 +6,10 @@ Flutter mobile application for TripThread.
 
 ### Prerequisites
 
-- Flutter SDK (latest stable version)
+- Flutter SDK matching `pubspec.yaml` (`>=3.10.0`; the Docker web image uses 3.38.5)
 - Dart SDK
 - Android Studio / Xcode (for mobile development)
-- Backend API running (see main project README)
+- Backend API running (see main project README), or the full Docker stack
 
 ### Environment Setup
 
@@ -32,9 +32,22 @@ cp .env.example .env
 # Install dependencies
 flutter pub get
 
-# Run the app
+# Run the app against a host or Docker API on port 3000
 flutter run
 ```
+
+### Browser UI (Docker)
+
+`docker compose up --build -d` from the repo root builds this app for the web and serves it at [http://localhost:8080](http://localhost:8080) (or `http://127.0.0.1:8080`). nginx proxies `/api`, `/chat`, and `/share` to the API, so the browser stays on one origin. See [DOCKER_SETUP.md](../DOCKER_SETUP.md).
+
+That image bakes `WEB_API_BASE_URL` (default `http://localhost:8080/api`). Rebuild the `web` service after changing it. Phone and emulator builds keep using `mobile/.env` and call the API on port 3000 (`http://10.0.2.2:3000/api` on the Android emulator).
+
+On the web build:
+
+- View Trip Map and the pin dropper use `mapbox_maps_flutter` 3.34.2. On web, markers and the route are GeoJSON circle, symbol, and line layers, because the annotation managers throw there. iOS and Android still draw those annotations. The web image needs a real `MAPBOX_ACCESS_TOKEN` build arg; rebuild `web` after changing it.
+- iOS uses Swift Package Manager only (`flutter config --enable-swift-package-manager`) and requires iOS 14.
+- On Linux, `flutter pub get` exits 1 for that iOS plugin because Xcode is missing. `scripts/linux_mapbox_pub_get.sh` (used by the web image and `mobile-tests`) satisfies the check and retries. macOS does not need the script.
+- Sign-in stores the session in browser local storage. iOS and Android keep `flutter_secure_storage`.
 
 ## Resources
 
@@ -60,7 +73,7 @@ flutter run
 - **Final Posts**: Edit and publish curated trip summaries with selected media
 - **Social Features**: Follow users, view profiles, discover trips
 - **Media Upload**: Cloudinary integration for images and videos
-- **Location Services**: Place search, check-ins, and map integration
+- **Location Services**: Place search, location entries, and Mapbox maps on iOS, Android, and the Docker web UI
 
 ## Documentation
 

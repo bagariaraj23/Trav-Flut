@@ -6,6 +6,11 @@ import 'package:tripthread/providers/auth_provider.dart';
 import 'package:tripthread/providers/trip_provider.dart';
 import 'package:tripthread/models/trip.dart';
 import 'package:tripthread/services/api_service.dart';
+import 'package:tripthread/utils/app_layout.dart';
+import 'package:tripthread/utils/trip_time_format.dart';
+import 'package:tripthread/utils/app_theme.dart';
+import 'package:tripthread/utils/user_display_labels.dart';
+import 'package:tripthread/widgets/chat/chat_avatar.dart';
 
 class TripParticipantsScreen extends StatefulWidget {
   final String tripId;
@@ -19,15 +24,26 @@ class TripParticipantsScreen extends StatefulWidget {
 class _TripParticipantsScreenState extends State<TripParticipantsScreen> {
   final _searchController = TextEditingController();
   Timer? _debounceTimer;
+  Trip? _trip;
   List<TripParticipant> _participants = [];
   List<Map<String, dynamic>> _searchResults = [];
   bool _isSearching = false;
+
   @override
   void initState() {
     super.initState();
-    _loadParticipants();
-    _loadSentInvitations();
     _searchController.addListener(_onSearchChanged);
+    _bootstrap();
+  }
+
+  Future<void> _bootstrap() async {
+    final tripProvider = context.read<TripProvider>();
+    final trip = await tripProvider.getTrip(widget.tripId);
+    if (mounted) {
+      setState(() => _trip = trip);
+    }
+    await _loadParticipants();
+    await _loadSentInvitations();
   }
 
   void _onSearchChanged() {
@@ -61,7 +77,15 @@ class _TripParticipantsScreenState extends State<TripParticipantsScreen> {
     });
   }
 
+  bool get _viewerIsTripOwner {
+    final ownerId = _trip?.userId;
+    if (ownerId == null) return false;
+    return context.read<AuthProvider>().currentUser?.id == ownerId;
+  }
+
+  /// Owner-only API (`GET /trips/:id/invites` returns 403 for participants).
   Future<void> _loadSentInvitations() async {
+    if (!_viewerIsTripOwner) return;
     try {
       final tripProvider = context.read<TripProvider>();
       await tripProvider.loadSentTripInvitations(widget.tripId);
@@ -78,6 +102,25 @@ class _TripParticipantsScreenState extends State<TripParticipantsScreen> {
     super.dispose();
   }
 
+  List<TripParticipant> _withOwnerFirst(List<TripParticipant> list) {
+    final trip = _trip;
+    if (trip == null) return list;
+    final ownerAlreadyListed = list.any((p) => p.userId == trip.userId);
+    if (ownerAlreadyListed) return list;
+    final ownerUser = trip.user;
+    return [
+      TripParticipant(
+        id: 'owner-${trip.id}',
+        tripId: trip.id,
+        userId: trip.userId,
+        role: 'owner',
+        joinedAt: trip.createdAt,
+        user: ownerUser,
+      ),
+      ...list,
+    ];
+  }
+
   Future<void> _loadParticipants() async {
     try {
       setState(() {});
@@ -87,12 +130,19 @@ class _TripParticipantsScreenState extends State<TripParticipantsScreen> {
 
       if (mounted) {
         setState(() {
-          _participants = response;
+          _participants = _withOwnerFirst(response);
         });
       }
     } catch (e) {
+      debugPrint('[TripParticipants] load failed: $e');
       if (mounted) {
-        setState(() {});
+        setState(() {
+          // Still surface the trip owner if the list endpoint fails partially.
+          _participants = _withOwnerFirst(_participants);
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not refresh participants: $e')),
+        );
       }
     }
   }
@@ -108,7 +158,7 @@ class _TripParticipantsScreenState extends State<TripParticipantsScreen> {
       if (!mounted) return;
       if (success) {
         final messenger = ScaffoldMessenger.of(context);
-        await tripProvider.loadSentTripInvitations(widget.tripId);
+        await _loadSentInvitations();
         if (!mounted) return;
         setState(() {});
         messenger.showSnackBar(
@@ -154,7 +204,7 @@ class _TripParticipantsScreenState extends State<TripParticipantsScreen> {
 
       if (!mounted) return;
       if (success) {
-        await tripProvider.loadSentTripInvitations(widget.tripId);
+        await _loadSentInvitations();
         if (!mounted) return;
         setState(() {});
         ScaffoldMessenger.of(context).showSnackBar(
@@ -192,7 +242,7 @@ class _TripParticipantsScreenState extends State<TripParticipantsScreen> {
     if (matchingInvitations.isNotEmpty) {
       final invitation = matchingInvitations.first;
       return InkWell(
-        onTap: tripProvider.isLoading
+        onTap: tripProvider.invitationCancelInviteId == invitation.id
             ? null
             : () => _cancelInvitation(invitation.id),
         borderRadius: BorderRadius.circular(8),
@@ -206,7 +256,17 @@ class _TripParticipantsScreenState extends State<TripParticipantsScreen> {
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(Icons.access_time, color: Colors.amber.shade700, size: 16),
+              if (tripProvider.invitationCancelInviteId == invitation.id)
+                SizedBox(
+                  width: 14,
+                  height: 14,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: Colors.amber.shade800,
+                  ),
+                )
+              else
+                Icon(Icons.access_time, color: Colors.amber.shade700, size: 16),
               const SizedBox(width: 4),
               Text(
                 'Pending',
@@ -223,8 +283,9 @@ class _TripParticipantsScreenState extends State<TripParticipantsScreen> {
     }
 
     return IconButton(
-      onPressed: tripProvider.isLoading ? null : () => _sendInvitation(userId),
-      icon: tripProvider.isLoading
+      onPressed:
+          tripProvider.invitationSendReceiverId == userId ? null : () => _sendInvitation(userId),
+      icon: tripProvider.invitationSendReceiverId == userId
           ? SizedBox(
               width: 20,
               height: 20,
@@ -289,9 +350,16 @@ class _TripParticipantsScreenState extends State<TripParticipantsScreen> {
 
   Widget _buildUserSearchResult(Map<String, dynamic> user) {
     final avatarUrl = user['avatarUrl'] as String?;
-    final name = user['name'] ?? 'Unknown User';
-    final username = user['username'] ?? 'No username';
     final userId = user['id'] as String;
+    final uname = user['username'] as String?;
+    final displayName = user['name'] as String?;
+    final primary = userPrimaryLabel(
+      id: userId,
+      username: uname,
+      name: displayName,
+    );
+    final secondary =
+        userSecondaryName(username: uname, name: displayName);
 
     final isParticipant = _participants.any((p) => p.userId == userId);
 
@@ -303,15 +371,11 @@ class _TripParticipantsScreenState extends State<TripParticipantsScreen> {
           padding: const EdgeInsets.all(12),
           child: Row(
             children: [
-              CircleAvatar(
+              ChatAvatar(
                 radius: 20,
-                backgroundColor: Theme.of(context).colorScheme.primary,
-                backgroundImage: avatarUrl != null
-                    ? NetworkImage(avatarUrl)
-                    : null,
-                child: avatarUrl == null
-                    ? Icon(Icons.person, color: Colors.white, size: 20)
-                    : null,
+                avatarUrl: avatarUrl,
+                username: uname,
+                name: displayName,
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -320,20 +384,21 @@ class _TripParticipantsScreenState extends State<TripParticipantsScreen> {
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     Text(
-                      name,
+                      primary,
                       style: const TextStyle(fontWeight: FontWeight.w600),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
-                    Text(
-                      '@$username',
-                      style: TextStyle(
-                        color: Theme.of(context).colorScheme.onSurfaceVariant,
-                        fontSize: 12,
+                    if (secondary != null)
+                      Text(
+                        secondary,
+                        style: TextStyle(
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                          fontSize: 12,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
                   ],
                 ),
               ),
@@ -344,25 +409,28 @@ class _TripParticipantsScreenState extends State<TripParticipantsScreen> {
                     vertical: 6,
                   ),
                   decoration: BoxDecoration(
-                    color: Colors.green.shade50,
+                    color: AppTheme.live.withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: Colors.green.shade200, width: 1),
+                    border: Border.all(
+                      color: AppTheme.live.withValues(alpha: 0.35),
+                      width: 1,
+                    ),
                   ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Icon(
                         Icons.check_circle,
-                        color: Colors.green.shade700,
+                        color: AppTheme.live,
                         size: 16,
                       ),
                       const SizedBox(width: 4),
                       Text(
                         'Member',
                         style: TextStyle(
-                          color: Colors.green.shade900,
+                          color: AppTheme.live,
                           fontSize: 12,
-                          fontWeight: FontWeight.w500,
+                          fontWeight: FontWeight.w600,
                         ),
                       ),
                     ],
@@ -377,29 +445,108 @@ class _TripParticipantsScreenState extends State<TripParticipantsScreen> {
     );
   }
 
+  bool _canLeaveTrip() {
+    final u = context.read<AuthProvider>().currentUser;
+    if (_trip == null || u == null) return false;
+    if (_trip!.userId == u.id) return false;
+    return _participants.any((p) => p.userId == u.id);
+  }
+
+  Future<void> _leaveTrip() async {
+    final tripProvider = context.read<TripProvider>();
+    final choice = await showDialog<_LeaveTripChoice>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Leave trip?'),
+        content: const Text(
+          'You will be removed as a participant.\n\n'
+          'Keep your thread entries visible to others on this trip, '
+          'or remove all entries you posted? '
+          '(Removing entries is only allowed while the trip is ongoing.)',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, _LeaveTripChoice.cancel),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, _LeaveTripChoice.keepEntries),
+            child: const Text('Keep my entries'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: Theme.of(ctx).colorScheme.error,
+            ),
+            onPressed: () => Navigator.pop(ctx, _LeaveTripChoice.removeEntries),
+            child: const Text('Remove my entries'),
+          ),
+        ],
+      ),
+    );
+
+    if (choice == null || choice == _LeaveTripChoice.cancel) {
+      return;
+    }
+
+    final removeMyData = choice == _LeaveTripChoice.removeEntries;
+    final ok = await tripProvider.leaveTrip(
+      widget.tripId,
+      removeMyData: removeMyData,
+    );
+
+    if (!mounted) return;
+    final err = tripProvider.error;
+    if (ok) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            removeMyData
+                ? 'You left the trip; your entries were removed.'
+                : 'You left the trip.',
+          ),
+        ),
+      );
+      context.go('/trips');
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(err ?? 'Could not leave trip'),
+        ),
+      );
+    }
+  }
+
   Widget _buildParticipantTile(TripParticipant participant) {
     final currentUser = context.read<AuthProvider>().currentUser;
-    final isOwner = participant.userId == currentUser?.id;
+    final tripOwnerId = _trip?.userId;
+    final isTripOwnerRow =
+        tripOwnerId != null && participant.userId == tripOwnerId;
+    final viewerIsTripOwner =
+        tripOwnerId != null && currentUser?.id == tripOwnerId;
+    final participantSecondary = userSecondaryName(
+      username: participant.user?.username,
+      name: participant.user?.name,
+    );
 
     return ListTile(
-      leading: CircleAvatar(
-        backgroundColor: Theme.of(context).colorScheme.primary,
-        backgroundImage: participant.user?.avatarUrl != null
-            ? NetworkImage(participant.user!.avatarUrl!)
-            : null,
-        child: participant.user?.avatarUrl == null
-            ? Icon(Icons.person, color: Colors.white, size: 20)
-            : null,
+      leading: ChatAvatar(
+        radius: 22,
+        avatarUrl: participant.user?.avatarUrl,
+        username: participant.user?.username,
+        name: participant.user?.name,
       ),
       title: Text(
-        participant.user?.name ?? 'Unknown User',
+        userPrimaryLabel(
+          id: participant.userId,
+          username: participant.user?.username,
+          name: participant.user?.name,
+        ),
         style: const TextStyle(fontWeight: FontWeight.w600),
       ),
       subtitle: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          if (participant.user?.username != null)
-            Text('@${participant.user!.username}'),
+          if (participantSecondary != null) Text(participantSecondary),
           Text(
             'Role: ${participant.role}',
             style: TextStyle(
@@ -408,7 +555,7 @@ class _TripParticipantsScreenState extends State<TripParticipantsScreen> {
             ),
           ),
           Text(
-            'Joined: ${_formatDate(participant.joinedAt)}',
+            'Joined: ${formatLocalDate(participant.joinedAt)}',
             style: TextStyle(
               color: Theme.of(context).colorScheme.onSurfaceVariant,
               fontSize: 12,
@@ -416,29 +563,35 @@ class _TripParticipantsScreenState extends State<TripParticipantsScreen> {
           ),
         ],
       ),
-      trailing: isOwner
-          ? Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              decoration: BoxDecoration(
-                color: Theme.of(
-                  context,
-                ).colorScheme.primary.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Text(
-                'Owner',
-                style: TextStyle(
-                  color: Theme.of(context).colorScheme.primary,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            )
-          : IconButton(
-              onPressed: () => _removeParticipant(participant.userId),
-              icon: const Icon(Icons.remove_circle_outline),
-              color: Theme.of(context).colorScheme.error,
-            ),
+      trailing: tripOwnerId == null
+          ? null
+          : isTripOwnerRow
+              ? Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).brightness == Brightness.dark
+                        ? AppTheme.darkMuted
+                        : AppTheme.accentSoft,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    'Owner',
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.secondary,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                )
+              : viewerIsTripOwner
+                  ? IconButton(
+                      onPressed: () =>
+                          _removeParticipant(participant.userId),
+                      icon: const Icon(Icons.remove_circle_outline),
+                      color: Theme.of(context).colorScheme.error,
+                    )
+                  : null,
     );
   }
 
@@ -469,9 +622,18 @@ class _TripParticipantsScreenState extends State<TripParticipantsScreen> {
               }
             },
           ),
+          actions: [
+            if (_canLeaveTrip())
+              TextButton(
+                onPressed: _leaveTrip,
+                child: const Text('Leave trip'),
+              ),
+          ],
         ),
         body: SafeArea(
-          child: Column(
+          child: AppLayout.reading(
+            context: context,
+            child: Column(
             children: [
               // Search Section
               Padding(
@@ -581,14 +743,12 @@ class _TripParticipantsScreenState extends State<TripParticipantsScreen> {
               ),
             ],
           ),
+          ),
         ),
       ),
     );
   }
 
-  String _formatDate(DateTime date) {
-    // Extract only date components to avoid timezone issues
-    final dateOnly = DateTime.utc(date.year, date.month, date.day);
-    return '${dateOnly.day}/${dateOnly.month}/${dateOnly.year}';
-  }
 }
+
+enum _LeaveTripChoice { cancel, keepEntries, removeEntries }

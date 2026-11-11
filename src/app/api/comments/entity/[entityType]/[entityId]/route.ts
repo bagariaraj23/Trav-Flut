@@ -15,7 +15,7 @@ export async function GET(
   { params }: { params: Promise<{ entityType: string; entityId: string }> }
 ) {
   const loggedHandler = withLogging(async (req) => {
-    return withRateLimit(req, async (rateLimitedReq) => {
+    return withRateLimit(req, "read_hot", async (rateLimitedReq) => {
       try {
         const { entityType, entityId } = await params;
         const { searchParams } = new URL(rateLimitedReq.url);

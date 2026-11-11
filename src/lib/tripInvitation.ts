@@ -7,6 +7,8 @@ import {
 } from "./errors";
 import { TripJoinRequestStatus } from "@prisma/client";
 import { handlePrismaUniqueError } from "./prismaErrors";
+import { ensureTripConversation } from "./services/chat";
+import { applyAutoTripType } from "./tripSchedule";
 
 export class TripInvitationService {
   // Send a trip invitation
@@ -39,6 +41,27 @@ export class TripInvitationService {
         // 3. Prevent self-invitation
         if (senderId === receiverId) {
           throw new ConflictError("Cannot invite yourself to a trip");
+        }
+
+        // 3b. Private trip owner: invitee must already follow the owner
+        const ownerProfile = await tx.user.findUnique({
+          where: { id: trip.userId },
+          select: { isPrivate: true },
+        });
+        if (ownerProfile?.isPrivate) {
+          const follow = await tx.follow.findUnique({
+            where: {
+              followerId_followeeId: {
+                followerId: receiverId,
+                followeeId: trip.userId,
+              },
+            },
+          });
+          if (!follow) {
+            throw new AuthorizationError(
+              "This user must follow you before you can invite them to a private trip."
+            );
+          }
         }
 
         // 4. Check if receiver is already a participant
@@ -187,9 +210,9 @@ export class TripInvitationService {
     }
 
     if (action === "accept") {
-      return prisma.$transaction(async (tx) => {
+      const updatedRequest = await prisma.$transaction(async (tx) => {
         // Update invitation status
-        const updatedRequest = await tx.tripJoinRequest.update({
+        const updated = await tx.tripJoinRequest.update({
           where: { id: inviteId },
           data: { status: TripJoinRequestStatus.ACCEPTED },
         });
@@ -208,9 +231,23 @@ export class TripInvitationService {
           where: { id: request.tripId },
           data: { participantCount: { increment: 1 } },
         });
+        await applyAutoTripType(tx, request.tripId);
 
-        return updatedRequest;
+        return updated;
       });
+
+      try {
+        await ensureTripConversation(request.tripId, {
+          rejoinUserIds: [request.receiverId],
+        });
+      } catch (chatErr) {
+        console.error(
+          `[WARN] Failed to sync trip chat after invite accept on ${request.tripId}:`,
+          chatErr
+        );
+      }
+
+      return updatedRequest;
     } else {
       return prisma.tripJoinRequest.update({
         where: { id: inviteId },

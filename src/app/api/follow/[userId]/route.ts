@@ -3,7 +3,9 @@ import { prisma } from "@/lib/prisma";
 import { AuthService } from "@/lib/auth";
 import { ApiResponse, FollowResponse, FollowStatusResponse } from "@/types/api";
 import { withAuth, withRateLimit, withLogging } from "@/lib/middleware";
+import { enforcePresetRateLimit } from "@/lib/rateLimit";
 import { handlePrismaUniqueError } from "@/lib/prismaErrors";
+import { createNotification } from "@/lib/services/notification";
 
 export async function GET(
   request: NextRequest,
@@ -247,6 +249,13 @@ export async function POST(
             );
           }
           if (result.code === "FOLLOW_CREATED" && result.follow) {
+            createNotification({
+              type: "FOLLOW",
+              actorId: followerId,
+              recipientId: followeeId,
+            }).catch((err) =>
+              console.error("[Notification] Failed to create FOLLOW notification:", err)
+            );
             return NextResponse.json(
               {
                 success: true,
@@ -292,6 +301,8 @@ export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ userId: string }> }
 ) {
+  const limited = await enforcePresetRateLimit(request, "write");
+  if (limited) return limited;
   try {
     const { userId } = await params;
     const followeeId = userId;

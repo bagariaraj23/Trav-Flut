@@ -4,8 +4,11 @@ import 'package:go_router/go_router.dart';
 import 'package:form_field_validator/form_field_validator.dart';
 import 'package:tripthread/providers/auth_provider.dart';
 import 'package:tripthread/services/google_sign_in_service.dart';
+import 'package:tripthread/utils/validators.dart';
+import 'package:tripthread/utils/app_layout.dart';
 import 'package:tripthread/widgets/custom_text_field.dart';
 import 'package:tripthread/widgets/loading_button.dart';
+import 'package:tripthread/widgets/tripthread_logo.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -20,6 +23,29 @@ class _LoginScreenState extends State<LoginScreen> {
   final _passwordController = TextEditingController();
   bool _obscurePassword = true;
 
+  /// Safe in-app path from `?from=` (share resume, etc.).
+  String? get _resumePath {
+    final from = GoRouterState.of(context).uri.queryParameters['from'];
+    if (from == null || from.isEmpty) return null;
+    if (!from.startsWith('/') || from.startsWith('//') || from.contains('://')) {
+      return null;
+    }
+    return from;
+  }
+
+  void _goAfterAuth(AuthProvider authProvider) {
+    if (authProvider.requiresProfileCompletion) {
+      context.go('/complete-profile');
+      return;
+    }
+    final resume = _resumePath;
+    if (resume != null) {
+      context.go(resume);
+      return;
+    }
+    context.go('/home');
+  }
+
   @override
   void dispose() {
     _emailController.dispose();
@@ -31,15 +57,22 @@ class _LoginScreenState extends State<LoginScreen> {
     if (!_formKey.currentState!.validate()) return;
 
     final authProvider = context.read<AuthProvider>();
+    final input = _emailController.text.trim();
+    // Only normalize email on client side.
+    // Username normalization is handled server-side to keep implementations in sync.
+    final emailOrUsername = input.contains('@')
+        ? Validators.normalizeEmail(input)
+        : input;
+
     final success = await authProvider.login(
-      email: _emailController.text.trim(),
+      email: emailOrUsername,
       password: _passwordController.text,
     );
     debugPrint(
       'LoginScreen: login success = $success, isAuthenticated = ${authProvider.isAuthenticated}',
     );
     if (success && mounted) {
-      context.go('/home');
+      _goAfterAuth(authProvider);
     } else if (mounted) {
       // Persist inline error; do not auto-dismiss via SnackBar
       authProvider.markErrorAsShown();
@@ -48,34 +81,27 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final spacing = AppLayout.authSpacing(context);
     return Scaffold(
       body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(24.0),
+        child: Align(
+          alignment: Alignment.topCenter,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 420),
+            child: SingleChildScrollView(
+          padding: EdgeInsets.all(spacing.pagePadding),
           child: Form(
             key: _formKey,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                const SizedBox(height: 60),
+                SizedBox(height: spacing.top),
 
                 // Logo and Title
                 Column(
                   children: [
-                    Container(
-                      width: 64,
-                      height: 64,
-                      decoration: BoxDecoration(
-                        color: Theme.of(context).colorScheme.primary,
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                      child: const Icon(
-                        Icons.travel_explore,
-                        size: 32,
-                        color: Colors.white,
-                      ),
-                    ),
-                    const SizedBox(height: 24),
+                    TripThreadLogo(size: spacing.logo),
+                    SizedBox(height: spacing.afterLogo),
                     Text(
                       'Welcome back',
                       style: Theme.of(context).textTheme.displaySmall,
@@ -90,18 +116,15 @@ class _LoginScreenState extends State<LoginScreen> {
                   ],
                 ),
 
-                const SizedBox(height: 48),
+                SizedBox(height: spacing.beforeFields),
 
-                // Email Field
+                // Email or Username Field
                 CustomTextField(
                   controller: _emailController,
-                  label: 'Email',
-                  keyboardType: TextInputType.emailAddress,
-                  prefixIcon: Icons.email_outlined,
-                  validator: MultiValidator([
-                    RequiredValidator(errorText: 'Email is required'),
-                    EmailValidator(errorText: 'Please enter a valid email'),
-                  ]).call,
+                  label: 'Email or Username',
+                  keyboardType: TextInputType.text,
+                  prefixIcon: Icons.person_outlined,
+                  validator: Validators.validateEmailOrUsername,
                   onChanged: (_) {
                     // Clear error when user starts typing after an error
                     final authProvider = context.read<AuthProvider>();
@@ -203,6 +226,35 @@ class _LoginScreenState extends State<LoginScreen> {
                   },
                 ),
 
+                // Retry session restore (tokens on device but /users/me failed transiently)
+                Consumer<AuthProvider>(
+                  builder: (context, authProvider, child) {
+                    if (!authProvider.canRetrySessionRestore) {
+                      return const SizedBox.shrink();
+                    }
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 16),
+                      child: SizedBox(
+                        width: double.infinity,
+                        child: OutlinedButton.icon(
+                          onPressed: authProvider.isLoading
+                              ? null
+                              : () async {
+                                  await authProvider.retrySessionRestore();
+                                  if (!context.mounted) return;
+                                  final a = context.read<AuthProvider>();
+                                  if (a.isAuthenticated) {
+                                    _goAfterAuth(a);
+                                  }
+                                },
+                          icon: const Icon(Icons.refresh),
+                          label: const Text('Retry restoring session'),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+
                 // Login Button
                 Consumer<AuthProvider>(
                   builder: (context, authProvider, child) {
@@ -214,7 +266,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   },
                 ),
 
-                const SizedBox(height: 24),
+                SizedBox(height: spacing.section),
 
                 // Or continue with
                 Row(
@@ -240,7 +292,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                   ],
                 ),
-                const SizedBox(height: 24),
+                SizedBox(height: spacing.section),
 
                 // Google Sign In
                 Consumer<AuthProvider>(
@@ -308,12 +360,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                 if (!mounted) return;
                                 switch (result) {
                                   case GoogleSignInSuccess():
-                                    if (authProvider
-                                        .requiresProfileCompletion) {
-                                      context.go('/complete-profile');
-                                    } else {
-                                      context.go('/home');
-                                    }
+                                    _goAfterAuth(authProvider);
                                     break;
                                   case GoogleSignInFailure():
                                     authProvider.markErrorAsShown();
@@ -341,7 +388,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   },
                 ),
 
-                const SizedBox(height: 24),
+                SizedBox(height: spacing.section),
 
                 // Forgot Password Link
                 Align(
@@ -358,7 +405,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   ),
                 ),
 
-                const SizedBox(height: 24),
+                SizedBox(height: spacing.section),
 
                 // Sign Up Link
                 Row(
@@ -381,12 +428,14 @@ class _LoginScreenState extends State<LoginScreen> {
                   ],
                 ),
 
-                const SizedBox(height: 40),
+                SizedBox(height: spacing.bottom),
               ],
             ),
           ),
         ),
-      ),
+            ),
+          ),
+        ),
     );
     // );
   }

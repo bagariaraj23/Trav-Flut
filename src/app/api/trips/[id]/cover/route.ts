@@ -6,6 +6,7 @@ import {
   AuthenticatedRequest,
   handleApiError,
 } from "@/lib/middleware";
+import { enforcePresetRateLimit } from "@/lib/rateLimit";
 import { ApiResponse, MediaResponse } from "@/types/api";
 
 const updateCoverSchema = z.object({
@@ -48,11 +49,11 @@ async function handler(
       );
     }
 
-    if (trip.status !== "ONGOING") {
+    if (trip.status !== "ONGOING" && trip.status !== "ENDED") {
       return NextResponse.json<ApiResponse>(
         {
           success: false,
-          error: "Trip cover can only be updated while the trip is ongoing",
+          error: "Trip cover can only be updated for ongoing or ended trips",
         },
         { status: 400 }
       );
@@ -157,6 +158,8 @@ export async function PATCH(
   request: NextRequest,
   context: { params: Promise<{ id: string }> }
 ) {
+  const limited = await enforcePresetRateLimit(request, "write");
+  if (limited) return limited;
   const params = await context.params;
   return withAuth(request, (authRequest) => handler(authRequest, { params: Promise.resolve(params) }));
 }

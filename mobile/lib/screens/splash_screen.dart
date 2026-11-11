@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_spinkit/flutter_spinkit.dart';
+import 'package:tripthread/utils/app_theme.dart';
+import 'package:tripthread/widgets/tripthread_logo.dart';
 
 class SplashScreen extends StatelessWidget {
   const SplashScreen({super.key});
@@ -7,25 +9,15 @@ class SplashScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Theme.of(context).colorScheme.primary,
+      backgroundColor: Theme.of(context).brightness == Brightness.dark
+          ? AppTheme.darkBackground
+          : AppTheme.ink,
       body: Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             // App Logo
-            Container(
-              width: 80,
-              height: 80,
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: const Icon(
-                Icons.travel_explore,
-                size: 40,
-                color: Color(0xFF6366F1),
-              ),
-            ),
+            const TripThreadLogo(size: 80, useDarkVariant: true),
 
             const SizedBox(height: 24),
 
@@ -33,7 +25,7 @@ class SplashScreen extends StatelessWidget {
             Text(
               'TripThread',
               style: Theme.of(context).textTheme.displayMedium?.copyWith(
-                color: Colors.white,
+                color: AppTheme.cream,
                 fontWeight: FontWeight.bold,
               ),
             ),
@@ -42,9 +34,9 @@ class SplashScreen extends StatelessWidget {
 
             // Tagline
             Text(
-              'Document your journey',
+              'Capture journeys. Share stories.',
               style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                color: Colors.white.withValues(alpha: 0.8),
+                color: AppTheme.cream.withValues(alpha: 0.8),
               ),
             ),
 
@@ -54,7 +46,7 @@ class SplashScreen extends StatelessWidget {
             const SizedBox(
               width: 60, // enough horizontal space for the three dots
               height: 24,
-              child: SpinKitThreeBounce(color: Colors.white, size: 16),
+              child: SpinKitThreeBounce(color: AppTheme.accent, size: 16),
             ),
           ],
         ),

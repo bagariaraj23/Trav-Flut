@@ -5,6 +5,18 @@ import 'package:tripthread/services/storage_service.dart';
 import 'package:tripthread/services/token_refresh_manager.dart';
 import 'package:tripthread/config/app_config.dart';
 
+class ShareLinkResult {
+  final String webUrl;
+  final String shareToken;
+
+  const ShareLinkResult({
+    required this.webUrl,
+    required this.shareToken,
+  });
+
+  String get primaryAppDeepLink => 'tripthread://share/$shareToken';
+}
+
 class SharedEntity {
   final String entityType;
   final String entityId;
@@ -19,11 +31,27 @@ class SharedEntity {
   });
 
   factory SharedEntity.fromJson(Map<String, dynamic> json) {
+    final share = json['share'];
+    if (share is! Map<String, dynamic>) {
+      throw AppException('Share data missing or invalid');
+    }
+    final entityType = share['entityType'] as String?;
+    final entityId = share['entityId'] as String?;
+    if (entityType == null ||
+        entityType.isEmpty ||
+        entityId == null ||
+        entityId.isEmpty) {
+      throw AppException('Share target is missing');
+    }
+    final entity = json['entity'];
+    final entityData = entity is Map<String, dynamic>
+        ? entity
+        : <String, dynamic>{};
     return SharedEntity(
-      entityType: json['share']['entityType'] as String,
-      entityId: json['share']['entityId'] as String,
-      entityData: json['entity'] as Map<String, dynamic>,
-      shareData: json['share'] as Map<String, dynamic>,
+      entityType: entityType,
+      entityId: entityId,
+      entityData: entityData,
+      shareData: share,
     );
   }
 }
@@ -92,7 +120,7 @@ class ShareService {
     ));
   }
 
-  Future<String> createShare(
+  Future<ShareLinkResult> createShare(
     String entityType,
     String entityId,
   ) async {
@@ -103,6 +131,7 @@ class ShareService {
           'entityType': entityType,
           'entityId': entityId,
           'shareType': 'DEEP_LINK',
+          'shareSource': 'SYSTEM_SHEET',
         },
       );
 
@@ -111,7 +140,9 @@ class ShareService {
         if (data['success'] == true && data['data'] != null) {
           final shareData = data['data'] as Map<String, dynamic>;
           final shareToken = shareData['shareToken'] as String;
-          return '${AppConfig.apiBaseUrl.replaceAll('/api', '')}/share/$shareToken';
+          final origin = AppConfig.effectiveShareLinkOrigin;
+          final webUrl = '$origin/share/$shareToken';
+          return ShareLinkResult(webUrl: webUrl, shareToken: shareToken);
         }
       }
 

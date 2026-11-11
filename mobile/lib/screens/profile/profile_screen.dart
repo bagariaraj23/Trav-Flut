@@ -3,7 +3,15 @@ import 'package:provider/provider.dart';
 import 'package:tripthread/providers/auth_provider.dart';
 import 'package:tripthread/providers/user_provider.dart';
 import 'package:tripthread/providers/trip_provider.dart';
+import 'package:tripthread/providers/feed_provider.dart';
 import 'package:tripthread/models/user.dart';
+import 'package:tripthread/models/trip.dart';
+import 'package:tripthread/services/api_service.dart';
+import 'package:tripthread/utils/app_feedback.dart';
+import 'package:tripthread/utils/app_layout.dart';
+import 'package:tripthread/utils/app_theme.dart';
+import 'package:tripthread/utils/cloudinary_utils.dart';
+import 'package:tripthread/utils/user_display_labels.dart';
 import 'package:go_router/go_router.dart';
 
 class ProfileScreen extends StatefulWidget {
@@ -16,6 +24,10 @@ class ProfileScreen extends StatefulWidget {
 }
 
 class _ProfileScreenState extends State<ProfileScreen> {
+  List<Trip> _profileTrips = [];
+  bool _profileTripsLoading = false;
+  String? _profileTripsError;
+
   @override
   void initState() {
     super.initState();
@@ -26,14 +38,34 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   // A single, reliable method to load all necessary data for the screen.
-  void _loadInitialData() {
+  Future<void> _loadInitialData() async {
     final authProvider = context.read<AuthProvider>();
     if (authProvider.currentUser != null) {
-      context.read<UserProvider>().loadProfileData(
+      await context.read<UserProvider>().loadProfileData(
         widget.userId,
         authProvider.currentUser!.id,
       );
+      await _loadProfileTrips();
     }
+  }
+
+  Future<void> _loadProfileTrips() async {
+    if (!mounted) return;
+    setState(() {
+      _profileTripsLoading = true;
+      _profileTripsError = null;
+    });
+    final res = await context.read<ApiService>().getTripsForUser(widget.userId);
+    if (!mounted) return;
+    setState(() {
+      _profileTripsLoading = false;
+      if (res.success && res.data != null) {
+        _profileTrips = res.data!;
+      } else {
+        _profileTrips = [];
+        _profileTripsError = res.error ?? 'Could not load trips';
+      }
+    });
   }
 
   // The refresh action now uses the same centralized method.
@@ -44,6 +76,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         widget.userId,
         authProvider.currentUser!.id,
       );
+      await _loadProfileTrips();
     }
   }
 
@@ -61,12 +94,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
     if (detailedStatus == null) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Unable to determine follow status'),
-          backgroundColor: Colors.red,
-        ),
-      );
+      AppFeedback.showError(context, 'Unable to determine follow status');
       return;
     }
 
@@ -80,8 +108,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
       );
       // Use the message from the API response if available
       actionMessage = success
-          ? (userProvider.error == null ? 'Successfully unfollowed user' : userProvider.error!)
-          : (userProvider.error ?? 'Failed to unfollow user');
+          ? (userProvider.error == null ? 'Unfollowed' : userProvider.error!)
+          : (userProvider.error ?? 'Couldn’t unfollow');
     } else if (detailedStatus.isRequestPending) {
       success = await userProvider.cancelFollowRequest(
         widget.userId,
@@ -101,7 +129,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       if (success) {
         if (updatedStatus?.isFollowing == true) {
           // Public profile - now following
-          actionMessage = 'Successfully following user';
+          actionMessage = 'You’re following them';
         } else if (updatedStatus?.isRequestPending == true) {
           // Private profile - request sent
           actionMessage = 'Follow request sent';
@@ -121,22 +149,57 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final errorMessage = userProvider.error ?? 
         userProvider.followRequestsError ?? 
         'An error occurred';
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          success ? actionMessage : errorMessage,
-        ),
-        backgroundColor: success ? Colors.green : Colors.red,
-      ),
-    );
-
-    // Force refresh of profile data to ensure UI is in sync
     if (success) {
+      AppFeedback.showSuccess(context, actionMessage);
+    } else {
+      AppFeedback.showError(context, errorMessage);
+    }
+
+    // Force refresh of profile data to ensure UI is in sync (avatar, stats, trips section)
+    if (success) {
+      userProvider.invalidateUserCache(widget.userId);
+      if (mounted) {
+        await context.read<FeedProvider>().loadDiscoverTrips(refresh: true);
+      }
       await userProvider.loadProfileData(
         widget.userId,
         authProvider.currentUser!.id,
       );
+      await _loadProfileTrips();
     }
+  }
+
+  void _openAvatarFullScreen(BuildContext context, String imageUrl) {
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => Dialog(
+        backgroundColor: Colors.black,
+        insetPadding: EdgeInsets.zero,
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            Center(
+              child: InteractiveViewer(
+                minScale: 0.5,
+                maxScale: 4,
+                child: Image.network(
+                  buildOptimizedImageUrl(imageUrl, width: 1600),
+                  fit: BoxFit.contain,
+                ),
+              ),
+            ),
+            Positioned(
+              top: MediaQuery.of(ctx).padding.top + 8,
+              right: 8,
+              child: IconButton(
+                icon: const Icon(Icons.close, color: Colors.white, size: 28),
+                onPressed: () => Navigator.pop(ctx),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   @override
@@ -184,28 +247,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
         // debugPrint('[ProfileScreen] pendingRequests: ${}');
 
         return PopScope(
-          canPop: true,
+          canPop: false,
           onPopInvokedWithResult: (didPop, result) {
-            if (!didPop) {
-              if (context.canPop()) {
-                context.pop();
-              } else {
-                context.go('/home');
-              }
-            }
+            if (didPop) return;
+            context.go('/home', extra: {'explicitHome': true});
           },
           child: Scaffold(
             appBar: AppBar(
               title: Text(user.username ?? 'Profile'),
               leading: IconButton(
                 icon: const Icon(Icons.arrow_back),
-                onPressed: () {
-                  if (context.canPop()) {
-                    context.pop();
-                  } else {
-                    context.go('/home');
-                  }
-                },
+                onPressed: () =>
+                    context.go('/home', extra: {'explicitHome': true}),
               ),
               actions: _buildAppBarActions(
                 context,
@@ -215,7 +268,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 tripProvider.pendingTripInvitations, // Add trip invitations
               ),
             ),
-            body: RefreshIndicator(
+            body: AppLayout.reading(
+              context: context,
+              child: RefreshIndicator(
               onRefresh: _refreshProfile,
               child: SingleChildScrollView(
                 physics: const AlwaysScrollableScrollPhysics(),
@@ -238,6 +293,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 ),
               ),
             ),
+            ),
           ),
         );
       },
@@ -250,40 +306,42 @@ class _ProfileScreenState extends State<ProfileScreen> {
     List<dynamic> pendingRequests,
     List<dynamic> pendingTripInvitations,
   ) {
+    // Show actions only on own profile (mail = trip invites, follow requests, settings).
     if (!isOwnProfile) {
       return [];
     }
 
-    return [
-      // Trip Invitations Button
-      Stack(
-        alignment: Alignment.center,
-        children: [
-          IconButton(
-            icon: const Icon(Icons.mail_outline),
-            tooltip: 'Trip Invitations',
-            onPressed: () => context.push('/trip-invites'),
-          ),
-          if (pendingTripInvitations.isNotEmpty)
-            Positioned(
-              top: 8,
-              right: 8,
-              child: Container(
-                padding: const EdgeInsets.all(2),
-                decoration: BoxDecoration(
-                  color: Colors.red,
-                  borderRadius: BorderRadius.circular(6),
-                ),
-                constraints: const BoxConstraints(minWidth: 14, minHeight: 14),
-                child: Text(
-                  '${pendingTripInvitations.length}',
-                  style: const TextStyle(color: Colors.white, fontSize: 8),
-                  textAlign: TextAlign.center,
-                ),
+    final tripInvitesAction = Stack(
+      alignment: Alignment.center,
+      children: [
+        IconButton(
+          icon: const Icon(Icons.mail_outline),
+          tooltip: 'Trip Invitations',
+          onPressed: () => context.push('/trip-invites'),
+        ),
+        if (pendingTripInvitations.isNotEmpty)
+          Positioned(
+            top: 8,
+            right: 8,
+            child: Container(
+              padding: const EdgeInsets.all(2),
+              decoration: BoxDecoration(
+                color: AppTheme.likeRose,
+                borderRadius: BorderRadius.circular(6),
+              ),
+              constraints: const BoxConstraints(minWidth: 14, minHeight: 14),
+              child: Text(
+                '${pendingTripInvitations.length}',
+                style: const TextStyle(color: Colors.white, fontSize: 8),
+                textAlign: TextAlign.center,
               ),
             ),
-        ],
-      ),
+          ),
+      ],
+    );
+
+    return [
+      tripInvitesAction,
       Stack(
         alignment: Alignment.center,
         children: [
@@ -299,7 +357,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               child: Container(
                 padding: const EdgeInsets.all(2),
                 decoration: BoxDecoration(
-                  color: Colors.red,
+                  color: AppTheme.likeRose,
                   borderRadius: BorderRadius.circular(6),
                 ),
                 constraints: const BoxConstraints(minWidth: 14, minHeight: 14),
@@ -320,15 +378,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
     ];
   }
 
-  /// Single character for avatar fallback (name > username > 'U').
   String _avatarInitial(User user) {
-    final name = user.name?.trim();
-    if (name != null && name.isNotEmpty) return name.substring(0, 1).toUpperCase();
-    final username = user.username?.trim();
-    if (username != null && username.isNotEmpty) {
-      return username.substring(0, 1).toUpperCase();
-    }
-    return 'U';
+    return userAvatarInitial(username: user.username, name: user.name);
   }
 
   /// Subtitle style for username and bio (smaller, muted; works in light and dark).
@@ -350,6 +401,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
   ) {
     final hasUsername =
         user.username != null && user.username!.trim().isNotEmpty;
+    final profilePrimary = userPrimaryLabel(
+      id: user.id,
+      username: user.username,
+      name: user.name,
+    );
+    final profileSecondary =
+        userSecondaryName(username: user.username, name: user.name);
     final hasBio = user.bio != null && user.bio!.trim().isNotEmpty;
     final bioText = hasBio ? user.bio!.trim() : '';
     // ~40 chars per line at bodySmall; clamp so short bios stay compact, long ones get space
@@ -365,41 +423,49 @@ class _ProfileScreenState extends State<ProfileScreen> {
       decoration: BoxDecoration(
         color: Theme.of(context).colorScheme.surface,
         borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 2),
-          ),
-        ],
+        border: Border.all(color: Theme.of(context).colorScheme.outlineVariant),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // Profile photo
+          // Profile photo (tappable to enlarge when a photo exists)
           Center(
-            child: CircleAvatar(
-            radius: 48,
-            backgroundColor: Theme.of(context).colorScheme.primary,
-            backgroundImage: user.avatarUrl != null
-                ? NetworkImage(user.avatarUrl!)
-                : null,
-            child: user.avatarUrl == null
-                ? Text(
-                    _avatarInitial(user),
-                    style: TextStyle(
-                      fontSize: 28,
-                      fontWeight: FontWeight.bold,
-                      color: Theme.of(context).colorScheme.onPrimary,
-                    ),
-                  )
-                : null,
+            child: Material(
+              color: Colors.transparent,
+              child: InkWell(
+                customBorder: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                onTap: user.avatarUrl != null && user.avatarUrl!.isNotEmpty
+                    ? () => _openAvatarFullScreen(context, user.avatarUrl!)
+                    : null,
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(20),
+                  child: Container(
+                    width: 96,
+                    height: 96,
+                    color: AppTheme.muted,
+                    child: user.avatarUrl != null && user.avatarUrl!.isNotEmpty
+                        ? Image.network(user.avatarUrl!, fit: BoxFit.cover)
+                        : Center(
+                            child: Text(
+                              _avatarInitial(user),
+                              style: const TextStyle(
+                                fontSize: 28,
+                                fontWeight: FontWeight.bold,
+                                color: AppTheme.ink,
+                              ),
+                            ),
+                          ),
+                  ),
+                ),
+              ),
             ),
           ),
 
           const SizedBox(height: 20),
 
-          // Name and privacy indicator (prominent)
+          // @username (unique) first; optional display name second 
           Center(
             child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
@@ -407,9 +473,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             children: [
               Flexible(
                 child: Text(
-                  (user.name?.trim().isNotEmpty == true
-                      ? user.name!.trim()
-                      : (hasUsername ? '@${user.username!.trim()}' : 'User')),
+                  profilePrimary,
                   style: Theme.of(context).textTheme.headlineMedium?.copyWith(
                         fontWeight: FontWeight.w600,
                         color: Theme.of(context).colorScheme.onSurface,
@@ -431,11 +495,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
           ),
           ),
 
-          // Username
-          if (hasUsername) ...[
+          if (profileSecondary != null) ...[
             const SizedBox(height: 6),
             Text(
-              '@${user.username!.trim()}',
+              profileSecondary,
               style: subtitleStyle,
               overflow: TextOverflow.ellipsis,
               maxLines: 1,
@@ -443,22 +506,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ),
           ],
 
-          // Bio (full-width, justified; height adapts to length)
+          // Bio (centered; height adapts to length)
           if (hasBio) ...[
             SizedBox(height: hasUsername ? 8 : 6),
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(
-                  child: Text(
-                    bioText,
-                    style: subtitleStyle.copyWith(height: 1.4),
-                    textAlign: TextAlign.justify,
-                    maxLines: bioMaxLines,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-              ],
+            Center(
+              child: Text(
+                bioText,
+                style: subtitleStyle.copyWith(height: 1.4),
+                textAlign: TextAlign.center,
+                maxLines: bioMaxLines,
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
           ],
 
@@ -635,8 +693,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   child: ElevatedButton(
                     onPressed: isLoading ? null : _handleFollowToggle,
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: Theme.of(context).colorScheme.primary,
-                      foregroundColor: Colors.white,
+                      backgroundColor: Theme.of(context).colorScheme.secondary,
+                      foregroundColor: Theme.of(context).colorScheme.onSecondary,
                       padding: const EdgeInsets.symmetric(vertical: 12),
                     ),
                     child: const Text('Send Follow Request'),
@@ -706,8 +764,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   return ElevatedButton(
                     onPressed: isProcessing ? null : _handleFollowToggle,
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: Theme.of(context).colorScheme.primary,
-                      foregroundColor: Colors.white,
+                      backgroundColor: Theme.of(context).colorScheme.secondary,
+                      foregroundColor: Theme.of(context).colorScheme.onSecondary,
                       padding: const EdgeInsets.symmetric(vertical: 12),
                     ),
                     child: isProcessing
@@ -744,35 +802,123 @@ class _ProfileScreenState extends State<ProfileScreen> {
       decoration: BoxDecoration(
         color: Theme.of(context).colorScheme.surface,
         borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 2),
-          ),
-        ],
+        border: Border.all(
+          color: Theme.of(context).colorScheme.outlineVariant,
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            isOwnProfile ? 'Your Trips' : '${user.name}\'s Trips',
+            isOwnProfile
+                ? 'Your Trips'
+                : '${userPrimaryLabel(id: user.id, username: user.username, name: user.name)}\'s Trips',
             style: Theme.of(context).textTheme.headlineSmall,
           ),
           const SizedBox(height: 16),
-          const Center(
-            child: Column(
-              children: [
-                Icon(Icons.map_outlined, size: 48, color: Colors.grey),
-                SizedBox(height: 12),
-                Text(
-                  'No trips yet',
-                  style: TextStyle(fontSize: 16, color: Colors.grey),
+          if (_profileTripsLoading)
+            const Center(
+              child: Padding(
+                padding: EdgeInsets.all(24),
+                child: CircularProgressIndicator(),
+              ),
+            )
+          else if (_profileTripsError != null)
+            Center(
+              child: Text(
+                _profileTripsError!,
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.error,
+                  fontSize: 14,
                 ),
-              ],
+                textAlign: TextAlign.center,
+              ),
+            )
+          else if (_profileTrips.isEmpty)
+            AppFeedback.empty(
+              context: context,
+              icon: Icons.map_outlined,
+              title: 'No trips yet',
+              subtitle: isOwnProfile
+                  ? 'Start a trip and it will show up here'
+                  : 'Trips they share will show up here',
+              expand: false,
+            )
+          else
+            ListView.separated(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: _profileTrips.length,
+              separatorBuilder: (_, _) => const Divider(height: 1),
+              itemBuilder: (context, index) {
+                final trip = _profileTrips[index];
+                return ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: _buildTripLeadingThumb(trip),
+                  title: Text(
+                    trip.title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  subtitle: Text(
+                    trip.status.name,
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () {
+                    context.push(
+                      '/trip/${trip.id}',
+                      extra: {'from': '/profile/${widget.userId}'},
+                    );
+                  },
+                );
+              },
             ),
-          ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildTripLeadingThumb(Trip trip) {
+    const size = 44.0;
+    final coverUrl = trip.coverMedia?.url;
+    final trimmed = trip.title.trim();
+    final titleInitial =
+        trimmed.isNotEmpty ? trimmed[0].toUpperCase() : 'T';
+
+    Widget imageChild;
+    if (coverUrl != null && coverUrl.isNotEmpty) {
+      imageChild = Image.network(
+        buildOptimizedImageUrl(coverUrl, width: 128),
+        fit: BoxFit.cover,
+        errorBuilder: (_, _, _) => _tripThumbInitial(titleInitial),
+      );
+    } else {
+      imageChild = _tripThumbInitial(titleInitial);
+    }
+
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(10),
+      child: SizedBox(
+        width: size,
+        height: size,
+        child: imageChild,
+      ),
+    );
+  }
+
+  Widget _tripThumbInitial(String initial) {
+    return ColoredBox(
+      color: AppTheme.muted,
+      child: Center(
+        child: Text(
+          initial,
+          style: const TextStyle(
+            color: AppTheme.ink,
+            fontWeight: FontWeight.w600,
+            fontSize: 16,
+          ),
+        ),
       ),
     );
   }
@@ -783,12 +929,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
     String label, {
     VoidCallback? onTap,
   }) {
-    debugPrint(
-      '[ProfileScreen] _buildStatColumn - label: $label, count: $count, onTap: ${onTap != null}',
-    );
+    final clickable = onTap != null;
+    final scheme = Theme.of(context).colorScheme;
 
-    final content = Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+    final content = Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -797,9 +942,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             style: TextStyle(
               fontSize: 18,
               fontWeight: FontWeight.bold,
-              color: onTap != null
-                  ? Theme.of(context).colorScheme.primary
-                  : null,
+              color: clickable ? scheme.secondary : scheme.onSurface,
             ),
           ),
           const SizedBox(height: 4),
@@ -807,28 +950,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
             label,
             style: TextStyle(
               fontSize: 14,
-              color: Theme.of(context).colorScheme.onSurfaceVariant,
+              fontWeight: clickable ? FontWeight.w600 : FontWeight.w400,
+              color: clickable
+                  ? scheme.onSurface
+                  : scheme.onSurfaceVariant,
             ),
           ),
         ],
       ),
     );
 
-    if (onTap == null) {
+    if (!clickable) {
       return content;
-    }
-
-    void tapHandler() {
-      debugPrint(
-        '[ProfileScreen] StatColumn tapped - label: $label, count: $count',
-      );
-      try {
-        onTap();
-        debugPrint('[ProfileScreen] StatColumn onTap executed successfully');
-      } catch (e, stackTrace) {
-        debugPrint('[ProfileScreen] StatColumn onTap error: $e');
-        debugPrint('[ProfileScreen] Stack trace: $stackTrace');
-      }
     }
 
     return MouseRegion(
@@ -836,7 +969,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       child: Material(
         color: Colors.transparent,
         child: InkWell(
-          onTap: tapHandler,
+          onTap: onTap,
           borderRadius: BorderRadius.circular(8),
           child: content,
         ),

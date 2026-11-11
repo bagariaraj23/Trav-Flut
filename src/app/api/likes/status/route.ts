@@ -17,7 +17,7 @@ const statusQuerySchema = z.object({
 
 export async function GET(request: NextRequest) {
   const loggedHandler = withLogging(async (req) => {
-    return withRateLimit(req, async (rateLimitedReq) => {
+    return withRateLimit(req, "read_hot", async (rateLimitedReq) => {
       return withAuth(rateLimitedReq, async (authenticatedReq) => {
         try {
           const { searchParams } = new URL(authenticatedReq.url);

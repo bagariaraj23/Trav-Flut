@@ -4,6 +4,7 @@ import { MediaType } from "@prisma/client";
 import { AppError, ValidationError } from "./errors";
 import { validateFileUpload } from "./security";
 import { prisma } from "./prisma";
+import { retry } from "./retry";
 
 const requiredEnvVars = [
   "CLOUDINARY_CLOUD_NAME",
@@ -36,6 +37,8 @@ const CLOUDINARY_UPLOAD_FOLDER =
 const ALLOWED_FORMATS_BY_RESOURCE_TYPE: Record<string, string[]> = {
   image: ["jpeg", "jpg", "png", "gif"],
   video: ["mp4", "mov", "avi"],
+  raw: ["mp3", "wav", "m4a", "ogg", "aac"],
+  auto: ["jpg", "jpeg", "png", "gif", "mp4", "mov", "avi", "mp3", "wav", "m4a"],
 };
 
 const USER_STORAGE_QUOTA_BYTES =
@@ -88,7 +91,12 @@ function detectMimeType(buffer: Buffer): string | null {
   return null;
 }
 
-export type MediaUploadUsage = "trip_cover" | "thread_entry" | "general";
+export type MediaUploadUsage =
+  | "trip_cover"
+  | "thread_entry"
+  | "general"
+  | "chat"
+  | "group_avatar";
 
 interface UploadSignatureArgs {
   filename: string;
@@ -110,6 +118,7 @@ interface ConfirmUploadArgs {
   height?: number;
   duration?: number;
   tripId?: string;
+  chatMessageId?: string;
   usage?: MediaUploadUsage;
 }
 
@@ -122,6 +131,19 @@ interface SignedUploadParams {
   publicId: string;
   resourceType: "auto";
   uploadUrl: string;
+  /** Named Cloudinary upload preset. Must already exist in the dashboard. */
+  uploadPreset: string;
+}
+
+/**
+ * Preset names are created in the Cloudinary dashboard, not by this API.
+ * tripthread_thread_image, cover, video, avatar.
+ */
+function uploadPresetFor(usage: string, contentType: string): string {
+  if (contentType.startsWith("video/")) return "video";
+  if (usage === "trip_cover") return "cover";
+  if (usage === "group_avatar") return "avatar";
+  return "tripthread_thread_image";
 }
 
 function ensureConfigured(): void {
@@ -173,10 +195,12 @@ export class CloudinaryService {
       .slice(0, 60);
     const uniqueSlug = `${timestamp}_${randomUUID()}_${sanitizedBaseName}`;
 
+    const uploadPreset = uploadPresetFor(usage, contentType);
     const paramsToSign: Record<string, string | number> = {
       folder,
       public_id: uniqueSlug,
       timestamp,
+      upload_preset: uploadPreset,
     };
 
     const signature = cloudinary.utils.api_sign_request(
@@ -193,6 +217,7 @@ export class CloudinaryService {
       publicId: uniqueSlug,
       resourceType: "auto",
       uploadUrl: `https://api.cloudinary.com/v1_1/${process.env.CLOUDINARY_CLOUD_NAME}/auto/upload`,
+      uploadPreset,
     };
   }
 
@@ -235,13 +260,23 @@ export class CloudinaryService {
     }
 
     const resourceTypeKey = data.resource_type.toLowerCase();
-    const formatLower = data.format.toLowerCase();
     const allowedFormats = ALLOWED_FORMATS_BY_RESOURCE_TYPE[resourceTypeKey];
 
-    if (!allowedFormats || !allowedFormats.includes(formatLower)) {
+    const formatForCheck = data.format?.toLowerCase() ?? "";
+    if (!allowedFormats || !allowedFormats.includes(formatForCheck)) {
       throw new ValidationError(
-        `Unsupported media format: ${resourceTypeKey}/${formatLower}`
+        `Unsupported media format: ${resourceTypeKey}/${formatForCheck}`
       );
+    }
+
+    const resourceUpper = data.resource_type.toUpperCase();
+    let mediaType: MediaType;
+    if (resourceUpper === "VIDEO") mediaType = MediaType.VIDEO;
+    else if (resourceUpper === "RAW" || resourceUpper === "AUDIO") mediaType = MediaType.AUDIO;
+    else if (formatForCheck === "gif" || resourceUpper === "IMAGE") {
+      mediaType = formatForCheck === "gif" ? MediaType.GIF : MediaType.IMAGE;
+    } else {
+      mediaType = MediaType.IMAGE;
     }
 
     const mimeOverrides: Record<string, string> = {
@@ -254,21 +289,38 @@ export class CloudinaryService {
       avi: "video/avi",
     };
 
-    const expectedMime = mimeOverrides[formatLower] ?? mimeType.toLowerCase();
-
-    const mediaType =
-      data.resource_type.toUpperCase() === "VIDEO"
-        ? MediaType.VIDEO
-        : MediaType.IMAGE;
+    const expectedMime = mimeOverrides[formatForCheck] ?? mimeType.toLowerCase();
 
     // Verify reported mime type using magic number
     let verificationPassed = false;
     try {
-      const response = await fetch(data.secure_url, {
-        method: "GET",
-        headers: { Range: "bytes=0-511" },
-        cache: "no-store",
-      });
+      // Retry Cloudinary fetch with exponential backoff
+      const response = await retry(
+        async () => {
+          const res = await fetch(data.secure_url, {
+            method: "GET",
+            headers: { Range: "bytes=0-511" },
+            cache: "no-store",
+          });
+          if (!res.ok && res.status >= 500) {
+            throw new Error(`Cloudinary fetch error: ${res.status} ${res.statusText}`);
+          }
+          return res;
+        },
+        {
+          maxRetries: 2,
+          initialDelayMs: 500,
+          retryIf: (error) => {
+            // Retry on network errors and 5xx server errors
+            if (error instanceof Error) {
+              return error.message.includes('Cloudinary fetch error') ||
+                error.message.includes('fetch') ||
+                error.message.includes('network');
+            }
+            return false;
+          },
+        }
+      );
 
       if (response.ok) {
         const buffer = Buffer.from(await response.arrayBuffer());
@@ -318,6 +370,31 @@ export class CloudinaryService {
       }
     }
 
+    if (data.chatMessageId) {
+      const msg = await prisma.chatMessage.findUnique({
+        where: { id: data.chatMessageId },
+        select: {
+          id: true,
+          conversation: {
+            select: {
+              participants: {
+                where: { userId },
+                select: { userId: true },
+              },
+            },
+          },
+        },
+      });
+      if (
+        !msg ||
+        !msg.conversation.participants.some((p) => p.userId === userId)
+      ) {
+        throw new ValidationError(
+          "Chat message not found or you are not a participant"
+        );
+      }
+    }
+
     const media = await prisma.media.create({
       data: {
         url: data.secure_url,
@@ -331,6 +408,7 @@ export class CloudinaryService {
         processingStatus: "COMPLETED",
         uploadedById: userId,
         tripId: data.tripId ?? null,
+        chatMessageId: data.chatMessageId ?? null,
       } as any,
     });
 
@@ -339,8 +417,38 @@ export class CloudinaryService {
 
   static async deleteMedia(publicId: string): Promise<void> {
     ensureConfigured();
-    await cloudinary.uploader.destroy(publicId);
+    // Delete DB record FIRST, then Cloudinary. This prevents orphaned DB records
+    // pointing to deleted Cloudinary assets. If Cloudinary delete fails, the DB
+    // record is already gone — no broken image references. Cloudinary destroy is
+    // idempotent, so a retry or manual cleanup is safe.
     await prisma.media.deleteMany({ where: { publicId } });
+
+    try {
+      await retry(
+        async () => {
+          await cloudinary.uploader.destroy(publicId);
+        },
+        {
+          maxRetries: 2,
+          initialDelayMs: 500,
+          retryIf: (error) => {
+            if (error instanceof Error) {
+              return error.message.includes('network') ||
+                error.message.includes('timeout') ||
+                error.message.includes('ECONNRESET');
+            }
+            return false;
+          },
+        }
+      );
+    } catch (error) {
+      // Cloudinary delete failed but DB record is already removed.
+      // Log for manual cleanup — the orphaned Cloudinary asset doesn't affect users.
+      console.error(
+        `[Cloudinary] Failed to delete asset ${publicId} from Cloudinary after DB record removed:`,
+        error
+      );
+    }
   }
 
   static async cleanupOrphanedMedia(userId: string): Promise<void> {

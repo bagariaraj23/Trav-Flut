@@ -5,6 +5,9 @@ import 'package:tripthread/providers/auth_provider.dart';
 import 'package:tripthread/providers/user_provider.dart';
 import 'package:tripthread/services/media_service.dart';
 import 'package:tripthread/utils/validators.dart';
+import 'package:tripthread/utils/app_feedback.dart';
+import 'package:tripthread/utils/app_layout.dart';
+import 'package:tripthread/widgets/chat/chat_avatar.dart';
 import 'package:tripthread/widgets/custom_text_field.dart';
 import 'package:tripthread/widgets/loading_button.dart';
 
@@ -82,33 +85,18 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       );
 
       if (!success && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Failed to update profile photo.'),
-            backgroundColor: Colors.red,
-          ),
-        );
+        AppFeedback.showError(context, 'Failed to update profile photo.');
       } else if (success && mounted) {
         final updatedUser = userProvider.getUser(currentUser.id);
         if (updatedUser != null) {
           authProvider.updateUser(updatedUser);
         }
 
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Profile photo updated successfully'),
-            backgroundColor: Colors.green,
-          ),
-        );
+        AppFeedback.showSuccess(context, 'Profile photo updated successfully');
       }
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Error updating profile photo: $e'),
-          backgroundColor: Colors.red,
-        ),
-      );
+      AppFeedback.showError(context, 'Error updating profile photo: $e');
     } finally {
       if (mounted) {
         setState(() {
@@ -145,9 +133,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         authProvider.updateUser(updatedUser);
       }
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Profile updated successfully')),
-      );
+      AppFeedback.showSuccess(context, 'Profile updated successfully');
 
       // Use the same explicit navigation pattern
       final extra = GoRouterState.of(context).extra;
@@ -207,7 +193,9 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
             ),
           ],
         ),
-        body: Form(
+        body: AppLayout.reading(
+          context: context,
+          child: Form(
           key: _formKey,
           child: SingleChildScrollView(
             padding: const EdgeInsets.all(16),
@@ -220,25 +208,11 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                       Consumer<AuthProvider>(
                         builder: (context, authProvider, child) {
                           final user = authProvider.currentUser;
-                          return CircleAvatar(
+                          return ChatAvatar(
                             radius: 50,
-                            backgroundColor: Theme.of(
-                              context,
-                            ).colorScheme.primary,
-                            backgroundImage: user?.avatarUrl != null
-                                ? NetworkImage(user!.avatarUrl!)
-                                : null,
-                            child: user?.avatarUrl == null
-                                ? Text(
-                                    user?.name?.substring(0, 1).toUpperCase() ??
-                                        'U',
-                                    style: const TextStyle(
-                                      fontSize: 28,
-                                      fontWeight: FontWeight.bold,
-                                      color: Colors.white,
-                                    ),
-                                  )
-                                : null,
+                            avatarUrl: user?.avatarUrl,
+                            username: user?.username,
+                            name: user?.name,
                           );
                         },
                       ),
@@ -247,7 +221,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                         right: 0,
                         child: Container(
                           decoration: BoxDecoration(
-                            color: Theme.of(context).colorScheme.primary,
+                            color: Theme.of(context).colorScheme.secondary,
                             shape: BoxShape.circle,
                             boxShadow: [
                               BoxShadow(
@@ -312,6 +286,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                   controller: _usernameController,
                   label: 'Username',
                   prefixIcon: Icons.alternate_email,
+                  collapseSelectionOnTap: true,
                   validator: (value) {
                     final normalized =
                         Validators.normalizeUsernameToAscii(value?.trim() ?? '');
@@ -428,6 +403,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
               ],
             ),
           ),
+        ),
         ),
       ),
     );

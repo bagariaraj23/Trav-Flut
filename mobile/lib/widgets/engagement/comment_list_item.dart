@@ -1,11 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
+import 'package:go_router/go_router.dart';
 import 'package:tripthread/models/comment.dart';
 import 'package:tripthread/providers/comment_provider.dart';
 import 'package:tripthread/providers/auth_provider.dart';
 import 'package:tripthread/providers/engagement_provider.dart';
-import 'package:cached_network_image/cached_network_image.dart';
+import 'package:tripthread/utils/app_feedback.dart';
+import 'package:tripthread/utils/app_theme.dart';
+import 'package:tripthread/utils/locale_dates.dart';
+import 'package:tripthread/utils/error_handler.dart';
+import 'package:tripthread/utils/user_display_labels.dart';
+import 'package:tripthread/widgets/chat/chat_avatar.dart';
+import 'package:tripthread/widgets/mention_text.dart';
 
 class CommentListItem extends StatefulWidget {
   final Comment comment;
@@ -29,11 +36,11 @@ class CommentListItem extends StatefulWidget {
 
 class _CommentListItemState extends State<CommentListItem> {
   bool _showFullText = false;
+  bool _serverRejectedEditWindow = false;
 
-  bool _canEditComment() {
-    final now = DateTime.now();
-    final commentAge = now.difference(widget.comment.createdAt);
-    return commentAge.inMinutes < 15;
+  bool _withinAuthorEditWindow() {
+    return DateTime.now().difference(widget.comment.createdAt) <=
+        const Duration(minutes: 15);
   }
 
   @override
@@ -42,18 +49,21 @@ class _CommentListItemState extends State<CommentListItem> {
     final isOwnComment = authProvider.currentUser?.id == widget.comment.userId;
     final text = widget.comment.contentText;
     final shouldTruncate = text.length > 150;
-    final canEdit = isOwnComment && _canEditComment();
+    final inEditWindow =
+        isOwnComment && !_serverRejectedEditWindow && _withinAuthorEditWindow();
+    final scheme = Theme.of(context).colorScheme;
+    final muted = scheme.onSurfaceVariant;
 
     return Dismissible(
       key: Key(widget.comment.id),
-      direction: isOwnComment
+      direction: isOwnComment && inEditWindow
           ? DismissDirection.endToStart
           : DismissDirection.none,
       background: Container(
         alignment: Alignment.centerRight,
         padding: const EdgeInsets.only(right: 16),
-        color: Colors.red,
-        child: const Icon(Icons.delete, color: Colors.white),
+        color: scheme.error,
+        child: Icon(Icons.delete, color: scheme.onError),
       ),
       confirmDismiss: (direction) async {
         if (direction == DismissDirection.endToStart && isOwnComment) {
@@ -71,27 +81,16 @@ class _CommentListItemState extends State<CommentListItem> {
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            CircleAvatar(
-              radius: 18,
-              backgroundImage:
-                  widget.comment.user?.avatarUrl != null &&
-                      widget.comment.user!.avatarUrl!.isNotEmpty
-                  ? CachedNetworkImageProvider(widget.comment.user!.avatarUrl!)
-                  : null,
-              child:
-                  (widget.comment.user?.avatarUrl == null ||
-                      widget.comment.user!.avatarUrl!.isEmpty)
-                  ? Text(
-                      (widget.comment.user?.name?.isNotEmpty == true
-                              ? widget.comment.user!.name!.substring(0, 1)
-                              : widget.comment.user?.username?.isNotEmpty ==
-                                    true
-                              ? widget.comment.user!.username!.substring(0, 1)
-                              : 'U')
-                          .toUpperCase(),
-                      style: const TextStyle(fontSize: 14),
-                    )
-                  : null,
+            GestureDetector(
+              onTap: () {
+                context.push('/profile/${widget.comment.userId}');
+              },
+              child: ChatAvatar(
+                radius: 18,
+                avatarUrl: widget.comment.user?.avatarUrl,
+                username: widget.comment.user?.username,
+                name: widget.comment.user?.name,
+              ),
             ),
             const SizedBox(width: 12),
             Expanded(
@@ -99,13 +98,55 @@ class _CommentListItemState extends State<CommentListItem> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        widget.comment.user?.name ??
-                            widget.comment.user?.username ??
-                            'Unknown',
-                        style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                          fontWeight: FontWeight.w600,
+                      Expanded(
+                        child: GestureDetector(
+                          onTap: () {
+                            context.push('/profile/${widget.comment.userId}');
+                          },
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                widget.comment.user != null
+                                    ? userPrimaryLabel(
+                                        id: widget.comment.user!.id,
+                                        username: widget.comment.user!.username,
+                                        name: widget.comment.user!.name,
+                                      )
+                                    : userPrimaryLabel(
+                                        id: widget.comment.userId,
+                                        username: null,
+                                        name: null,
+                                      ),
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .titleSmall
+                                    ?.copyWith(fontWeight: FontWeight.w600),
+                              ),
+                              if (widget.comment.user != null &&
+                                  userSecondaryName(
+                                        username: widget.comment.user!.username,
+                                        name: widget.comment.user!.name,
+                                      ) !=
+                                      null)
+                                Text(
+                                  userSecondaryName(
+                                    username: widget.comment.user!.username,
+                                    name: widget.comment.user!.name,
+                                  )!,
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .bodySmall
+                                      ?.copyWith(
+                                        color: Theme.of(context)
+                                            .colorScheme
+                                            .onSurfaceVariant,
+                                      ),
+                                ),
+                            ],
+                          ),
                         ),
                       ),
                       const SizedBox(width: 8),
@@ -113,112 +154,120 @@ class _CommentListItemState extends State<CommentListItem> {
                         _formatRelativeTime(widget.comment.createdAt),
                         style: Theme.of(
                           context,
-                        ).textTheme.bodySmall?.copyWith(color: Colors.grey),
+                        ).textTheme.bodySmall?.copyWith(color: muted),
                       ),
                     ],
                   ),
                   const SizedBox(height: 4),
-                  GestureDetector(
-                    onTap: shouldTruncate
-                        ? () => setState(() => _showFullText = !_showFullText)
-                        : null,
-                    child: Text(
-                      _showFullText || !shouldTruncate
-                          ? text
-                          : '${text.substring(0, 150)}...',
-                      style: Theme.of(context).textTheme.bodyMedium,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
                   Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Expanded(
-                        child: Wrap(
-                          crossAxisAlignment: WrapCrossAlignment.center,
-                          spacing: 0,
-                          runSpacing: 4,
-                          children: [
-                            if (widget.comment.replyCount != null &&
-                                widget.comment.replyCount! > 0 &&
-                                widget.onViewReplies != null)
-                              TextButton.icon(
-                                onPressed: widget.onViewReplies,
-                                icon: Icon(
-                                  widget.isExpanded
-                                      ? Icons.expand_less
-                                      : Icons.expand_more,
-                                  size: 16,
-                                ),
-                                label: Text(
-                                  widget.isExpanded
-                                      ? 'Hide replies'
-                                      : 'View ${widget.comment.replyCount} ${widget.comment.replyCount == 1 ? 'reply' : 'replies'}',
-                                ),
-                                style: TextButton.styleFrom(
-                                  padding: const EdgeInsets.symmetric(horizontal: 8),
-                                  minimumSize: Size.zero,
-                                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                                ),
-                              ),
-                            if (widget.comment.parentCommentId == null)
-                              TextButton.icon(
-                                onPressed: () {
-                                  HapticFeedback.lightImpact();
-                                  widget.onReplyTap?.call();
-                                },
-                                icon: const Icon(Icons.reply, size: 16),
-                                label: const Text('Reply'),
-                                style: TextButton.styleFrom(
-                                  padding: const EdgeInsets.symmetric(horizontal: 8),
-                                  minimumSize: Size.zero,
-                                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                                ),
-                              ),
-                            if (isOwnComment) ...[
-                              if (canEdit)
-                                TextButton(
-                                  onPressed: () {
-                                    HapticFeedback.lightImpact();
-                                    _editComment();
-                                  },
-                                  style: TextButton.styleFrom(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 8,
-                                    ),
-                                    minimumSize: Size.zero,
-                                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                                    foregroundColor: Colors.grey[600],
-                                  ),
-                                  child: const Text(
-                                    'Edit',
-                                    style: TextStyle(fontSize: 13),
-                                  ),
-                                ),
-                              TextButton(
-                                onPressed: () async {
-                                  HapticFeedback.lightImpact();
-                                  final confirmed = await _showDeleteConfirmation();
-                                  if (confirmed) {
-                                    _deleteComment();
-                                  }
-                                },
-                                style: TextButton.styleFrom(
-                                  padding: const EdgeInsets.symmetric(horizontal: 8),
-                                  minimumSize: Size.zero,
-                                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                                  foregroundColor: Colors.grey[600],
-                                ),
-                                child: const Text(
-                                  'Delete',
-                                  style: TextStyle(fontSize: 13),
-                                ),
-                              ),
-                            ],
-                          ],
+                        child: GestureDetector(
+                          onTap: shouldTruncate
+                              ? () =>
+                                    setState(() => _showFullText = !_showFullText)
+                              : null,
+                          child: MentionText(
+                            text: _showFullText || !shouldTruncate
+                                ? text
+                                : '${text.substring(0, 150)}...',
+                            style: Theme.of(context).textTheme.bodyMedium,
+                          ),
                         ),
                       ),
+                      const SizedBox(width: 4),
                       _CommentLikeButton(comment: widget.comment),
                     ],
+                  ),
+                  const SizedBox(height: 8),
+                  Align(
+                    alignment: AlignmentDirectional.centerStart,
+                    child: Wrap(
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      alignment: WrapAlignment.start,
+                      spacing: 0,
+                      runSpacing: 4,
+                      children: [
+                        if (widget.comment.replyCount != null &&
+                            widget.comment.replyCount! > 0 &&
+                            widget.onViewReplies != null)
+                          TextButton.icon(
+                            onPressed: widget.onViewReplies,
+                            icon: Icon(
+                              widget.isExpanded
+                                  ? Icons.expand_less
+                                  : Icons.expand_more,
+                              size: 16,
+                            ),
+                            label: Text(
+                              widget.isExpanded
+                                  ? 'Hide replies'
+                                  : 'View ${widget.comment.replyCount} ${widget.comment.replyCount == 1 ? 'reply' : 'replies'}',
+                            ),
+                            style: TextButton.styleFrom(
+                              padding:
+                                  const EdgeInsets.symmetric(horizontal: 8),
+                              minimumSize: Size.zero,
+                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                            ),
+                          ),
+                        if (widget.onReplyTap != null)
+                          TextButton.icon(
+                            onPressed: () {
+                              HapticFeedback.lightImpact();
+                              widget.onReplyTap!();
+                            },
+                            icon: const Icon(Icons.reply, size: 16),
+                            label: const Text('Reply'),
+                            style: TextButton.styleFrom(
+                              padding:
+                                  const EdgeInsets.symmetric(horizontal: 8),
+                              minimumSize: Size.zero,
+                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                            ),
+                          ),
+                        if (isOwnComment && inEditWindow)
+                          TextButton(
+                            onPressed: () {
+                              HapticFeedback.lightImpact();
+                              _editComment();
+                            },
+                            style: TextButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(horizontal: 8),
+                              minimumSize: Size.zero,
+                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                              foregroundColor: muted,
+                            ),
+                            child: const Text(
+                              'Edit',
+                              style: TextStyle(fontSize: 13),
+                            ),
+                          ),
+                        if (isOwnComment && inEditWindow)
+                          TextButton(
+                            onPressed: () async {
+                              HapticFeedback.lightImpact();
+                              final confirmed =
+                                  await _showDeleteConfirmation();
+                              if (confirmed) {
+                                _deleteComment();
+                              }
+                            },
+                            style: TextButton.styleFrom(
+                              padding:
+                                  const EdgeInsets.symmetric(horizontal: 8),
+                              minimumSize: Size.zero,
+                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                              foregroundColor: muted,
+                            ),
+                            child: const Text(
+                              'Delete',
+                              style: TextStyle(fontSize: 13),
+                            ),
+                          ),
+                      ],
+                    ),
                   ),
                 ],
               ),
@@ -244,9 +293,9 @@ class _CommentListItemState extends State<CommentListItem> {
               ),
               TextButton(
                 onPressed: () => Navigator.of(context).pop(true),
-                child: const Text(
+                child: Text(
                   'Delete',
-                  style: TextStyle(color: Colors.red),
+                  style: TextStyle(color: Theme.of(context).colorScheme.error),
                 ),
               ),
             ],
@@ -277,17 +326,18 @@ class _CommentListItemState extends State<CommentListItem> {
         engagementProvider.clearEntity(id);
       }
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Comment deleted')),
-        );
+        AppFeedback.showSuccess(context, 'Comment deleted');
       }
     } catch (e) {
+      if (e is ValidationException && mounted) {
+        setState(() => _serverRejectedEditWindow = true);
+      }
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Failed to delete comment: ${e.toString()}'),
-            backgroundColor: Colors.red,
-          ),
+        AppFeedback.showError(
+          context,
+          e is ValidationException
+              ? 'Delete window expired for this comment.'
+              : 'Failed to delete comment: ${e.toString()}',
         );
       }
     }
@@ -326,17 +376,18 @@ class _CommentListItemState extends State<CommentListItem> {
         final provider = context.read<CommentProvider>();
         await provider.updateComment(widget.comment.id, result);
         if (mounted) {
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(const SnackBar(content: Text('Comment updated')));
+          AppFeedback.showSuccess(context, 'Comment updated');
         }
       } catch (e) {
+        if (e is ValidationException && mounted) {
+          setState(() => _serverRejectedEditWindow = true);
+        }
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Failed to update comment: ${e.toString()}'),
-              backgroundColor: Colors.red,
-            ),
+          AppFeedback.showError(
+            context,
+            e is ValidationException
+                ? 'Edit window expired for this comment.'
+                : 'Failed to update comment: ${e.toString()}',
           );
         }
       }
@@ -348,7 +399,7 @@ class _CommentListItemState extends State<CommentListItem> {
     final difference = now.difference(dateTime);
 
     if (difference.inDays > 7) {
-      return '${dateTime.month}/${dateTime.day}';
+      return LocaleDates.monthDay(dateTime.toLocal());
     } else if (difference.inDays > 0) {
       return '${difference.inDays}d';
     } else if (difference.inHours > 0) {
@@ -361,85 +412,27 @@ class _CommentListItemState extends State<CommentListItem> {
   }
 }
 
-class _CommentLikeButton extends StatefulWidget {
+// Fixed visual size for liked vs unliked so reopening the sheet does not change scale.
+const double _kCommentHeartIconSize = 22;
+
+class _CommentLikeButton extends StatelessWidget {
   final Comment comment;
 
   const _CommentLikeButton({required this.comment});
 
-  @override
-  State<_CommentLikeButton> createState() => _CommentLikeButtonState();
-}
-
-class _CommentLikeButtonState extends State<_CommentLikeButton>
-    with SingleTickerProviderStateMixin {
-  late AnimationController _controller;
-  late Animation<double> _scaleAnimation;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = AnimationController(
-      duration: const Duration(milliseconds: 200),
-      vsync: this,
-    );
-
-    _scaleAnimation = Tween<double>(
-      begin: 1.0,
-      end: 1.3,
-    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeInOut));
-  }
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    // Initialize animation state based on current like status
-    final provider = context.read<EngagementProvider>();
-    final isLiked = provider.likeStatus.containsKey(widget.comment.id)
-        ? provider.isLiked(widget.comment.id)
-        : false;
-
-    if (isLiked && _controller.value != 1.0) {
-      _controller.value = 1.0;
-    } else if (!isLiked && _controller.value != 0.0) {
-      _controller.value = 0.0;
-    }
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  Future<void> _handleLike() async {
+  Future<void> _toggleLike(
+    BuildContext context,
+    EngagementProvider provider,
+    bool wasLiked,
+  ) async {
     HapticFeedback.lightImpact();
-    final provider = context.read<EngagementProvider>();
-    final wasLiked = provider.isLiked(widget.comment.id);
-
-    // Animate
-    if (!wasLiked) {
-      _controller.forward().then((_) {
-        _controller.reverse();
-      });
-    } else {
-      _controller.reverse();
-    }
-
     try {
-      await provider.toggleLike('COMMENT', widget.comment.id);
+      await provider.toggleLike('COMMENT', comment.id);
     } catch (e) {
-      // Rollback animation on error
-      if (wasLiked) {
-        _controller.forward();
-      } else {
-        _controller.reverse();
-      }
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Failed to ${wasLiked ? 'unlike' : 'like'} comment'),
-            backgroundColor: Colors.red,
-          ),
+      if (context.mounted) {
+        AppFeedback.showError(
+          context,
+          'Failed to ${wasLiked ? 'unlike' : 'like'} comment',
         );
       }
     }
@@ -448,54 +441,49 @@ class _CommentLikeButtonState extends State<_CommentLikeButton>
   @override
   Widget build(BuildContext context) {
     return Consumer<EngagementProvider>(
-      builder: (context, provider, child) {
-        final isLiked = provider.likeStatus.containsKey(widget.comment.id)
-            ? provider.isLiked(widget.comment.id)
+      builder: (context, provider, _) {
+        final muted = Theme.of(context).colorScheme.onSurfaceVariant;
+        final isLiked = provider.likeStatus.containsKey(comment.id)
+            ? provider.isLiked(comment.id)
             : false;
-        final likeCount = provider.likeCounts.containsKey(widget.comment.id)
-            ? provider.getLikeCount(widget.comment.id)
-            : widget.comment.likeCount;
-        final isToggling = provider.isToggling(widget.comment.id);
+        final likeCount = provider.likeCounts.containsKey(comment.id)
+            ? provider.getLikeCount(comment.id)
+            : comment.likeCount;
+        final isToggling = provider.isToggling(comment.id);
 
-        return InkWell(
-          onTap: isToggling ? null : _handleLike,
-          borderRadius: BorderRadius.circular(20),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(
-              horizontal: 12.0,
-              vertical: 8.0,
-            ), // Creates adequate touch target
-            child: AnimatedBuilder(
-              animation: _controller,
-              builder: (context, child) {
-                return Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Transform.scale(
-                      scale: _scaleAnimation.value,
-                      child: Icon(
-                        isLiked ? Icons.favorite : Icons.favorite_border,
-                        size: 16,
-                        color: isLiked ? Colors.red : Colors.grey,
-                      ),
-                    ),
-                    if (likeCount > 0) ...[
-                      const SizedBox(width: 4),
-                      Text(
-                        likeCount.toString(),
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: isLiked ? Colors.red : Colors.grey,
-                          fontWeight: isLiked
-                              ? FontWeight.w600
-                              : FontWeight.normal,
-                        ),
-                      ),
-                    ],
-                  ],
-                );
-              },
+        return Row(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            IconButton(
+              onPressed: isToggling
+                  ? null
+                  : () => _toggleLike(context, provider, isLiked),
+              icon: Icon(
+                isLiked ? Icons.favorite : Icons.favorite_border,
+                size: _kCommentHeartIconSize,
+                color: isLiked ? AppTheme.likeRose : muted,
+              ),
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints.tightFor(width: 44, height: 44),
+              style: IconButton.styleFrom(
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                visualDensity: VisualDensity.compact,
+              ),
             ),
-          ),
+            if (likeCount > 0)
+              Padding(
+                padding: const EdgeInsets.only(top: 12),
+                child: Text(
+                  likeCount.toString(),
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: isLiked ? AppTheme.likeRose : muted,
+                        fontWeight:
+                            isLiked ? FontWeight.w600 : FontWeight.normal,
+                      ),
+                ),
+              ),
+          ],
         );
       },
     );

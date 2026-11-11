@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { AuthService } from "./auth";
-import { AppError, AuthenticationError } from "./errors";
+import { AppError, AuthenticationError, UnsettledBalanceError } from "./errors";
 import { prisma } from "./prisma";
+import { PerformanceMonitor, ErrorTracker } from "./monitoring";
 
 // Rate limiting is now handled by src/lib/rateLimit.ts
 
@@ -120,25 +121,64 @@ export function withValidation<T>(
 }
 
 // Error handling middleware
-export function handleApiError(error: unknown): NextResponse {
+export function handleApiError(error: unknown, context?: {
+  requestId?: string;
+  userId?: string;
+  endpoint?: string;
+}): NextResponse {
+  if (!(error instanceof AppError)) {
+    console.error(
+      `[handleApiError] Unhandled error${context?.endpoint ? ` (${context.endpoint})` : ""}:`,
+      error
+    );
+  }
   const appError =
     error instanceof AppError
       ? error
-      : new AppError("Internal server error", 500);
+      : new AppError("Internal server error", 500, false);
 
-  // Log operational errors for monitoring
+  // Enhanced logging with context
   if (!appError.isOperational) {
-    console.error("Non-operational error:", appError);
+    console.error(`[${context?.endpoint || 'unknown'}] Non-operational error:`, {
+      message: appError.message,
+      statusCode: appError.statusCode,
+      requestId: context?.requestId,
+      userId: context?.userId,
+      stack: appError.stack,
+    });
   }
 
-  return NextResponse.json(
-    {
-      success: false,
-      error: appError.message,
-      ...(process.env.NODE_ENV === "development" && { stack: appError.stack }),
-    },
-    { status: appError.statusCode }
-  );
+  // Track error for monitoring (non-blocking)
+  try {
+    ErrorTracker.getInstance().trackError(
+      appError,
+      {
+        endpoint: context?.endpoint,
+        requestId: context?.requestId,
+      },
+      context?.userId
+    );
+  } catch (trackingError) {
+    // Error tracking failure shouldn't break error handling
+    // Log silently to avoid noise, but don't throw
+    if (process.env.NODE_ENV === "development") {
+      console.warn("[ErrorHandler] Failed to track error:", trackingError);
+    }
+  }
+
+  const body: Record<string, unknown> = {
+    success: false,
+    error: appError.message,
+  };
+  if (error instanceof UnsettledBalanceError) {
+    body.code = error.code;
+    body.meta = { netMinor: error.netMinor };
+  }
+  if (process.env.NODE_ENV === "development") {
+    body.stack = appError.stack;
+  }
+
+  return NextResponse.json(body, { status: appError.statusCode });
 }
 
 // Security headers middleware
@@ -214,24 +254,29 @@ export function withCors(
   };
 }
 
-// Request logging middleware
+// Request logging middleware with performance monitoring
 export function withLogging(
-  handler: (req: NextRequest) => Promise<NextResponse>
+  handler: (req: NextRequest) => Promise<NextResponse>,
+  operationName?: string
 ) {
   return async (request: NextRequest): Promise<NextResponse> => {
     const start = Date.now();
     const method = request.method;
     const url = request.url;
+    const endpoint = operationName || `${method} ${new URL(url).pathname}`;
+    const endTimer = PerformanceMonitor.getInstance().startTimer(endpoint);
 
     try {
       const response = await handler(request);
       const duration = Date.now() - start;
+      endTimer();
 
       console.log(`${method} ${url} - ${response.status} - ${duration}ms`);
 
       return response;
     } catch (error) {
       const duration = Date.now() - start;
+      endTimer();
       console.error(`${method} ${url} - ERROR - ${duration}ms`, error);
       throw error;
     }

@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { AuthService } from "@/lib/auth";
 import { ApiResponse, TripResponse } from "@/types/api";
+import { syncViewerTripSchedule } from "@/lib/tripSchedule";
 
 // Get current ongoing trip for user
 export async function GET(request: NextRequest) {
@@ -34,12 +35,16 @@ export async function GET(request: NextRequest) {
     }
 
     const userId = payload.userId;
+    await syncViewerTripSchedule(userId);
 
-    // Get ongoing trip
+    // Ongoing trip where user is owner or participant
     const trip = await prisma.trip.findFirst({
       where: {
-        userId,
         status: "ONGOING",
+        OR: [
+          { userId },
+          { participants: { some: { userId } } },
+        ],
       },
       include: {
         user: {

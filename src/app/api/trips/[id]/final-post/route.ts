@@ -12,8 +12,6 @@ import {
   withLogging,
   handleApiError,
 } from "@/lib/middleware";
-import { ConflictError, NotFoundError } from "@/lib/errors";
-import { TripStatus } from "@prisma/client";
 
 function toResponse(
   finalPost: Awaited<ReturnType<typeof TripFinalizerService.getFinalPost>>
@@ -31,14 +29,13 @@ function toResponse(
   };
 }
 
-async function ensureParticipantOrOwner(tripId: string, userId: string) {
+async function ensureOwnPost(tripId: string, userId: string) {
   const trip = await prisma.trip.findUnique({
     where: { id: tripId },
     select: {
-      id: true,
       userId: true,
-      status: true,
-      participants: {
+      participants: { select: { userId: true } },
+      finalPosts: {
         where: { userId },
         select: { id: true },
         take: 1,
@@ -47,29 +44,26 @@ async function ensureParticipantOrOwner(tripId: string, userId: string) {
   });
 
   if (!trip) {
-    return {
-      error: NextResponse.json<ApiResponse>(
-        { success: false, error: "Trip not found" },
-        { status: 404 }
-      ),
-      trip: null,
-    };
+    return NextResponse.json<ApiResponse>(
+      { success: false, error: "Trip not found" },
+      { status: 404 }
+    );
   }
 
   const isOwner = trip.userId === userId;
-  const isParticipant = trip.participants.length > 0;
-
-  if (!isOwner && !isParticipant) {
-    return {
-      error: NextResponse.json<ApiResponse>(
-        { success: false, error: "Only trip participants can access final post" },
-        { status: 403 }
-      ),
-      trip: null,
-    };
+  const isParticipant = trip.participants.some((p) => p.userId === userId);
+  const hasOwnPost = trip.finalPosts.length > 0;
+  if (!isOwner && !isParticipant && !hasOwnPost) {
+    return NextResponse.json<ApiResponse>(
+      {
+        success: false,
+        error: "Only people on this trip can manage their own final post",
+      },
+      { status: 403 }
+    );
   }
 
-  return { error: null, trip };
+  return null;
 }
 
 export async function GET(
@@ -84,32 +78,20 @@ export async function GET(
           const tripId = id;
           const userId = authenticatedReq.user!.userId;
 
-          const { error, trip } = await ensureParticipantOrOwner(tripId, userId);
-          if (error) {
-            return error;
+          const permissionError = await ensureOwnPost(tripId, userId);
+          if (permissionError) {
+            return permissionError;
           }
 
-          try {
-            const finalPost = await TripFinalizerService.getFinalPost(tripId, userId);
-            return NextResponse.json<ApiResponse<TripFinalPostResponse>>({
-              success: true,
-              data: toResponse(finalPost),
-            });
-          } catch (serviceError) {
-            if (!(serviceError instanceof NotFoundError)) {
-              throw serviceError;
-            }
+          const finalPost = await TripFinalizerService.getFinalPost(
+            tripId,
+            userId
+          );
 
-            if (trip!.status !== TripStatus.ENDED) {
-              throw new ConflictError("Trip must be ended before generating final post");
-            }
-
-            const generated = await TripFinalizerService.generateFinalPost(tripId, userId);
-            return NextResponse.json<ApiResponse<TripFinalPostResponse>>({
-              success: true,
-              data: toResponse(generated),
-            });
-          }
+          return NextResponse.json<ApiResponse<TripFinalPostResponse>>({
+            success: true,
+            data: toResponse(finalPost),
+          });
         } catch (error) {
           return handleApiError(error);
         }
@@ -124,7 +106,7 @@ export async function PUT(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const loggedHandler = withLogging(async (req) => {
+  const handler = withLogging(async (req) => {
     return withRateLimit(req, async (rateLimitedReq) => {
       return withAuth(rateLimitedReq, async (authenticatedReq) => {
         try {
@@ -132,12 +114,13 @@ export async function PUT(
           const tripId = id;
           const userId = authenticatedReq.user!.userId;
 
-          const { error } = await ensureParticipantOrOwner(tripId, userId);
-          if (error) {
-            return error;
+          const permissionError = await ensureOwnPost(tripId, userId);
+          if (permissionError) {
+            return permissionError;
           }
 
-          const body = (await authenticatedReq.json()) as UpdateFinalPostRequest;
+          const body =
+            (await authenticatedReq.json()) as UpdateFinalPostRequest;
           const finalPost = await TripFinalizerService.updateFinalPost(
             tripId,
             userId,
@@ -155,6 +138,37 @@ export async function PUT(
       });
     });
   });
+  return handler(request);
+}
 
-  return await loggedHandler(request);
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const handler = withLogging(async (req) => {
+    return withRateLimit(req, async (rateLimitedReq) => {
+      return withAuth(rateLimitedReq, async (authenticatedReq) => {
+        try {
+          const { id } = await params;
+          const tripId = id;
+          const userId = authenticatedReq.user!.userId;
+
+          const permissionError = await ensureOwnPost(tripId, userId);
+          if (permissionError) {
+            return permissionError;
+          }
+
+          await TripFinalizerService.deleteFinalPost(tripId, userId);
+
+          return NextResponse.json<ApiResponse>({
+            success: true,
+            message: "Final post deleted",
+          });
+        } catch (error) {
+          return handleApiError(error);
+        }
+      });
+    });
+  });
+  return handler(request);
 }

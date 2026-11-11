@@ -2,6 +2,9 @@
 import 'dotenv/config';
 
 const nextConfig = {
+  // jsonwebtoken / bcryptjs use dynamic requires; bundling them for RSC causes
+  // "TypeError: __webpack_require__.nmd is not a function" on API routes.
+  serverExternalPackages: ["jsonwebtoken", "bcryptjs"],
   // instrumentationHook is now available by default in Next.js 15, no need to enable it
   env: {
     ENABLE_SCHEDULER: process.env.ENABLE_SCHEDULER,
@@ -27,6 +30,21 @@ const nextConfig = {
     ];
 
     return [
+      {
+        // Apple requires application/json (not octet-stream) for Universal Links.
+        source: '/.well-known/apple-app-site-association',
+        headers: [
+          { key: 'Content-Type', value: 'application/json' },
+          { key: 'Cache-Control', value: 'public, max-age=3600' },
+        ],
+      },
+      {
+        source: '/.well-known/assetlinks.json',
+        headers: [
+          { key: 'Content-Type', value: 'application/json' },
+          { key: 'Cache-Control', value: 'public, max-age=3600' },
+        ],
+      },
       {
         source: '/api/:path*',
         headers: [

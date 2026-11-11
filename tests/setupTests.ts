@@ -1,92 +1,77 @@
 /**
  * Test setup: ensure essential env vars are present for test runs.
- * This file is loaded by Vitest before running tests.
+ * This file is loaded by Vitest before running any tests.
  *
- * IMPORTANT: This runs BEFORE any application code is imported.
- * This ensures .env.test is loaded before src/env.ts validates environment.
+ * IMPORTANT: Runs BEFORE application imports so Prisma sees a safe DATABASE_URL.
  *
- * ARCHITECTURE:
- * - Tests use TEST_* prefixed variables from .env.test ONLY
- * - In test mode, we map TEST_* variables to non-prefixed versions for Prisma/application code
- * - This ensures complete separation: tests never touch production variables
- *
- * Required TEST_* variables in .env.test:
- * - TEST_DATABASE_URL: Test database connection string
- * - TEST_JWT_SECRET: Test JWT secret
- * - TEST_MAPBOX_ACCESS_TOKEN: Test Mapbox token
- * - TEST_REDIS_REST_URL: (optional) Test Redis URL
- * - TEST_REDIS_REST_TOKEN: (optional) Test Redis token
+ * - Loads `.env.test` only for file-based config.
+ * - Clears inherited `DATABASE_URL` from the shell so production is never targeted by mistake.
+ * - Sets `DATABASE_URL` exclusively from `TEST_DATABASE_URL`, which must point at a DB whose
+ *   name ends with `_test` (see `src/lib/dbUrlSafety.ts`).
  */
 import fs from "fs";
 import path from "path";
 import dotenv from "dotenv";
+import { assertTestDatabaseUrl } from "../src/lib/dbUrlSafety";
 
 export default function setupTests() {
-  // Force NODE_ENV to test mode for all tests
-  // This ensures no production code paths are executed
   if (process.env.NODE_ENV !== "test") {
-    (process.env as any).NODE_ENV = 'test';
+    (process.env as any).NODE_ENV = "test";
   }
 
-  // Load .env.test FIRST
   const envTestPath = path.resolve(process.cwd(), ".env.test");
   if (fs.existsSync(envTestPath)) {
     dotenv.config({ path: envTestPath });
   }
 
-  // In test mode, map TEST_* variables to non-prefixed versions
-  // This allows Prisma and application code to work without knowing about TEST_* prefix
-  
-  // Check for required TEST_* variables
-  const inCI = process.env.GITHUB_ACTIONS === "true" || process.env.CI === "true";
-  
+  delete process.env.DATABASE_URL;
+
+  const inCI =
+    process.env.GITHUB_ACTIONS === "true" || process.env.CI === "true";
+
   if (!process.env.TEST_DATABASE_URL) {
-    const msg = `TEST_DATABASE_URL is not set in .env.test. Tests require TEST_* prefixed variables.`;
+    const msg =
+      "TEST_DATABASE_URL is not set in .env.test. Integration tests need it; unit tests still run without a database.";
     if (inCI) {
       console.error(msg);
       throw new Error(msg);
-    } else {
-      console.warn(msg);
     }
-  }
-
-  // Map TEST_* variables to non-prefixed versions for application code
-  // This is ONLY done in test mode - production code never sees TEST_* variables
-  if (process.env.TEST_DATABASE_URL) {
+    console.warn(msg);
+  } else {
+    assertTestDatabaseUrl(process.env.TEST_DATABASE_URL, "Vitest setup");
     process.env.DATABASE_URL = process.env.TEST_DATABASE_URL;
   }
-  
+
   if (process.env.TEST_JWT_SECRET) {
     process.env.JWT_SECRET = process.env.TEST_JWT_SECRET;
   } else {
-    // Provide safe test default if not in .env.test
-    process.env.JWT_SECRET = "test-jwt-secret-key-for-testing-only-do-not-use-in-production";
+    process.env.JWT_SECRET =
+      "test-jwt-secret-key-for-testing-only-do-not-use-in-production";
   }
-  
+
   if (process.env.TEST_MAPBOX_ACCESS_TOKEN) {
     process.env.MAPBOX_ACCESS_TOKEN = process.env.TEST_MAPBOX_ACCESS_TOKEN;
   } else {
-    // Provide safe test default if not in .env.test
     process.env.MAPBOX_ACCESS_TOKEN = "test-mapbox-token";
   }
-  
-  // Optional Redis variables
+
   if (process.env.TEST_REDIS_REST_URL) {
     process.env.REDIS_REST_URL = process.env.TEST_REDIS_REST_URL;
   }
-  
+
   if (process.env.TEST_REDIS_REST_TOKEN) {
     process.env.REDIS_REST_TOKEN = process.env.TEST_REDIS_REST_TOKEN;
   }
 
-  // Silence noisy logs in test environments unless DEBUG is explicitly set
   if (!process.env.DEBUG) process.env.DEBUG = "";
 
-  // Log test environment status (helpful for debugging)
-  if (process.env.DEBUG?.includes('test')) {
-    console.log('[Test Setup] Environment configured:', {
+  if (process.env.DEBUG?.includes("test")) {
+    console.log("[Test Setup] Environment configured:", {
       NODE_ENV: process.env.NODE_ENV,
-      TEST_DATABASE_URL: process.env.TEST_DATABASE_URL?.replace(/:[^:@]+@/, ':****@'), // Mask password
+      TEST_DATABASE_URL: process.env.TEST_DATABASE_URL?.replace(
+        /:[^:@]+@/,
+        ":****@"
+      ),
       HAS_TEST_JWT_SECRET: !!process.env.TEST_JWT_SECRET,
       HAS_TEST_MAPBOX_TOKEN: !!process.env.TEST_MAPBOX_ACCESS_TOKEN,
     });

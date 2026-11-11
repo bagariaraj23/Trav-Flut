@@ -195,16 +195,19 @@ class _PlaceSearchSheetState extends State<PlaceSearchSheet> {
 
           // Loading indicator
           if (_isLoading)
-            const Padding(
-              padding: EdgeInsets.all(32.0),
+            Padding(
+              padding: const EdgeInsets.all(32.0),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  CircularProgressIndicator(),
-                  SizedBox(height: 16),
+                  const CircularProgressIndicator(),
+                  const SizedBox(height: 16),
                   Text(
                     'Searching places...',
-                    style: TextStyle(fontSize: 14, color: Colors.grey),
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
                   ),
                 ],
               ),

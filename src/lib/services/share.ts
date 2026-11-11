@@ -18,16 +18,26 @@ async function invalidateShareTokenCache(shareToken: string): Promise<void> {
   const key = getShareTokenCacheKey(shareToken);
   memoryCache.delete(key);
   if (redis) {
-    await redis.del(key);
+    try {
+      await redis.del(key);
+    } catch (err) {
+      console.warn("[share] Redis cache invalidate failed (non-fatal)", {
+        key,
+        error: err,
+      });
+    }
   }
 }
+
+export type ShareSource = "SYSTEM_SHEET" | "IN_APP_DM";
 
 export async function createShare(
   userId: string,
   entityType: EntityType,
   entityId: string,
   shareType: ShareType,
-  expiresAt?: Date
+  expiresAt?: Date,
+  shareSource: ShareSource = "SYSTEM_SHEET"
 ) {
   const exists = await validateEntityExists(entityType, entityId);
   if (!exists) {
@@ -57,37 +67,56 @@ export async function createShare(
 
   const metadata: Record<string, any> = {
     createdAt: new Date().toISOString(),
+    shareSource,
   };
 
-  return await prisma.$transaction(async (tx) => {
-    const share = await tx.share.create({
-      data: {
-        userId,
-        entityType,
-        entityId,
-        shareToken: shareToken!,
-        shareType,
-        metadata,
-        expiresAt,
-      },
-    });
+  const createData = {
+    userId,
+    entityType,
+    entityId,
+    shareToken: shareToken!,
+    shareType,
+    metadata,
+    expiresAt,
+  };
 
-    await incrementEntityCount(entityType, entityId, "shareCount", tx);
+  // SYSTEM_SHEET does not bump shareCount — use a plain create to avoid holding an
+  // interactive transaction open (Neon/slow pools + default ~5s tx timeout caused
+  // INSERT-then-ROLLBACK 500s in logs).
+  const share =
+    shareSource === "IN_APP_DM"
+      ? await prisma.$transaction(
+          async (tx) => {
+            const created = await tx.share.create({ data: createData });
+            await incrementEntityCount(entityType, entityId, "shareCount", tx);
+            return created;
+          },
+          { maxWait: 15_000, timeout: 20_000 }
+        )
+      : await prisma.share.create({ data: createData });
 
-    if (redis) {
-      const ttl = expiresAt
+  if (redis) {
+    try {
+      const ttlSeconds = expiresAt
         ? Math.floor((expiresAt.getTime() - Date.now()) / 1000)
         : Math.floor(ENGAGEMENT_CONSTANTS.CACHE_TTL.SHARE_TOKEN / 1000);
 
-      await redis.set(
-        getShareTokenCacheKey(shareToken!),
-        JSON.stringify(share),
-        { ex: ttl }
-      );
+      if (ttlSeconds > 0) {
+        await redis.set(
+          getShareTokenCacheKey(shareToken!),
+          JSON.stringify(share),
+          { ex: ttlSeconds }
+        );
+      }
+    } catch (err) {
+      console.warn("[share] Redis cache set failed (non-fatal)", {
+        shareToken: shareToken!,
+        error: err,
+      });
     }
+  }
 
-    return share;
-  });
+  return share;
 }
 
 export async function resolveShareToken(shareToken: string) {
@@ -241,59 +270,67 @@ export async function getSharesByUser(
 
   const result = paginateResults(shares, limit);
 
-  const itemsWithEntity = await Promise.all(
-    result.items.map(async (share) => {
-      let entityPreview: any = null;
-      if (share.entityType === "TRIP_FINAL_POST") {
-        const post = await prisma.tripFinalPost.findUnique({
-          where: { id: share.entityId },
+  const postIds = result.items
+    .filter((share) => share.entityType === "TRIP_FINAL_POST")
+    .map((share) => share.entityId);
+  const entryIds = result.items
+    .filter((share) => share.entityType === "TRIP_THREAD_ENTRY")
+    .map((share) => share.entityId);
+  const commentIds = result.items
+    .filter((share) => share.entityType === "COMMENT")
+    .map((share) => share.entityId);
+
+  const [posts, entries, comments] = await Promise.all([
+    postIds.length
+      ? prisma.tripFinalPost.findMany({
+          where: { id: { in: postIds } },
           select: {
             id: true,
             summaryText: true,
-            trip: {
-              select: {
-                id: true,
-                title: true,
-              },
-            },
+            trip: { select: { id: true, title: true } },
           },
-        });
-        entityPreview = post;
-      } else if (share.entityType === "TRIP_THREAD_ENTRY") {
-        const entry = await prisma.tripThreadEntry.findUnique({
-          where: { id: share.entityId },
+        })
+      : Promise.resolve([]),
+    entryIds.length
+      ? prisma.tripThreadEntry.findMany({
+          where: { id: { in: entryIds } },
           select: {
             id: true,
             contentText: true,
-            trip: {
-              select: {
-                id: true,
-                title: true,
-              },
-            },
+            trip: { select: { id: true, title: true } },
           },
-        });
-        entityPreview = entry;
-      } else if (share.entityType === "COMMENT") {
-        const comment = await prisma.comment.findUnique({
-          where: { id: share.entityId },
+        })
+      : Promise.resolve([]),
+    commentIds.length
+      ? prisma.comment.findMany({
+          where: { id: { in: commentIds } },
           select: {
             id: true,
             contentText: true,
-            user: {
-              select: USER_MINIMAL_SELECT,
-            },
+            user: { select: USER_MINIMAL_SELECT },
           },
-        });
-        entityPreview = comment;
-      }
+        })
+      : Promise.resolve([]),
+  ]);
 
-      return {
-        ...share,
-        entityPreview,
-      };
-    })
-  );
+  const postById = new Map(posts.map((post) => [post.id, post]));
+  const entryById = new Map(entries.map((entry) => [entry.id, entry]));
+  const commentById = new Map(comments.map((comment) => [comment.id, comment]));
+
+  const itemsWithEntity = result.items.map((share) => {
+    let entityPreview: (typeof posts)[number] | (typeof entries)[number] | (typeof comments)[number] | null = null;
+    if (share.entityType === "TRIP_FINAL_POST") {
+      entityPreview = postById.get(share.entityId) ?? null;
+    } else if (share.entityType === "TRIP_THREAD_ENTRY") {
+      entityPreview = entryById.get(share.entityId) ?? null;
+    } else if (share.entityType === "COMMENT") {
+      entityPreview = commentById.get(share.entityId) ?? null;
+    }
+    return {
+      ...share,
+      entityPreview,
+    };
+  });
 
   return {
     ...result,

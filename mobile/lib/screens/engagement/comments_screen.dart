@@ -3,6 +3,8 @@ import 'package:provider/provider.dart';
 import 'package:tripthread/models/comment.dart';
 import 'package:tripthread/providers/comment_provider.dart';
 import 'package:tripthread/widgets/engagement/comment_composer.dart';
+import 'package:tripthread/utils/app_feedback.dart';
+import 'package:tripthread/utils/app_layout.dart';
 import 'package:tripthread/widgets/engagement/comment_list_item.dart';
 
 class CommentsScreen extends StatefulWidget {
@@ -125,16 +127,15 @@ class _CommentsScreenState extends State<CommentsScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Comments'),
-      ),
-      body: Column(
+      appBar: AppBar(title: const Text('Comments')),
+      body: AppLayout.reading(
+        context: context,
+        child: Column(
         children: [
           Expanded(
             child: Consumer<CommentProvider>(
               builder: (context, provider, child) {
-                final entityKey =
-                    '${widget.entityType}:${widget.entityId}';
+                final entityKey = '${widget.entityType}:${widget.entityId}';
                 final comments = provider.getCommentsList(entityKey);
                 final isLoading = provider.isLoading(entityKey);
                 final error = provider.error;
@@ -144,43 +145,20 @@ class _CommentsScreenState extends State<CommentsScreen> {
                 }
 
                 if (error != null && comments.isEmpty) {
-                  return Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Text(error),
-                        const SizedBox(height: 16),
-                        ElevatedButton(
-                          onPressed: _loadComments,
-                          child: const Text('Retry'),
-                        ),
-                      ],
-                    ),
+                  return AppFeedback.error(
+                    context: context,
+                    title: 'Could not load comments',
+                    message: error,
+                    onRetry: _loadComments,
                   );
                 }
 
                 if (comments.isEmpty) {
-                  return Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          Icons.comment_outlined,
-                          size: 64,
-                          color: Theme.of(context).colorScheme.onSurfaceVariant,
-                        ),
-                        const SizedBox(height: 16),
-                        Text(
-                          'No comments yet',
-                          style: Theme.of(context).textTheme.titleMedium,
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          'Be the first to comment!',
-                          style: Theme.of(context).textTheme.bodyMedium,
-                        ),
-                      ],
-                    ),
+                  return AppFeedback.empty(
+                    context: context,
+                    icon: Icons.comment_outlined,
+                    title: 'No comments yet',
+                    subtitle: 'Be the first to comment!',
                   );
                 }
 
@@ -201,7 +179,8 @@ class _CommentsScreenState extends State<CommentsScreen> {
                       final comment = comments[index];
                       final isExpanded = _expandedReplies[comment.id] ?? false;
                       final replies = provider.getRepliesList(comment.id);
-                      final hasReplies = comment.replyCount != null && comment.replyCount! > 0;
+                      final hasReplies =
+                          comment.replyCount != null && comment.replyCount! > 0;
 
                       return Column(
                         children: [
@@ -218,9 +197,12 @@ class _CommentsScreenState extends State<CommentsScreen> {
                               (reply) => CommentListItem(
                                 comment: reply,
                                 isReply: true,
+                                onReplyTap: () => _startReply(reply.id),
                               ),
                             ),
-                          if (isExpanded && replies.isEmpty && provider.isLoadingReplies(comment.id))
+                          if (isExpanded &&
+                              replies.isEmpty &&
+                              provider.isLoadingReplies(comment.id))
                             const Padding(
                               padding: EdgeInsets.only(left: 48, bottom: 8),
                               child: CircularProgressIndicator(),
@@ -248,7 +230,7 @@ class _CommentsScreenState extends State<CommentsScreen> {
           ),
         ],
       ),
+      ),
     );
   }
 }
-

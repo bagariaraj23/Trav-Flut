@@ -4,9 +4,11 @@ import 'package:go_router/go_router.dart';
 import 'package:form_field_validator/form_field_validator.dart';
 import 'package:tripthread/providers/auth_provider.dart';
 import 'package:tripthread/services/google_sign_in_service.dart';
+import 'package:tripthread/utils/app_layout.dart';
 import 'package:tripthread/utils/validators.dart';
 import 'package:tripthread/widgets/custom_text_field.dart';
 import 'package:tripthread/widgets/loading_button.dart';
+import 'package:tripthread/widgets/tripthread_logo.dart';
 import 'package:flutter/services.dart';
 
 class SignupScreen extends StatefulWidget {
@@ -59,6 +61,7 @@ class _SignupScreenState extends State<SignupScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final spacing = AppLayout.authSpacing(context);
     return PopScope(
       canPop: true,
       onPopInvokedWithResult: (didPop, result) {
@@ -66,32 +69,24 @@ class _SignupScreenState extends State<SignupScreen> {
       },
       child: Scaffold(
         body: SafeArea(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.all(24.0),
+          child: Align(
+            alignment: Alignment.topCenter,
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 420),
+              child: SingleChildScrollView(
+            padding: EdgeInsets.all(spacing.pagePadding),
             child: Form(
               key: _formKey,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  const SizedBox(height: 40),
+                  SizedBox(height: spacing.top),
 
                   // Logo and Title
                   Column(
                     children: [
-                      Container(
-                        width: 64,
-                        height: 64,
-                        decoration: BoxDecoration(
-                          color: Theme.of(context).colorScheme.primary,
-                          borderRadius: BorderRadius.circular(16),
-                        ),
-                        child: const Icon(
-                          Icons.travel_explore,
-                          size: 32,
-                          color: Colors.white,
-                        ),
-                      ),
-                      const SizedBox(height: 24),
+                      TripThreadLogo(size: spacing.logo),
+                      SizedBox(height: spacing.afterLogo),
                       Text(
                         'Create account',
                         style: Theme.of(context).textTheme.displaySmall,
@@ -106,7 +101,7 @@ class _SignupScreenState extends State<SignupScreen> {
                     ],
                   ),
 
-                  const SizedBox(height: 48),
+                  SizedBox(height: spacing.beforeFields),
 
                   // Name Field
                   CustomTextField(
@@ -136,6 +131,7 @@ class _SignupScreenState extends State<SignupScreen> {
                     controller: _usernameController,
                     label: 'Username',
                     prefixIcon: Icons.alternate_email,
+                    collapseSelectionOnTap: true,
                     validator: (value) {
                       final normalized =
                           Validators.normalizeUsernameToAscii(value?.trim() ?? '');
@@ -206,13 +202,7 @@ class _SignupScreenState extends State<SignupScreen> {
                         });
                       },
                     ),
-                    validator: MultiValidator([
-                      RequiredValidator(errorText: 'Password is required'),
-                      MinLengthValidator(
-                        8,
-                        errorText: 'Password must be at least 8 characters',
-                      ),
-                    ]).call,
+                    validator: Validators.validatePassword,
                     onChanged: (_) {
                       final authProvider = context.read<AuthProvider>();
                       if (authProvider.error != null) {
@@ -224,7 +214,7 @@ class _SignupScreenState extends State<SignupScreen> {
                   const SizedBox(height: 8),
 
                   Text(
-                    'Must be at least 8 characters long',
+                    'Must be 8+ chars with at least 1 uppercase, 1 lowercase, and 1 number',
                     style: Theme.of(context).textTheme.bodySmall,
                   ),
 
@@ -429,7 +419,7 @@ class _SignupScreenState extends State<SignupScreen> {
                     },
                   ),
 
-                  const SizedBox(height: 24),
+                  SizedBox(height: spacing.section),
 
                   // Login Link
                   Row(
@@ -452,13 +442,15 @@ class _SignupScreenState extends State<SignupScreen> {
                     ],
                   ),
 
-                  const SizedBox(height: 40),
+                  SizedBox(height: spacing.bottom),
                 ],
               ),
             ),
           ),
+              ),
+            ),
+          ),
         ),
-      ),
     );
   }
 }

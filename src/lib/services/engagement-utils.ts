@@ -1,5 +1,5 @@
-import { EntityType, Prisma } from "@prisma/client";
-import { prisma } from "../prisma";
+import { EntityType } from "@prisma/client";
+import { prisma, type PrismaTransactionClient } from "../prisma";
 import { redis, memoryCache } from "../redis";
 
 // CONSTANTS
@@ -95,7 +95,14 @@ export async function invalidateEngagementCache(
   const key = `${cacheType}Count:${entityType}:${entityId}`;
   memoryCache.delete(key);
   if (redis) {
-    await redis.del(key);
+    try {
+      await redis.del(key);
+    } catch (err) {
+      console.warn("[engagement] Redis cache invalidate failed (non-fatal)", {
+        key,
+        error: err,
+      });
+    }
   }
 }
 
@@ -141,7 +148,7 @@ export async function incrementEntityCount(
   entityType: EntityType,
   entityId: string,
   countType: CountType,
-  tx: Prisma.TransactionClient
+  tx: PrismaTransactionClient
 ): Promise<void> {
   switch (entityType) {
     case "TRIP_FINAL_POST":
@@ -179,7 +186,7 @@ export async function decrementEntityCount(
   entityType: EntityType,
   entityId: string,
   countType: CountType,
-  tx: Prisma.TransactionClient
+  tx: PrismaTransactionClient
 ): Promise<void> {
   switch (entityType) {
     case "TRIP_FINAL_POST": {

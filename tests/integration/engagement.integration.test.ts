@@ -11,7 +11,7 @@ import { GET as getUserLikesRoute } from "../../src/app/api/likes/user/[userId]/
 import { GET as checkLikeStatusRoute } from "../../src/app/api/likes/status/route";
 
 import { POST as createCommentRoute } from "../../src/app/api/comments/route";
-import { GET as getCommentsByEntityRoute } from "../../src/app/api/comments/[entityType]/[entityId]/route";
+import { GET as getCommentsByEntityRoute } from "../../src/app/api/comments/entity/[entityType]/[entityId]/route";
 import { PUT as updateCommentRoute, DELETE as deleteCommentRoute } from "../../src/app/api/comments/[commentId]/route";
 import { GET as getCommentRepliesRoute } from "../../src/app/api/comments/[commentId]/replies/route";
 import { POST as likeCommentRoute } from "../../src/app/api/comments/[commentId]/like/route";
@@ -83,9 +83,10 @@ describe("Engagement API - Likes", () => {
     finalPost = await prisma.tripFinalPost.create({
       data: {
         tripId: trip.id,
-        userId: trip.userId,
+        userId: user1.id,
         summaryText: "Test trip summary",
         curatedMedia: [],
+        isPublished: true,
       },
     });
     threadEntry = await prisma.tripThreadEntry.create({
@@ -482,9 +483,10 @@ describe("Engagement API - Comments", () => {
     finalPost = await prisma.tripFinalPost.create({
       data: {
         tripId: trip.id,
-        userId: trip.userId,
+        userId: user1.id,
         summaryText: "Test trip summary",
         curatedMedia: [],
+        isPublished: true,
       },
     });
     threadEntry = await prisma.tripThreadEntry.create({
@@ -569,7 +571,7 @@ describe("Engagement API - Comments", () => {
         {
           entityType: "TRIP_FINAL_POST",
           entityId: finalPost.id,
-          contentText: "a".repeat(501),
+          contentText: "a".repeat(251), // Max is 250 characters
         },
         token1
       );
@@ -617,7 +619,7 @@ describe("Engagement API - Comments", () => {
 
     it("should get comments for an entity", async () => {
       const req = createRequestWithParams(
-        "http://localhost/api/comments/[entityType]/[entityId]",
+        "http://localhost/api/comments/entity/[entityType]/[entityId]",
         {
           entityType: "TRIP_FINAL_POST",
           entityId: finalPost.id,
@@ -883,9 +885,10 @@ describe("Engagement API - Shares", () => {
     finalPost = await prisma.tripFinalPost.create({
       data: {
         tripId: trip.id,
-        userId: trip.userId,
+        userId: user1.id,
         summaryText: "Test trip summary",
         curatedMedia: [],
+        isPublished: true,
       },
     });
   });
@@ -919,6 +922,31 @@ describe("Engagement API - Shares", () => {
         },
       });
       expect(share).toBeTruthy();
+
+      const updatedPost = await prisma.tripFinalPost.findUnique({
+        where: { id: finalPost.id },
+      });
+      expect(updatedPost?.shareCount).toBe(0);
+    });
+
+    it("should increment shareCount only for IN_APP_DM shareSource", async () => {
+      const req = createAuthenticatedRequest(
+        "http://localhost/api/shares",
+        "POST",
+        {
+          entityType: "TRIP_FINAL_POST",
+          entityId: finalPost.id,
+          shareType: "DEEP_LINK",
+          shareSource: "IN_APP_DM",
+        },
+        token1
+      );
+
+      const response = await createShareRoute(req);
+      const data = await getResponseData(response);
+
+      expect(response.status).toBe(200);
+      expect(data.success).toBe(true);
 
       const updatedPost = await prisma.tripFinalPost.findUnique({
         where: { id: finalPost.id },

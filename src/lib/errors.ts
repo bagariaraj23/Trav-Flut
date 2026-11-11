@@ -41,6 +41,16 @@ export class ConflictError extends AppError {
   }
 }
 
+export class UnsettledBalanceError extends ConflictError {
+  readonly netMinor: number
+  readonly code = "UNSETTLED_BALANCE" as const
+
+  constructor(netMinor: number, message = "Settle your trip balance before leaving or deleting your account") {
+    super(message)
+    this.netMinor = netMinor
+  }
+}
+
 export class RateLimitError extends AppError {
   constructor(message: string = 'Too many requests') {
     super(message, 429)

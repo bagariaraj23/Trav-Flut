@@ -6,17 +6,125 @@ import { createThreadEntrySchema } from "@/lib/validation";
 import {
   ApiResponse,
   TripThreadEntryResponse,
+  TripThreadEntriesPageResponse,
   PlaceResponse,
 } from "@/types/api";
 import { serializePlace } from "@/lib/place";
 import { checkLikeStatus } from "@/lib/services/like";
-import { EntityType } from "@prisma/client";
+import { createNotification } from "@/lib/services/notification";
+import { EntityType, Prisma } from "@prisma/client";
+import { enforcePresetRateLimit } from "@/lib/rateLimit";
+import { canViewEntity } from "@/lib/auth/permissions";
+import { resolveTaggedUserIdsForTripThread } from "@/lib/services/tripTagResolution";
+
+const THREAD_ENTRY_LIST_INCLUDE = {
+  author: {
+    select: {
+      id: true,
+      email: true,
+      username: true,
+      name: true,
+      avatarUrl: true,
+      bio: true,
+      isPrivate: true,
+      createdAt: true,
+      updatedAt: true,
+    },
+  },
+  taggedUsers: {
+    include: {
+      taggedUser: {
+        select: {
+          id: true,
+          email: true,
+          username: true,
+          name: true,
+          avatarUrl: true,
+          bio: true,
+          isPrivate: true,
+          createdAt: true,
+          updatedAt: true,
+        },
+      },
+    },
+  },
+  media: true,
+  place: true,
+} as const;
+
+type ThreadEntryListRow = Prisma.TripThreadEntryGetPayload<{
+  include: typeof THREAD_ENTRY_LIST_INCLUDE;
+}>;
+
+function encodeEntryCursor(createdAt: Date, id: string): string {
+  return Buffer.from(
+    JSON.stringify({ c: createdAt.toISOString(), i: id })
+  ).toString("base64url");
+}
+
+function decodeEntryCursor(cursor: string): { createdAt: Date; id: string } {
+  const raw = Buffer.from(cursor, "base64url").toString("utf8");
+  const obj = JSON.parse(raw) as { c?: string; i?: string };
+  if (!obj.c || !obj.i) {
+    throw new Error("invalid_cursor");
+  }
+  return { createdAt: new Date(obj.c), id: obj.i };
+}
+
+function mapThreadEntryRowsToResponse(
+  entries: ThreadEntryListRow[],
+  likeStatusMap: Record<string, boolean>
+): (TripThreadEntryResponse & {
+  likeCount: number;
+  commentCount: number;
+  hasLiked: boolean;
+})[] {
+  return entries.map((entry) => ({
+    ...entry,
+    gpsCoordinates: entry.gpsCoordinates
+      ? ((typeof entry.gpsCoordinates === "string"
+        ? JSON.parse(entry.gpsCoordinates)
+        : entry.gpsCoordinates) as {
+        lat: number | null;
+        lng: number | null;
+      })
+      : null,
+    createdAt: entry.createdAt.toISOString(),
+    likeCount: entry.likeCount,
+    commentCount: entry.commentCount,
+    hasLiked: likeStatusMap[entry.id] || false,
+    author: {
+      ...entry.author,
+      createdAt: entry.author.createdAt.toISOString(),
+      updatedAt: entry.author.updatedAt.toISOString(),
+    },
+    taggedUsers:
+      entry.taggedUsers && entry.taggedUsers.length > 0
+        ? entry.taggedUsers.map((tag) => ({
+          ...tag.taggedUser,
+          createdAt: tag.taggedUser.createdAt.toISOString(),
+          updatedAt: tag.taggedUser.updatedAt.toISOString(),
+        }))
+        : [],
+    media: entry.media
+      ? {
+        ...entry.media,
+        createdAt: entry.media.createdAt.toISOString(),
+      }
+      : undefined,
+    place: entry.place
+      ? (serializePlace(entry.place) as PlaceResponse)
+      : null,
+  }));
+}
 
 // Create a new thread entry
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const limited = await enforcePresetRateLimit(request, "write");
+  if (limited) return limited;
   try {
     const { id } = await params;
     const tripId = id;
@@ -73,34 +181,6 @@ export async function POST(
       }
     }
 
-    // Resolve tagged usernames to user IDs
-    let taggedUserIds: string[] = [];
-    if (
-      validatedData.taggedUsernames &&
-      validatedData.taggedUsernames.length > 0
-    ) {
-      const taggedUsers = await prisma.user.findMany({
-        where: {
-          username: { in: validatedData.taggedUsernames },
-        },
-        select: { id: true, username: true },
-      });
-
-      taggedUserIds = taggedUsers.map((user) => user.id);
-
-      // Log if some usernames weren't found
-      const foundUsernames = taggedUsers.map((user) => user.username);
-      const notFoundUsernames = validatedData.taggedUsernames.filter(
-        (username) => !foundUsernames.includes(username)
-      );
-
-      if (notFoundUsernames.length > 0) {
-        console.log(
-          `[DEBUG] Tagged usernames not found: ${notFoundUsernames.join(", ")}`
-        );
-      }
-    }
-
     // Check if trip exists and user has access
     const trip = await prisma.trip.findUnique({
       where: { id: tripId },
@@ -131,6 +211,18 @@ export async function POST(
         },
         { status: 403 }
       );
+    }
+
+    let taggedUserIds: string[] = [];
+    if (validatedData.taggedUsernames?.length) {
+      taggedUserIds = await resolveTaggedUserIdsForTripThread({
+        trip: {
+          userId: trip.userId,
+          participants: trip.participants,
+        },
+        actorId: userId,
+        taggedUsernames: validatedData.taggedUsernames,
+      });
     }
 
     if (trip.status !== "ONGOING") {
@@ -271,6 +363,52 @@ export async function POST(
       }
       return entry;
     });
+
+    // Fire-and-forget: create TAG notifications for each tagged user (exclude self)
+    const recipientsToNotify = taggedUserIds.filter((id) => id !== userId);
+    if (recipientsToNotify.length > 0) {
+      void (async () => {
+        const contentPreview =
+          createdEntry.contentText &&
+          createdEntry.contentText.length > 0
+            ? createdEntry.contentText.length > 60
+              ? createdEntry.contentText.slice(0, 60) + "..."
+              : createdEntry.contentText
+            : undefined;
+        for (const taggedUserId of recipientsToNotify) {
+          try {
+            const canRecipientView = await canViewEntity(
+              taggedUserId,
+              EntityType.TRIP_THREAD_ENTRY,
+              createdEntry.id
+            );
+            if (!canRecipientView) {
+              continue;
+            }
+            await createNotification({
+              type: "TAG",
+              actorId: userId,
+              recipientId: taggedUserId,
+              entityType: "TRIP_THREAD_ENTRY",
+              entityId: createdEntry.id,
+              metadata: {
+                tagSource: "thread_entry",
+                tripId,
+                threadEntryId: createdEntry.id,
+                postEntityType: "TRIP_THREAD_ENTRY",
+                postEntityId: createdEntry.id,
+                ...(contentPreview && { contentPreview }),
+              },
+            });
+          } catch (err) {
+            console.error(
+              "[Notification] Failed to create TAG notification:",
+              { tripId, threadEntryId: createdEntry.id, actorId: userId, taggedUserId, error: err }
+            );
+          }
+        }
+      })();
+    }
 
     // Fetch the complete entry with tags and place
     const completeEntry = await prisma.tripThreadEntry.findUnique({
@@ -462,98 +600,70 @@ export async function GET(
       }
     }
 
-    // Get thread entries
-    const entries = await prisma.tripThreadEntry.findMany({
-      where: { tripId },
-      include: {
-        author: {
-          select: {
-            id: true,
-            email: true,
-            username: true,
-            name: true,
-            avatarUrl: true,
-            bio: true,
-            isPrivate: true,
-            createdAt: true,
-            updatedAt: true,
+    const { searchParams } = new URL(request.url);
+    const limitRaw = parseInt(searchParams.get("limit") || "30", 10);
+    const limit = Math.min(Math.max(Number.isFinite(limitRaw) ? limitRaw : 30, 1), 100);
+    const cursorParam = searchParams.get("cursor");
+
+    let whereClause: Prisma.TripThreadEntryWhereInput = { tripId };
+
+    if (cursorParam) {
+      let decoded: { createdAt: Date; id: string };
+      try {
+        decoded = decodeEntryCursor(cursorParam);
+      } catch {
+        return NextResponse.json<ApiResponse>(
+          { success: false, error: "Invalid cursor" },
+          { status: 400 }
+        );
+      }
+      whereClause = {
+        tripId,
+        OR: [
+          { createdAt: { lt: decoded.createdAt } },
+          {
+            AND: [
+              { createdAt: decoded.createdAt },
+              { id: { lt: decoded.id } },
+            ],
           },
-        },
-        taggedUsers: {
-          include: {
-            taggedUser: {
-              select: {
-                id: true,
-                email: true,
-                username: true,
-                name: true,
-                avatarUrl: true,
-                bio: true,
-                isPrivate: true,
-                createdAt: true,
-                updatedAt: true,
-              },
-            },
-          },
-        },
-        media: true,
-        place: true,
-      },
-      orderBy: { createdAt: "asc" },
+        ],
+      };
+    }
+
+    const rows = await prisma.tripThreadEntry.findMany({
+      where: whereClause,
+      include: THREAD_ENTRY_LIST_INCLUDE,
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      take: limit + 1,
     });
 
-    const entryIds = entries.map((e) => e.id);
+    const hasMoreOlder = rows.length > limit;
+    const pageRows = hasMoreOlder ? rows.slice(0, limit) : rows;
+    pageRows.reverse();
+
+    const entryIds = pageRows.map((e) => e.id);
     const likeStatusMap = await checkLikeStatus(
       userId,
       EntityType.TRIP_THREAD_ENTRY,
       entryIds
     );
 
-    const entriesResponse: (TripThreadEntryResponse & {
-      likeCount: number;
-      commentCount: number;
-      hasLiked: boolean;
-    })[] = entries.map((entry) => ({
-      ...entry,
-      gpsCoordinates: entry.gpsCoordinates
-        ? ((typeof entry.gpsCoordinates === "string"
-          ? JSON.parse(entry.gpsCoordinates)
-          : entry.gpsCoordinates) as {
-            lat: number | null;
-            lng: number | null;
-          })
-        : null,
-      createdAt: entry.createdAt.toISOString(),
-      likeCount: entry.likeCount,
-      commentCount: entry.commentCount,
-      hasLiked: likeStatusMap[entry.id] || false,
-      author: {
-        ...entry.author,
-        createdAt: entry.author.createdAt.toISOString(),
-        updatedAt: entry.author.updatedAt.toISOString(),
-      },
-      taggedUsers:
-        entry.taggedUsers && entry.taggedUsers.length > 0
-          ? entry.taggedUsers.map((tag) => ({
-            ...tag.taggedUser,
-            createdAt: tag.taggedUser.createdAt.toISOString(),
-            updatedAt: tag.taggedUser.updatedAt.toISOString(),
-          }))
-          : [],
-      media: entry.media
-        ? {
-          ...entry.media,
-          createdAt: entry.media.createdAt.toISOString(),
-        }
-        : undefined,
-      place: entry.place
-        ? (serializePlace(entry.place) as PlaceResponse)
-        : null,
-    }));
+    const items = mapThreadEntryRowsToResponse(pageRows, likeStatusMap);
 
-    return NextResponse.json<ApiResponse<TripThreadEntryResponse[]>>({
+    const oldestInPage = pageRows[0] ?? null;
+    const pageData: TripThreadEntriesPageResponse = {
+      items,
+      hasMoreOlder,
+      nextOlderCursor:
+        hasMoreOlder && oldestInPage
+          ? encodeEntryCursor(oldestInPage.createdAt, oldestInPage.id)
+          : null,
+    };
+
+    return NextResponse.json<ApiResponse<TripThreadEntriesPageResponse>>({
       success: true,
-      data: entriesResponse,
+      data: pageData,
     });
   } catch (error: any) {
     console.error("Get thread entries error:", error);

@@ -20,6 +20,22 @@ The project now uses centralized configuration through environment variables ins
 - `mobile/lib/config/app_config.dart` - Centralized configuration class
 - `mobile/scripts/switch_env.sh` - Environment switching script (also updates backend)
 
+## Docker Compose
+
+`npm run setup:env` copies `docker.env.example` to `.env`. That file is what `docker compose up` reads.
+
+Full stack (`docker-compose.yml`):
+
+- `DB_SCHEMA_MODE` defaults to `migrate` (`prisma migrate deploy` when the API container starts). `push` and `skip` are opt-ins. Do not use `push` against the Neon production branch.
+- `SCHEDULER_INTERVAL_SECONDS` defaults to `300`. The scheduler script still runs once per start; Compose loops it.
+- `WEB_PORT` defaults to `8080`. `WEB_API_BASE_URL` (default `http://localhost:8080/api`) and `WEB_SHARE_LINK_BASE_URL` (default `http://localhost:8080`) are baked into the Flutter web image. Rebuild the `web` service after changing them.
+- `MAPBOX_ACCESS_TOKEN` is required for place search. The API boots with a placeholder when it is empty.
+- `SHARE_LINK_BASE_URL` on the API defaults to `http://localhost:3000` so phone builds and the share bridge on port 3000 keep working. The web image uses its own share origin on port 8080.
+
+Database-only (`docker-compose.dev.yml`) leaves the API and Flutter on the host. Use `mobile/.env` with `API_BASE_URL=http://localhost:3000/api` (or `http://10.0.2.2:3000/api` on the Android emulator). The web container does not read `mobile/.env` at runtime.
+
+Redis stays optional. Unset `REDIS_REST_URL` and `REDIS_REST_TOKEN` and the API uses an in-memory cache. The scheduler does not use Redis.
+
 ## Required Environment Variables
 
 ### Backend Configuration

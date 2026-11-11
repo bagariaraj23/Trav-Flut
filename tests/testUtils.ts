@@ -59,6 +59,7 @@ function assertTestDatabase() {
 export async function cleanDb() {
   assertTestDatabase();
   await prisma.$transaction([
+    prisma.notification.deleteMany(),
     prisma.comment.deleteMany(),
     prisma.like.deleteMany(),
     prisma.share.deleteMany(),
@@ -66,6 +67,9 @@ export async function cleanDb() {
     prisma.tripThreadEntry.deleteMany(),
     prisma.tripFinalPost.deleteMany(),
     prisma.tripJoinRequest.deleteMany(),
+    prisma.tripSettlement.deleteMany(),
+    prisma.tripExpenseShare.deleteMany(),
+    prisma.tripExpense.deleteMany(),
     prisma.tripParticipant.deleteMany(),
     prisma.followRequest.deleteMany(),
     prisma.follow.deleteMany(),
@@ -143,6 +147,7 @@ export async function createTrip(
     userId: string;
     title: string;
     status: TripStatus;
+    type: TripType;
   }> = {}
 ) {
   let ownerId: string;
@@ -177,7 +182,7 @@ export async function createTrip(
       startDate: new Date(),
       endDate: new Date(Date.now() + 86400000),
       status: overrides.status ?? TripStatus.UPCOMING,
-      type: TripType.SOLO,
+      type: overrides.type ?? TripType.SOLO,
       mood: TripMood.MIXED,
     },
   });
@@ -203,6 +208,7 @@ export async function createFinalPost(
   overrides: Partial<{
     tripId: string;
     userId: string;
+    authorId: string;
     isPublished: boolean;
   }> = {}
 ) {
@@ -226,7 +232,7 @@ export async function createFinalPost(
   return prisma.tripFinalPost.create({
     data: {
       tripId: trip.id,
-      userId: overrides.userId ?? trip.userId,
+      userId: overrides.authorId ?? trip.userId,
       summaryText: `Final post summary for testing engagement features. This is a longer summary to meet any validation requirements. ${randomUUID().slice(
         0,
         6

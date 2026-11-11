@@ -40,8 +40,45 @@ model User {
   comments                 Comment[]         @relation("UserComments")
   shares                   Share[]           @relation("UserShares")
   finalPosts               TripFinalPost[]
+  sentNotifications        Notification[]    @relation("NotificationActor")
+  receivedNotifications    Notification[]    @relation("NotificationRecipient")
+  conversationParticipants ConversationParticipant[]
+  sentChatMessages         ChatMessage[]     @relation("ChatMessageSender")
+  createdExpenses          TripExpense[]     @relation("ExpenseCreatedBy")
+  paidExpenses             TripExpense[]     @relation("ExpensePayer")
+  expenseShares            TripExpenseShare[]
+  settlementsFrom          TripSettlement[]  @relation("SettlementFrom")
+  settlementsTo            TripSettlement[]  @relation("SettlementTo")
+  recordedSettlements      TripSettlement[]  @relation("SettlementRecordedBy")
 
   @@map("users")
+}
+
+enum NotificationType {
+  LIKE
+  COMMENT_LIKE
+  COMMENT
+  COMMENT_REPLY
+  TAG
+  FOLLOW
+}
+
+model Notification {
+  id          String           @id @default(uuid())
+  type        NotificationType
+  actorId     String
+  recipientId String
+  readAt      DateTime?
+  entityType  EntityType?
+  entityId    String?
+  metadata    Json?
+  createdAt   DateTime         @default(now())
+  actor       User             @relation("NotificationActor", fields: [actorId], references: [id], onDelete: Cascade)
+  recipient   User             @relation("NotificationRecipient", fields: [recipientId], references: [id], onDelete: Cascade)
+
+  @@index([recipientId, createdAt(sort: Desc), id(sort: Desc)])
+  @@index([recipientId, readAt])
+  @@map("notifications")
 }
 
 model PasswordReset {
@@ -106,6 +143,7 @@ model Follow {
   follower   User     @relation("Follower", fields: [followerId], references: [id], onDelete: Cascade)
 
   @@unique([followerId, followeeId])
+  @@index([followeeId])
   @@map("follows")
 }
 
@@ -120,6 +158,7 @@ model FollowRequest {
   follower   User                @relation("SentFollowRequests", fields: [followerId], references: [id], onDelete: Cascade)
 
   @@unique([followerId, followeeId])
+  @@index([followeeId, status, createdAt(sort: Desc)])
   @@map("follow_requests")
 }
 
@@ -142,10 +181,14 @@ model Trip {
   title            String
   description      String?
   startDate        DateTime
-  endDate          DateTime
+  endDate          DateTime?
+  /// IANA zone the start/end wall times were chosen in. Null on legacy date-only rows.
+  scheduleTimezone String?
   destinations     String[]
   mood             TripMood?
   type             TripType?
+  /// True when the creator chose a type. Auto Solo/Group updates run only when this is false.
+  typeSetByUser    Boolean           @default(false)
   coverMediaId     String?
   status           TripStatus        @default(UPCOMING)
   entryCount       Int               @default(0)
@@ -167,7 +210,15 @@ model Trip {
   endLocationId   String?
   endLocation     Place?  @relation("TripEndLocation", fields: [endLocationId], references: [id])
 
-  placeVisits PlaceOnTrip[]
+  placeVisits   PlaceOnTrip[]
+  conversation  Conversation?  @relation("TripConversation")
+  expenses      TripExpense[]
+  settlements   TripSettlement[]
+
+  // Expense ledger (v1 tracking)
+  expenseCurrency          String  @default("INR")
+  totalSpendMinor          Int     @default(0)
+  spendVisibleOnDiscover   Boolean @default(false)
 
   // Optional precomputed map center/bounds (can be derived server-side)
   centerLat  Float?
@@ -177,6 +228,10 @@ model Trip {
   boundSwLat Float?
   boundSwLng Float?
 
+  @@index([userId, status])
+  @@index([userId, createdAt(sort: Desc)])
+  @@index([status, endDate])
+  @@index([status, startDate])
   @@map("trips")
 }
 
@@ -190,6 +245,7 @@ model TripParticipant {
   user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([tripId, userId])
+  @@index([userId])
   @@map("trip_participants")
 }
 
@@ -209,13 +265,15 @@ model TripThreadEntry {
   taggedUsers    TripThreadTag[]
   likeCount      Int             @default(0)
   commentCount   Int             @default(0)
-  // Canonical place link for location/check-in entries
+  // Canonical place link for location entries
   placeId        String?
   place          Place?          @relation(fields: [placeId], references: [id])
 
   // Shares
   placeShares PlaceShare[]
 
+  @@index([tripId, createdAt(sort: Desc), id(sort: Desc)])
+  @@index([authorId, createdAt(sort: Desc)])
   @@map("trip_thread_entries")
 }
 
@@ -328,6 +386,7 @@ model TripFinalPost {
   @@unique([tripId, userId])
   @@index([tripId])
   @@index([userId, isPublished, publishedAt])
+  @@index([isPublished, createdAt(sort: Desc), id(sort: Desc)])
   @@map("trip_final_posts")
 }
 
@@ -344,14 +403,89 @@ model Media {
   processingStatus MediaProcessingStatus @default(COMPLETED)
   uploadedById     String
   tripId           String?
+  chatMessageId    String?
   createdAt        DateTime              @default(now())
 
   uploadedBy    User              @relation(fields: [uploadedById], references: [id], onDelete: Cascade)
   trip          Trip?             @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  chatMessage   ChatMessage?      @relation(fields: [chatMessageId], references: [id], onDelete: SetNull)
   threadEntries TripThreadEntry[]
   tripCover     Trip[]            @relation("TripCoverMedia")
 
+  @@index([chatMessageId])
+  @@index([tripId])
+  @@index([uploadedById, createdAt(sort: Desc)])
   @@map("media")
+}
+
+// ---- Chat ----
+enum ConversationType {
+  DM
+  GROUP
+  TRIP
+}
+
+enum ConversationParticipantRole {
+  MEMBER
+  ADMIN
+}
+
+model Conversation {
+  id        String             @id @default(uuid())
+  type      ConversationType
+  tripId    String?            @unique
+  name      String?
+  avatarUrl String?
+  createdAt DateTime           @default(now())
+  updatedAt DateTime           @updatedAt
+
+  trip         Trip?                    @relation("TripConversation", fields: [tripId], references: [id], onDelete: Cascade)
+  participants ConversationParticipant[]
+  messages     ChatMessage[]
+
+  @@index([tripId])
+  @@index([type])
+  @@index([updatedAt(sort: Desc)])
+  @@map("conversations")
+}
+
+model ConversationParticipant {
+  id             String                    @id @default(uuid())
+  conversationId String
+  userId         String
+  role           ConversationParticipantRole @default(MEMBER)
+  joinedAt       DateTime                 @default(now())
+  lastReadAt     DateTime?
+  leftAt        DateTime?
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([conversationId, userId])
+  @@index([userId])
+  @@index([userId, lastReadAt])
+  @@map("conversation_participants")
+}
+
+model ChatMessage {
+  id               String    @id @default(uuid())
+  conversationId   String
+  senderId         String
+  content          String    @db.Text
+  replyToMessageId String?
+  deletedAt        DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  conversation   Conversation  @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  sender         User          @relation("ChatMessageSender", fields: [senderId], references: [id], onDelete: Cascade)
+  replyTo        ChatMessage?  @relation("ChatMessageReplies", fields: [replyToMessageId], references: [id], onDelete: SetNull)
+  replies        ChatMessage[] @relation("ChatMessageReplies")
+  attachments    Media[]
+
+  @@index([conversationId, createdAt(sort: Desc)])
+  @@index([senderId])
+  @@map("chat_messages")
 }
 
 enum MediaProcessingStatus {
@@ -374,6 +508,7 @@ model TripJoinRequest {
   trip       Trip                  @relation(fields: [tripId], references: [id], onDelete: Cascade)
 
   @@unique([tripId, receiverId])
+  @@index([receiverId, status])
   @@map("trip_join_requests")
 }
 
@@ -414,12 +549,13 @@ enum ThreadEntryType {
   TEXT
   MEDIA
   LOCATION
-  CHECKIN
 }
 
 enum MediaType {
   IMAGE
   VIDEO
+  AUDIO
+  GIF
 }
 
 enum TripJoinRequestStatus {
@@ -448,6 +584,94 @@ enum ShareType {
   EXTERNAL
 }
 
+enum ExpenseCategory {
+  FOOD
+  STAY
+  TRANSPORT
+  ACTIVITIES
+  SHOPPING
+  OTHER
+}
+
+enum ExpenseSplitMethod {
+  EQUAL
+  EXACT
+  PERCENT
+  SHARES
+}
+
+enum TripSettlementStatus {
+  PAID
+  PENDING
+  COMPLETED
+  FAILED
+  CANCELLED
+  DISPUTED
+}
+
+model TripExpense {
+  id          String             @id @default(uuid())
+  tripId      String
+  createdById String
+  payerId     String
+  title       String
+  category    ExpenseCategory
+  amountMinor Int
+  currency    String
+  splitMethod ExpenseSplitMethod
+  note        String?
+  deletedAt   DateTime?
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+
+  trip      Trip               @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  createdBy User               @relation("ExpenseCreatedBy", fields: [createdById], references: [id], onDelete: Cascade)
+  payer     User               @relation("ExpensePayer", fields: [payerId], references: [id], onDelete: Cascade)
+  shares    TripExpenseShare[]
+
+  @@index([tripId, createdAt])
+  @@index([tripId, deletedAt])
+  @@index([payerId])
+  @@map("trip_expenses")
+}
+
+model TripExpenseShare {
+  id         String @id @default(uuid())
+  expenseId  String
+  userId     String
+  shareMinor Int
+  weight     Int?
+
+  expense TripExpense @relation(fields: [expenseId], references: [id], onDelete: Cascade)
+  user    User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([expenseId, userId])
+  @@index([userId])
+  @@map("trip_expense_shares")
+}
+
+model TripSettlement {
+  id           String               @id @default(uuid())
+  tripId       String
+  fromUserId   String
+  toUserId     String
+  amountMinor  Int
+  currency     String
+  status       TripSettlementStatus @default(PAID)
+  recordedById String
+  createdAt    DateTime             @default(now())
+
+  trip       Trip @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  fromUser   User @relation("SettlementFrom", fields: [fromUserId], references: [id], onDelete: Cascade)
+  toUser     User @relation("SettlementTo", fields: [toUserId], references: [id], onDelete: Cascade)
+  recordedBy User @relation("SettlementRecordedBy", fields: [recordedById], references: [id], onDelete: Cascade)
+
+  @@index([tripId, createdAt])
+  @@index([fromUserId])
+  @@index([toUserId])
+  @@map("trip_settlements")
+}
+
 model Like {
   id         String     @id @default(uuid())
   userId     String
@@ -458,7 +682,7 @@ model Like {
 
   @@unique([userId, entityType, entityId])
   @@index([entityType, entityId, createdAt])
-  @@index([userId])
+  @@index([userId, createdAt(sort: Desc)])
 }
 
 model Comment {
@@ -476,7 +700,7 @@ model Comment {
   replies         Comment[]  @relation("CommentReplies")
 
   @@index([entityType, entityId, createdAt])
-  @@index([parentCommentId])
+  @@index([parentCommentId, createdAt(sort: Desc)])
   @@index([userId])
 }
 

@@ -4,12 +4,15 @@ import { AuthService } from "@/lib/auth";
 import { updateProfileSchema } from "@/lib/validation";
 import { ApiResponse, UserProfile, UserStats } from "@/types/api";
 import { handlePrismaUniqueError } from "@/lib/prismaErrors";
+import { PerformanceMonitor } from "@/lib/monitoring";
+import type { Prisma } from "@prisma/client";
 
 // Get user profile
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const endTimer = PerformanceMonitor.getInstance().startTimer("get_user_by_id");
   try {
     const { id } = await params;
     const userId = id;
@@ -122,6 +125,8 @@ export async function GET(
       },
       { status: 500 }
     );
+  } finally {
+    endTimer();
   }
 }
 
@@ -130,6 +135,7 @@ export async function PUT(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const endTimer = PerformanceMonitor.getInstance().startTimer("update_user_by_id");
   try {
     const { id } = await params;
     const userId = id;
@@ -156,12 +162,23 @@ export async function PUT(
     }
     const body = await request.json();
     const validatedData = updateProfileSchema.parse(body);
-    // Remove manual check; try update and catch P2002 unique error
+    const data: Record<string, unknown> = { updatedAt: new Date() };
+    for (const key of ["name", "username", "bio", "isPrivate"] as const) {
+      if (validatedData[key] !== undefined) {
+        data[key] = validatedData[key];
+      }
+    }
+    if (
+      validatedData.avatarUrl !== undefined &&
+      validatedData.avatarUrl.length > 0
+    ) {
+      data.avatarUrl = validatedData.avatarUrl;
+    }
     let updatedUser;
     try {
       updatedUser = await prisma.user.update({
         where: { id: userId },
-        data: { ...validatedData, updatedAt: new Date() },
+        data: data as Prisma.UserUpdateInput,
         select: {
           id: true,
           email: true,
@@ -217,5 +234,7 @@ export async function PUT(
       },
       { status: 500 }
     );
+  } finally {
+    endTimer();
   }
 }

@@ -1,0 +1,733 @@
+import 'dart:async';
+import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import 'package:go_router/go_router.dart';
+import 'package:tripthread/models/chat_conversation.dart';
+import 'package:tripthread/providers/chat_provider.dart';
+import 'package:tripthread/providers/auth_provider.dart';
+import 'package:tripthread/services/media_service.dart';
+import 'package:tripthread/utils/app_layout.dart';
+import 'package:tripthread/utils/app_theme.dart';
+import 'package:tripthread/utils/chat_navigation.dart';
+import 'package:tripthread/widgets/chat/chat_avatar.dart';
+import 'package:tripthread/services/api_service.dart';
+
+class GroupSettingsScreen extends StatefulWidget {
+  final String conversationId;
+
+  const GroupSettingsScreen({super.key, required this.conversationId});
+
+  @override
+  State<GroupSettingsScreen> createState() => _GroupSettingsScreenState();
+}
+
+class _GroupSettingsScreenState extends State<GroupSettingsScreen> {
+  bool _uploadingAvatar = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted) return;
+      final chat = context.read<ChatProvider>();
+      await chat.ensureConversationLoaded(widget.conversationId);
+    });
+  }
+
+  ChatConversationSummary? _currentConversation(ChatProvider chat) {
+    for (final c in chat.conversations) {
+      if (c.id == widget.conversationId) return c;
+    }
+    return null;
+  }
+
+  Future<void> _changeAvatar() async {
+    try {
+      final mediaService = context.read<MediaService>();
+      final file = await mediaService.pickImage();
+      if (file == null) return;
+
+      setState(() => _uploadingAvatar = true);
+
+      final media = await mediaService.uploadMediaToCloudinary(
+        file: file,
+        usage: 'group_avatar',
+      );
+
+      if (media != null && mounted) {
+        final chat = context.read<ChatProvider>();
+        final ok = await chat.updateGroupInfo(
+          widget.conversationId,
+          avatarUrl: media.url,
+        );
+        if (!ok && mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(chat.error ?? 'Failed to update avatar')),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error selecting/uploading image: $e')),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _uploadingAvatar = false);
+      }
+    }
+  }
+
+  Future<void> _removeAvatar() async {
+    try {
+      setState(() => _uploadingAvatar = true);
+      final chat = context.read<ChatProvider>();
+      final ok = await chat.updateGroupInfo(
+        widget.conversationId,
+        clearAvatar: true,
+      );
+      if (!ok && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(chat.error ?? 'Failed to remove avatar')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e')),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _uploadingAvatar = false);
+      }
+    }
+  }
+
+  Future<void> _showEditNameDialog(String currentName) async {
+    final controller = TextEditingController(text: currentName);
+    final newName = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Edit Group Name'),
+        content: TextField(
+          controller: controller,
+          decoration: const InputDecoration(
+            hintText: 'Enter group name',
+          ),
+          maxLength: 100,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, controller.text.trim()),
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+    if (newName != null && newName.isNotEmpty && newName != currentName && mounted) {
+      final chat = context.read<ChatProvider>();
+      final ok = await chat.updateGroupInfo(widget.conversationId, name: newName);
+      if (!ok && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(chat.error ?? 'Failed to update group name')),
+        );
+      }
+    }
+  }
+
+  Future<void> _promoteMember(ChatParticipant participant) async {
+    final chat = context.read<ChatProvider>();
+    final ok = await chat.promoteAdmin(widget.conversationId, participant.userId);
+    if (mounted) {
+      if (ok) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('${participant.name ?? participant.username} promoted to Admin')),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(chat.error ?? 'Failed to promote member')),
+        );
+      }
+    }
+  }
+
+  Future<void> _removeMember(ChatParticipant participant) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Remove Member'),
+        content: Text('Are you sure you want to remove ${participant.name ?? participant.username} from this group?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: TextButton.styleFrom(
+              foregroundColor: Theme.of(context).colorScheme.error,
+            ),
+            child: const Text('Remove'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true && mounted) {
+      final chat = context.read<ChatProvider>();
+      final ok = await chat.removeParticipant(widget.conversationId, participant.userId);
+      if (mounted) {
+        if (ok) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('${participant.name ?? participant.username} removed')),
+          );
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(chat.error ?? 'Failed to remove member')),
+          );
+        }
+      }
+    }
+  }
+
+  void _showAddParticipantDialog(ChatConversationSummary conversation) {
+    showDialog(
+      context: context,
+      builder: (context) => AddParticipantDialog(
+        conversationId: widget.conversationId,
+        currentParticipants: conversation.participants,
+      ),
+    );
+  }
+
+  void _leave() {
+    leaveChatSettings(context, widget.conversationId);
+  }
+
+  Future<void> _leaveGroup(ChatConversationSummary conversation, bool isViewerAdmin) async {
+    // Guard: sole admin cannot leave while other members remain.
+    final activeParticipants = conversation.participants;
+    final adminCount = activeParticipants.where((p) => p.role == 'ADMIN').length;
+    final isOnlyAdmin = isViewerAdmin && adminCount == 1 && activeParticipants.length > 1;
+
+    if (isOnlyAdmin) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Promote another member to admin before leaving the group.'),
+          ),
+        );
+      }
+      return;
+    }
+
+    final isTripChat = conversation.type == 'TRIP';
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(isTripChat ? 'Leave chat' : 'Leave Group'),
+        content: Text(
+          isTripChat
+              ? 'You will leave this chat and stay on the trip. An admin can add you back.'
+              : 'Are you sure you want to leave this group? You will need to be re-added by an admin.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: TextButton.styleFrom(
+              foregroundColor: Theme.of(context).colorScheme.error,
+            ),
+            child: const Text('Leave'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !mounted) return;
+
+    final chat = context.read<ChatProvider>();
+    final ok = await chat.leaveGroup(widget.conversationId);
+    if (!mounted) return;
+
+    if (ok) {
+      leaveChatRoute(context, fallback: '/chat');
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(chat.error ?? 'Failed to leave group')),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final currentUserId = context.watch<AuthProvider>().currentUser?.id ?? '';
+    final chat = context.watch<ChatProvider>();
+    final conversation = _currentConversation(chat);
+
+    if (conversation == null) {
+      return PopScope(
+        canPop: false,
+        onPopInvokedWithResult: (didPop, _) {
+          if (didPop) return;
+          _leave();
+        },
+        child: Scaffold(
+        appBar: AppBar(
+          title: const Text('Group Settings'),
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back),
+            onPressed: _leave,
+          ),
+        ),
+        body: const Center(
+          child: CircularProgressIndicator(),
+        ),
+      ),
+      );
+    }
+
+    final isTripChat = conversation.type == 'TRIP';
+    final name = conversation.name?.trim().isNotEmpty == true
+        ? conversation.name!.trim()
+        : (isTripChat ? 'Trip chat' : 'Group Chat');
+    final hasImage =
+        conversation.avatarUrl != null && conversation.avatarUrl!.isNotEmpty;
+
+    final currentUserParticipant = conversation.participants.firstWhere(
+      (p) => p.userId == currentUserId,
+      orElse: () => const ChatParticipant(id: '', userId: '', role: 'MEMBER'),
+    );
+    final isViewerAdmin = currentUserParticipant.role == 'ADMIN';
+
+    final avatarLabel = name;
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop) return;
+        _leave();
+      },
+      child: Scaffold(
+      appBar: AppBar(
+        title: Text(isTripChat ? 'Chat details' : 'Group Details'),
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          onPressed: _leave,
+        ),
+      ),
+      body: AppLayout.reading(
+        context: context,
+        child: SingleChildScrollView(
+        child: Column(
+          children: [
+            const SizedBox(height: 24),
+            Center(
+              child: Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  ChatAvatar(
+                    radius: 60,
+                    avatarUrl: conversation.avatarUrl,
+                    name: avatarLabel,
+                  ),
+                  if (isViewerAdmin)
+                    Positioned(
+                      bottom: 0,
+                      right: 0,
+                      child: CircleAvatar(
+                        backgroundColor: Theme.of(context).colorScheme.secondary,
+                        child: _uploadingAvatar
+                            ? const Padding(
+                                padding: EdgeInsets.all(8.0),
+                                child: CircularProgressIndicator(
+                                  color: Colors.white,
+                                  strokeWidth: 2,
+                                ),
+                              )
+                            : PopupMenuButton<String>(
+                                icon: const Icon(Icons.edit, color: Colors.white),
+                                onSelected: (val) {
+                                  if (val == 'change') {
+                                    _changeAvatar();
+                                  } else if (val == 'remove') {
+                                    _removeAvatar();
+                                  }
+                                },
+                                itemBuilder: (context) => [
+                                  const PopupMenuItem(
+                                    value: 'change',
+                                    child: Text('Change Group Photo'),
+                                  ),
+                                  if (hasImage)
+                                    const PopupMenuItem(
+                                      value: 'remove',
+                                      child: Text('Remove Photo'),
+                                    ),
+                                ],
+                              ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 24),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Flexible(
+                    child: Text(
+                      name,
+                      style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                            fontWeight: FontWeight.bold,
+                          ),
+                      textAlign: TextAlign.center,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  if (isViewerAdmin) ...[
+                    const SizedBox(width: 8),
+                    IconButton(
+                      icon: const Icon(Icons.edit_outlined),
+                      onPressed: () => _showEditNameDialog(name),
+                      tooltip: 'Edit name',
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              '${conversation.participants.length} members',
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+            ),
+            const SizedBox(height: 24),
+            const Divider(),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    'Members',
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.bold,
+                        ),
+                  ),
+                  if (isViewerAdmin)
+                    TextButton.icon(
+                      onPressed: () => _showAddParticipantDialog(conversation),
+                      icon: const Icon(Icons.add),
+                      label: const Text('Add Member'),
+                    ),
+                ],
+              ),
+            ),
+            ListView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: conversation.participants.length,
+              itemBuilder: (context, index) {
+                final participant = conversation.participants[index];
+                final pDisplayName = participant.name ?? participant.username ?? 'Unknown';
+                final isMe = participant.userId == currentUserId;
+                final isParticipantAdmin = participant.role == 'ADMIN';
+
+                return ListTile(
+                  onTap: () => context.push('/profile/${participant.userId}'),
+                  leading: ChatAvatar(
+                    radius: 22,
+                    avatarUrl: participant.avatarUrl,
+                    username: participant.username,
+                    name: participant.name ?? participant.username,
+                  ),
+                  title: Text(
+                    isMe ? 'You' : pDisplayName,
+                    style: const TextStyle(fontWeight: FontWeight.w600),
+                  ),
+                  subtitle: participant.username != null
+                      ? Text(
+                          participant.username!,
+                          style: Theme.of(context).textTheme.bodySmall,
+                        )
+                      : null,
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (isParticipantAdmin)
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                          margin: const EdgeInsets.only(right: 8),
+                          decoration: BoxDecoration(
+                            color: Theme.of(context).brightness == Brightness.dark
+                                ? AppTheme.darkMuted
+                                : AppTheme.accentSoft,
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Text(
+                            'Admin',
+                            style: TextStyle(
+                              color: Theme.of(context).colorScheme.secondary,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      if (isViewerAdmin && !isMe)
+                        PopupMenuButton<String>(
+                          onSelected: (val) {
+                            if (val == 'promote') {
+                              _promoteMember(participant);
+                            } else if (val == 'remove') {
+                              _removeMember(participant);
+                            }
+                          },
+                          itemBuilder: (context) => [
+                            if (!isParticipantAdmin)
+                              const PopupMenuItem(
+                                value: 'promote',
+                                child: Text('Promote to Admin'),
+                              ),
+                            PopupMenuItem(
+                              value: 'remove',
+                              child: Text(isTripChat ? 'Remove from chat' : 'Remove from Group'),
+                            ),
+                          ],
+                        ),
+                    ],
+                  ),
+                );
+              },
+            ),
+            const SizedBox(height: 24),
+            const Divider(),
+            const SizedBox(height: 8),
+            ListTile(
+              leading: Icon(
+                Icons.exit_to_app,
+                color: Theme.of(context).colorScheme.error,
+              ),
+              title: Text(
+                isTripChat ? 'Leave chat' : 'Leave Group',
+                style: TextStyle(color: Theme.of(context).colorScheme.error),
+              ),
+              subtitle: isTripChat
+                  ? const Text('You stay on the trip')
+                  : null,
+              onTap: () => _leaveGroup(conversation, isViewerAdmin),
+            ),
+            const SizedBox(height: 24),
+          ],
+        ),
+      ),
+      ),
+      ),
+    );
+  }
+}
+
+class AddParticipantDialog extends StatefulWidget {
+  final String conversationId;
+  final List<ChatParticipant> currentParticipants;
+
+  const AddParticipantDialog({
+    super.key,
+    required this.conversationId,
+    required this.currentParticipants,
+  });
+
+  @override
+  State<AddParticipantDialog> createState() => _AddParticipantDialogState();
+}
+
+class _AddParticipantDialogState extends State<AddParticipantDialog> {
+  final _searchController = TextEditingController();
+  Timer? _debounceTimer;
+  List<Map<String, dynamic>> _searchResults = [];
+  bool _isSearching = false;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _searchController.addListener(_onSearchChanged);
+  }
+
+  void _onSearchChanged() {
+    final query = _searchController.text.trim();
+    _debounceTimer?.cancel();
+    if (query.isEmpty) {
+      setState(() {
+        _searchResults = [];
+        _isSearching = false;
+        _error = null;
+      });
+      return;
+    }
+    setState(() {
+      _isSearching = true;
+      _error = null;
+    });
+    _debounceTimer = Timer(const Duration(milliseconds: 500), () async {
+      try {
+        final apiService = context.read<ApiService>();
+        final response = await apiService.searchUsers(search: query, limit: 10);
+        if (!mounted) return;
+        if (response.success && response.data != null) {
+          setState(() {
+            _searchResults = response.data!;
+            _isSearching = false;
+          });
+        } else {
+          setState(() {
+            _searchResults = [];
+            _isSearching = false;
+            _error = response.error ?? 'Failed to search users';
+          });
+        }
+      } catch (e) {
+        if (mounted) {
+          setState(() {
+            _searchResults = [];
+            _isSearching = false;
+            _error = 'Error searching: $e';
+          });
+        }
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _debounceTimer?.cancel();
+    _searchController.removeListener(_onSearchChanged);
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _addMember(String userId, String username) async {
+    final chat = context.read<ChatProvider>();
+    final ok = await chat.addParticipant(widget.conversationId, userId);
+    if (mounted) {
+      if (ok) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('$username added to group')),
+        );
+        Navigator.pop(context); // Close dialog
+      } else {
+        setState(() {
+          _error = chat.error ?? 'Failed to add member';
+        });
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Add Member'),
+      content: SizedBox(
+        width: double.maxFinite,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: _searchController,
+              decoration: const InputDecoration(
+                hintText: 'Search by name or username...',
+                prefixIcon: Icon(Icons.search),
+              ),
+            ),
+            const SizedBox(height: 12),
+            if (_isSearching)
+              const Center(
+                child: Padding(
+                  padding: EdgeInsets.all(8.0),
+                  child: CircularProgressIndicator(),
+                ),
+              ),
+            if (_error != null)
+              Text(
+                _error!,
+                style: TextStyle(color: Theme.of(context).colorScheme.error),
+              ),
+            if (!_isSearching && _searchResults.isEmpty && _searchController.text.isNotEmpty)
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 16),
+                child: Text('No users found'),
+              ),
+            if (_searchResults.isNotEmpty)
+              ConstrainedBox(
+                constraints: BoxConstraints(
+                  maxHeight: MediaQuery.sizeOf(context).height * 0.4,
+                ),
+                child: ListView.builder(
+                  shrinkWrap: true,
+                  itemCount: _searchResults.length,
+                itemBuilder: (context, index) {
+                  final user = _searchResults[index];
+                  final userId = user['id'] as String;
+                  final username = user['username'] as String? ?? '';
+                  final name = user['name'] as String? ?? '';
+                  final avatarUrl = user['avatarUrl'] as String?;
+
+                  final isAlreadyMember = widget.currentParticipants.any((p) => p.userId == userId);
+
+                  return ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: ChatAvatar(
+                      radius: 20,
+                      avatarUrl: avatarUrl,
+                      username: username,
+                      name: name,
+                    ),
+                    title: Text(
+                      name.isNotEmpty ? name : username,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    subtitle: Text(
+                      username,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    trailing: isAlreadyMember
+                        ? Text(
+                            'Member',
+                            style: TextStyle(
+                              color: Theme.of(context).colorScheme.onSurfaceVariant,
+                            ),
+                          )
+                        : IconButton(
+                            icon: const Icon(Icons.add_circle_outline),
+                            onPressed: () => _addMember(userId, username),
+                          ),
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Close'),
+        ),
+      ],
+    );
+  }
+}

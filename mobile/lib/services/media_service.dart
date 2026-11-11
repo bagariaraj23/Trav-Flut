@@ -1,12 +1,13 @@
 import 'dart:async';
-import 'dart:io';
 import 'package:image_picker/image_picker.dart';
 import 'package:dio/dio.dart';
-import 'package:http_parser/http_parser.dart' as http_parser;
 import 'package:file_picker/file_picker.dart';
 import 'package:mime/mime.dart';
 import 'package:tripthread/models/trip.dart';
 import 'package:tripthread/services/api_service.dart';
+import 'package:tripthread/utils/app_permissions.dart';
+import 'package:tripthread/utils/local_file_header.dart';
+import 'package:tripthread/utils/multipart_xfile.dart';
 import 'package:tripthread/utils/validators.dart';
 import 'package:flutter/foundation.dart';
 
@@ -19,9 +20,35 @@ class MediaService {
   MediaService(this._apiService, {Dio? uploadClient})
       : _uploadClient = uploadClient ?? Dio();
 
+  Future<bool> _allow(AppPermissionKind kind) async {
+    final outcome = await AppPermissions.ensure(kind);
+    if (outcome == AppPermissionOutcome.granted) return true;
+    if (outcome == AppPermissionOutcome.permanentlyDenied) {
+      throw AppPermissionException(AppPermissions.deniedMessage(kind));
+    }
+    return false;
+  }
+
+  Future<bool> _allowAny(List<AppPermissionKind> kinds) async {
+    var blocked = false;
+    for (final kind in kinds) {
+      final outcome = await AppPermissions.ensure(kind);
+      if (outcome == AppPermissionOutcome.granted) return true;
+      if (outcome == AppPermissionOutcome.permanentlyDenied) blocked = true;
+    }
+    if (blocked) {
+      throw AppPermissionException(AppPermissions.deniedMessage(kinds.first));
+    }
+    return false;
+  }
+
   /// Pick an image from camera or gallery
-  Future<File?> pickImage({bool fromCamera = false}) async {
+  Future<XFile?> pickImage({bool fromCamera = false}) async {
     try {
+      final allowed = await _allow(
+        fromCamera ? AppPermissionKind.camera : AppPermissionKind.photos,
+      );
+      if (!allowed) return null;
       final XFile? pickedFile = await _imagePicker.pickImage(
         source: fromCamera ? ImageSource.camera : ImageSource.gallery,
         maxWidth: 1920,
@@ -30,19 +57,16 @@ class MediaService {
       );
 
       if (pickedFile != null) {
-        final file = File(pickedFile.path);
-
-        // Validate the file
         final validation = Validators.validateFile(
           pickedFile.name,
-          await file.length(),
+          await pickedFile.length(),
         );
 
         if (validation != null) {
           throw Exception(validation);
         }
 
-        return file;
+        return pickedFile;
       }
       return null;
     } catch (e) {
@@ -51,27 +75,25 @@ class MediaService {
   }
 
   /// Pick a video file from gallery
-  Future<File?> pickVideo() async {
+  Future<XFile?> pickVideo() async {
     try {
+      if (!await _allow(AppPermissionKind.videos)) return null;
       final XFile? pickedFile = await _imagePicker.pickVideo(
         source: ImageSource.gallery,
         maxDuration: const Duration(minutes: 10),
       );
 
       if (pickedFile != null) {
-        final file = File(pickedFile.path);
-
-        // Validate the file
         final validation = Validators.validateFile(
           pickedFile.name,
-          await file.length(),
+          await pickedFile.length(),
         );
 
         if (validation != null) {
           throw Exception(validation);
         }
 
-        return file;
+        return pickedFile;
       }
       return null;
     } catch (e) {
@@ -80,28 +102,32 @@ class MediaService {
   }
 
   /// Pick any file type using image picker (limited to images and videos)
-  Future<File?> pickFile({
+  Future<XFile?> pickFile({
     List<String>? allowedExtensions,
     bool allowMultiple = false,
   }) async {
     try {
+      if (!await _allowAny([
+        AppPermissionKind.photos,
+        AppPermissionKind.videos,
+      ])) {
+        return null;
+      }
       final XFile? pickedFile = await _imagePicker.pickMedia(
         imageQuality: 85,
       );
 
       if (pickedFile != null) {
-        final file = File(pickedFile.path);
-
         final validation = Validators.validateFile(
           pickedFile.name,
-          await file.length(),
+          await pickedFile.length(),
         );
 
         if (validation != null) {
           throw Exception(validation);
         }
 
-        return file;
+        return pickedFile;
       }
       return null;
     } catch (e) {
@@ -109,8 +135,14 @@ class MediaService {
     }
   }
 
-  Future<List<File>> pickMultipleMedia() async {
+  Future<List<XFile>> pickMultipleMedia() async {
     try {
+      if (!await _allowAny([
+        AppPermissionKind.photos,
+        AppPermissionKind.videos,
+      ])) {
+        return [];
+      }
       final result = await FilePicker.platform.pickFiles(
         allowMultiple: true,
         type: FileType.custom,
@@ -134,17 +166,13 @@ class MediaService {
         throw Exception('You can select at most $maxSelection files at once.');
       }
 
-      final files = <File>[];
+      final files = <XFile>[];
 
       for (final file in result.files) {
-        if (file.path == null) {
-          continue;
-        }
-
-        final pickedFile = File(file.path!);
+        final pickedFile = file.xFile;
         final validation = Validators.validateFile(
           file.name,
-          await pickedFile.length(),
+          file.size,
         );
 
         if (validation != null) {
@@ -163,7 +191,7 @@ class MediaService {
   /// Uploads a file to Cloudinary using a server-signed request.
   /// Confirms the upload with the backend to create a Media record.
   Future<Media?> uploadMediaToCloudinary({
-    required File file,
+    required XFile file,
     String? tripId,
     String usage = 'general',
     void Function(double progress)? onProgress,
@@ -202,7 +230,7 @@ class MediaService {
   }
 
   Future<Media?> _performUpload({
-    required File file,
+    required XFile file,
     String? tripId,
     String usage = 'general',
     void Function(double progress)? onProgress,
@@ -212,7 +240,7 @@ class MediaService {
       debugPrint(
           '[MediaService] Starting Cloudinary upload for file: ${file.path}');
 
-      final filename = file.path.split('/').last;
+      final filename = getFileName(file);
       final mediaType = getMediaType(file);
       final contentType = _inferMimeType(file, mediaType);
 
@@ -304,7 +332,7 @@ class MediaService {
 
   /// Upload file directly to Cloudinary
   Future<Map<String, dynamic>> _uploadToCloudinary({
-    required File file,
+    required XFile file,
     required Map<String, dynamic> uploadParams,
     required String contentType,
     void Function(double progress)? onProgress,
@@ -327,7 +355,7 @@ class MediaService {
           'format': 'jpg',
           'resource_type': 'image',
           'bytes': await file.length(),
-          'original_filename': file.path.split('/').last,
+          'original_filename': getFileName(file),
         };
       }
 
@@ -340,16 +368,18 @@ class MediaService {
       while (true) {
         try {
           final formData = FormData.fromMap({
-            'file': await MultipartFile.fromFile(
-              file.path,
-              filename: file.path.split('/').last,
-              contentType: http_parser.MediaType.parse(contentType),
+            'file': await multipartFromXFile(
+              file,
+              filename: getFileName(file),
+              contentType: contentType,
             ),
             'api_key': uploadParams['apiKey'],
             'timestamp': uploadParams['timestamp'].toString(),
             'signature': uploadParams['signature'],
             'folder': uploadParams['folder'],
             'public_id': uploadParams['publicId'],
+            if (uploadParams['uploadPreset'] != null)
+              'upload_preset': uploadParams['uploadPreset'],
           });
 
           final response = await _uploadClient.post(
@@ -394,32 +424,27 @@ class MediaService {
   }
 
   /// Get media type from file
-  MediaType getMediaType(File file) {
+  MediaType getMediaType(XFile file) {
+    final name = getFileName(file);
     try {
-      final randomAccessFile = file.openSync();
-      try {
-        final headerBytes = randomAccessFile.readSync(12);
-        final detectedMime = lookupMimeType(
-          file.path,
-          headerBytes: headerBytes,
-        );
-        if (detectedMime != null) {
-          if (detectedMime.startsWith('image/')) {
-            return MediaType.image;
-          }
-          if (detectedMime.startsWith('video/')) {
-            return MediaType.video;
-          }
+      final detectedMime = lookupMimeType(
+        name,
+        headerBytes: readLocalFileHeader(file.path),
+      );
+      if (detectedMime != null) {
+        if (detectedMime.startsWith('image/')) {
+          return MediaType.image;
         }
-      } finally {
-        randomAccessFile.closeSync();
+        if (detectedMime.startsWith('video/')) {
+          return MediaType.video;
+        }
       }
     } catch (e) {
       debugPrint(
           '[MediaService] MIME detection failed, falling back to extension: $e');
     }
 
-    final extension = file.path.split('.').last.toLowerCase();
+    final extension = name.split('.').last.toLowerCase();
 
     if (['jpg', 'jpeg', 'png', 'gif'].contains(extension)) {
       return MediaType.image;
@@ -431,17 +456,19 @@ class MediaService {
   }
 
   /// Get file size in bytes
-  Future<int> getFileSize(File file) async {
+  Future<int> getFileSize(XFile file) async {
     return await file.length();
   }
 
   /// Get file name
-  String getFileName(File file) {
-    return file.path.split('/').last;
+  String getFileName(XFile file) {
+    if (file.name.isNotEmpty) return file.name;
+    final parts = file.path.split(RegExp(r'[/\\]'));
+    return parts.isEmpty ? file.path : parts.last;
   }
 
-  String _inferMimeType(File file, MediaType mediaType) {
-    final extension = file.path.split('.').last.toLowerCase();
+  String _inferMimeType(XFile file, MediaType mediaType) {
+    final extension = getFileName(file).split('.').last.toLowerCase();
 
     if (mediaType == MediaType.image) {
       switch (extension) {

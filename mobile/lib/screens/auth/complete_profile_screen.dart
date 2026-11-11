@@ -4,7 +4,9 @@ import 'package:go_router/go_router.dart';
 import 'package:tripthread/providers/auth_provider.dart';
 import 'package:tripthread/utils/validators.dart';
 import 'package:tripthread/widgets/custom_text_field.dart';
+import 'package:tripthread/utils/app_layout.dart';
 import 'package:tripthread/widgets/loading_button.dart';
+import 'package:tripthread/widgets/tripthread_logo.dart';
 
 class CompleteProfileScreen extends StatefulWidget {
   const CompleteProfileScreen({super.key});
@@ -44,7 +46,11 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
   Future<void> _handleSubmit() async {
     if (!_formKey.currentState!.validate()) return;
     final authProvider = context.read<AuthProvider>();
-    final username = Validators.normalizeUsernameToAscii(_usernameController.text.trim());
+    var rawUsername = _usernameController.text.trim();
+    while (rawUsername.startsWith('@')) {
+      rawUsername = rawUsername.substring(1).trim();
+    }
+    final username = Validators.normalizeUsernameToAscii(rawUsername);
     final success = await authProvider.completeProfile(
       username: username,
       password: _passwordController.text,
@@ -61,6 +67,7 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final spacing = AppLayout.authSpacing(context);
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, result) async {
@@ -94,26 +101,38 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
           title: const Text('Complete your profile'),
           automaticallyImplyLeading: false,
         ),
-        body: SafeArea(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.all(24.0),
-            child: Form(
+        body: AppLayout.authFormBody(
+          context: context,
+          child: Form(
               key: _formKey,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  const SizedBox(height: 16),
+                  SizedBox(height: spacing.top),
+                  Center(child: TripThreadLogo(size: spacing.logo)),
+                  SizedBox(height: spacing.afterLogo),
+                  Text(
+                    'Complete your profile',
+                    style: Theme.of(context).textTheme.displaySmall,
+                    textAlign: TextAlign.center,
+                  ),
+                  SizedBox(height: spacing.section),
                   Text(
                     'Set a username and password so you can also sign in with email later.',
                     style: Theme.of(context).textTheme.bodyMedium,
+                    textAlign: TextAlign.center,
                   ),
-                  const SizedBox(height: 24),
+                  SizedBox(height: spacing.beforeFields),
                   CustomTextField(
                     controller: _usernameController,
                     label: 'Username',
                     prefixIcon: Icons.alternate_email,
                     validator: (value) {
-                      final normalized = Validators.normalizeUsernameToAscii(value?.trim() ?? '');
+                      var t = value?.trim() ?? '';
+                      while (t.startsWith('@')) {
+                        t = t.substring(1).trim();
+                      }
+                      final normalized = Validators.normalizeUsernameToAscii(t);
                       if (normalized.isEmpty) return 'Username is required';
                       if (normalized.length < 3) {
                         return 'Username must be at least 3 characters';
@@ -268,7 +287,6 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
                 ],
               ),
             ),
-          ),
         ),
       ),
     );

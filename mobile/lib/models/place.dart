@@ -128,6 +128,16 @@ class MapPlace {
   factory MapPlace.fromJson(Map<String, dynamic> json) =>
       _$MapPlaceFromJson(json);
   Map<String, dynamic> toJson() => _$MapPlaceToJson(this);
+
+  factory MapPlace.fromPlaceOnTrip(PlaceOnTrip pot) => MapPlace(
+        place: pot.place,
+        origin: MapPlaceOrigin.onTrip,
+        visitedAt: pot.visitedAt,
+        dayIndex: pot.dayIndex,
+        notes: pot.notes,
+        order: pot.order,
+        placeOnTripId: pot.id,
+      );
 }
 
 @JsonSerializable()

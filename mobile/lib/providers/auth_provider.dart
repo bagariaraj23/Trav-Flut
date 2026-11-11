@@ -3,6 +3,7 @@ import 'package:tripthread/models/user.dart';
 import 'package:tripthread/services/api_service.dart';
 import 'package:tripthread/services/google_sign_in_service.dart';
 import 'package:tripthread/services/storage_service.dart';
+import 'package:tripthread/utils/auth_error_messages.dart';
 
 /// Result of Google sign-in: success (logged in) or failure.
 sealed class GoogleSignInResult {}
@@ -25,6 +26,10 @@ class AuthProvider extends ChangeNotifier {
   bool _hasShownError = false;
   bool _isInitializing = false;
 
+  /// True after session restore failed while refresh/access tokens were still on disk.
+  /// Lets the login screen offer "Retry" without treating transient failures as logout.
+  bool _canRetrySessionRestore = false;
+
   // Notifier dedicated for UI-only updates (e.g., error banner)
   final ChangeNotifier uiNotifier = ChangeNotifier();
   // Notifier dedicated for routing-related changes only (auth/loading)
@@ -34,9 +39,9 @@ class AuthProvider extends ChangeNotifier {
     required ApiService apiService,
     required StorageService storageService,
     GoogleSignInService? googleSignInService,
-  })  : _apiService = apiService,
-        _storageService = storageService,
-        _googleSignInService = googleSignInService {
+  }) : _apiService = apiService,
+       _storageService = storageService,
+       _googleSignInService = googleSignInService {
     _apiService.setStorageService(_storageService);
     _initializeAuth();
   }
@@ -46,6 +51,16 @@ class AuthProvider extends ChangeNotifier {
   bool get isLoading => _isLoading;
   bool get isAuthenticated => _currentUser != null;
   String? get error => _error;
+
+  /// Whether the user can tap "Retry restoring session" on the login screen.
+  bool get canRetrySessionRestore => _canRetrySessionRestore;
+
+  /// Re-runs cold-start session restore after a transient error (slow network, timeout).
+  Future<void> retrySessionRestore() async {
+    _clearError();
+    await _initializeAuth();
+  }
+
   /// True when user is authenticated but must complete profile (username + password) before full access.
   bool get requiresProfileCompletion =>
       _currentUser != null && (_currentUser!.profileComplete == false);
@@ -59,7 +74,9 @@ class AuthProvider extends ChangeNotifier {
 
     // If user is already authenticated (e.g., after signup/login), skip initialization
     if (_currentUser != null) {
-      debugPrint('AuthProvider: User already authenticated, skipping initialization');
+      debugPrint(
+        'AuthProvider: User already authenticated, skipping initialization',
+      );
       _setLoadingState(false);
       return;
     }
@@ -67,52 +84,69 @@ class AuthProvider extends ChangeNotifier {
     debugPrint('AuthProvider: Starting initialization');
     _isInitializing = true;
     _setLoadingState(true);
+    _canRetrySessionRestore = false;
+    const storageTimeout = Duration(seconds: 15);
+    const restoreTimeout = Duration(seconds: 30);
+    var attemptedSessionRestore = false;
     try {
       debugPrint('AuthProvider: Checking tokens...');
-      final hasTokens = await _storageService
-          .hasValidTokens()
-          .timeout(const Duration(seconds: 5), onTimeout: () {
-        debugPrint('AuthProvider: hasValidTokens() timed out!');
-        throw Exception('hasValidTokens() timed out');
-      });
+      final hasTokens = await _storageService.hasValidTokens().timeout(
+        storageTimeout,
+        onTimeout: () {
+          debugPrint(
+            'AuthProvider: hasValidTokens() timed out (slow secure storage)',
+          );
+          throw Exception('hasValidTokens() timed out');
+        },
+      );
       debugPrint('AuthProvider: hasTokens = $hasTokens');
-      
+
       // Double-check if user was authenticated during token check (race condition protection)
       if (_currentUser != null) {
-        debugPrint('AuthProvider: User authenticated during token check, skipping getCurrentUser');
+        debugPrint(
+          'AuthProvider: User authenticated during token check, skipping getCurrentUser',
+        );
         return;
       }
 
       if (hasTokens) {
+        attemptedSessionRestore = true;
         debugPrint('AuthProvider: Getting userId...');
-        final userId = await _storageService
-            .getUserId()
-            .timeout(const Duration(seconds: 5), onTimeout: () {
-          debugPrint('AuthProvider: getUserId() timed out!');
-          throw Exception('getUserId() timed out');
-        });
+        final userId = await _storageService.getUserId().timeout(
+          storageTimeout,
+          onTimeout: () {
+            debugPrint('AuthProvider: getUserId() timed out!');
+            throw Exception('getUserId() timed out');
+          },
+        );
         debugPrint('AuthProvider: userId = $userId');
-        
+
         // Double-check again if user was authenticated during userId fetch
         if (_currentUser != null) {
-          debugPrint('AuthProvider: User authenticated during userId fetch, skipping getCurrentUser');
+          debugPrint(
+            'AuthProvider: User authenticated during userId fetch, skipping getCurrentUser',
+          );
           return;
         }
 
         if (userId != null) {
           debugPrint('AuthProvider: Calling getCurrentUser...');
-          final response = await _apiService
-              .getCurrentUser()
-              .timeout(const Duration(seconds: 5), onTimeout: () {
-            debugPrint('AuthProvider: getCurrentUser() timed out!');
-            throw Exception('getCurrentUser() timed out');
-          });
+          final response = await _apiService.getCurrentUser().timeout(
+            restoreTimeout,
+            onTimeout: () {
+              debugPrint('AuthProvider: getCurrentUser() timed out!');
+              throw Exception('getCurrentUser() timed out');
+            },
+          );
           debugPrint(
-              'AuthProvider: getUser response = ${response.success} | ${response.data} | ${response.error}');
-          
+            'AuthProvider: getUser response = ${response.success} | ${response.data} | ${response.error}',
+          );
+
           // Final check: if user was authenticated during API call (e.g., from signup/login)
           if (_currentUser != null) {
-            debugPrint('AuthProvider: User authenticated during getCurrentUser, preserving existing state');
+            debugPrint(
+              'AuthProvider: User authenticated during getCurrentUser, preserving existing state',
+            );
             return;
           }
 
@@ -121,21 +155,39 @@ class AuthProvider extends ChangeNotifier {
             routingNotifier.notifyListeners();
             notifyListeners();
           } else {
-            debugPrint('AuthProvider: Invalid tokens, clearing');
-            await _storageService.clearTokens();
+            // Do not clear tokens here. Network errors, slow servers, and timeouts
+            // surface as success:false without implying invalid credentials.
+            // Real auth failure is handled by ApiService (401 + refresh + forceLogout).
+            debugPrint(
+              'AuthProvider: getCurrentUser failed during restore, keeping stored tokens: ${response.error}',
+            );
+            _error =
+                'Could not restore your session. Check your connection and try opening the app again.';
+            _hasShownError = false;
+            _canRetrySessionRestore = true;
+            uiNotifier.notifyListeners();
+            notifyListeners();
           }
         }
       }
     } catch (e, stack) {
-      // Only clear tokens and set error if user is not already authenticated
-      // This prevents clearing tokens that were just set by signup/login
+      // Never wipe tokens on restore errors (timeouts, DNS, slow API). Users were
+      // forced to re-login after back/kill when init hit a 5s cap while the API
+      // took ~5s+. Interceptor + forceLogout still clears on real session expiry.
       if (_currentUser == null) {
-        _error = 'Failed to initialize authentication';
+        _error =
+            'Could not restore your session. Check your connection and try again.';
+        _hasShownError = false;
+        if (attemptedSessionRestore) {
+          _canRetrySessionRestore = true;
+        }
         uiNotifier.notifyListeners();
+        notifyListeners();
         debugPrint('AuthProvider: Exception in _initializeAuth: $e\n$stack');
-        await _storageService.clearTokens();
       } else {
-        debugPrint('AuthProvider: Exception in _initializeAuth but user is authenticated, ignoring: $e');
+        debugPrint(
+          'AuthProvider: Exception in _initializeAuth but user is authenticated, ignoring: $e',
+        );
       }
     } finally {
       _isInitializing = false;
@@ -161,11 +213,12 @@ class AuthProvider extends ChangeNotifier {
       );
 
       debugPrint(
-          '[AuthProvider] signup response: success=${response.success}, error=${response.error}');
+        '[AuthProvider] signup response: success=${response.success}, error=${response.error}',
+      );
 
       if (response.success && response.data != null) {
         final authData = response.data!;
-        
+
         // Save tokens first to ensure they're persisted before setting user
         // This prevents race condition with _initializeAuth()
         await _storageService.saveTokens(
@@ -176,13 +229,16 @@ class AuthProvider extends ChangeNotifier {
 
         // Set user after tokens are saved to prevent race condition
         _currentUser = authData.user;
+        _canRetrySessionRestore = false;
         routingNotifier.notifyListeners();
         notifyListeners();
 
         _setLoadingState(false);
         return true;
       } else {
-        _setError(response.error ?? 'Signup failed. Please try again.');
+        _setError(
+          AuthErrorMessages.toSignupFriendly(response.error),
+        );
         debugPrint('[AuthProvider] signup error set: $_error');
         _setLoadingState(false);
         return false;
@@ -197,7 +253,7 @@ class AuthProvider extends ChangeNotifier {
   }
 
   Future<bool> login({
-    required String email,
+    required String email, // Can be email or username
     required String password,
   }) async {
     try {
@@ -210,11 +266,12 @@ class AuthProvider extends ChangeNotifier {
       );
 
       debugPrint(
-          '[AuthProvider] login response: success=${response.success}, error=${response.error}, data=${response.data}');
+        '[AuthProvider] login response: success=${response.success}, error=${response.error}, data=${response.data}',
+      );
 
       if (response.success && response.data != null) {
         final authData = response.data!;
-        
+
         // Save tokens first to ensure they're persisted before setting user
         // This prevents race condition with _initializeAuth()
         await _storageService.saveTokens(
@@ -225,14 +282,14 @@ class AuthProvider extends ChangeNotifier {
 
         // Set user after tokens are saved to prevent race condition
         _currentUser = authData.user;
+        _canRetrySessionRestore = false;
         routingNotifier.notifyListeners();
         notifyListeners();
 
         _setLoadingState(false);
         return true;
       } else {
-        _setError(
-            response.error ?? 'Login failed. Please check your credentials.');
+        _setError(AuthErrorMessages.toLoginFriendly(response.error));
         debugPrint('[AuthProvider] login error set: $_error');
         _setLoadingState(false);
         return false;
@@ -267,6 +324,7 @@ class AuthProvider extends ChangeNotifier {
           userId: authData.user.id,
         );
         _currentUser = authData.user;
+        _canRetrySessionRestore = false;
         routingNotifier.notifyListeners();
         notifyListeners();
         _setLoadingState(false);
@@ -276,13 +334,16 @@ class AuthProvider extends ChangeNotifier {
         final userResponse = await _apiService.getCurrentUser();
         if (userResponse.success && userResponse.data != null) {
           _currentUser = userResponse.data!.copyWith(profileComplete: true);
+          _canRetrySessionRestore = false;
           routingNotifier.notifyListeners();
           notifyListeners();
           _setLoadingState(false);
           return true;
         }
       }
-      _setError(response.error ?? 'Failed to complete profile.');
+      _setError(
+        AuthErrorMessages.toCompleteProfileFriendly(response.error),
+      );
       _setLoadingState(false);
       return false;
     } catch (e) {
@@ -297,13 +358,14 @@ class AuthProvider extends ChangeNotifier {
     try {
       debugPrint('[AuthProvider] Delete account called');
       final response = await _apiService.deleteAccount();
-      
+
       if (response.success) {
         // Clear local storage and state
         await _storageService.clearTokens();
         _currentUser = null;
         _error = null;
         _isLoading = false;
+        _canRetrySessionRestore = false;
         notifyListeners();
         routingNotifier.notifyListeners();
         debugPrint('[AuthProvider] Account deleted successfully');
@@ -322,16 +384,18 @@ class AuthProvider extends ChangeNotifier {
     }
   }
 
-  Future<void> logout() async {
+  Future<void> logout({bool logoutAll = false}) async {
     try {
+      debugPrint('[AuthProvider] Logout called (logoutAll: $logoutAll)');
       final refreshToken = await _storageService.getRefreshToken();
       if (refreshToken != null) {
-        await _apiService.logout();
+        await _apiService.logout(logoutAll: logoutAll);
       }
     } catch (e) {
       debugPrint('Logout error: $e');
     } finally {
       _currentUser = null;
+      _canRetrySessionRestore = false;
       routingNotifier.notifyListeners();
       notifyListeners();
       await _storageService.clearTokens();
@@ -339,9 +403,7 @@ class AuthProvider extends ChangeNotifier {
     }
   }
 
-  Future<bool> forgotPassword({
-    required String email,
-  }) async {
+  Future<bool> forgotPassword({required String email}) async {
     try {
       _setLoadingState(true);
       _clearError();
@@ -349,14 +411,16 @@ class AuthProvider extends ChangeNotifier {
       final response = await _apiService.forgotPassword(email: email);
 
       debugPrint(
-          '[AuthProvider] forgotPassword response: success=${response.success}, error=${response.error}');
+        '[AuthProvider] forgotPassword response: success=${response.success}, error=${response.error}',
+      );
 
       if (response.success) {
         _setLoadingState(false);
         return true;
       } else {
         _setError(
-            response.error ?? 'Failed to send reset email. Please try again.');
+          AuthErrorMessages.toForgotPasswordFriendly(response.error),
+        );
         debugPrint('[AuthProvider] forgotPassword error set: $_error');
         _setLoadingState(false);
         return false;
@@ -384,19 +448,23 @@ class AuthProvider extends ChangeNotifier {
       );
 
       debugPrint(
-          '[AuthProvider] resetPassword response: success=${response.success}, error=${response.error}');
+        '[AuthProvider] resetPassword response: success=${response.success}, error=${response.error}',
+      );
 
       if (response.success) {
         // After successful password reset, backend invalidates all refresh tokens
         // for security. We must log out the user immediately so they can log in
         // with their new password. This is a security best practice.
-        debugPrint('[AuthProvider] Password reset successful, logging out user');
+        debugPrint(
+          '[AuthProvider] Password reset successful, logging out user',
+        );
         await logout();
         _setLoadingState(false);
         return true;
       } else {
         _setError(
-            response.error ?? 'Failed to reset password. Please try again.');
+          AuthErrorMessages.toResetPasswordFriendly(response.error),
+        );
         debugPrint('[AuthProvider] resetPassword error set: $_error');
         _setLoadingState(false);
         return false;
@@ -425,6 +493,7 @@ class AuthProvider extends ChangeNotifier {
           userId: authData.user.id,
         );
         _currentUser = authData.user;
+        _canRetrySessionRestore = false;
         routingNotifier.notifyListeners();
         notifyListeners();
         _setLoadingState(false);
@@ -433,12 +502,16 @@ class AuthProvider extends ChangeNotifier {
 
       _setError(response.error ?? 'Sign-in failed. Try again.');
       _setLoadingState(false);
-      return GoogleSignInFailure(response.error ?? 'Sign-in failed. Try again.');
+      return GoogleSignInFailure(
+        response.error ?? 'Sign-in failed. Try again.',
+      );
     } catch (e) {
       debugPrint('[AuthProvider] signInWithGoogle catch error: $e');
       _setError('Network error. Please check your connection and try again.');
       _setLoadingState(false);
-      return GoogleSignInFailure('Network error. Please check your connection and try again.');
+      return GoogleSignInFailure(
+        'Network error. Please check your connection and try again.',
+      );
     }
   }
 
@@ -449,7 +522,9 @@ class AuthProvider extends ChangeNotifier {
       final response = await _apiService.linkGoogle(idToken);
       if (response.success) {
         final userResponse = await _apiService.getCurrentUser();
-        if (userResponse.success && userResponse.data != null && _currentUser != null) {
+        if (userResponse.success &&
+            userResponse.data != null &&
+            _currentUser != null) {
           _currentUser = userResponse.data;
           notifyListeners();
         }
@@ -504,12 +579,29 @@ class AuthProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Toggle account public/private. Returns true on success, false otherwise.
+  /// Updates [currentUser] on success.
+  Future<bool> togglePrivacy() async {
+    final user = _currentUser;
+    if (user == null) return false;
+    final response = await _apiService.togglePrivacy(user.id);
+    if (response.success && response.data != null) {
+      _currentUser = response.data;
+      notifyListeners();
+      return true;
+    }
+    _error = response.error;
+    notifyListeners();
+    return false;
+  }
+
   // Called by ApiService when refresh fails or user is unauthorized
   Future<void> forceLogout({String? message}) async {
     debugPrint('[AuthProvider] forceLogout called with message: $message');
 
     _isLoading = false;
     _currentUser = null;
+    _canRetrySessionRestore = false;
     await _storageService.clearTokens();
     await _googleSignInService?.signOut();
 
@@ -534,6 +626,7 @@ class AuthProvider extends ChangeNotifier {
     notifyListeners();
 
     debugPrint(
-        '[AuthProvider] forceLogout completed - isAuthenticated: $isAuthenticated');
+      '[AuthProvider] forceLogout completed - isAuthenticated: $isAuthenticated',
+    );
   }
 }

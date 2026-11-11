@@ -62,6 +62,7 @@ TripJoinRequestTrip _$TripJoinRequestTripFromJson(Map<String, dynamic> json) =>
       endDate: json['endDate'] == null
           ? null
           : DateTime.parse(json['endDate'] as String),
+      scheduleTimezone: json['scheduleTimezone'] as String?,
     );
 
 Map<String, dynamic> _$TripJoinRequestTripToJson(
@@ -75,4 +76,5 @@ Map<String, dynamic> _$TripJoinRequestTripToJson(
   'status': instance.status,
   'startDate': instance.startDate?.toIso8601String(),
   'endDate': instance.endDate?.toIso8601String(),
+  'scheduleTimezone': instance.scheduleTimezone,
 };

@@ -24,7 +24,10 @@ export interface PaginatedResponse<T> {
   hasNext: boolean;
 }
 
+import { PerformanceMonitor } from "@/lib/monitoring";
+
 export async function GET(request: NextRequest) {
+  const endTimer = PerformanceMonitor.getInstance().startTimer("get_users_discover");
   try {
     // Verify authentication
     const authHeader = request.headers.get("authorization");
@@ -294,5 +297,7 @@ export async function GET(request: NextRequest) {
       },
       { status: 500 }
     );
+  } finally {
+    endTimer();
   }
 }

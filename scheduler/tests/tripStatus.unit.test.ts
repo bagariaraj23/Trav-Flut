@@ -1,5 +1,6 @@
 import { describe, test, expect, vi } from "vitest";
 import { updateTripStatuses, TripStatus } from "../src/tripStatus";
+import { scheduledEndInstant } from "../src/tripEnd";
 
 type UpdateManyArgs = any;
 
@@ -40,6 +41,23 @@ function createPrismaMock() {
 
   return { prisma, updateManyCalls, findManyCalls } as const;
 }
+
+describe("scheduledEndInstant", () => {
+  test("moves a midnight end to 11:59 PM and keeps a chosen time", () => {
+    expect(
+      scheduledEndInstant(new Date("2026-03-19T18:30:00.000Z"), "Asia/Kolkata").toISOString()
+    ).toBe("2026-03-20T18:29:59.999Z");
+    expect(
+      scheduledEndInstant(new Date("2026-03-20T13:00:00.000Z"), "Asia/Kolkata").toISOString()
+    ).toBe("2026-03-20T13:00:00.000Z");
+    expect(
+      scheduledEndInstant(new Date("2026-03-20T04:00:00.000Z"), "America/New_York").toISOString()
+    ).toBe("2026-03-21T03:59:59.999Z");
+    expect(
+      scheduledEndInstant(new Date("2026-03-20T00:00:00.000Z"), "America/New_York").toISOString()
+    ).toBe("2026-03-20T00:00:00.000Z");
+  });
+});
 
 describe("updateTripStatuses", () => {
   test("sets ENDED when endDate <= now for UPCOMING or ONGOING", async () => {

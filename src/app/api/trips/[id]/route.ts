@@ -2,180 +2,171 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { AuthService } from "@/lib/auth";
 import { ApiResponse, TripResponse } from "@/types/api";
+import { withLogging, handleApiError } from "@/lib/middleware";
+import { enforcePresetRateLimit } from "@/lib/rateLimit";
+import { PerformanceMonitor } from "@/lib/monitoring";
+import { omitHiddenTripSpend } from "@/lib/tripSpendVisibility";
+import { syncTripById } from "@/lib/tripSchedule";
 
 // Get trip by ID
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  try {
-    const { id } = await params;
-    const tripId = id;
+  return withLogging(async (req) => {
+    const endTimer = PerformanceMonitor.getInstance().startTimer("get_trip_by_id");
+    try {
+      const limited = await enforcePresetRateLimit(request, "read_hot");
+      if (limited) return limited;
+      const { id } = await params;
+      const tripId = id;
 
-    // Verify authentication
-    const authHeader = request.headers.get("authorization");
-    if (!authHeader?.startsWith("Bearer ")) {
-      return NextResponse.json<ApiResponse>(
-        {
-          success: false,
-          error: "Authorization token required",
-        },
-        { status: 401 }
-      );
-    }
-
-    const token = authHeader.substring(7);
-    const payload = AuthService.verifyAccessToken(token);
-
-    if (!payload) {
-      return NextResponse.json<ApiResponse>(
-        {
-          success: false,
-          error: "Invalid token",
-        },
-        { status: 401 }
-      );
-    }
-
-    const currentUserId = payload.userId;
-
-    // Get trip with full details
-    const trip = await prisma.trip.findUnique({
-      where: { id: tripId },
-      include: {
-        coverMedia: true,
-        user: {
-          select: {
-            id: true,
-            email: true,
-            username: true,
-            name: true,
-            avatarUrl: true,
-            bio: true,
-            isPrivate: true,
-            createdAt: true,
-            updatedAt: true,
+      // Verify authentication
+      const authHeader = request.headers.get("authorization");
+      if (!authHeader?.startsWith("Bearer ")) {
+        return NextResponse.json<ApiResponse>(
+          {
+            success: false,
+            error: "Authorization token required",
           },
-        },
-        participants: {
-          include: {
-            user: {
-              select: {
-                id: true,
-                email: true,
-                username: true,
-                name: true,
-                avatarUrl: true,
-                bio: true,
-                isPrivate: true,
-                createdAt: true,
-                updatedAt: true,
-              },
+          { status: 401 }
+        );
+      }
+
+      const token = authHeader.substring(7);
+      const payload = AuthService.verifyAccessToken(token);
+
+      if (!payload) {
+        return NextResponse.json<ApiResponse>(
+          {
+            success: false,
+            error: "Invalid token",
+          },
+          { status: 401 }
+        );
+      }
+
+      const currentUserId = payload.userId;
+      await syncTripById(tripId);
+
+      // Get trip with full details
+      const trip = await prisma.trip.findUnique({
+        where: { id: tripId },
+        include: {
+          coverMedia: true,
+          startLocation: true,
+          endLocation: true,
+          user: {
+            select: {
+              id: true,
+              email: true,
+              username: true,
+              name: true,
+              avatarUrl: true,
+              bio: true,
+              isPrivate: true,
+              createdAt: true,
+              updatedAt: true,
             },
           },
-        },
-        threadEntries: {
-          include: {
-            author: {
-              select: {
-                id: true,
-                email: true,
-                username: true,
-                name: true,
-                avatarUrl: true,
-                bio: true,
-                isPrivate: true,
-                createdAt: true,
-                updatedAt: true,
-              },
-            },
-            taggedUsers: {
-              include: {
-                taggedUser: {
-                  select: {
-                    id: true,
-                    email: true,
-                    username: true,
-                    name: true,
-                    avatarUrl: true,
-                    bio: true,
-                    isPrivate: true,
-                    createdAt: true,
-                    updatedAt: true,
-                  },
+          participants: {
+            include: {
+              user: {
+                select: {
+                  id: true,
+                  email: true,
+                  username: true,
+                  name: true,
+                  avatarUrl: true,
+                  bio: true,
+                  isPrivate: true,
+                  createdAt: true,
+                  updatedAt: true,
                 },
               },
             },
-            media: true,
           },
-          orderBy: { createdAt: "asc" },
-        },
-        finalPosts: {
-          where: { userId: currentUserId },
-          take: 1,
-        },
-        _count: {
-          select: {
-            threadEntries: true,
-            media: true,
-            participants: true,
+          finalPosts: {
+            where: { userId: currentUserId },
+            take: 1,
           },
         },
-      },
-    });
+      });
 
-    if (!trip) {
-      return NextResponse.json<ApiResponse>(
-        {
-          success: false,
-          error: "Trip not found",
-        },
-        { status: 404 }
+      if (!trip) {
+        return NextResponse.json<ApiResponse>(
+          {
+            success: false,
+            error: "Trip not found",
+          },
+          { status: 404 }
+        );
+      }
+
+      // Check if user has access to this trip
+      const isOwner = trip.userId === currentUserId;
+      const isParticipant = trip.participants.some(
+        (p) => p.userId === currentUserId
       );
-    }
 
-    // Check if user has access to this trip
-    const isOwner = trip.userId === currentUserId;
-    const isParticipant = trip.participants.some(
-      (p) => p.userId === currentUserId
-    );
-
-    if (!isOwner && !isParticipant) {
-      // Check if trip owner's profile is public or if current user follows them
-      if (trip.user?.isPrivate) {
-        const followRelation = await prisma.follow.findUnique({
-          where: {
-            followerId_followeeId: {
-              followerId: currentUserId,
-              followeeId: trip.userId,
+      if (!isOwner && !isParticipant) {
+        // Check if trip owner's profile is public or if current user follows them
+        if (trip.user?.isPrivate) {
+          const followRelation = await prisma.follow.findUnique({
+            where: {
+              followerId_followeeId: {
+                followerId: currentUserId,
+                followeeId: trip.userId,
+              },
             },
-          },
-        });
+          });
 
-        if (!followRelation) {
-          return NextResponse.json<ApiResponse>(
-            {
-              success: false,
-              error:
-                "Access denied. This trip belongs to a private profile. Follow the user to view their trips.",
-            },
-            { status: 403 }
-          );
+          if (!followRelation) {
+            return NextResponse.json<ApiResponse>(
+              {
+                success: false,
+                error:
+                  "Access denied. This trip belongs to a private profile. Follow the user to view their trips.",
+              },
+              { status: 403 }
+            );
+          }
         }
       }
-    }
 
-    const tripResponse: TripResponse = {
-      ...trip,
-      startDate: trip.startDate?.toISOString() || undefined,
-      endDate: trip.endDate?.toISOString() || undefined,
-      entryCount: trip.entryCount,
-      participantCount: trip.participantCount,
-      coverMediaId: trip.coverMediaId ?? undefined,
-      createdAt: trip.createdAt.toISOString(),
-      updatedAt: trip.updatedAt.toISOString(),
-      user: trip.user
-        ? {
+      const serializePlace = (place: typeof trip.startLocation) =>
+        place
+          ? {
+              id: place.id,
+              name: place.name,
+              address: place.address ?? undefined,
+              lat: place.lat,
+              lng: place.lng,
+              placeType: place.placeType,
+              source: place.source,
+              externalId: place.externalId ?? undefined,
+              createdAt: place.createdAt.toISOString(),
+              updatedAt: place.updatedAt.toISOString(),
+            }
+          : undefined;
+
+      const ownFinalPost = trip.finalPosts[0];
+      const tripResponse: TripResponse = omitHiddenTripSpend({
+        ...trip,
+        finalPosts: undefined,
+        startDate: trip.startDate?.toISOString() || undefined,
+        endDate: trip.endDate?.toISOString() || undefined,
+        entryCount: trip.entryCount,
+        participantCount: trip.participantCount,
+        coverMediaId: trip.coverMediaId ?? undefined,
+        startLocationId: trip.startLocationId ?? undefined,
+        endLocationId: trip.endLocationId ?? undefined,
+        startLocation: serializePlace(trip.startLocation),
+        endLocation: serializePlace(trip.endLocation),
+        createdAt: trip.createdAt.toISOString(),
+        updatedAt: trip.updatedAt.toISOString(),
+        user: trip.user
+          ? {
             ...trip.user,
             username: trip.user.username ?? undefined,
             name: trip.user.name ?? undefined,
@@ -184,83 +175,50 @@ export async function GET(
             createdAt: trip.user.createdAt.toISOString(),
             updatedAt: trip.user.updatedAt.toISOString(),
           }
-        : undefined,
-      participants: trip.participants.map((p) => ({
-        ...p,
-        joinedAt: p.joinedAt.toISOString(),
-        user: {
-          ...p.user,
-          username: p.user.username ?? undefined,
-          name: p.user.name ?? undefined,
-          avatarUrl: p.user.avatarUrl ?? undefined,
-          bio: p.user.bio ?? undefined,
-          createdAt: p.user.createdAt.toISOString(),
-          updatedAt: p.user.updatedAt.toISOString(),
-        },
-      })),
-      coverMedia: trip.coverMedia
-        ? {
+          : undefined,
+        participants: trip.participants.map((p) => ({
+          ...p,
+          joinedAt: p.joinedAt.toISOString(),
+          user: {
+            ...p.user,
+            username: p.user.username ?? undefined,
+            name: p.user.name ?? undefined,
+            avatarUrl: p.user.avatarUrl ?? undefined,
+            bio: p.user.bio ?? undefined,
+            createdAt: p.user.createdAt.toISOString(),
+            updatedAt: p.user.updatedAt.toISOString(),
+          },
+        })),
+        coverMedia: trip.coverMedia
+          ? {
             ...trip.coverMedia,
             filename: trip.coverMedia.filename ?? undefined,
             size: trip.coverMedia.size ?? undefined,
             tripId: trip.coverMedia.tripId ?? undefined,
             createdAt: trip.coverMedia.createdAt.toISOString(),
           }
-        : undefined,
-      threadEntries: trip.threadEntries.map((entry) => ({
-        ...entry,
-        gpsCoordinates: entry.gpsCoordinates
-          ? ((typeof entry.gpsCoordinates === "string"
-              ? JSON.parse(entry.gpsCoordinates)
-              : entry.gpsCoordinates) as {
-              lat: number | null;
-              lng: number | null;
-            })
-          : null,
-        createdAt: entry.createdAt.toISOString(),
-        author: {
-          ...entry.author,
-          createdAt: entry.author.createdAt.toISOString(),
-          updatedAt: entry.author.updatedAt.toISOString(),
-        },
-        taggedUsers: entry.taggedUsers && entry.taggedUsers.length > 0
-          ? entry.taggedUsers.map((tag) => ({
-              ...tag.taggedUser,
-              createdAt: tag.taggedUser.createdAt.toISOString(),
-              updatedAt: tag.taggedUser.updatedAt.toISOString(),
-            }))
-          : [],
-        media: entry.media
-          ? {
-              ...entry.media,
-              createdAt: entry.media.createdAt.toISOString(),
-            }
           : undefined,
-      })),
-      finalPost: trip.finalPosts[0]
-        ? {
-            ...trip.finalPosts[0],
-            createdAt: trip.finalPosts[0].createdAt.toISOString(),
-            updatedAt: trip.finalPosts[0].updatedAt.toISOString(),
-            publishedAt: trip.finalPosts[0].publishedAt?.toISOString() ?? undefined,
-            coverMediaUrl: trip.finalPosts[0].coverMediaUrl ?? undefined,
+        finalPost: ownFinalPost
+          ? {
+            ...ownFinalPost,
+            createdAt: ownFinalPost.createdAt.toISOString(),
+            updatedAt: ownFinalPost.updatedAt.toISOString(),
+            publishedAt: ownFinalPost.publishedAt?.toISOString() ?? undefined,
+            coverMediaUrl: ownFinalPost.coverMediaUrl ?? undefined,
           }
-        : undefined,
-    };
+          : undefined,
+      }, isOwner || isParticipant);
 
-    return NextResponse.json<ApiResponse<TripResponse>>({
-      success: true,
-      data: tripResponse,
-    });
-  } catch (error: any) {
-    console.error("Get trip error:", error);
-
-    return NextResponse.json<ApiResponse>(
-      {
-        success: false,
-        error: "Internal server error",
-      },
-      { status: 500 }
-    );
-  }
+      return NextResponse.json<ApiResponse<TripResponse>>({
+        success: true,
+        data: tripResponse,
+      });
+    } catch (error: any) {
+      return handleApiError(error, {
+        endpoint: "GET /trips/[id]",
+      });
+    } finally {
+      endTimer();
+    }
+  })(request);
 }

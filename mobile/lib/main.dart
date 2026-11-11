@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
 import 'package:another_flushbar/flushbar.dart';
@@ -16,9 +17,11 @@ import 'package:tripthread/providers/share_provider.dart';
 import 'package:tripthread/services/like_service.dart';
 import 'package:tripthread/services/comment_service.dart';
 import 'package:tripthread/services/share_service.dart';
-import 'package:tripthread/screens/trip/trip_map_screen.dart';
+import 'package:tripthread/services/expense_service.dart';
+import 'package:tripthread/screens/trip/trip_map.dart';
 import 'package:tripthread/services/api_service.dart';
 import 'package:tripthread/services/storage_service.dart';
+import 'package:tripthread/services/metadata_cache_service.dart';
 import 'package:tripthread/services/trip_service.dart';
 import 'package:tripthread/services/connectivity_service.dart';
 import 'package:tripthread/services/media_service.dart';
@@ -42,15 +45,27 @@ import 'package:tripthread/screens/trip/trip_participants_screen.dart';
 import 'package:tripthread/screens/trip/final_post_edit_screen.dart';
 import 'package:tripthread/screens/profile/follow_requests_screen.dart';
 import 'package:tripthread/screens/profile/trip_invitations_screen.dart';
+import 'package:tripthread/screens/settings/permissions_screen.dart';
 import 'package:tripthread/screens/settings/settings_screen.dart';
 import 'package:tripthread/screens/engagement/liked_by_screen.dart';
+import 'package:tripthread/screens/notifications/notifications_screen.dart';
+import 'package:tripthread/screens/post/post_detail_screen.dart';
+import 'package:tripthread/screens/chat/conversation_list_screen.dart';
+import 'package:tripthread/screens/chat/chat_screen.dart';
+import 'package:tripthread/screens/chat/new_conversation_screen.dart';
+import 'package:tripthread/screens/chat/group_settings_screen.dart';
+import 'package:tripthread/providers/chat_provider.dart';
+import 'package:tripthread/providers/expense_provider.dart';
+import 'package:tripthread/screens/share/share_link_screen.dart';
 import 'package:tripthread/utils/app_theme.dart';
+import 'package:tripthread/utils/locale_dates.dart';
 import 'package:tripthread/utils/error_handler.dart';
 import 'package:tripthread/widgets/auth_gate.dart';
 
 void main() async {
   debugPrint('[main] Starting TripThread app initialization');
   WidgetsFlutterBinding.ensureInitialized();
+  await LocaleDates.ensureInitialized();
 
   try {
     debugPrint('[main] Initializing environment configuration');
@@ -82,6 +97,16 @@ void main() async {
       rethrow;
     }
 
+    debugPrint('[main] Creating MetadataCacheService');
+    final metadataCacheService = MetadataCacheService();
+    try {
+      await metadataCacheService.init();
+      debugPrint('[main] MetadataCacheService initialized');
+    } catch (e) {
+      debugPrint('[main] MetadataCacheService initialization failed: $e');
+      rethrow;
+    }
+
     debugPrint('[main] Creating core services');
     final apiService = ApiService();
     final tripService = TripService();
@@ -90,6 +115,7 @@ void main() async {
     final likeService = LikeService();
     final commentService = CommentService();
     final shareService = ShareService();
+    final expenseService = ExpenseService();
     debugPrint('[main] Core services created');
 
     debugPrint('[main] Setting up providers');
@@ -97,6 +123,7 @@ void main() async {
       MultiProvider(
         providers: [
           Provider<StorageService>.value(value: storageService),
+          Provider<MetadataCacheService>.value(value: metadataCacheService),
           Provider<ApiService>.value(value: apiService),
           Provider<TripService>.value(value: tripService),
           Provider<MediaService>.value(value: mediaService),
@@ -104,6 +131,7 @@ void main() async {
           Provider<LikeService>.value(value: likeService),
           Provider<CommentService>.value(value: commentService),
           Provider<ShareService>.value(value: shareService),
+          Provider<ExpenseService>.value(value: expenseService),
           Provider<GoogleSignInService>.value(value: GoogleSignInService()),
           ChangeNotifierProvider<ConnectivityService>.value(
             value: connectivityService,
@@ -131,11 +159,21 @@ void main() async {
           ChangeNotifierProvider<UserProvider>(
             create: (context) {
               debugPrint('[main] Creating UserProvider');
+              final apiService = context.read<ApiService>();
+              final metadataCache = context.read<MetadataCacheService>();
               final authProvider = context.read<AuthProvider>();
-              final userProvider = UserProvider(apiService: apiService);
-              // Listen to auth changes and clear UserProvider cache on logout
+              final userProvider = UserProvider(
+                apiService: apiService,
+                metadataCache: metadataCache,
+              );
               authProvider.addListener(() {
-                if (!authProvider.isAuthenticated) {
+                if (authProvider.isAuthenticated &&
+                    authProvider.currentUser != null) {
+                  userProvider.warmMetadataCacheIfNeeded(
+                    authProvider.currentUser!.id,
+                    currentUser: authProvider.currentUser,
+                  );
+                } else if (!authProvider.isAuthenticated) {
                   userProvider.clearCache();
                 }
               });
@@ -145,8 +183,22 @@ void main() async {
           ChangeNotifierProvider<TripProvider>(
             create: (context) {
               debugPrint('[main] Creating TripProvider');
+              final authProvider = context.read<AuthProvider>();
               final provider = TripProvider(tripService: tripService);
               tripService.setStorageService(storageService);
+              tripService.setUnauthorizedCallback(() {
+                debugPrint(
+                  '[main] TripService unauthorized — forcing logout',
+                );
+                authProvider.forceLogout(
+                  message: 'Session expired. Please log in again.',
+                );
+              });
+              authProvider.addListener(() {
+                if (!authProvider.isAuthenticated) {
+                  provider.clearData();
+                }
+              });
               return provider;
             },
           ),
@@ -204,10 +256,52 @@ void main() async {
               debugPrint('[main] Creating ShareProvider');
               final provider = ShareProvider(
                 shareService: shareService,
-                deepLinkService: deepLinkService,
               );
               shareService.setStorageService(storageService);
               return provider;
+            },
+          ),
+          ChangeNotifierProvider<ExpenseProvider>(
+            create: (context) {
+              debugPrint('[main] Creating ExpenseProvider');
+              expenseService.setStorageService(storageService);
+              final provider = ExpenseProvider(expenseService: expenseService);
+              final authProvider = context.read<AuthProvider>();
+              authProvider.addListener(() {
+                if (!authProvider.isAuthenticated) {
+                  provider.clear();
+                }
+              });
+              return provider;
+            },
+          ),
+          ChangeNotifierProvider<ChatProvider>(
+            create: (context) {
+              debugPrint('[main] Creating ChatProvider');
+              final auth = context.read<AuthProvider>();
+              final chat = ChatProvider(
+                apiService: apiService,
+                storageService: storageService,
+              );
+              var wasAuthenticated = auth.isAuthenticated;
+              void syncChatSocket() {
+                final authed = auth.isAuthenticated;
+                if (authed && !wasAuthenticated) {
+                  debugPrint('[main] Auth signed in — connecting chat WebSocket');
+                  chat.onAuthSignedIn();
+                } else if (!authed && wasAuthenticated) {
+                  debugPrint('[main] Auth signed out — resetting chat WebSocket');
+                  chat.onAuthSignedOut();
+                }
+                wasAuthenticated = authed;
+              }
+
+              auth.addListener(syncChatSocket);
+              if (auth.isAuthenticated) {
+                // Listener only runs on transitions; opening chat while already logged in must open the socket.
+                chat.onAuthSignedIn();
+              }
+              return chat;
             },
           ),
         ],
@@ -227,7 +321,7 @@ void main() async {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                const Icon(Icons.error, size: 64, color: Colors.red),
+                const Icon(Icons.error, size: 64, color: AppTheme.errorColor),
                 const SizedBox(height: 16),
                 const Text('Failed to initialize app'),
                 const SizedBox(height: 8),
@@ -239,6 +333,41 @@ void main() async {
       ),
     );
   }
+}
+
+/// Resolves GoRouter `extra` for `/trip/:tripId/map` into [MapPlace] list.
+/// Supports thread jumps (`initialZoomLocation`), [PlaceOnTrip] visits from trip detail, and [MapPlace].
+List<MapPlace>? mapPlacesFromTripMapExtra(Map<String, dynamic>? extra) {
+  if (extra == null) return null;
+
+  final zoom = extra['initialZoomLocation'];
+  if (zoom is Place) {
+    return [
+      MapPlace(
+        place: zoom,
+        origin: MapPlaceOrigin.threadEntry,
+      ),
+    ];
+  }
+
+  final raw = extra['places'];
+  if (raw == null) return null;
+  if (raw is List<MapPlace>) return List<MapPlace>.from(raw);
+  if (raw is List<PlaceOnTrip>) {
+    return raw.map(MapPlace.fromPlaceOnTrip).toList();
+  }
+  if (raw is Iterable) {
+    final out = <MapPlace>[];
+    for (final e in raw) {
+      if (e is MapPlace) {
+        out.add(e);
+      } else if (e is PlaceOnTrip) {
+        out.add(MapPlace.fromPlaceOnTrip(e));
+      }
+    }
+    return out.isEmpty ? null : out;
+  }
+  return null;
 }
 
 class TripThreadAppRouter extends StatefulWidget {
@@ -296,7 +425,7 @@ class _ConnectivityToastHandlerState extends State<ConnectivityToastHandler> {
       title: 'No Internet Connection',
       message: 'You are offline. Some features may not be available.',
       icon: const Icon(Icons.wifi_off_rounded, size: 28.0, color: Colors.white),
-      backgroundColor: Colors.red.shade700,
+      backgroundColor: AppTheme.ink,
       // The toast will disappear after 8 seconds.
       // For a persistent toast that only disappears when connection is back
       // or when the user dismisses it, set `duration: null`.
@@ -348,7 +477,7 @@ class _TripThreadAppRouterState extends State<TripThreadAppRouter> {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                const Icon(Icons.error, size: 64, color: Colors.red),
+                const Icon(Icons.error, size: 64, color: AppTheme.errorColor),
                 const SizedBox(height: 16),
                 const Text('Page not found'),
                 const SizedBox(height: 16),
@@ -388,28 +517,36 @@ class _TripThreadAppRouterState extends State<TripThreadAppRouter> {
             return null;
           }
 
-          // Redirect to login if not authenticated and not on auth pages
-          if (!isLoggedIn &&
-              location != '/login' &&
-              location != '/signup' &&
-              location != '/forgot-password' &&
-              !location.startsWith('/reset-password')) {
+          final isShareLink = location.startsWith('/share/');
+          final isAuthPage = location == '/login' ||
+              location == '/signup' ||
+              location == '/forgot-password' ||
+              location.startsWith('/reset-password');
+
+          // Redirect to login if not authenticated and not on auth/share pages.
+          // Share links must stay reachable logged-out so the token is not dropped.
+          if (!isLoggedIn && !isAuthPage && !isShareLink) {
             debugPrint('[GoRouter] Not logged in, redirecting to /login');
             return '/login';
           }
 
-          final requiresProfileCompletion = authProvider.requiresProfileCompletion;
+          final requiresProfileCompletion =
+              authProvider.requiresProfileCompletion;
 
           // Authenticated but profile incomplete: must complete profile before home
+          // (allow share resolve so public posts still open; private will error in-screen)
           if (isLoggedIn &&
               requiresProfileCompletion &&
-              location != '/complete-profile') {
+              location != '/complete-profile' &&
+              !isShareLink) {
             debugPrint(
-                '[GoRouter] Profile incomplete, redirecting to /complete-profile');
+              '[GoRouter] Profile incomplete, redirecting to /complete-profile',
+            );
             return '/complete-profile';
           }
 
           // On complete-profile but profile now complete: go home
+          // (HomeScreen will handle ongoing trip redirect after tripProvider.initialize())
           if (isLoggedIn &&
               !requiresProfileCompletion &&
               location == '/complete-profile') {
@@ -417,15 +554,21 @@ class _TripThreadAppRouterState extends State<TripThreadAppRouter> {
             return '/home';
           }
 
-          // Redirect to home (or complete-profile) if authenticated and on auth pages
-          if (isLoggedIn &&
-              (location == '/login' ||
-                  location == '/signup' ||
-                  location == '/forgot-password' ||
-                  location.startsWith('/reset-password'))) {
+          // Redirect to home (or complete-profile / resume `from`) if authenticated on auth pages
+          if (isLoggedIn && isAuthPage) {
             if (requiresProfileCompletion) {
               return '/complete-profile';
             }
+
+            final from = state.uri.queryParameters['from'];
+            if (from != null &&
+                from.startsWith('/') &&
+                !from.startsWith('//') &&
+                !from.contains('://')) {
+              debugPrint('[GoRouter] Already logged in, resuming $from');
+              return from;
+            }
+
             debugPrint('[GoRouter] Already logged in, redirecting to /home');
             return '/home';
           }
@@ -521,7 +664,15 @@ class _TripThreadAppRouterState extends State<TripThreadAppRouter> {
             path: '/trip/:tripId/thread',
             builder: (context, state) {
               final tripId = state.pathParameters['tripId']!;
-              return TripThreadScreen(tripId: tripId);
+              final extra = state.extra as Map<String, dynamic>?;
+              final highlightEntryId = extra?['highlightEntryId'] as String?;
+              final openMoneyPane = extra?['pane'] == 'money' ||
+                  state.uri.queryParameters['pane'] == 'money';
+              return TripThreadScreen(
+                tripId: tripId,
+                highlightEntryId: highlightEntryId,
+                openMoneyPane: openMoneyPane,
+              );
             },
           ),
           GoRoute(
@@ -530,7 +681,7 @@ class _TripThreadAppRouterState extends State<TripThreadAppRouter> {
               final tripId = state.pathParameters['tripId']!;
               final extra = state.extra as Map<String, dynamic>?;
               final tripTitle = extra?['tripTitle'] as String? ?? 'Trip Map';
-              final places = extra?['places'] as List<MapPlace>?;
+              final places = mapPlacesFromTripMapExtra(extra);
 
               return TripMapScreen(
                 tripId: tripId,
@@ -563,6 +714,58 @@ class _TripThreadAppRouterState extends State<TripThreadAppRouter> {
             },
           ),
           GoRoute(
+            path: '/notifications',
+            builder: (context, state) {
+              return const NotificationsScreen();
+            },
+          ),
+          GoRoute(
+            path: '/chat',
+            builder: (context, state) {
+              final tripId = state.uri.queryParameters['tripId'];
+              return ConversationListScreen(tripId: tripId);
+            },
+          ),
+          GoRoute(
+            path: '/chat/new',
+            builder: (context, state) => const NewConversationScreen(),
+          ),
+          GoRoute(
+            path: '/chat/:conversationId',
+            builder: (context, state) {
+              final conversationId = state.pathParameters['conversationId']!;
+              return ChatScreen(conversationId: conversationId);
+            },
+          ),
+          GoRoute(
+            path: '/chat/:conversationId/settings',
+            builder: (context, state) {
+              final conversationId = state.pathParameters['conversationId']!;
+              return GroupSettingsScreen(conversationId: conversationId);
+            },
+          ),
+          GoRoute(
+            path: '/post/:entityType/:entityId',
+            builder: (context, state) {
+              final entityType = state.pathParameters['entityType']!;
+              final entityId = state.pathParameters['entityId']!;
+              final extra = state.extra as Map<String, dynamic>?;
+              final scrollToCommentId = extra?['scrollToCommentId'] as String?;
+              return PostDetailScreen(
+                entityType: entityType,
+                entityId: entityId,
+                scrollToCommentId: scrollToCommentId,
+              );
+            },
+          ),
+          GoRoute(
+            path: '/share/:shareToken',
+            builder: (context, state) {
+              final shareToken = state.pathParameters['shareToken']!;
+              return ShareLinkScreen(shareToken: shareToken);
+            },
+          ),
+          GoRoute(
             path: '/follow-requests',
             builder: (context, state) {
               debugPrint('[Router] Navigating to FollowRequestsScreen');
@@ -579,6 +782,10 @@ class _TripThreadAppRouterState extends State<TripThreadAppRouter> {
           GoRoute(
             path: '/settings',
             builder: (context, state) => const SettingsScreen(),
+          ),
+          GoRoute(
+            path: '/settings/permissions',
+            builder: (context, state) => const PermissionsScreen(),
           ),
           GoRoute(
             path: '/likes/:entityType/:entityId',
@@ -599,16 +806,19 @@ class _TripThreadAppRouterState extends State<TripThreadAppRouter> {
 
   @override
   Widget build(BuildContext context) {
-    // Use the existing router instance; it must be non-null after didChangeDependencies
+    // Use the existing router instance; it must be non-null after didChangeDependencies.
+    // DeepLinkService.initialize() runs once when the router is created — do not
+    // re-subscribe on every rebuild.
     final router = _router!;
     _deepLinkService?.setRouter(router);
-    _deepLinkService?.initialize();
 
     return MaterialApp.router(
       title: 'TripThread',
       theme: AppTheme.lightTheme,
       darkTheme: AppTheme.darkTheme,
       themeMode: ThemeMode.system,
+      supportedLocales: _regionLocales(),
+      localizationsDelegates: GlobalMaterialLocalizations.delegates,
       routerConfig: router,
       debugShowCheckedModeBanner: false,
       builder: (context, child) {
@@ -652,4 +862,26 @@ class _TripThreadAppRouterState extends State<TripThreadAppRouter> {
       },
     );
   }
+}
+
+/// The phone's locale is listed first so English (India) stays `en_IN`
+/// (date help `dd/mm/yyyy`) instead of falling through to US English.
+/// `en_US` is the fallback when the language has no Material translations.
+List<Locale> _regionLocales() {
+  final device = WidgetsBinding.instance.platformDispatcher.locale;
+  final locales = <Locale>[];
+  final seen = <String>{};
+
+  void add(Locale locale) {
+    final key =
+        '${locale.languageCode}_${locale.scriptCode ?? ''}_${locale.countryCode ?? ''}';
+    if (seen.add(key)) locales.add(locale);
+  }
+
+  add(device);
+  add(const Locale('en', 'US'));
+  for (final code in kMaterialSupportedLanguages) {
+    add(Locale(code));
+  }
+  return locales;
 }

@@ -5,6 +5,9 @@ import 'package:form_field_validator/form_field_validator.dart';
 import 'package:tripthread/providers/auth_provider.dart';
 import 'package:tripthread/widgets/custom_text_field.dart';
 import 'package:tripthread/widgets/loading_button.dart';
+import 'package:tripthread/utils/app_feedback.dart';
+import 'package:tripthread/utils/app_layout.dart';
+import 'package:tripthread/widgets/tripthread_logo.dart';
 
 class ForgotPasswordScreen extends StatefulWidget {
   const ForgotPasswordScreen({super.key});
@@ -33,13 +36,9 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
 
     if (success && mounted) {
       // Show success message and navigate back to login
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'If an account exists for this email, a reset link has been sent.',
-          ),
-          backgroundColor: Colors.green,
-        ),
+      AppFeedback.showSuccess(
+        context,
+        'If an account exists for this email, a reset link has been sent.',
       );
       context.go('/login');
     } else if (mounted) {
@@ -50,6 +49,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final spacing = AppLayout.authSpacing(context);
     return Scaffold(
       appBar: AppBar(
         title: const Text('Forgot Password'),
@@ -58,33 +58,20 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
           onPressed: () => context.go('/login'),
         ),
       ),
-      body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(24.0),
-          child: Form(
+      body: AppLayout.authFormBody(
+        context: context,
+        child: Form(
             key: _formKey,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                const SizedBox(height: 40),
+                SizedBox(height: spacing.top),
 
                 // Logo and Title
                 Column(
                   children: [
-                    Container(
-                      width: 64,
-                      height: 64,
-                      decoration: BoxDecoration(
-                        color: Theme.of(context).colorScheme.primary,
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                      child: const Icon(
-                        Icons.lock_reset,
-                        size: 32,
-                        color: Colors.white,
-                      ),
-                    ),
-                    const SizedBox(height: 24),
+                    TripThreadLogo(size: spacing.logo),
+                    SizedBox(height: spacing.afterLogo),
                     Text(
                       'Reset your password',
                       style: Theme.of(context).textTheme.displaySmall,
@@ -99,7 +86,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                   ],
                 ),
 
-                const SizedBox(height: 48),
+                SizedBox(height: spacing.beforeFields),
 
                 // Email Field
                 CustomTextField(
@@ -214,11 +201,10 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                   ],
                 ),
 
-                const SizedBox(height: 40),
+                SizedBox(height: spacing.bottom),
               ],
             ),
           ),
-        ),
       ),
     );
   }

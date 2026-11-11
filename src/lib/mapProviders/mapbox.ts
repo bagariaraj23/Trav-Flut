@@ -1,6 +1,15 @@
 import { ENV } from "@/env";
 import { NormalizedPlace, PlacesProviderAdapter } from "./adapter";
 
+const MAPBOX_TIMEOUT_MS = 2000;
+
+export class MapboxRequestError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "MapboxRequestError";
+  }
+}
+
 // Mapping Mapbox feature types to our place types
 function mapFeatureType(featureType: string | undefined): string {
   if (!featureType) return 'POI';
@@ -49,8 +58,21 @@ export class MapboxPlacesAdapter implements PlacesProviderAdapter {
     const url = `https://api.mapbox.com/search/geocode/v6/forward?q=${encodeURIComponent(
       q
     )}${proximity}&limit=${limit}&access_token=${ENV.MAPBOX_ACCESS_TOKEN}`;
-    const res = await fetch(url, { cache: "no-store" as any });
-    if (!res.ok) return [];
+
+    let res: Response;
+    try {
+      res = await fetch(url, {
+        cache: "no-store",
+        signal: AbortSignal.timeout(MAPBOX_TIMEOUT_MS),
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Mapbox request failed";
+      throw new MapboxRequestError(message);
+    }
+
+    if (!res.ok) {
+      throw new MapboxRequestError(`Mapbox API error: ${res.status} ${res.statusText}`);
+    }
     const data = await res.json();
     const features: any[] = data?.features ?? [];
     return features

@@ -12,7 +12,10 @@ Trip _$TripFromJson(Map<String, dynamic> json) => Trip(
   title: json['title'] as String,
   description: json['description'] as String?,
   startDate: DateTime.parse(json['startDate'] as String),
-  endDate: DateTime.parse(json['endDate'] as String),
+  endDate: json['endDate'] == null
+      ? null
+      : DateTime.parse(json['endDate'] as String),
+  scheduleTimezone: json['scheduleTimezone'] as String?,
   destinations:
       (json['destinations'] as List<dynamic>?)
           ?.map((e) => e as String)
@@ -20,6 +23,7 @@ Trip _$TripFromJson(Map<String, dynamic> json) => Trip(
       [],
   mood: $enumDecodeNullable(_$TripMoodEnumMap, json['mood']),
   type: $enumDecodeNullable(_$TripTypeEnumMap, json['type']),
+  typeSetByUser: json['typeSetByUser'] as bool? ?? false,
   coverMediaId: json['coverMediaId'] as String?,
   coverMedia: json['coverMedia'] == null
       ? null
@@ -63,10 +67,12 @@ Map<String, dynamic> _$TripToJson(Trip instance) => <String, dynamic>{
   'title': instance.title,
   'description': instance.description,
   'startDate': instance.startDate.toIso8601String(),
-  'endDate': instance.endDate.toIso8601String(),
+  'endDate': instance.endDate?.toIso8601String(),
+  'scheduleTimezone': instance.scheduleTimezone,
   'destinations': instance.destinations,
   'mood': _$TripMoodEnumMap[instance.mood],
   'type': _$TripTypeEnumMap[instance.type],
+  'typeSetByUser': instance.typeSetByUser,
   'coverMediaId': instance.coverMediaId,
   'coverMedia': instance.coverMedia,
   'status': _$TripStatusEnumMap[instance.status]!,
@@ -199,7 +205,6 @@ const _$ThreadEntryTypeEnumMap = {
   ThreadEntryType.text: 'TEXT',
   ThreadEntryType.media: 'MEDIA',
   ThreadEntryType.location: 'LOCATION',
-  ThreadEntryType.checkin: 'CHECKIN',
 };
 
 TripFinalPost _$TripFinalPostFromJson(Map<String, dynamic> json) =>
@@ -225,6 +230,9 @@ TripFinalPost _$TripFinalPostFromJson(Map<String, dynamic> json) =>
           : DateTime.parse(json['publishedAt'] as String),
       createdAt: DateTime.parse(json['createdAt'] as String),
       updatedAt: DateTime.parse(json['updatedAt'] as String),
+      user: json['user'] == null
+          ? null
+          : User.fromJson(json['user'] as Map<String, dynamic>),
       trip: json['trip'] == null
           ? null
           : Trip.fromJson(json['trip'] as Map<String, dynamic>),
@@ -248,6 +256,7 @@ Map<String, dynamic> _$TripFinalPostToJson(TripFinalPost instance) =>
       'publishedAt': instance.publishedAt?.toIso8601String(),
       'createdAt': instance.createdAt.toIso8601String(),
       'updatedAt': instance.updatedAt.toIso8601String(),
+      'user': instance.user,
       'trip': instance.trip,
       'likeCount': instance.likeCount,
       'commentCount': instance.commentCount,
@@ -338,6 +347,7 @@ CreateTripRequest _$CreateTripRequestFromJson(Map<String, dynamic> json) =>
       mood: $enumDecodeNullable(_$TripMoodEnumMap, json['mood']),
       type: $enumDecodeNullable(_$TripTypeEnumMap, json['type']),
       coverMediaId: json['coverMediaId'] as String?,
+      scheduleTimezone: json['scheduleTimezone'] as String?,
     );
 
 Map<String, dynamic> _$CreateTripRequestToJson(CreateTripRequest instance) =>
@@ -351,6 +361,7 @@ Map<String, dynamic> _$CreateTripRequestToJson(CreateTripRequest instance) =>
       'mood': _$TripMoodEnumMap[instance.mood],
       'type': _$TripTypeEnumMap[instance.type],
       'coverMediaId': instance.coverMediaId,
+      'scheduleTimezone': instance.scheduleTimezone,
     };
 
 CreateThreadEntryRequest _$CreateThreadEntryRequestFromJson(
@@ -414,6 +425,7 @@ TripConflictTrip _$TripConflictTripFromJson(Map<String, dynamic> json) =>
       endDate: json['endDate'] == null
           ? null
           : DateTime.parse(json['endDate'] as String),
+      scheduleTimezone: json['scheduleTimezone'] as String?,
       status: $enumDecode(_$TripStatusEnumMap, json['status']),
     );
 
@@ -423,5 +435,6 @@ Map<String, dynamic> _$TripConflictTripToJson(TripConflictTrip instance) =>
       'title': instance.title,
       'startDate': instance.startDate.toIso8601String(),
       'endDate': instance.endDate?.toIso8601String(),
+      'scheduleTimezone': instance.scheduleTimezone,
       'status': _$TripStatusEnumMap[instance.status]!,
     };

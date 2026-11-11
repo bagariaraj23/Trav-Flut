@@ -3,6 +3,8 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
 import 'package:tripthread/providers/engagement_provider.dart';
+import 'package:tripthread/utils/app_feedback.dart';
+import 'package:tripthread/utils/app_theme.dart';
 
 class LikeButton extends StatefulWidget {
   final String entityType;
@@ -40,8 +42,8 @@ class _LikeButtonState extends State<LikeButton>
     );
 
     _colorAnimation = ColorTween(
-      begin: Colors.grey,
-      end: Colors.red,
+      begin: AppTheme.mutedForeground,
+      end: AppTheme.likeRose,
     ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeInOut));
   }
 
@@ -97,13 +99,9 @@ class _LikeButtonState extends State<LikeButton>
         _controller.reverse();
       }
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              'Failed to ${wasLiked ? 'unlike' : 'like'}: ${e.toString()}',
-            ),
-            backgroundColor: Colors.red,
-          ),
+        AppFeedback.showError(
+          context,
+          'Failed to ${wasLiked ? 'unlike' : 'like'}: ${e.toString()}',
         );
       }
     }
@@ -146,8 +144,8 @@ class _LikeButtonState extends State<LikeButton>
                       child: Icon(
                         isLiked ? Icons.favorite : Icons.favorite_border,
                         color: isLiked
-                            ? (_colorAnimation.value ?? Colors.red)
-                            : Colors.grey,
+                            ? (_colorAnimation.value ?? AppTheme.likeRose)
+                            : AppTheme.mutedForeground,
                         size: 24,
                       ),
                     );
@@ -172,7 +170,9 @@ class _LikeButtonState extends State<LikeButton>
                   child: Text(
                     _formatCount(likeCount),
                     style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: isLiked ? Colors.red : Colors.grey,
+                      color: isLiked
+                          ? AppTheme.likeRose
+                          : AppTheme.mutedForeground,
                       fontWeight: FontWeight.w500,
                     ),
                   ),
