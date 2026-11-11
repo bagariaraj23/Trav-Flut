@@ -31,7 +31,7 @@ When a user creates a trip, they set `startDate` and `endDate`. The initial stat
 
 ### Business Logic
 
-The scheduler performs two main operations every hour:
+Each run performs two operations. How often that happens depends on the trigger: the cron examples in this doc are hourly, and the local Docker loop defaults to every 300 seconds.
 
 1. **End trips that have passed their end date**
    - Finds all trips where `endDate <= now` and status is UPCOMING or ONGOING
@@ -253,7 +253,33 @@ npm start  # or: node dist/index.js
 
 ### The Key Insight
 
-**The scheduler itself doesn't know about time.** It's just a script that runs when invoked. The **external cron service** is responsible for triggering it every hour.
+**The scheduler itself doesn't know about time.** It's just a script that runs when invoked. The trigger decides the gap between runs.
+
+### Local Docker Compose
+
+The full stack in `docker-compose.yml` is one trigger. The scheduler container starts after the API is healthy (migrations have been applied), then runs:
+
+```sh
+while true; do node dist/index.js || echo 'Scheduler run failed'; sleep "$SCHEDULER_INTERVAL_SECONDS"; done
+```
+
+`SCHEDULER_INTERVAL_SECONDS` defaults to 300. `TZ=UTC`. Each `node dist/index.js` is still the one-shot script: it connects, updates trip statuses, and exits. The shell loop is what keeps the container alive. A non-zero exit is logged and the loop sleeps until the next interval. This Compose file is local only. Production stays on Railway and should keep invoking the same script from cron (or the existing Railway scheduler service), not from this loop.
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│  docker compose (scheduler service)                          │
+│  starts after backend /api/health is healthy                 │
+│  shell loop, default sleep 300s                              │
+└─────────────────────────────────────────────────────────────┘
+                            │
+                            │ each iteration:
+                            │ node dist/index.js
+                            ▼
+┌─────────────────────────────────────────────────────────────┐
+│  Scheduler script (runs once and exits)                      │
+│  updateTripStatuses() → Postgres                             │
+└─────────────────────────────────────────────────────────────┘
+```
 
 ### Deployment Options
 

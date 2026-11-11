@@ -1,6 +1,6 @@
 import 'dart:async';
-import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
@@ -10,6 +10,7 @@ import 'package:tripthread/models/chat_message.dart';
 import 'package:tripthread/providers/chat_provider.dart';
 import 'package:tripthread/providers/auth_provider.dart';
 import 'package:tripthread/services/media_service.dart';
+import 'package:tripthread/widgets/media/local_file_image.dart';
 import 'package:tripthread/utils/app_layout.dart';
 import 'package:tripthread/utils/app_theme.dart';
 import 'package:tripthread/utils/chat_navigation.dart';
@@ -31,7 +32,7 @@ class _ChatScreenState extends State<ChatScreen> {
   final ScrollController _scrollController = ScrollController();
   bool _loadingMore = false;
   ChatMessageModel? _replyingTo;
-  List<File> _selectedMedia = [];
+  List<XFile> _selectedMedia = [];
   bool _uploadingMedia = false;
   ChatMessageModel? _editingMessage;
   final Map<String, GlobalKey> _messageKeys = {};
@@ -898,8 +899,8 @@ class _ChatScreenState extends State<ChatScreen> {
                       children: [
                         ClipRRect(
                           borderRadius: BorderRadius.circular(8),
-                          child: Image.file(
-                            file,
+                          child: LocalFileImage(
+                            path: file.path,
                             fit: BoxFit.cover,
                             width: 90,
                             height: 90,

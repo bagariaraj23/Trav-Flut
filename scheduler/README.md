@@ -1,6 +1,6 @@
 # TripThread Scheduler
 
-A lightweight Node.js (TypeScript) service that automatically transitions trip statuses based on time. Designed to run as a **cron job** that executes once per hour.
+A lightweight Node.js (TypeScript) service that automatically transitions trip statuses based on time. The process runs **once and exits**. Something outside it decides when to start it again: production cron (the examples below use hourly), or the local Docker loop (every `SCHEDULER_INTERVAL_SECONDS`, default 300).
 
 ## What It Does
 
@@ -42,10 +42,11 @@ npm start
 **Key Design: Zero Redis Dependency**
 
 The scheduler runs as a **simple cron-executable script** that:
-- Executes once per invocation (designed for cron scheduling)
+- Executes once per invocation, then exits (no in-process timer)
 - Connects directly to PostgreSQL via Prisma
 - Includes retry logic with exponential backoff
-- Exits after completion (no long-running process)
+- Open-ended trips (`endDate` null) start on time and stay ongoing until an end is set
+- Local Docker starts the same script in a loop; it does not turn this process into a resident worker
 
 **Benefits:**
 - ✅ **Zero Redis usage** - All Upstash Redis budget available for API caching
@@ -71,6 +72,18 @@ LOG_LEVEL=info  # optional, defaults to 'info'
 **Note:** `REDIS_URL` is **not required** - the scheduler uses zero Redis commands.
 
 ## Deployment
+
+### Local Docker
+
+`docker compose up --build -d` builds `scheduler/Dockerfile` and starts the container only after the API healthcheck passes (so migrations have been applied). The container command is a shell loop around the one-shot script:
+
+```sh
+while true; do node dist/index.js || echo 'Scheduler run failed'; sleep "$SCHEDULER_INTERVAL_SECONDS"; done
+```
+
+`SCHEDULER_INTERVAL_SECONDS` defaults to 300 and `TZ` is UTC. A failed run is logged and retried on the next interval. The script itself is unchanged. Confirm a run with `docker compose logs scheduler`.
+
+Production does not use this Compose loop. Use one of the cron options below, or the Railway scheduler service.
 
 ### Option 1: Railway Cron (Recommended)
 
@@ -186,7 +199,7 @@ Status changes use `Date` comparisons. If your domain uses date-only semantics, 
 
 ### Immediate Transitions
 
-If a trip is created with `startDate == now`, the API should compute initial status at creation time. Otherwise, rely on the scheduler's hourly execution.
+If a trip is created with `startDate == now`, the API should compute initial status at creation time. Otherwise the next scheduler run applies it. An hourly cron can lag up to an hour; the local Docker loop defaults to five minutes because start and end instants are minute-precision UTC.
 
 ### Concurrency
 
@@ -212,17 +225,17 @@ The API continues to use Upstash Redis for caching, but the scheduler runs compl
 
 ### Scheduler Not Running
 
-1. Check cron service is configured correctly
-2. Verify `DATABASE_URL` is set
-3. Check logs: `scheduler.log` or cron service logs
-4. Test manually: `npm start`
+1. Local Docker: `docker compose logs scheduler` and confirm the backend is healthy (`docker compose ps`). The scheduler waits for that healthcheck.
+2. Cron: check the cron service is configured and `DATABASE_URL` is set
+3. Check logs: `scheduler.log` or the cron service logs
+4. Test one run: `npm start` inside `scheduler/`
 
 ### Status Not Updating
 
 1. Verify trips have correct `startDate`/`endDate`
 2. Check database connection
 3. Review logs for errors
-4. Ensure cron is running hourly
+4. Ensure the trigger is actually firing (hourly cron, or the Docker loop every `SCHEDULER_INTERVAL_SECONDS`)
 
 ### Database Connection Errors
 

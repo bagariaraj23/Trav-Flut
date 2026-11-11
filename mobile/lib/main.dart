@@ -18,7 +18,7 @@ import 'package:tripthread/services/like_service.dart';
 import 'package:tripthread/services/comment_service.dart';
 import 'package:tripthread/services/share_service.dart';
 import 'package:tripthread/services/expense_service.dart';
-import 'package:tripthread/screens/trip/trip_map_screen.dart';
+import 'package:tripthread/screens/trip/trip_map.dart';
 import 'package:tripthread/services/api_service.dart';
 import 'package:tripthread/services/storage_service.dart';
 import 'package:tripthread/services/metadata_cache_service.dart';

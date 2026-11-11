@@ -9,7 +9,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:tripthread/utils/app_layout.dart';
 import 'package:tripthread/utils/app_theme.dart';
 import 'package:tripthread/utils/trip_time_format.dart';
-import 'package:flutter_timezone/flutter_timezone.dart';
+import 'package:tripthread/utils/device_timezone.dart';
 import 'package:tripthread/utils/chat_navigation.dart';
 import 'package:tripthread/utils/user_display_labels.dart';
 import 'package:tripthread/utils/cloudinary_utils.dart';
@@ -71,8 +71,8 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
 
   Future<String?> _deviceZone() async {
     try {
-      final name = (await FlutterTimezone.getLocalTimezone()).identifier;
-      if (name.isNotEmpty) return name;
+      final name = await deviceTimezoneIdentifier();
+      if (name != null && name.isNotEmpty) return name;
     } catch (_) {}
     return _trip?.scheduleTimezone;
   }

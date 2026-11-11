@@ -1,5 +1,8 @@
-import 'package:flutter/material.dart';
+import 'dart:convert';
 import 'dart:math' as math;
+
+import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 import 'package:mapbox_maps_flutter/mapbox_maps_flutter.dart' as mapbox;
 import 'package:tripthread/models/place.dart';
 import 'package:tripthread/providers/place_provider.dart';
@@ -33,6 +36,9 @@ class _TripMapScreenState extends State<TripMapScreen> {
   mapbox.PolylineAnnotationManager? _routeManager;
   mapbox.CircleAnnotationManager? _circleManager;
   mapbox.PointAnnotationManager? _textManager;
+  bool _overlaysDrawn = false;
+  bool _initializingMap = false;
+  bool _retryMapInit = false;
 
   @override
   void initState() {
@@ -240,7 +246,7 @@ class _TripMapScreenState extends State<TripMapScreen> {
                   mapbox.MapWidget(
                     key: const Key('tripMapWidget'),
                     styleUri: _mapStyleUri,
-                    cameraOptions: mapbox.CameraOptions(
+                    viewport: mapbox.CameraViewportState(
                       center: mapbox.Point(
                         coordinates: mapbox.Position(
                           _places!.first.place.lng,
@@ -250,6 +256,7 @@ class _TripMapScreenState extends State<TripMapScreen> {
                       zoom: 12.0,
                     ),
                     onMapCreated: _onMapCreated,
+                    onStyleLoadedListener: (_) => _initializeMap(),
                   ),
 
                   // Place cards at bottom (ONLY ONE LIST)
@@ -402,7 +409,13 @@ class _TripMapScreenState extends State<TripMapScreen> {
   }
 
   Future<void> _initializeMap() async {
+    if (_overlaysDrawn || _mapboxMap == null) return;
     if (_places == null || _places!.isEmpty) return;
+    if (_initializingMap) {
+      _retryMapInit = true;
+      return;
+    }
+    _initializingMap = true;
 
     // Sort places properly - destinations LAST, others chronologically
     final sortedPlaces = List<MapPlace>.from(_places!);
@@ -442,7 +455,61 @@ class _TripMapScreenState extends State<TripMapScreen> {
     double minLng = double.infinity;
     double maxLng = -double.infinity;
 
-    // Initialize managers
+    try {
+      if (kIsWeb) {
+        // Circle, point, and polyline annotation managers throw on web in
+        // mapbox_maps_flutter 3.x. Style layers draw the same markers there.
+        await _drawWebOverlays(sortedPlaces);
+      } else {
+        await _drawNativeAnnotations(sortedPlaces);
+      }
+
+      for (final mapPlace in sortedPlaces) {
+        final place = mapPlace.place;
+        final lat = place.lat;
+        final lng = place.lng;
+
+        minLat = lat < minLat ? lat : minLat;
+        maxLat = lat > maxLat ? lat : maxLat;
+        minLng = lng < minLng ? lng : minLng;
+        maxLng = lng > maxLng ? lng : maxLng;
+      }
+
+      _overlaysDrawn = true;
+
+      // FIT BOUNDS - Auto-zoom to show all places
+      await _mapboxMap?.flyTo(
+        mapbox.CameraOptions(
+          center: mapbox.Point(
+            coordinates: mapbox.Position(
+              (minLng + maxLng) / 2,
+              (minLat + maxLat) / 2,
+            ),
+          ),
+          zoom: _calculateZoomLevel(minLat, maxLat, minLng, maxLng),
+          padding: mapbox.MbxEdgeInsets(
+            top: 60,
+            right: 40,
+            bottom: 160,
+            left: 40,
+          ),
+        ),
+        mapbox.MapAnimationOptions(duration: 1000, startDelay: 0),
+      );
+    } catch (e, stack) {
+      // Style-loaded and map-created can both fire before the style accepts
+      // sources. Leave the flag clear so the next callback can draw them.
+      debugPrint('[TripMapScreen] Map overlay setup failed: $e\n$stack');
+    } finally {
+      _initializingMap = false;
+      if (!_overlaysDrawn && _retryMapInit && mounted) {
+        _retryMapInit = false;
+        await _initializeMap();
+      }
+    }
+  }
+
+  Future<void> _drawNativeAnnotations(List<MapPlace> sortedPlaces) async {
     _circleManager ??= await _mapboxMap?.annotations
         .createCircleAnnotationManager();
     _textManager ??= await _mapboxMap?.annotations
@@ -450,34 +517,25 @@ class _TripMapScreenState extends State<TripMapScreen> {
     _routeManager ??= await _mapboxMap?.annotations
         .createPolylineAnnotationManager();
 
-    // Create markers
     for (final mapPlace in sortedPlaces) {
       final place = mapPlace.place;
-      final lat = place.lat;
-      final lng = place.lng;
-
-      minLat = lat < minLat ? lat : minLat;
-      maxLat = lat > maxLat ? lat : maxLat;
-      minLng = lng < minLng ? lng : minLng;
-      maxLng = lng > maxLng ? lng : maxLng;
-
       final color = colorForOrigin(mapPlace.origin);
-
-      // Circle marker
       await _circleManager?.create(
         mapbox.CircleAnnotationOptions(
-          geometry: mapbox.Point(coordinates: mapbox.Position(lng, lat)),
+          geometry: mapbox.Point(
+            coordinates: mapbox.Position(place.lng, place.lat),
+          ),
           circleColor: color.toARGB32(),
           circleRadius: 10.0,
           circleStrokeWidth: 2.0,
           circleStrokeColor: Colors.white.toARGB32(),
         ),
       );
-
-      // Text label
       await _textManager?.create(
         mapbox.PointAnnotationOptions(
-          geometry: mapbox.Point(coordinates: mapbox.Position(lng, lat)),
+          geometry: mapbox.Point(
+            coordinates: mapbox.Position(place.lng, place.lat),
+          ),
           textField: place.name,
           textColor: Colors.black.toARGB32(),
           textHaloColor: Colors.white.toARGB32(),
@@ -488,30 +546,96 @@ class _TripMapScreenState extends State<TripMapScreen> {
       );
     }
 
-    // Draw route
     if (sortedPlaces.length > 1) {
       await _drawChronologicalRoute(sortedPlaces);
     }
+  }
 
-    // FIT BOUNDS - Auto-zoom to show all places
-    await _mapboxMap?.flyTo(
-      mapbox.CameraOptions(
-        center: mapbox.Point(
-          coordinates: mapbox.Position(
-            (minLng + maxLng) / 2,
-            (minLat + maxLat) / 2,
-          ),
+  Future<void> _drawWebOverlays(List<MapPlace> sortedPlaces) async {
+    final map = _mapboxMap;
+    if (map == null) return;
+
+    const placesSource = 'trip-places';
+    const routeSource = 'trip-route';
+    final features = sortedPlaces.map((mapPlace) {
+      return {
+        'type': 'Feature',
+        'properties': {
+          'name': mapPlace.place.name,
+          'color': _hexColor(colorForOrigin(mapPlace.origin)),
+        },
+        'geometry': {
+          'type': 'Point',
+          'coordinates': [mapPlace.place.lng, mapPlace.place.lat],
+        },
+      };
+    }).toList();
+
+    if (!await map.styleSourceExists(placesSource)) {
+      await map.addSource(
+        mapbox.GeoJsonSource(
+          id: placesSource,
+          data: jsonEncode({
+            'type': 'FeatureCollection',
+            'features': features,
+          }),
         ),
-        zoom: _calculateZoomLevel(minLat, maxLat, minLng, maxLng),
-        padding: mapbox.MbxEdgeInsets(
-          top: 60,
-          right: 40,
-          bottom: 160,
-          left: 40,
+      );
+      await map.addLayer(
+        mapbox.CircleLayer(
+          id: 'trip-place-circles',
+          sourceId: placesSource,
+          circleColorExpression: const ['get', 'color'],
+          circleRadius: 10,
+          circleStrokeWidth: 2,
+          circleStrokeColor: Colors.white.toARGB32(),
         ),
-      ),
-      mapbox.MapAnimationOptions(duration: 1000, startDelay: 0),
-    );
+      );
+      await map.addLayer(
+        mapbox.SymbolLayer(
+          id: 'trip-place-labels',
+          sourceId: placesSource,
+          textFieldExpression: const ['get', 'name'],
+          textSize: 12,
+          textColor: Colors.black.toARGB32(),
+          textHaloColor: Colors.white.toARGB32(),
+          textHaloWidth: 2,
+          textOffset: const [0, 1.5],
+        ),
+      );
+    }
+
+    if (sortedPlaces.length > 1 && !await map.styleSourceExists(routeSource)) {
+      await map.addSource(
+        mapbox.GeoJsonSource(
+          id: routeSource,
+          data: jsonEncode({
+            'type': 'Feature',
+            'geometry': {
+              'type': 'LineString',
+              'coordinates': [
+                for (final mapPlace in sortedPlaces)
+                  [mapPlace.place.lng, mapPlace.place.lat],
+              ],
+            },
+          }),
+        ),
+      );
+      await map.addLayer(
+        mapbox.LineLayer(
+          id: 'trip-route-line',
+          sourceId: routeSource,
+          lineColor: Colors.deepPurple.toARGB32(),
+          lineWidth: 4,
+          lineOpacity: 0.7,
+        ),
+      );
+    }
+  }
+
+  String _hexColor(Color color) {
+    final rgb = color.toARGB32() & 0xFFFFFF;
+    return '#${rgb.toRadixString(16).padLeft(6, '0')}';
   }
 
   // Draw route polyline

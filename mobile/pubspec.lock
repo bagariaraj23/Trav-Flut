@@ -929,10 +929,34 @@ packages:
     dependency: "direct main"
     description:
       name: mapbox_maps_flutter
-      sha256: "9da440e44be8eb8baad5dcc4d7dac8865cc0451f0d491d70f3b658bf25ba97fc"
+      sha256: f65c20ea6590e1c28f56f4045919b79710de07a8acf109dec92d9d07ac6ac60a
       url: "https://pub.dev"
     source: hosted
-    version: "2.17.0"
+    version: "3.34.2"
+  mapbox_maps_flutter_mobile:
+    dependency: transitive
+    description:
+      name: mapbox_maps_flutter_mobile
+      sha256: "8c43f4394fc77b37f74f58bfec094c176dc0d8bf3199bbbfaf573d672b429640"
+      url: "https://pub.dev"
+    source: hosted
+    version: "3.34.2"
+  mapbox_maps_flutter_platform_interface:
+    dependency: transitive
+    description:
+      name: mapbox_maps_flutter_platform_interface
+      sha256: "2019616aa8289f217433b75404af10685a84a06865d4ed2c9d36476b543dcc71"
+      url: "https://pub.dev"
+    source: hosted
+    version: "3.34.2"
+  mapbox_maps_flutter_web:
+    dependency: transitive
+    description:
+      name: mapbox_maps_flutter_web
+      sha256: bf3bc977280f2d3516adc6aa154cf11b767ec396fbb530a81f31a934310e8b86
+      url: "https://pub.dev"
+    source: hosted
+    version: "3.34.2"
   matcher:
     dependency: transitive
     description:
@@ -1422,10 +1446,10 @@ packages:
     dependency: transitive
     description:
       name: turf
-      sha256: "75347c45a5c1de805db7cb182286f05a3770e01546626c4dc292709d15cbe436"
+      sha256: "607db17ebb5ed83c00d822059e2542094abf6dc76fa1365dceddfee1d9492c5f"
       url: "https://pub.dev"
     source: hosted
-    version: "0.0.10"
+    version: "0.0.14"
   turf_equality:
     dependency: transitive
     description:
