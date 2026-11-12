@@ -10,6 +10,7 @@ import 'package:tripthread/utils/chat_navigation.dart';
 import 'package:tripthread/widgets/chat/chat_avatar.dart';
 import 'package:tripthread/screens/chat/group_settings_screen.dart';
 import 'package:tripthread/widgets/chat/conversation_media_strip.dart';
+import 'package:tripthread/screens/settings/help_faq_screen.dart';
 import 'package:tripthread/widgets/safety/safety_actions.dart';
 
 class DmSettingsScreen extends StatefulWidget {
@@ -112,6 +113,13 @@ class _DmSettingsScreenState extends State<DmSettingsScreen> {
       child: Scaffold(
         appBar: AppBar(
           title: const Text('Chat details'),
+          actions: [
+            IconButton(
+              tooltip: 'What Restrict and Block do',
+              onPressed: () => showSafetyInfo(context),
+              icon: const Icon(Icons.info_outline),
+            ),
+          ],
           leading: IconButton(
             icon: const Icon(Icons.arrow_back),
             onPressed: () => leaveChatSettings(context, widget.conversationId),

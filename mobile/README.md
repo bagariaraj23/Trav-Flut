@@ -72,7 +72,8 @@ On the web build:
 - **Trip Management**: Create, edit, and manage trips
 - **Final Posts**: Edit and publish curated trip summaries with selected media
 - **Social Features**: Follow users, view profiles, discover trips
-- **Restrict and Block**: From another person's profile menu, a direct-message info screen, each group or trip chat member, Manage Participants, and Settings. Restrict stops that chat both ways. Block also hides your profile and stops you from adding each other to a trip or group you created.
+- **Restrict and Block**: From another person's profile menu, a direct-message info screen, each group or trip chat member, Manage Participants, and Settings. An info button explains the difference. Restrict stops that chat both ways. Block also hides your profile and stops you from adding each other to a trip or group you created.
+- **Help and FAQ**: Settings explains the product rules, including edits, trip start and end, follows, chats, Discover, and money.
 - **Shared media**: Six thumbnails on a conversation's settings, then a paged grid. The same viewer opens chat and trip-thread photos and videos.
 - **Media Upload**: Cloudinary integration for images and videos
 - **Location Services**: Place search, location entries, and Mapbox maps on iOS, Android, and the Docker web UI

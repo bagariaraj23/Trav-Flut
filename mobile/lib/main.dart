@@ -45,6 +45,7 @@ import 'package:tripthread/screens/trip/trip_participants_screen.dart';
 import 'package:tripthread/screens/trip/final_post_edit_screen.dart';
 import 'package:tripthread/screens/profile/follow_requests_screen.dart';
 import 'package:tripthread/screens/profile/trip_invitations_screen.dart';
+import 'package:tripthread/screens/settings/help_faq_screen.dart';
 import 'package:tripthread/screens/settings/permissions_screen.dart';
 import 'package:tripthread/screens/settings/safety_list_screen.dart';
 import 'package:tripthread/screens/settings/settings_screen.dart';
@@ -791,6 +792,12 @@ class _TripThreadAppRouterState extends State<TripThreadAppRouter> {
           GoRoute(
             path: '/settings/safety',
             builder: (context, state) => const SafetyListScreen(),
+          ),
+          GoRoute(
+            path: '/settings/help',
+            builder: (context, state) => HelpFaqScreen(
+              initialTopic: state.uri.queryParameters['topic'],
+            ),
           ),
           GoRoute(
             path: '/likes/:entityType/:entityId',
