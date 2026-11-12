@@ -1,13 +1,20 @@
 # Documentation Index
 
+## Technical handbook
+
+Feature-by-feature implementation notes, the data model, the optimizations, and the full architecture diagram (Mermaid frames you can import into Miro):
+
+- [Technical handbook](./technical/README.md)
+
+The product snapshot the handbook was checked against is [context.json](./context.json). Where they disagree, the handbook follows the code.
+
 ## Core Documentation
 
-- [CACHE.md](./CACHE.md) - Redis cache implementation and usage
-- [CLOUDINARY_IMPLEMENTATION.md](./CLOUDINARY_IMPLEMENTATION.md) - Cloudinary media storage
 - [ENVIRONMENT_SETUP.md](./ENVIRONMENT_SETUP.md) - Environment configuration
-- [ISSUE_PRIORITIZATION.md](./ISSUE_PRIORITIZATION.md) - Issue prioritization guidelines
+- [PROJECT_STRUCTURE.md](./PROJECT_STRUCTURE.md) - Repository layout
+- [RACE_CONDITION_ANALYSIS.md](./RACE_CONDITION_ANALYSIS.md) - Earlier notes on races. The handbook is newer where they differ.
 
-**Note:** Architecture overview is in the [main README](../README.md#-architecture-overview).
+**Note:** Architecture overview is in the [main README](../README.md#-architecture-overview) and, in more detail, in the [technical handbook](./technical/00-system-overview.md).
 
 ## Local Docker
 
