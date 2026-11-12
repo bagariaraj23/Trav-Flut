@@ -11,6 +11,7 @@ import 'package:tripthread/utils/app_theme.dart';
 import 'package:tripthread/utils/chat_navigation.dart';
 import 'package:tripthread/widgets/chat/chat_avatar.dart';
 import 'package:tripthread/widgets/chat/conversation_media_strip.dart';
+import 'package:tripthread/widgets/safety/safety_actions.dart';
 import 'package:tripthread/services/api_service.dart';
 
 class GroupSettingsScreen extends StatefulWidget {
@@ -488,25 +489,37 @@ class _GroupSettingsScreenState extends State<GroupSettingsScreen> {
                             ),
                           ),
                         ),
-                      if (isViewerAdmin && !isMe)
+                      if (!isMe)
                         PopupMenuButton<String>(
+                          tooltip: 'Member actions',
                           onSelected: (val) {
                             if (val == 'promote') {
                               _promoteMember(participant);
                             } else if (val == 'remove') {
                               _removeMember(participant);
+                            } else if (val == 'safety') {
+                              showUserSafetySheet(
+                                context,
+                                userId: participant.userId,
+                                name: pDisplayName,
+                              );
                             }
                           },
                           itemBuilder: (context) => [
-                            if (!isParticipantAdmin)
+                            const PopupMenuItem(
+                              value: 'safety',
+                              child: Text('Restrict or block'),
+                            ),
+                            if (isViewerAdmin && !isParticipantAdmin)
                               const PopupMenuItem(
                                 value: 'promote',
                                 child: Text('Promote to Admin'),
                               ),
-                            PopupMenuItem(
-                              value: 'remove',
-                              child: Text(isTripChat ? 'Remove from chat' : 'Remove from Group'),
-                            ),
+                            if (isViewerAdmin)
+                              PopupMenuItem(
+                                value: 'remove',
+                                child: Text(isTripChat ? 'Remove from chat' : 'Remove from Group'),
+                              ),
                           ],
                         ),
                     ],

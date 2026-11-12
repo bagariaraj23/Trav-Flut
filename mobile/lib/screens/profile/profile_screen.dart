@@ -12,6 +12,7 @@ import 'package:tripthread/utils/app_layout.dart';
 import 'package:tripthread/utils/app_theme.dart';
 import 'package:tripthread/utils/cloudinary_utils.dart';
 import 'package:tripthread/utils/user_display_labels.dart';
+import 'package:tripthread/widgets/safety/safety_actions.dart';
 import 'package:go_router/go_router.dart';
 
 class ProfileScreen extends StatefulWidget {
@@ -262,6 +263,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ),
               actions: _buildAppBarActions(
                 context,
+                user,
                 isOwnProfile,
                 userProvider
                     .pendingFollowRequests, // Data comes directly from the provider.
@@ -302,13 +304,27 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   List<Widget> _buildAppBarActions(
     BuildContext context,
+    User user,
     bool isOwnProfile,
     List<dynamic> pendingRequests,
     List<dynamic> pendingTripInvitations,
   ) {
-    // Show actions only on own profile (mail = trip invites, follow requests, settings).
     if (!isOwnProfile) {
-      return [];
+      return [
+        IconButton(
+          tooltip: 'Restrict or block',
+          icon: const Icon(Icons.more_vert),
+          onPressed: () => showUserSafetySheet(
+            context,
+            userId: user.id,
+            name: userPrimaryLabel(
+              id: user.id,
+              username: user.username,
+              name: user.name,
+            ),
+          ),
+        ),
+      ];
     }
 
     final tripInvitesAction = Stack(
