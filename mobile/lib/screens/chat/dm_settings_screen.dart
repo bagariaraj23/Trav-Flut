@@ -10,6 +10,7 @@ import 'package:tripthread/utils/chat_navigation.dart';
 import 'package:tripthread/widgets/chat/chat_avatar.dart';
 import 'package:tripthread/screens/chat/group_settings_screen.dart';
 import 'package:tripthread/widgets/chat/conversation_media_strip.dart';
+import 'package:tripthread/widgets/safety/safety_actions.dart';
 
 class DmSettingsScreen extends StatefulWidget {
   const DmSettingsScreen({super.key, required this.conversationId});
@@ -143,53 +144,24 @@ class _DmSettingsScreenState extends State<DmSettingsScreen> {
                         title: const Text('View profile'),
                         onTap: () => context.push('/profile/${other.userId}'),
                       ),
-                    if (_outgoing == 'BLOCK')
-                      ListTile(
-                        title: const Text('Unblock'),
-                        enabled: !_busy,
-                        onTap: () => _clear(other.userId),
-                      )
-                    else if (_outgoing == 'RESTRICT') ...[
-                      ListTile(
-                        title: const Text('Remove restriction'),
-                        enabled: !_busy,
-                        onTap: () => _clear(other.userId),
-                      ),
-                      ListTile(
-                        title: Text(
-                          'Block',
-                          style: TextStyle(color: Theme.of(context).colorScheme.error),
-                        ),
-                        enabled: !_busy,
-                        onTap: () => _set(other.userId, 'BLOCK'),
-                      ),
-                    ] else if (!theyClosed) ...[
-                      ListTile(
-                        title: const Text('Restrict'),
-                        subtitle: const Text(
-                          'Neither of you can send messages. This chat stays.',
-                        ),
-                        enabled: !_busy,
-                        onTap: () => _set(other.userId, 'RESTRICT'),
-                      ),
-                      ListTile(
-                        title: Text(
-                          'Block',
-                          style: TextStyle(color: Theme.of(context).colorScheme.error),
-                        ),
-                        subtitle: const Text(
-                          'Stops messages, and they cannot follow you or open your profile.',
-                        ),
-                        enabled: !_busy,
-                        onTap: () => _set(other.userId, 'BLOCK'),
-                      ),
-                    ]                     else
+                    if (theyClosed)
                       ListTile(
                         title: Text(
                           "You can't message this person.",
                           style: TextStyle(color: Theme.of(context).colorScheme.error),
                         ),
                       ),
+                    SafetyChoiceList(
+                      choices: safetyChoices(_outgoing),
+                      enabled: !_busy,
+                      onSelected: (choice) {
+                        if (choice.clears) {
+                          _clear(other.userId);
+                        } else {
+                          _set(other.userId, choice.action!);
+                        }
+                      },
+                    ),
                     ConversationMediaStrip(conversationId: widget.conversationId),
                   ],
                 ),

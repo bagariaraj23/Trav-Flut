@@ -11,6 +11,7 @@ import 'package:tripthread/utils/trip_time_format.dart';
 import 'package:tripthread/utils/app_theme.dart';
 import 'package:tripthread/utils/user_display_labels.dart';
 import 'package:tripthread/widgets/chat/chat_avatar.dart';
+import 'package:tripthread/widgets/safety/safety_actions.dart';
 
 class TripParticipantsScreen extends StatefulWidget {
   final String tripId;
@@ -518,6 +519,7 @@ class _TripParticipantsScreenState extends State<TripParticipantsScreen> {
 
   Widget _buildParticipantTile(TripParticipant participant) {
     final currentUser = context.read<AuthProvider>().currentUser;
+    final isMe = currentUser?.id == participant.userId;
     final tripOwnerId = _trip?.userId;
     final isTripOwnerRow =
         tripOwnerId != null && participant.userId == tripOwnerId;
@@ -563,35 +565,62 @@ class _TripParticipantsScreenState extends State<TripParticipantsScreen> {
           ),
         ],
       ),
-      trailing: tripOwnerId == null
-          ? null
-          : isTripOwnerRow
-              ? Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: Theme.of(context).brightness == Brightness.dark
-                        ? AppTheme.darkMuted
-                        : AppTheme.accentSoft,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Text(
-                    'Owner',
-                    style: TextStyle(
-                      color: Theme.of(context).colorScheme.secondary,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (isTripOwnerRow)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: Theme.of(context).brightness == Brightness.dark
+                    ? AppTheme.darkMuted
+                    : AppTheme.accentSoft,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Text(
+                'Owner',
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.secondary,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          if (!isMe)
+            PopupMenuButton<String>(
+              tooltip: 'Participant actions',
+              onSelected: (value) {
+                if (value == 'remove') {
+                  _removeParticipant(participant.userId);
+                } else if (value == 'safety') {
+                  showUserSafetySheet(
+                    context,
+                    userId: participant.userId,
+                    name: userPrimaryLabel(
+                      id: participant.userId,
+                      username: participant.user?.username,
+                      name: participant.user?.name,
+                    ),
+                  );
+                }
+              },
+              itemBuilder: (context) => [
+                const PopupMenuItem(
+                  value: 'safety',
+                  child: Text('Restrict or block'),
+                ),
+                if (viewerIsTripOwner && !isTripOwnerRow)
+                  PopupMenuItem(
+                    value: 'remove',
+                    child: Text(
+                      'Remove',
+                      style: TextStyle(color: Theme.of(context).colorScheme.error),
                     ),
                   ),
-                )
-              : viewerIsTripOwner
-                  ? IconButton(
-                      onPressed: () =>
-                          _removeParticipant(participant.userId),
-                      icon: const Icon(Icons.remove_circle_outline),
-                      color: Theme.of(context).colorScheme.error,
-                    )
-                  : null,
+              ],
+            ),
+        ],
+      ),
     );
   }
 
