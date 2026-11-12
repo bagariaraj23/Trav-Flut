@@ -309,9 +309,10 @@ npm start
 
 ### Core Documentation
 
+- **[Technical handbook](./documentations/technical/README.md)** - Feature-by-feature implementation, data model, optimizations, and the full architecture diagram
 - **[Environment Setup](./documentations/ENVIRONMENT_SETUP.md)** - Complete environment configuration guide
-- **[Cache Implementation](./documentations/CACHE.md)** - Redis caching architecture and usage
-- **[Cloudinary Implementation](./documentations/CLOUDINARY_IMPLEMENTATION.md)** - Media storage setup
+- **[Redis, cache, and queues](./documentations/technical/09-redis-cache-and-queues.md)** - Two-tier cache, locks, and rate limits
+- **[Media and Cloudinary](./documentations/technical/07-media-cloudinary.md)** - Signed upload, confirm, and quota
 
 ### Module Documentation
 
@@ -321,7 +322,8 @@ npm start
 
 ### Additional Documentation
 
-- **[Issue Prioritization](./documentations/ISSUE_PRIORITIZATION.md)** - Development priorities
+- **[Architecture diagram](./documentations/technical/19-architecture-diagram.md)** - Mermaid frames for the whole system, including a Miro import order
+- **[Optimizations](./documentations/technical/18-optimizations.md)** - Indexes, N+1 removal, caching, and pagination
 
 ## 🔑 Key Features
 
@@ -502,7 +504,7 @@ For complete environment setup, see [ENVIRONMENT_SETUP.md](./documentations/ENVI
 - **Batch operations** for efficiency
 - **Graceful degradation** if Redis unavailable
 
-For detailed cache architecture, see [CACHE.md](./documentations/CACHE.md).
+For detailed cache architecture, see [Redis, cache, and queues](./documentations/technical/09-redis-cache-and-queues.md).
 
 ## 📊 Tech Stack Summary
 
@@ -533,6 +535,6 @@ For detailed cache architecture, see [CACHE.md](./documentations/CACHE.md).
 ## 🔗 Links
 
 - [Documentation Index](./documentations/README.md)
+- [Technical handbook](./documentations/technical/README.md)
 - [Environment Setup](./documentations/ENVIRONMENT_SETUP.md)
-- [Cache Documentation](./documentations/CACHE.md)
 - [Scheduler Architecture](./scheduler/SCHEDULER_ARCHITECTURE.md)
