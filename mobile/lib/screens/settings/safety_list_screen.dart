@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:tripthread/models/chat_media_item.dart';
 import 'package:tripthread/services/api_service.dart';
+import 'package:tripthread/screens/settings/help_faq_screen.dart';
 import 'package:tripthread/utils/app_layout.dart';
 
 class SafetyPersonTile extends StatelessWidget {
@@ -113,7 +114,16 @@ class _SafetyListScreenState extends State<SafetyListScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Blocked and restricted')),
+      appBar: AppBar(
+        title: const Text('Blocked and restricted'),
+        actions: [
+          IconButton(
+            tooltip: 'What Restrict and Block do',
+            onPressed: () => showSafetyInfo(context),
+            icon: const Icon(Icons.info_outline),
+          ),
+        ],
+      ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : AppLayout.reading(

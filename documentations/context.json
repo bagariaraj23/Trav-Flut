@@ -2326,7 +2326,8 @@
                 "head": "cursor/media-restrict-block-aa71",
                 "notes": "Current work. Restrict and Block, conversation media, the shared viewer, and final-post photo order. Rebuild the web image. The new migration is applied by migrate deploy.",
                 "keyFeatures": [
-                    "Restrict and Block from a profile, a direct message, a group or trip chat member list, and Manage Participants",
+                    "Restrict and Block from a profile, a direct message, a group or trip chat member list, and Manage Participants, with an info explanation",
+                    "Help and FAQ in Settings for the product rules",
                     "Block also stops follows, profile access, and creator adds",
                     "A trip or group someone else created can include both people",
                     "Shared media viewer and final-post selection order"

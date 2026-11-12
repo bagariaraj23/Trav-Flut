@@ -256,6 +256,13 @@ class SettingsScreen extends StatelessWidget {
                 const Divider(),
                 _buildSettingsTile(
                   context: context,
+                  icon: Icons.help_outline,
+                  title: 'Help and FAQ',
+                  onTap: () => context.push('/settings/help'),
+                ),
+                const Divider(),
+                _buildSettingsTile(
+                  context: context,
                   icon: Icons.lock_outline,
                   title: 'Change Password',
                   onTap: () {

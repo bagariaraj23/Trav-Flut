@@ -223,6 +223,7 @@ mobile/
 │   │   └── settings/
 │   │       ├── settings_screen.dart  # App settings
 │   │       ├── safety_list_screen.dart  # People you blocked or restricted
+│   │       ├── help_faq_screen.dart  # In-app help for the product rules
 │   │       ├── privacy_screen.dart   # Privacy settings
 │   │       ├── notifications_screen.dart
 │   │       └── about_screen.dart     # App info, licenses
