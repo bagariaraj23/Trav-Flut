@@ -17,6 +17,7 @@ class User {
   final Map<String, dynamic>? deleteMeta;
   final bool? profileComplete;
   final bool? hasGoogleLinked;
+  final bool? blockedByViewer;
 
   const User({
     required this.id,
@@ -32,6 +33,7 @@ class User {
     this.deleteMeta,
     this.profileComplete,
     this.hasGoogleLinked,
+    this.blockedByViewer,
   });
 
   factory User.fromJson(Map<String, dynamic> json) => _$UserFromJson(json);
@@ -51,6 +53,7 @@ class User {
     Map<String, dynamic>? deleteMeta,
     bool? profileComplete,
     bool? hasGoogleLinked,
+    bool? blockedByViewer,
   }) {
     return User(
       id: id ?? this.id,
@@ -66,6 +69,7 @@ class User {
       deleteMeta: deleteMeta ?? this.deleteMeta,
       profileComplete: profileComplete ?? this.profileComplete,
       hasGoogleLinked: hasGoogleLinked ?? this.hasGoogleLinked,
+      blockedByViewer: blockedByViewer ?? this.blockedByViewer,
     );
   }
 }

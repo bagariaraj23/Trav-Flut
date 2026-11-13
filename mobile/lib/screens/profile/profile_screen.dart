@@ -70,6 +70,21 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   // The refresh action now uses the same centralized method.
+  Future<void> _unblock() async {
+    final response =
+        await context.read<ApiService>().clearSafety(widget.userId);
+    if (!mounted) return;
+    if (!response.success) {
+      AppFeedback.showError(context, response.error ?? 'Could not unblock');
+      return;
+    }
+    await _refreshProfile();
+    if (!mounted) return;
+    final feed = context.read<FeedProvider>();
+    await feed.loadHomeFeed(refresh: true);
+    await feed.loadDiscoverTrips(refresh: true);
+  }
+
   Future<void> _refreshProfile() async {
     final authProvider = context.read<AuthProvider>();
     if (authProvider.currentUser != null) {
@@ -289,8 +304,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       userProvider
                           .isLoading, // Pass loading state for the button.
                     ),
-                    const SizedBox(height: 24),
-                    _buildTripsSection(context, user, isOwnProfile),
+                    if (user.blockedByViewer != true) ...[
+                      const SizedBox(height: 24),
+                      _buildTripsSection(context, user, isOwnProfile),
+                    ],
                   ],
                 ),
               ),
@@ -538,6 +555,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
           const SizedBox(height: 20),
 
+          if (user.blockedByViewer == true)
+            Text(
+              'You blocked this person. Unblock them to see their trips and posts again.',
+              style: subtitleStyle,
+              textAlign: TextAlign.center,
+            )
+          else
           // Stats Row
           Builder(
             builder: (context) {
@@ -636,7 +660,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
           const SizedBox(height: 20),
 
           // Action Buttons
-          if (isOwnProfile)
+          if (user.blockedByViewer == true)
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton(
+                onPressed: _unblock,
+                child: const Text('Unblock'),
+              ),
+            )
+          else if (isOwnProfile)
             SizedBox(
               width: double.infinity,
               child: OutlinedButton(

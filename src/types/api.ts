@@ -25,6 +25,8 @@ export interface UserProfile {
   profileComplete?: boolean;
   /** True when the user has linked a Google account (for Settings UI). */
   hasGoogleLinked?: boolean;
+  /** The viewer blocked this person. The page is limited until they unblock. */
+  blockedByViewer?: boolean;
 }
 
 export interface UserStats {

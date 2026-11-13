@@ -5,7 +5,10 @@ import { updateProfileSchema } from "@/lib/validation";
 import { ApiResponse, UserProfile, UserStats } from "@/types/api";
 import { handlePrismaUniqueError } from "@/lib/prismaErrors";
 import { PerformanceMonitor } from "@/lib/monitoring";
-import { isProfileUnavailable } from "@/lib/services/userSafety";
+import {
+  isProfileUnavailable,
+  viewerHasBlocked,
+} from "@/lib/services/userSafety";
 import type { Prisma } from "@prisma/client";
 
 // Get user profile
@@ -52,6 +55,27 @@ export async function GET(
         },
         { status: 404 }
       );
+    }
+
+    if (await viewerHasBlocked(currentUserId, userId)) {
+      const limitedProfile: UserProfile = {
+        id: user.id,
+        email: "",
+        username: user.username ?? undefined,
+        name: user.name ?? undefined,
+        avatarUrl: user.avatarUrl ?? undefined,
+        bio: undefined,
+        isPrivate: user.isPrivate,
+        createdAt: user.createdAt.toISOString(),
+        updatedAt: user.updatedAt.toISOString(),
+        blockedByViewer: true,
+      };
+
+      return NextResponse.json<ApiResponse<UserProfile>>({
+        success: true,
+        data: limitedProfile,
+        message: "You blocked this person. Unblock them to see their posts again.",
+      });
     }
 
     // Check privacy settings

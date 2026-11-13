@@ -22,7 +22,7 @@ class SafetyChoice {
 }
 
 const _blockSubtitle =
-    'Stops messages. They cannot follow you, open your profile, or be added to a trip or group you created.';
+    'Stops messages. They cannot follow you, open your profile, or be added to a trip or group you created. Their posts leave your Home feed and Discover until you unblock them.';
 
 /// Actions the signed-in person can take toward [outgoing] (RESTRICT, BLOCK, or none).
 List<SafetyChoice> safetyChoices(String? outgoing) {
