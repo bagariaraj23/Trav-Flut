@@ -340,7 +340,7 @@ npm start
 - Automatic status transitions via scheduler
 - Trip participants and invitations
 - Trip publishing and privacy
-- **Final Posts**: Auto-generated trip summaries with curated media
+- **Final Posts**: Each member gets their own recap, then publishes it themselves
   - Generated automatically when trip ends
   - Editable summary, media selection, and captions
   - Publishing makes final posts visible in home feed
@@ -350,7 +350,7 @@ npm start
 - Text, media, and location entries
 - Place tagging on location entries
 - Media uploads (images/videos) via Cloudinary
-- **Final Posts**: Auto-generated trip summaries with curated media
+- **Final Posts**: Each member gets their own recap, then publishes it themselves
   - Intelligent summary generation from trip entries
   - Media curation (one per day, up to 12 items)
   - Editable before publishing

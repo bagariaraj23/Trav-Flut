@@ -17,7 +17,7 @@ Primary files:
 
 ## Data model
 
-`Conversation.type` is `DM`, `GROUP`, or `TRIP`. A trip room has `tripId` unique, so there is at most one conversation per trip. `name` and `avatarUrl` are group and trip display fields. Trip rooms default the name to the trip title.
+`Conversation.type` is `DM`, `GROUP`, or `TRIP`. A trip room has `tripId` unique, so there is at most one conversation per trip. `name` and `avatarUrl` are group and trip display fields. Trip rooms default the name to the trip title. `createdById` is the user who created the room, set null if that user is deleted. For an existing group it is backfilled as the earliest admin. The creator is who `assertCreatorMayAdd` checks when someone is added.
 
 `ConversationParticipant`: `role` `MEMBER` or `ADMIN`, `joinedAt`, `lastReadAt`, `leftAt`. Unique `(conversationId, userId)`. Indexes `(userId)` and `(userId, lastReadAt)`. Leaving sets `leftAt`. It does not delete the row, so history and "you left" stay coherent. A later trip sync does not clear `leftAt`. Leaving the chat is not leaving the trip, and the reverse is also true: trip leave does not automatically mean the product re-adds you to a chat you left.
 
@@ -41,7 +41,9 @@ Primary files:
 | `POST .../leave` | Set `leftAt` |
 | `PATCH .../read` | Set `lastReadAt` |
 
-DM create looks up an existing room between the two users (`findExistingDM`) and returns it instead of inserting a second pair. Group create makes the caller `ADMIN`.
+DM create looks up an existing room between the two users (`findExistingDM`) and returns it instead of inserting a second pair. Before the room is reused or created, `assertCanDirectMessage` rejects the pair when either person has a Restrict or Block row against the other. The history stays. Group and trip rooms are not closed by Restrict. Group create makes the caller `ADMIN`. Adding a member to a group the caller created also runs `assertCreatorMayAdd`.
+
+`GET /api/chat/conversations/:id/media` pages the room's image, gif, and video attachments. The phone shows six thumbnails, then a wider grid, and opens `media_gallery_viewer.dart` for chat and for trip-thread photos and videos.
 
 Trip create calls `getOrCreateTripConversation`. Adding or removing trip participants updates the room membership with `createMany` rather than one insert per person. A user who already left is not forced back in on that sync.
 

@@ -1,6 +1,6 @@
 # Profiles and privacy
 
-One `User` row is both the login identity and the public profile. Privacy is a single boolean, `isPrivate`, default `false`. There is no separate profile table and no block list.
+One `User` row is both the login identity and the public profile. Privacy is a single boolean, `isPrivate`, default `false`. There is no separate profile table. Block is not a second privacy flag. It is a `UserSafetyRelation` row. If the profile owner has blocked the viewer, `isProfileUnavailable` makes `GET /users/:id`, stats, trips, and the follower lists respond as if the profile cannot be opened. Restrict does not hide the profile. See [Follow](./04-follow-system.md).
 
 Primary files:
 

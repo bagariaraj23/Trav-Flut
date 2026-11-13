@@ -21,7 +21,7 @@ erDiagram
   User ||--o{ Notification : receives
   Trip ||--o{ TripParticipant : has
   Trip ||--o{ TripThreadEntry : thread
-  Trip ||--o| TripFinalPost : finalPost
+  Trip ||--o{ TripFinalPost : finalPosts
   Trip ||--o{ TripExpense : ledger
   Trip ||--o{ TripSettlement : settlements
   Trip ||--o| Conversation : room
@@ -111,9 +111,13 @@ Indexes: `(tripId, createdAt DESC, id DESC)`, `(authorId, createdAt DESC)`.
 
 ### TripFinalPost (`trip_final_posts`)
 
-`tripId` unique, `summaryText`, `curatedMedia` string array, `caption`, `coverMediaUrl`, `generationStatus` default `DRAFT`, `isPublished` default false, `publishedAt`, counters `likeCount`, `commentCount`, `shareCount`.
+`tripId`, `userId`, `summaryText`, `curatedMedia` string array, `caption`, `coverMediaUrl`, `generationStatus` default `DRAFT`, `isPublished` default false, `publishedAt`, counters `likeCount`, `commentCount`, `shareCount`.
 
-Index `(isPublished, createdAt DESC, id DESC)`.
+Unique `(tripId, userId)`. Indexes `tripId`, `(userId, isPublished, publishedAt)`, and `(isPublished, createdAt DESC, id DESC)`.
+
+### UserSafetyRelation (`user_safety_relations`)
+
+`actorId`, `targetId`, `action` `RESTRICT | BLOCK`, `createdAt`, `updatedAt`. Unique `(actorId, targetId)`. Indexes `(actorId, action, createdAt DESC, id DESC)` and `(targetId, action)`. Restrict and Block are not follow rows.
 
 ## Places and media
 
@@ -175,7 +179,7 @@ Enums: `ExpenseCategory`, `ExpenseSplitMethod` (`EQUAL`, `EXACT`, `PERCENT`, `SH
 
 ### Conversation (`conversations`)
 
-`type` `DM | GROUP | TRIP`, `tripId` unique nullable, `name`, `avatarUrl`, timestamps. Indexes `tripId`, `type`, `updatedAt DESC`.
+`type` `DM | GROUP | TRIP`, `tripId` unique nullable, `name`, `avatarUrl`, `createdById` nullable, timestamps. Indexes `tripId`, `type`, `updatedAt DESC`. `createdBy` uses `onDelete: SetNull`.
 
 ### ConversationParticipant (`conversation_participants`)
 
@@ -236,3 +240,5 @@ Hot-path indexes and the spatial indexes are explained in [Optimizations](./18-o
 | `20261004153000` / `20261004180000` | Hot-path indexes |
 | `20261014150000` | Open-ended schedule, `scheduleTimezone` |
 | `20261031120000` | Remove check-in entry type |
+| `20261111120000_personalized_final_posts` | One final post per `(tripId, userId)`. Old rows belong to the trip owner |
+| `20261111120000_user_safety_and_conversation_creator` | `UserSafetyRelation`, and `conversations.createdById` |

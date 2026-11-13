@@ -143,7 +143,7 @@ The API is one deployable, split by folder rather than by network service.
 
 **Keyset pagination.** Home feed, thread entries, notifications, likes, comments, and chat messages page with a cursor instead of a growing `OFFSET`. The cursor is base64url JSON of the sort key (usually `createdAt` plus `id`).
 
-**Privacy.** `User.isPrivate` changes follow (immediate vs request), profile visibility, trip visibility, and who can be invited. There is no block or mute table.
+**Privacy.** `User.isPrivate` changes follow (immediate vs request), profile visibility, trip visibility, and who can be invited. `UserSafetyRelation` is separate: Restrict stops direct messages both ways, and Block also hides the actor's profile from the target and stops that follow. See [Follow](./04-follow-system.md).
 
 **Membership.** The trip owner is `Trip.userId`. They are a billable member for expenses and tags, and they are prepended as a synthetic `owner` row on `GET /trips/:id/participants`. They are not inserted into `trip_participants` at create time.
 
@@ -154,7 +154,8 @@ The API is one deployable, split by folder rather than by network service.
 These are in the code today. They are documented so a reader does not "fix" the docs back to an intended design that was never wired.
 
 1. The Flutter reset call sends `{ token, newPassword }`. The server schema also requires `currentPassword`. The web reset page sends the current password. See [Password reset](./02-password-reset.md).
-2. The scheduler writes a final post with the schema default `generationStatus = DRAFT`. The API finalizer writes `READY`. See [Thread and final posts](./06-thread-and-final-posts.md).
-3. `PasswordReset.otpCodeHash` and `OAuthProvider.APPLE` exist on the schema and are unused.
-4. `recordSecurityEvent` is called with password-reset type strings that are not in the `SecurityEventType` enum. The insert fails and is swallowed.
-5. Chat cannot fan out across API replicas until a real pub/sub transport exists. Upstash REST cannot `SUBSCRIBE`.
+2. The scheduler writes one final post per member with the schema default `generationStatus = DRAFT`. The API finalizer writes `READY`. See [Thread and final posts](./06-thread-and-final-posts.md).
+3. A block hides the actor's profile from the target and removes that follow. The home feed still includes a public author's published post. See [Feed](./11-feed-discover-posts.md).
+4. `PasswordReset.otpCodeHash` and `OAuthProvider.APPLE` exist on the schema and are unused.
+5. `recordSecurityEvent` is called with password-reset type strings that are not in the `SecurityEventType` enum. The insert fails and is swallowed.
+6. Chat cannot fan out across API replicas until a real pub/sub transport exists. Upstash REST cannot `SUBSCRIBE`.
