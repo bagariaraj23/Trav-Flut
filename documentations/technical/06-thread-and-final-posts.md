@@ -74,38 +74,38 @@ For one entry it deletes tags, likes, comments, shares, and notifications that p
 
 `TripFinalPost` is unique on `(tripId, userId)`. Each member has their own draft. Migration `20261111120000_personalized_final_posts` assigns older rows to the trip owner, drops the old `tripId` unique index, and adds `(userId, isPublished, publishedAt)` plus `tripId`.
 
-Ending a trip drafts a post for the owner and every current participant (`generateFinalPostsForMembers`). The first draft uses that person's notes, photos they uploaded or posted, and photos on entries that tag them. After that, the editor can add any photo from the trip. The picker numbers the selection and stops at 10 (`FinalPostProvider.maxPhotos`). The home feed and the post screen show `post.user`, the author, and a published post follows that author's privacy. A block in either direction hides that post from the other person's feed and from `canViewEntity`. A draft stays visible only to its author (`canViewEntity` in `src/lib/auth/permissions.ts`).
+Ending a trip drafts a post for the owner and every current participant (`generateFinalPostsForMembers`). The first draft uses that person's notes, photos they uploaded or posted, and photos on entries that tag them. After that, the editor can add any photo from the trip. The picker numbers the selection and stops at 12 (`FinalPostProvider.maxPhotos`). The home feed and the post screen show `post.user`, the author, and a published post follows that author's privacy. A block in either direction hides that post from the other person's feed and from `canViewEntity`. A draft stays visible only to its author (`canViewEntity` in `src/lib/auth/permissions.ts`).
 
 | Column | Role |
 | --- | --- |
 | `summaryText` | Generated narrative. Publish requires at least 50 characters |
-| `curatedMedia` | Up to 10 image URLs, chosen with a per-day cap so one day does not fill the post |
+| `curatedMedia` | Up to 12 image URLs, chosen with a per-day cap so one day does not fill the post |
 | `caption` | Editable. Generation adds hashtags |
 | `coverMediaUrl` | Optional cover |
 | `generationStatus` | `DRAFT`, `GENERATING`, `READY`, `PUBLISHED`, `FAILED` |
 | `isPublished`, `publishedAt` | Feed eligibility |
 | `likeCount`, `commentCount`, `shareCount` | Denormalized |
 
-`GENERATING` and `FAILED` are on the enum and on the Flutter model. Neither the API nor the scheduler assigns them. A new personal draft is `READY` and `isPublished` stays false until that person publishes. `DRAFT` remains the column default for an old untouched row; the next generate or scheduler pass replaces that row with the same `READY` draft. `PUBLISHED` means the author published it.
+`GENERATING`, `READY`, and `FAILED` are on the enum and on the Flutter model. Neither the API nor the scheduler assigns them. A new personal draft is `DRAFT` and `isPublished` stays false until that person publishes. Migration `20261113180000_relabel_ready_final_posts_as_draft` rewrites stored `READY` rows to `DRAFT`. `PUBLISHED` means the author published it.
 
 ### When a row is created
 
 | Event | Writer | Status |
 | --- | --- | --- |
-| Scheduler end batch | `buildMemberFinalDraft` in `scheduler/src/memberFinalDraft.ts`, called from `scheduler/src/tripStatus.ts`, one row per current member | `READY`, unpublished. Same summary and up to 10 personal photos as the API |
-| Read-path sync that ends a trip | `TripFinalizerService.generateFinalPostsForMembers` | `READY`, unpublished, same builder |
-| `POST /trips/:id/end` from `ONGOING` | same service, one post per member | `READY`, unpublished, same builder |
+| Scheduler end batch | `buildMemberFinalDraft` in `scheduler/src/memberFinalDraft.ts`, called from `scheduler/src/tripStatus.ts`, one row per current member | `DRAFT`, unpublished. Same summary and up to 12 personal photos as the API |
+| Read-path sync that ends a trip | `TripFinalizerService.generateFinalPostsForMembers` | `DRAFT`, unpublished, same builder |
+| `POST /trips/:id/end` from `ONGOING` | same service, one post per member | `DRAFT`, unpublished, same builder |
 | `POST /trips/:id/end` from `UPCOMING` | none | No row. Ending before the trip starts does not create a draft |
-| `POST /trips/:id/final-post/generate` | that member, trip must be `ENDED` | `READY`. Returns a saved row unchanged. Replaces an unpublished `DRAFT` |
+| `POST /trips/:id/final-post/generate` | that member, trip must be `ENDED` | `DRAFT` when the row is missing. Returns an existing row unchanged |
 
-`generateFinalPost` does not overwrite a draft the person has saved, and it does not unpublish a post. An unpublished row still at `DRAFT` is the old short scheduler draft, and generating replaces it with the personal `READY` draft.
+`generateFinalPost` does not overwrite a draft the person has saved, and it does not unpublish a post. The scheduler also skips a member who already has a row.
 
 ### Edit and publish
 
 | Route | Rule |
 | --- | --- |
 | `GET /trips/:id/final-post` | The caller's own post. A member, or someone who already has a post on this trip |
-| `PUT /trips/:id/final-post` | The author edits their draft. If it is already `PUBLISHED`, the status stays `PUBLISHED` |
+| `PUT /trips/:id/final-post` | The author edits their draft. An unpublished edit stays `DRAFT`. If it is already `PUBLISHED`, the status stays `PUBLISHED` |
 | `DELETE /trips/:id/final-post` | The author. Removes their post and its engagement rows |
 | `POST /trips/:id/publish` | The author. Summary at least 50 characters, and at least one curated media item or a cover URL. Sets `isPublished`, `publishedAt`, `generationStatus = PUBLISHED` |
 
@@ -115,7 +115,7 @@ Publishing the post is what puts it on the home feed. Ending the trip does not p
 
 ### Mobile
 
-`FinalPostProvider` loads the signed-in member's draft, calls generate if it is missing, autosaves with a debounce, and publishes via `POST /trips/:id/publish`. `toggleMedia` appends in selection order and refuses an 11th photo. The screen is `final_post_edit_screen.dart`. `PhotoOrderBadge` in `media_seek.dart` draws the number.
+`FinalPostProvider` loads the signed-in member's draft, calls generate if it is missing, autosaves with a debounce, and publishes via `POST /trips/:id/publish`. `toggleMedia` appends in selection order and refuses a 13th photo. The screen is `final_post_edit_screen.dart`. `PhotoOrderBadge` in `media_seek.dart` draws the number.
 
 ## Engagement on both kinds of post
 
