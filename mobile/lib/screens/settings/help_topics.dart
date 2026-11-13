@@ -220,12 +220,12 @@ const helpTopics = <HelpTopic>[
       HelpItem(
         question: 'When is a final post created?',
         answer:
-            'Each trip has one final post. It is created when an ongoing trip ends, whether you end it or the scheduled end arrives. Ending an upcoming trip does not create one. The hourly ending leaves a draft. Ending the trip yourself marks it ready to edit. Generating it again does not overwrite your edits.',
+            'Each person on the trip gets their own final post. It is created when an ongoing trip ends, whether you end it or the scheduled end arrives. Ending an upcoming trip does not create one. Either ending leaves an unpublished draft with that person\'s photos. Generating it again does not overwrite edits.',
       ),
       HelpItem(
         question: 'How do I publish it?',
         answer:
-            'Edit the summary, caption, cover, and up to 10 photos. The picker shows the order you chose. Publish needs a summary of at least 50 characters and at least one photo or a cover. Ending the trip does not publish the post. Only a published post appears on Home and on its link. You can still edit it after publishing, and you can delete it.',
+            'Edit the summary, caption, cover, and up to 12 photos. The picker shows the order you chose. Publish needs a summary of at least 50 characters and at least one photo or a cover. Ending the trip does not publish the post. Only a published post appears on Home and on its link. You can still edit it after publishing, and you can delete it.',
       ),
     ],
   ),
