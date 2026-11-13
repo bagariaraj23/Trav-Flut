@@ -155,5 +155,5 @@ What was considered and not cached: the home feed itself. The feed is per user (
 - `GET /users` search has no rate preset and no `deletedAt` filter. It is a `contains` scan on name and username, which will want a trigram index if search traffic grows. There is no `pg_trgm` index today.
 - User stats (`tripCount`, `followerCount`, `followingCount`) are live counts, not columns. They are one screen, not a feed, so three counts are acceptable.
 - Chat fan-out is in-process. That is the opposite of a scale optimization. It is documented in [Chat](./14-chat.md) so nobody adds a replica and expects messages to arrive.
-- The scheduler's final-post insert duplicates the finalizer and writes `DRAFT` instead of `READY`. That is a consistency gap, not a performance win. The duplication exists because the scheduler package cannot import `src/lib/services/tripFinalizer.ts`.
+- The scheduler still cannot import `src/lib/services/tripFinalizer.ts`. The personal draft text and photo choice live in `scheduler/src/memberFinalDraft.ts`, and the API imports that file, so the two endings stay the same without a second copy of the summary.
 - `invalidateEngagementCache` does not currently remove a read. Leaving it is cheap. Building a reader for those keys would be a second source of truth next to the columns, which is the bug the columns were meant to end.

@@ -42,8 +42,8 @@ Open-ended trips (`endDate` null) are never auto-ended. The scheduler's end batc
 | Trigger | Where | Final post |
 | --- | --- | --- |
 | Create | `POST /trips` | No |
-| Read catch-up | `syncViewerTripSchedule` on `GET /trips` and `GET /trips/status`. `syncTripById` on `GET /trips/:id` | Yes, via `TripFinalizerService`, status `READY`, when a trip is transitioned to `ENDED` |
-| Hourly cron | `scheduler/src/tripStatus.ts` | Yes, inline insert, `generationStatus` left at schema default `DRAFT` |
+| Read catch-up | `syncViewerTripSchedule` on `GET /trips` and `GET /trips/status`. `syncTripById` on `GET /trips/:id` | Yes, one unpublished `READY` draft per member, when a trip is transitioned to `ENDED` |
+| Hourly cron | `scheduler/src/tripStatus.ts` | Yes, the same unpublished `READY` draft per member |
 | Owner ends | `POST /trips/:id/end` | Only if the trip was `ONGOING`. A `UPCOMING` end does not generate a post |
 | Owner changes dates | `PATCH /trips/:id/dates` | No. Extending an `ENDED` trip that already has a final post is rejected |
 | Replace on create | `updateMany` of conflicting trips to `ENDED` | No |

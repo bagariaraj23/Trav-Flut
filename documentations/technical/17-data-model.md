@@ -111,7 +111,7 @@ Indexes: `(tripId, createdAt DESC, id DESC)`, `(authorId, createdAt DESC)`.
 
 ### TripFinalPost (`trip_final_posts`)
 
-`tripId`, `userId`, `summaryText`, `curatedMedia` string array, `caption`, `coverMediaUrl`, `generationStatus` default `DRAFT`, `isPublished` default false, `publishedAt`, counters `likeCount`, `commentCount`, `shareCount`.
+`tripId`, `userId`, `summaryText`, `curatedMedia` string array, `caption`, `coverMediaUrl`, `generationStatus` default `DRAFT`, `isPublished` default false, `publishedAt`, counters `likeCount`, `commentCount`, `shareCount`. The API and the scheduler set `generationStatus` to `READY` when they create the personal draft. `isPublished` stays false until that person publishes.
 
 Unique `(tripId, userId)`. Indexes `tripId`, `(userId, isPublished, publishedAt)`, and `(isPublished, createdAt DESC, id DESC)`.
 
