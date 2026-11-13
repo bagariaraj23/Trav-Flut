@@ -33,9 +33,16 @@ function createPrismaMock(options: {
       findMany: vi.fn(({ where }: any) => {
         if (!existing.has(where.tripId)) return Promise.resolve([]);
         const ids: string[] = where.userId?.in ?? [];
-        return Promise.resolve(ids.map((userId) => ({ userId })));
+        return Promise.resolve(
+          ids.map((userId) => ({
+            userId,
+            generationStatus: "READY",
+            isPublished: false,
+          }))
+        );
       }),
       create: vi.fn(({ data }: any) => Promise.resolve({ id: `post-${data.tripId}`, ...data })),
+      update: vi.fn(({ data }: any) => Promise.resolve(data)),
     },
     trip: {
       findUnique: vi.fn(({ where }: any) => {
@@ -46,15 +53,23 @@ function createPrismaMock(options: {
           ...trip,
           userId,
           participants: [],
+          media: [],
+          mood: "ADVENTURE",
           threadEntries: [
             {
               id: `media-entry-${trip.id}`,
               authorId: userId,
               type: "MEDIA",
               mediaId: `media-${trip.id}`,
+              createdAt: new Date("2026-01-01T10:00:00.000Z"),
+              contentText: null,
+              locationName: null,
+              place: null,
+              taggedUsers: [],
               media: {
                 url: `https://cdn.example.com/${trip.id}.jpg`,
                 type: "IMAGE",
+                processingStatus: "COMPLETED",
                 uploadedById: userId,
               },
             },
@@ -141,8 +156,10 @@ describe("updateTripStatuses behavior", () => {
         data: expect.objectContaining({
           tripId: "trip-ended",
           userId: "owner-1",
-          summaryText: expect.stringContaining("Tokyo, Kyoto"),
+          summaryText: expect.stringContaining("Japan"),
           curatedMedia: ["https://cdn.example.com/trip-ended.jpg"],
+          generationStatus: "READY",
+          coverMediaUrl: "https://cdn.example.com/trip-ended.jpg",
         }),
       })
     );
@@ -176,7 +193,7 @@ describe("updateTripStatuses behavior", () => {
 
     expect(tx.tripFinalPost.findMany).toHaveBeenCalledWith({
       where: { tripId: "trip-existing", userId: { in: ["owner-1"] } },
-      select: { userId: true },
+      select: { userId: true, generationStatus: true, isPublished: true },
     });
     expect(tx.tripFinalPost.create).not.toHaveBeenCalled();
     expect(tx.trip.update).toHaveBeenCalledWith({

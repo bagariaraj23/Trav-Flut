@@ -1,8 +1,11 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { NextRequest } from "next/server";
 import { randomUUID } from "crypto";
-import { MediaType, ThreadEntryType, TripStatus } from "@prisma/client";
+import { GenerationStatus, MediaType, ThreadEntryType, TripStatus } from "@prisma/client";
 import { prisma } from "../../src/lib/prisma";
+import { TripFinalizerService } from "../../src/lib/services/tripFinalizer";
+import { syncTripById } from "../../src/lib/tripSchedule";
+import { updateTripStatuses } from "../../scheduler/src/tripStatus";
 import { cleanDb, createTrip, createUser, getAuthToken } from "../testUtils";
 import { POST as endTripRoute } from "../../src/app/api/trips/[id]/end/route";
 import {
@@ -262,5 +265,174 @@ describe("Personalized final posts", () => {
     expect(editedAgain.success).toBe(true);
     expect(editedAgain.data.caption).toBe("Updated after publishing");
     expect(editedAgain.data.isPublished).toBe(true);
+  });
+
+  it("drafts every member the same way when the scheduler ends the trip", async () => {
+    const owner = await createUser({ email: "sched-owner@test.com", name: "Owner" });
+    const member = await createUser({ email: "sched-member@test.com", name: "Member" });
+    const trip = await createTrip({
+      userId: owner.id,
+      title: "Shared coast",
+      status: TripStatus.ONGOING,
+    });
+    await prisma.trip.update({
+      where: { id: trip.id },
+      data: {
+        startDate: new Date("2026-01-01T15:00:00.000Z"),
+        endDate: new Date("2026-01-03T15:00:00.000Z"),
+        scheduleTimezone: "UTC",
+      },
+    });
+    await prisma.tripParticipant.create({
+      data: { tripId: trip.id, userId: member.id },
+    });
+    const ownerPhoto = "https://cdn.example.com/sched-owner.jpg";
+    const memberPhoto = "https://cdn.example.com/sched-member.jpg";
+    const ownerMedia = await prisma.media.create({
+      data: {
+        url: ownerPhoto,
+        publicId: `sched-owner-${randomUUID()}`,
+        type: MediaType.IMAGE,
+        uploadedById: owner.id,
+        tripId: trip.id,
+      },
+    });
+    const memberMedia = await prisma.media.create({
+      data: {
+        url: memberPhoto,
+        publicId: `sched-member-${randomUUID()}`,
+        type: MediaType.IMAGE,
+        uploadedById: member.id,
+        tripId: trip.id,
+      },
+    });
+    await prisma.tripThreadEntry.create({
+      data: {
+        tripId: trip.id,
+        authorId: owner.id,
+        type: ThreadEntryType.MEDIA,
+        mediaId: ownerMedia.id,
+        contentText: "The owner kept a long note about the rocks and the tide.",
+      },
+    });
+    await prisma.tripThreadEntry.create({
+      data: {
+        tripId: trip.id,
+        authorId: member.id,
+        type: ThreadEntryType.MEDIA,
+        mediaId: memberMedia.id,
+        contentText: "The member kept a different note about the evening light.",
+      },
+    });
+
+    await updateTripStatuses(prisma as never, new Date("2026-02-01T00:00:00.000Z"));
+
+    const posts = await prisma.tripFinalPost.findMany({
+      where: { tripId: trip.id },
+    });
+    expect(posts.map((post) => post.userId).sort()).toEqual(
+      [owner.id, member.id].sort()
+    );
+    const ownerPost = posts.find((post) => post.userId === owner.id)!;
+    const memberPost = posts.find((post) => post.userId === member.id)!;
+    expect(ownerPost.isPublished).toBe(false);
+    expect(memberPost.isPublished).toBe(false);
+    expect(ownerPost.generationStatus).toBe(GenerationStatus.READY);
+    expect(memberPost.generationStatus).toBe(GenerationStatus.READY);
+    expect(ownerPost.curatedMedia).toEqual([ownerPhoto]);
+    expect(memberPost.curatedMedia).toEqual([memberPhoto]);
+    expect(ownerPost.summaryText).toContain("Shared coast");
+    expect(memberPost.summaryText.toLowerCase()).not.toContain("rocks and the tide");
+
+    const again = await TripFinalizerService.generateFinalPost(trip.id, member.id);
+    expect(again.id).toBe(memberPost.id);
+    expect(again.summaryText).toBe(memberPost.summaryText);
+    expect(again.isPublished).toBe(false);
+  });
+
+  it("replaces an untouched short draft and leaves a saved draft alone", async () => {
+    const owner = await createUser({ email: "draft-owner@test.com", name: "Owner" });
+    const trip = await createTrip({
+      userId: owner.id,
+      title: "Shared coast",
+      status: TripStatus.ENDED,
+    });
+    const photo = "https://cdn.example.com/ready-photo.jpg";
+    const media = await prisma.media.create({
+      data: {
+        url: photo,
+        publicId: `ready-${randomUUID()}`,
+        type: MediaType.IMAGE,
+        uploadedById: owner.id,
+        tripId: trip.id,
+      },
+    });
+    await prisma.tripThreadEntry.create({
+      data: {
+        tripId: trip.id,
+        authorId: owner.id,
+        type: ThreadEntryType.MEDIA,
+        mediaId: media.id,
+      },
+    });
+    await prisma.tripFinalPost.create({
+      data: {
+        tripId: trip.id,
+        userId: owner.id,
+        summaryText: "Your trip to Shared coast! Add the photos you took before you publish.",
+        curatedMedia: [],
+        generationStatus: GenerationStatus.DRAFT,
+      },
+    });
+
+    const upgraded = await TripFinalizerService.generateFinalPost(trip.id, owner.id);
+    expect(upgraded.generationStatus).toBe(GenerationStatus.READY);
+    expect(upgraded.isPublished).toBe(false);
+    expect(upgraded.curatedMedia).toEqual([photo]);
+    expect(upgraded.summaryText).toContain("Shared coast");
+
+    const saved = "This is my own recap and it must stay exactly as I saved it today.";
+    await TripFinalizerService.updateFinalPost(trip.id, owner.id, {
+      summaryText: saved,
+    });
+    const kept = await TripFinalizerService.generateFinalPost(trip.id, owner.id);
+    expect(kept.summaryText).toBe(saved);
+    expect(kept.generationStatus).toBe(GenerationStatus.READY);
+  });
+
+  it("drafts every member when a read catches an ended trip", async () => {
+    const owner = await createUser({ email: "sync-owner@test.com", name: "Owner" });
+    const member = await createUser({ email: "sync-member@test.com", name: "Member" });
+    const trip = await createTrip({
+      userId: owner.id,
+      title: "Late return",
+      status: TripStatus.ONGOING,
+    });
+    await prisma.trip.update({
+      where: { id: trip.id },
+      data: {
+        startDate: new Date("2026-01-01T15:00:00.000Z"),
+        endDate: new Date("2026-01-03T15:00:00.000Z"),
+        scheduleTimezone: "UTC",
+      },
+    });
+    await prisma.tripParticipant.create({
+      data: { tripId: trip.id, userId: member.id },
+    });
+
+    await syncTripById(trip.id);
+
+    const posts = await prisma.tripFinalPost.findMany({
+      where: { tripId: trip.id },
+    });
+    expect(posts.map((post) => post.userId).sort()).toEqual(
+      [owner.id, member.id].sort()
+    );
+    expect(posts.every((post) => post.generationStatus === GenerationStatus.READY)).toBe(
+      true
+    );
+    expect(posts.every((post) => post.isPublished === false)).toBe(true);
+    const stored = await prisma.trip.findUnique({ where: { id: trip.id } });
+    expect(stored?.status).toBe(TripStatus.ENDED);
   });
 });

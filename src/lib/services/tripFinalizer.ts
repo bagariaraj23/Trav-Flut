@@ -12,11 +12,14 @@ import {
   NotFoundError,
   ValidationError,
 } from "@/lib/errors";
+import {
+  buildMemberFinalDraft,
+  MAX_CURATED_MEDIA,
+  MIN_SUMMARY_LENGTH,
+  type DraftTrip,
+} from "../../../scheduler/src/memberFinalDraft";
 
-const MS_IN_DAY = 1000 * 60 * 60 * 24;
-const MIN_SUMMARY_LENGTH = 50;
 const MIN_MEDIA_COUNT = 1;
-const MAX_MEDIA_COUNT = 10;
 
 const finalPostSelect = {
   id: true,
@@ -59,10 +62,45 @@ export class TripFinalizerService {
       where: { tripId_userId: { tripId, userId } },
       select: finalPostSelect,
     });
-    if (existing) {
+    // A saved or published post stays as the member left it.
+    // An untouched scheduler DRAFT is replaced by this same personal draft.
+    if (
+      existing &&
+      (existing.isPublished || existing.generationStatus !== GenerationStatus.DRAFT)
+    ) {
       return existing;
     }
 
+    const draft = await this.composeDraft(db, tripId, userId);
+    if (existing) {
+      return db.tripFinalPost.update({
+        where: { tripId_userId: { tripId, userId } },
+        data: {
+          summaryText: draft.summaryText,
+          curatedMedia: draft.curatedMedia,
+          caption: draft.caption,
+          coverMediaUrl: draft.coverMediaUrl,
+          generationStatus: GenerationStatus.READY,
+        },
+        select: finalPostSelect,
+      });
+    }
+
+    return db.tripFinalPost.create({
+      data: {
+        tripId,
+        userId,
+        summaryText: draft.summaryText,
+        curatedMedia: draft.curatedMedia,
+        caption: draft.caption,
+        coverMediaUrl: draft.coverMediaUrl,
+        generationStatus: GenerationStatus.READY,
+      },
+      select: finalPostSelect,
+    });
+  }
+
+  private static async composeDraft(db: DbClient, tripId: string, userId: string) {
     const trip = await db.trip.findUnique({
       where: { id: tripId },
       include: {
@@ -82,24 +120,7 @@ export class TripFinalizerService {
       throw new NotFoundError("Trip not found");
     }
 
-    const typedTrip = trip as TripForFinalizer;
-    const summaryText = buildSummary(typedTrip, userId);
-    const curatedMedia = selectCuratedMedia(typedTrip, userId);
-    const coverMediaUrl = curatedMedia[0] ?? null;
-    const caption = generateDefaultCaption(typedTrip, userId);
-
-    return db.tripFinalPost.create({
-      data: {
-        tripId,
-        userId,
-        summaryText,
-        curatedMedia,
-        caption,
-        coverMediaUrl,
-        generationStatus: GenerationStatus.READY,
-      },
-      select: finalPostSelect,
-    });
+    return buildMemberFinalDraft(toDraftTrip(trip as TripForFinalizer), userId);
   }
 
   /** Draft a personal post for the owner and every current participant. */
@@ -179,8 +200,8 @@ export class TripFinalizerService {
 
       if (Array.isArray(updates.curatedMedia)) {
         data.curatedMedia = sanitizeMedia(updates.curatedMedia);
-        if (data.curatedMedia.length > MAX_MEDIA_COUNT) {
-          data.curatedMedia = data.curatedMedia.slice(0, MAX_MEDIA_COUNT);
+        if (data.curatedMedia.length > MAX_CURATED_MEDIA) {
+          data.curatedMedia = data.curatedMedia.slice(0, MAX_CURATED_MEDIA);
         }
       }
 
@@ -369,181 +390,36 @@ async function deleteEngagementForTripFinalPost(
   });
 }
 
-function ownEntries(trip: TripForFinalizer, userId: string) {
-  return trip.threadEntries.filter((entry) => entry.authorId === userId);
-}
-
-function buildSummary(trip: TripForFinalizer, userId: string) {
-  const durationDays = Math.max(
-    1,
-    Math.round(
-      ((trip.endDate ?? trip.startDate).getTime() - trip.startDate.getTime()) /
-        MS_IN_DAY
-    ) + 1
-  );
-  const destinations = trip.destinations ?? [];
-  const entries = ownEntries(trip, userId);
-  const locationSet = new Set<string>();
-
-  entries.forEach((entry) => {
-    if (entry.place?.name) {
-      locationSet.add(entry.place.name);
-    } else if (entry.locationName) {
-      locationSet.add(entry.locationName);
-    }
-  });
-
-  const highlightedLocations = Array.from(locationSet).slice(0, 3);
-  const textEntries = entries
-    .filter((entry) => entry.contentText)
-    .sort(
-      (a, b) =>
-        (b.contentText?.length ?? 0) - (a.contentText?.length ?? 0)
-    )
-    .slice(0, 2)
-    .map((entry) => `“${truncate(entry.contentText!, 160)}”`);
-
-  const tripTitle = trip.title?.trim() ?? "";
-  const destinationLabel =
-    destinations.length > 1
-      ? `${destinations.length} places`
-      : destinations.length === 1
-        ? destinations[0]!
-        : tripTitle || "your trip";
-
-  const opening =
-    destinations.length === 0
-      ? `${tripTitle || "Your trip"} was your ${durationDays}-day trip.`
-      : `${tripTitle || destinationLabel} was your ${durationDays}-day trip through ${destinationLabel}.`;
-
-  const summaryParts = [
-    opening,
-    highlightedLocations.length
-      ? `Your highlights included ${highlightedLocations.join(", ")}.`
-      : "This recap uses the notes and photos you added yourself.",
-    textEntries.join(" "),
-  ].filter(Boolean);
-
-  let summary = summaryParts.join(" ").trim();
-  if (summary.length < MIN_SUMMARY_LENGTH) {
-    summary = `${summary} Edit it, keep your own photos, and publish when it feels like yours.`;
-  }
-  return summary.trim();
-}
-
-function selectCuratedMedia(trip: TripForFinalizer, userId: string) {
-  const own = mediaFromEntries(
-    trip.threadEntries.filter((entry) => postedOrUploadedBy(entry, userId))
-  );
-  const tagged = mediaFromEntries(
-    trip.threadEntries.filter(
-      (entry) =>
-        !postedOrUploadedBy(entry, userId) && entryIncludesUser(entry, userId)
-    )
-  );
-
-  const selected = takePhotos(own);
-  for (const url of takePhotos(tagged)) {
-    if (selected.length >= MAX_MEDIA_COUNT) break;
-    if (!selected.includes(url)) selected.push(url);
-  }
-
-  for (const media of trip.media) {
-    if (selected.length >= MAX_MEDIA_COUNT) break;
-    if (media.uploadedById !== userId) continue;
-    const url = usableImageUrl(media);
-    if (url && !selected.includes(url)) selected.push(url);
-  }
-
-  return selected;
-}
-
-function postedOrUploadedBy(entry: ThreadEntryWithExtras, userId: string) {
-  return entry.authorId === userId || entry.media?.uploadedById === userId;
-}
-
-function entryIncludesUser(entry: ThreadEntryWithExtras, userId: string) {
-  return (entry.taggedUsers ?? []).some((tag) => tag.taggedUserId === userId);
-}
-
-function mediaFromEntries(entries: ThreadEntryWithExtras[]) {
-  return entries.flatMap((entry) => {
-    const url = usableImageUrl(entry.media);
-    return url ? [{ url, createdAt: entry.createdAt }] : [];
-  });
-}
-
-function takePhotos(items: { url: string; createdAt: Date }[]) {
-  const selected: string[] = [];
-  const perDay = new Set<string>();
-  const extras: string[] = [];
-  const sorted = [...items].sort(
-    (a, b) => a.createdAt.getTime() - b.createdAt.getTime()
-  );
-
-  for (const item of sorted) {
-    const dayKey = item.createdAt.toISOString().substring(0, 10);
-    if (!perDay.has(dayKey) && selected.length < MAX_MEDIA_COUNT) {
-      selected.push(item.url);
-      perDay.add(dayKey);
-    } else if (!selected.includes(item.url)) {
-      extras.push(item.url);
-    }
-  }
-
-  for (const url of extras) {
-    if (selected.length >= MAX_MEDIA_COUNT) break;
-    if (!selected.includes(url)) selected.push(url);
-  }
-
-  return selected;
-}
-
-function usableImageUrl(
-  media: {
-    url: string | null;
-    type: MediaType;
-    processingStatus: MediaProcessingStatus;
-  } | null
-) {
-  if (
-    !media?.url ||
-    media.type !== MediaType.IMAGE ||
-    media.processingStatus === MediaProcessingStatus.FAILED
-  ) {
-    return null;
-  }
-  return media.url;
-}
-
-function generateDefaultCaption(trip: TripForFinalizer, userId: string) {
-  const ownPlace = ownEntries(trip, userId).find(
-    (entry) => entry.place?.name || entry.locationName
-  );
-  const primaryDestination =
-    ownPlace?.place?.name?.trim() ||
-    ownPlace?.locationName?.trim() ||
-    trip.destinations[0]?.trim() ||
-    trip.title?.trim() ||
-    "your trip";
-  const mood = trip.mood ? `#${trip.mood.toLowerCase()}` : "";
-  return [`#${sanitizeTag(primaryDestination)}`, mood]
-    .filter(Boolean)
-    .join(" ");
-}
-
-function sanitizeTag(input: string) {
-  return input
-    .trim()
-    .replace(/\s+/g, "")
-    .replace(/[^a-zA-Z0-9]/g, "");
-}
-
-function truncate(value: string, limit: number) {
-  if (value.length <= limit) {
-    return value;
-  }
-  return `${value.slice(0, limit - 1)}…`;
+function toDraftTrip(trip: TripForFinalizer): DraftTrip {
+  return {
+    title: trip.title,
+    startDate: trip.startDate,
+    endDate: trip.endDate,
+    destinations: trip.destinations ?? [],
+    mood: trip.mood,
+    entries: trip.threadEntries.map((entry) => ({
+      authorId: entry.authorId,
+      contentText: entry.contentText,
+      createdAt: entry.createdAt,
+      locationName: entry.locationName,
+      media: entry.media
+        ? {
+            url: entry.media.url,
+            type: entry.media.type,
+            processingStatus: entry.media.processingStatus,
+            uploadedById: entry.media.uploadedById,
+          }
+        : null,
+      taggedUserIds: (entry.taggedUsers ?? []).map((tag) => tag.taggedUserId),
+      placeName: entry.place?.name ?? null,
+    })),
+    uploadedMedia: trip.media.map((media) => ({
+      url: media.url,
+      type: media.type,
+      processingStatus: media.processingStatus,
+      uploadedById: media.uploadedById,
+    })),
+  };
 }
 
 function sanitizeMedia(urls: string[]) {
