@@ -154,7 +154,6 @@ The API is one deployable, split by folder rather than by network service.
 These are in the code today. They are documented so a reader does not "fix" the docs back to an intended design that was never wired.
 
 1. The Flutter reset call sends `{ token, newPassword }`. The server schema also requires `currentPassword`. The web reset page sends the current password. See [Password reset](./02-password-reset.md).
-2. The scheduler writes one final post per member with the schema default `generationStatus = DRAFT`. The API finalizer writes `READY`. See [Thread and final posts](./06-thread-and-final-posts.md).
-3. `PasswordReset.otpCodeHash` and `OAuthProvider.APPLE` exist on the schema and are unused.
-4. `recordSecurityEvent` is called with password-reset type strings that are not in the `SecurityEventType` enum. The insert fails and is swallowed.
-5. Chat cannot fan out across API replicas until a real pub/sub transport exists. Upstash REST cannot `SUBSCRIBE`.
+2. `PasswordReset.otpCodeHash` and `OAuthProvider.APPLE` exist on the schema and are unused.
+3. `recordSecurityEvent` is called with password-reset type strings that are not in the `SecurityEventType` enum. The insert fails and is swallowed.
+4. Chat cannot fan out across API replicas until a real pub/sub transport exists. Upstash REST cannot `SUBSCRIBE`.

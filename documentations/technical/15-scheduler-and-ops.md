@@ -16,11 +16,11 @@ Files: `scheduler/src/index.ts`, `tripStatus.ts`, `tripEnd.ts`, `startup-logger.
 
 1. Load trips in `UPCOMING` or `ONGOING` whose stored `endDate` is at or before now, plus `UPCOMING` trips whose `startDate` is at or before now. This is a coarse fetch. Indexes `(status, endDate)` and `(status, startDate)` exist for it.
 2. Recompute with `scheduledEndInstant` (copy in `tripEnd.ts`). Midnight ends expand to 23:59:59.999 in `scheduleTimezone`. A trip with `endDate` null is not in the end batch.
-3. End batch, one transaction per trip: if no `TripFinalPost` exists, insert one (a shorter template than `TripFinalizerService`), then set `status = ENDED`. The insert does not set `generationStatus`, so the column default `DRAFT` applies.
+3. End batch, one transaction per trip: write one unpublished personal draft per current member with `buildMemberFinalDraft`, then set `status = ENDED`. The draft is `READY` and `isPublished` stays false. A saved or published post for that member is left alone. An unpublished `DRAFT` from an older run is replaced.
 4. Start batch: `updateMany` the filtered `UPCOMING` ids to `ONGOING`.
 5. Return `{ endedCount, ongoingCount, nowIso }`.
 
-The API does not wait for this. `syncViewerTripSchedule` and `syncTripById` apply the same status rules on read, and when they end a trip they call `TripFinalizerService`, which writes `READY` and a richer summary. A trip that nobody opens still ends, because cron is the backstop. A trip that somebody opens may end earlier and with a better draft. See [Thread and final posts](./06-thread-and-final-posts.md).
+The API does not wait for this. `syncViewerTripSchedule` and `syncTripById` apply the same status rules on read, and when they end a trip they call `TripFinalizerService.generateFinalPostsForMembers`. That service imports the same `buildMemberFinalDraft`, so a manual end, a read that catches a due end, and this cron write the same unpublished draft. A trip that nobody opens still ends, because cron is the backstop. See [Thread and final posts](./06-thread-and-final-posts.md).
 
 ### How it is invoked
 

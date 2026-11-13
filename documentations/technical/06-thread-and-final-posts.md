@@ -86,19 +86,19 @@ Ending a trip drafts a post for the owner and every current participant (`genera
 | `isPublished`, `publishedAt` | Feed eligibility |
 | `likeCount`, `commentCount`, `shareCount` | Denormalized |
 
-`GENERATING` and `FAILED` are on the enum and on the Flutter model. `tripFinalizer.ts` does not assign them. The live values are `DRAFT` (scheduler default), `READY` (API generator), and `PUBLISHED`.
+`GENERATING` and `FAILED` are on the enum and on the Flutter model. Neither the API nor the scheduler assigns them. A new personal draft is `READY` and `isPublished` stays false until that person publishes. `DRAFT` remains the column default for an old untouched row; the next generate or scheduler pass replaces that row with the same `READY` draft. `PUBLISHED` means the author published it.
 
 ### When a row is created
 
 | Event | Writer | Status |
 | --- | --- | --- |
-| Scheduler end batch | Inline insert in `scheduler/src/tripStatus.ts`, one row per member who does not already have a post | `DRAFT` (column default). Personal photos, capped at 6. The summary is shorter than the API generator |
-| Read-path sync that ends a trip | `TripFinalizerService.generateFinalPostsForMembers` | `READY` |
-| `POST /trips/:id/end` from `ONGOING` | same service, one post per member | `READY` |
-| `POST /trips/:id/end` from `UPCOMING` | none | No row |
-| `POST /trips/:id/final-post/generate` | that member, trip must be `ENDED` | `READY`. Idempotent if their row exists |
+| Scheduler end batch | `buildMemberFinalDraft` in `scheduler/src/memberFinalDraft.ts`, called from `scheduler/src/tripStatus.ts`, one row per current member | `READY`, unpublished. Same summary and up to 10 personal photos as the API |
+| Read-path sync that ends a trip | `TripFinalizerService.generateFinalPostsForMembers` | `READY`, unpublished, same builder |
+| `POST /trips/:id/end` from `ONGOING` | same service, one post per member | `READY`, unpublished, same builder |
+| `POST /trips/:id/end` from `UPCOMING` | none | No row. Ending before the trip starts does not create a draft |
+| `POST /trips/:id/final-post/generate` | that member, trip must be `ENDED` | `READY`. Returns a saved row unchanged. Replaces an unpublished `DRAFT` |
 
-`generateFinalPost` is idempotent: if the row exists it returns it instead of overwriting the owner's edits.
+`generateFinalPost` does not overwrite a draft the person has saved, and it does not unpublish a post. An unpublished row still at `DRAFT` is the old short scheduler draft, and generating replaces it with the personal `READY` draft.
 
 ### Edit and publish
 

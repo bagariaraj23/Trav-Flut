@@ -260,7 +260,7 @@ flowchart TD
   upcoming["UPCOMING\nstart in the future"]
   ongoing["ONGOING\nthread is writable"]
   ended["ENDED"]
-  draft["TripFinalPost\nAPI sets READY\ncron leaves DRAFT"]
+  draft["TripFinalPost\nunpublished READY draft\nper member"]
   published["isPublished\nhome feed index"]
 
   create -->|"start <= now"| ongoing
