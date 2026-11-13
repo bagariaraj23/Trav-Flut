@@ -349,7 +349,7 @@ npm start
 - Media uploads (images/videos) via Cloudinary
 - **Final Posts**: Auto-generated trip summaries with curated media
   - Intelligent summary generation from trip entries
-  - Media curation (one per day, up to 10 items)
+  - Media curation (one per day, up to 12 items)
   - Editable before publishing
   - Published final posts appear in home feed
 

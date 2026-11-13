@@ -36,7 +36,7 @@ function createPrismaMock(options: {
         return Promise.resolve(
           ids.map((userId) => ({
             userId,
-            generationStatus: "READY",
+            generationStatus: "DRAFT",
             isPublished: false,
           }))
         );
@@ -158,7 +158,7 @@ describe("updateTripStatuses behavior", () => {
           userId: "owner-1",
           summaryText: expect.stringContaining("Japan"),
           curatedMedia: ["https://cdn.example.com/trip-ended.jpg"],
-          generationStatus: "READY",
+          generationStatus: "DRAFT",
           coverMediaUrl: "https://cdn.example.com/trip-ended.jpg",
         }),
       })
@@ -193,7 +193,7 @@ describe("updateTripStatuses behavior", () => {
 
     expect(tx.tripFinalPost.findMany).toHaveBeenCalledWith({
       where: { tripId: "trip-existing", userId: { in: ["owner-1"] } },
-      select: { userId: true, generationStatus: true, isPublished: true },
+      select: { userId: true },
     });
     expect(tx.tripFinalPost.create).not.toHaveBeenCalled();
     expect(tx.trip.update).toHaveBeenCalledWith({

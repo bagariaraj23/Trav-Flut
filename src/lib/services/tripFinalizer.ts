@@ -62,30 +62,13 @@ export class TripFinalizerService {
       where: { tripId_userId: { tripId, userId } },
       select: finalPostSelect,
     });
-    // A saved or published post stays as the member left it.
-    // An untouched scheduler DRAFT is replaced by this same personal draft.
-    if (
-      existing &&
-      (existing.isPublished || existing.generationStatus !== GenerationStatus.DRAFT)
-    ) {
+    // The first ending creates the personal draft. Later calls leave that draft,
+    // including anything the member has edited, exactly as it is.
+    if (existing) {
       return existing;
     }
 
     const draft = await this.composeDraft(db, tripId, userId);
-    if (existing) {
-      return db.tripFinalPost.update({
-        where: { tripId_userId: { tripId, userId } },
-        data: {
-          summaryText: draft.summaryText,
-          curatedMedia: draft.curatedMedia,
-          caption: draft.caption,
-          coverMediaUrl: draft.coverMediaUrl,
-          generationStatus: GenerationStatus.READY,
-        },
-        select: finalPostSelect,
-      });
-    }
-
     return db.tripFinalPost.create({
       data: {
         tripId,
@@ -94,7 +77,7 @@ export class TripFinalizerService {
         curatedMedia: draft.curatedMedia,
         caption: draft.caption,
         coverMediaUrl: draft.coverMediaUrl,
-        generationStatus: GenerationStatus.READY,
+        generationStatus: GenerationStatus.DRAFT,
       },
       select: finalPostSelect,
     });
@@ -221,7 +204,7 @@ export class TripFinalizerService {
           ...data,
           generationStatus: wasPublished
             ? GenerationStatus.PUBLISHED
-            : GenerationStatus.READY,
+            : GenerationStatus.DRAFT,
           updatedAt: new Date(),
         },
         select: finalPostSelect,

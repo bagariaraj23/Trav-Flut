@@ -98,15 +98,23 @@ class FinalPostProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  void toggleMedia(String mediaUrl) {
-    if (!_canEdit || _draft == null) return;
+  static const int maxPhotos = 12;
+
+  bool toggleMedia(String mediaUrl) {
+    if (!_canEdit || _draft == null) return false;
     final next = List<String>.from(_draft!.curatedMedia);
     if (next.contains(mediaUrl)) {
       next.remove(mediaUrl);
+    } else if (next.length >= maxPhotos) {
+      _error = 'You can choose up to $maxPhotos photos.';
+      notifyListeners();
+      return false;
     } else {
       next.add(mediaUrl);
     }
+    _error = null;
     setCuratedMedia(next);
+    return true;
   }
 
   void setCoverMedia(String? url) {

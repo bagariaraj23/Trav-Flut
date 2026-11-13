@@ -6,7 +6,7 @@
 
 const MS_IN_DAY = 1000 * 60 * 60 * 24;
 export const MIN_SUMMARY_LENGTH = 50;
-export const MAX_CURATED_MEDIA = 10;
+export const MAX_CURATED_MEDIA = 12;
 
 export type DraftMedia = {
   url: string | null;
@@ -40,7 +40,7 @@ export type MemberFinalDraft = {
   curatedMedia: string[];
   caption: string;
   coverMediaUrl: string | null;
-  generationStatus: "READY";
+  generationStatus: "DRAFT";
 };
 
 export function buildMemberFinalDraft(
@@ -53,7 +53,7 @@ export function buildMemberFinalDraft(
     curatedMedia,
     caption: generateDefaultCaption(trip, userId),
     coverMediaUrl: curatedMedia[0] ?? null,
-    generationStatus: "READY",
+    generationStatus: "DRAFT",
   };
 }
 

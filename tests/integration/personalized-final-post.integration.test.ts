@@ -337,8 +337,8 @@ describe("Personalized final posts", () => {
     const memberPost = posts.find((post) => post.userId === member.id)!;
     expect(ownerPost.isPublished).toBe(false);
     expect(memberPost.isPublished).toBe(false);
-    expect(ownerPost.generationStatus).toBe(GenerationStatus.READY);
-    expect(memberPost.generationStatus).toBe(GenerationStatus.READY);
+    expect(ownerPost.generationStatus).toBe(GenerationStatus.DRAFT);
+    expect(memberPost.generationStatus).toBe(GenerationStatus.DRAFT);
     expect(ownerPost.curatedMedia).toEqual([ownerPhoto]);
     expect(memberPost.curatedMedia).toEqual([memberPhoto]);
     expect(ownerPost.summaryText).toContain("Shared coast");
@@ -350,7 +350,7 @@ describe("Personalized final posts", () => {
     expect(again.isPublished).toBe(false);
   });
 
-  it("replaces an untouched short draft and leaves a saved draft alone", async () => {
+  it("creates a personal draft and leaves an edited draft alone", async () => {
     const owner = await createUser({ email: "draft-owner@test.com", name: "Owner" });
     const trip = await createTrip({
       userId: owner.id,
@@ -375,21 +375,11 @@ describe("Personalized final posts", () => {
         mediaId: media.id,
       },
     });
-    await prisma.tripFinalPost.create({
-      data: {
-        tripId: trip.id,
-        userId: owner.id,
-        summaryText: "Your trip to Shared coast! Add the photos you took before you publish.",
-        curatedMedia: [],
-        generationStatus: GenerationStatus.DRAFT,
-      },
-    });
-
-    const upgraded = await TripFinalizerService.generateFinalPost(trip.id, owner.id);
-    expect(upgraded.generationStatus).toBe(GenerationStatus.READY);
-    expect(upgraded.isPublished).toBe(false);
-    expect(upgraded.curatedMedia).toEqual([photo]);
-    expect(upgraded.summaryText).toContain("Shared coast");
+    const created = await TripFinalizerService.generateFinalPost(trip.id, owner.id);
+    expect(created.generationStatus).toBe(GenerationStatus.DRAFT);
+    expect(created.isPublished).toBe(false);
+    expect(created.curatedMedia).toEqual([photo]);
+    expect(created.summaryText).toContain("Shared coast");
 
     const saved = "This is my own recap and it must stay exactly as I saved it today.";
     await TripFinalizerService.updateFinalPost(trip.id, owner.id, {
@@ -397,7 +387,8 @@ describe("Personalized final posts", () => {
     });
     const kept = await TripFinalizerService.generateFinalPost(trip.id, owner.id);
     expect(kept.summaryText).toBe(saved);
-    expect(kept.generationStatus).toBe(GenerationStatus.READY);
+    expect(kept.generationStatus).toBe(GenerationStatus.DRAFT);
+    expect(kept.isPublished).toBe(false);
   });
 
   it("drafts every member when a read catches an ended trip", async () => {
@@ -428,7 +419,7 @@ describe("Personalized final posts", () => {
     expect(posts.map((post) => post.userId).sort()).toEqual(
       [owner.id, member.id].sort()
     );
-    expect(posts.every((post) => post.generationStatus === GenerationStatus.READY)).toBe(
+    expect(posts.every((post) => post.generationStatus === GenerationStatus.DRAFT)).toBe(
       true
     );
     expect(posts.every((post) => post.isPublished === false)).toBe(true);

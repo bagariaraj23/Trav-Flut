@@ -97,22 +97,9 @@ export async function updateTripStatuses(
         ];
         const existingPosts = await tx.tripFinalPost.findMany({
           where: { tripId: trip.id, userId: { in: memberIds } },
-          select: { userId: true, generationStatus: true, isPublished: true },
+          select: { userId: true },
         });
-        const kept = new Set(
-          existingPosts
-            .filter(
-              (post) => post.isPublished || post.generationStatus !== "DRAFT"
-            )
-            .map((post) => post.userId)
-        );
-        const replaceDraft = new Set(
-          existingPosts
-            .filter(
-              (post) => !post.isPublished && post.generationStatus === "DRAFT"
-            )
-            .map((post) => post.userId)
-        );
+        const existingUserIds = new Set(existingPosts.map((post) => post.userId));
         const draftTrip: DraftTrip = {
           title: tripData.title,
           startDate: tripData.startDate,
@@ -146,27 +133,17 @@ export async function updateTripStatuses(
         };
 
         for (const memberId of memberIds) {
-          if (kept.has(memberId)) continue;
+          if (existingUserIds.has(memberId)) continue;
           const draft = buildMemberFinalDraft(draftTrip, memberId);
-          const data = {
-            summaryText: draft.summaryText,
-            curatedMedia: draft.curatedMedia,
-            caption: draft.caption,
-            coverMediaUrl: draft.coverMediaUrl,
-            generationStatus: draft.generationStatus,
-          };
-          if (replaceDraft.has(memberId)) {
-            await tx.tripFinalPost.update({
-              where: { tripId_userId: { tripId: trip.id, userId: memberId } },
-              data,
-            });
-            continue;
-          }
           await tx.tripFinalPost.create({
             data: {
               tripId: trip.id,
               userId: memberId,
-              ...data,
+              summaryText: draft.summaryText,
+              curatedMedia: draft.curatedMedia,
+              caption: draft.caption,
+              coverMediaUrl: draft.coverMediaUrl,
+              generationStatus: draft.generationStatus,
             },
           });
         }

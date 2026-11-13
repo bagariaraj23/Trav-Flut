@@ -413,7 +413,7 @@ class _FinalPostEditScreenState extends State<FinalPostEditScreen> {
             Row(
               children: [
                 Text(
-                  'Photos (${draft.curatedMedia.length}/10)',
+                  'Photos (${draft.curatedMedia.length}/12)',
                   style: Theme.of(context).textTheme.titleMedium,
                 ),
                 const SizedBox(width: 8),
