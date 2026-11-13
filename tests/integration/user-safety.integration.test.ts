@@ -122,7 +122,14 @@ describe("Restrict and Block", () => {
       }),
       { params: Promise.resolve({ id: alice.id }) }
     );
-    expect(profileResponse.status).toBe(404);
+    const profileBody = await profileResponse.json();
+    expect(profileResponse.status).toBe(200);
+    expect(profileBody.data.viewerIsBlocked).toBe(true);
+    expect(profileBody.data.blockedByViewer ?? false).toBe(false);
+    expect(profileBody.data.email).toBe("");
+    expect(profileBody.data.avatarUrl ?? null).toBeNull();
+    expect(profileBody.data.bio ?? null).toBeNull();
+    expect(profileBody.data.username).toBe(alice.username);
   });
 
   it("keeps a blocked person's posts out of Home and Discover", async () => {
@@ -153,6 +160,20 @@ describe("Restrict and Block", () => {
       },
     });
 
+    await prisma.user.update({
+      where: { id: alice.id },
+      data: {
+        avatarUrl: "https://cdn.example.com/alice.png",
+        bio: "Alice bio",
+      },
+    });
+    await prisma.user.update({
+      where: { id: bob.id },
+      data: {
+        avatarUrl: "https://cdn.example.com/bob.png",
+        bio: "Bob bio",
+      },
+    });
     await setSafetyAction(alice.id, bob.id, UserSafetyAction.BLOCK);
     const token = await getAuthToken(alice);
     const auth = { authorization: `Bearer ${token}` };
@@ -185,9 +206,13 @@ describe("Restrict and Block", () => {
     );
     const searchBody = await search.json();
     expect(search.status).toBe(200);
-    expect(
-      searchBody.data.items.map((item: { id: string }) => item.id)
-    ).toContain(bob.id);
+    const bobHit = searchBody.data.items.find(
+      (item: { id: string }) => item.id === bob.id
+    );
+    expect(bobHit).toBeTruthy();
+    expect(bobHit.avatarUrl ?? null).toBeNull();
+    expect(bobHit.bio ?? null).toBeNull();
+    expect(bobHit.username).toBe("bobfeed");
 
     const profile = await getUser(
       new NextRequest(`http://localhost/api/users/${bob.id}`, {
@@ -198,9 +223,38 @@ describe("Restrict and Block", () => {
     const profileBody = await profile.json();
     expect(profile.status).toBe(200);
     expect(profileBody.data.blockedByViewer).toBe(true);
+    expect(profileBody.data.viewerIsBlocked ?? false).toBe(false);
     expect(profileBody.data.email).toBe("");
     expect(profileBody.data.username).toBe("bobfeed");
+    expect(profileBody.data.name).toBe("Bob Feed");
+    expect(profileBody.data.avatarUrl ?? null).toBeNull();
     expect(profileBody.data.bio ?? null).toBeNull();
+
+    const bobToken = await getAuthToken(bob);
+    const aliceProfile = await getUser(
+      new NextRequest(`http://localhost/api/users/${alice.id}`, {
+        headers: { authorization: `Bearer ${bobToken}` },
+      }),
+      { params: Promise.resolve({ id: alice.id }) }
+    );
+    const aliceProfileBody = await aliceProfile.json();
+    expect(aliceProfile.status).toBe(200);
+    expect(aliceProfileBody.data.viewerIsBlocked).toBe(true);
+    expect(aliceProfileBody.data.blockedByViewer ?? false).toBe(false);
+    expect(aliceProfileBody.data.email).toBe("");
+    expect(aliceProfileBody.data.username).toBe("alicefeed");
+    expect(aliceProfileBody.data.avatarUrl ?? null).toBeNull();
+    expect(aliceProfileBody.data.bio ?? null).toBeNull();
+
+    const bobFeed = await getHomeFeed(
+      new NextRequest("http://localhost/api/feed/home", {
+        headers: { authorization: `Bearer ${bobToken}` },
+      })
+    );
+    const bobFeedBody = await bobFeed.json();
+    expect(
+      bobFeedBody.data.items.map((item: { userId: string }) => item.userId)
+    ).not.toContain(alice.id);
 
     const opened = await getPost(
       new NextRequest(

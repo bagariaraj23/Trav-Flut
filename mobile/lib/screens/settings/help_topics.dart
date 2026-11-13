@@ -19,8 +19,8 @@ class HelpTopic {
 
 const safetyHelpPreview =
     'Restrict stops a direct message both ways and keeps the history. '
-    'Block also stops them following you, opening your profile, and being added to a trip or group you created. '
-    'Their posts leave your Home feed and Discover until you unblock them. '
+    'Block also stops them following you and being added to a trip or group you created. '
+    'Neither of you sees the other\'s photo, trips, followers, or posts. A profile shows a name and username only. '
     'A trip or group someone else created can still include both of you.';
 
 const helpTopics = <HelpTopic>[
@@ -36,7 +36,7 @@ const helpTopics = <HelpTopic>[
       HelpItem(
         question: 'What does Block do?',
         answer:
-            'Block includes Restrict. They also cannot follow you or open your profile. You can still find them in search. Their profile shows their name and photo, with Unblock, and hides their trips and posts. Their posts leave your Home feed and Discover. Unblock brings that content back. A follow that Block removed is not restored. Neither of you can add the other to a trip or a group chat that you created. A trip or group that someone else created can include both of you. People already on a trip or in a chat stay there.',
+            'Block includes Restrict. They also cannot follow you. You can still find them in search. Both profiles show a name and username only: no photo, bio, trips, follower counts, or following lists. You see Unblock on their profile. They do not see your posts, trips, or photo. Unblock brings that content back. A follow that Block removed is not restored. Neither of you can add the other to a trip or a group chat that you created. A trip or group that someone else created can include both of you. People already on a trip or in a chat stay there.',
       ),
       HelpItem(
         question: 'Where can I restrict or block someone?',

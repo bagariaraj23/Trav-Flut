@@ -304,7 +304,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       userProvider
                           .isLoading, // Pass loading state for the button.
                     ),
-                    if (user.blockedByViewer != true) ...[
+                    if (user.blockedByViewer != true &&
+                        user.viewerIsBlocked != true) ...[
                       const SizedBox(height: 24),
                       _buildTripsSection(context, user, isOwnProfile),
                     ],
@@ -450,6 +451,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
         ? (bioText.length / charsPerLine).ceil().clamp(1, maxBioLinesCap)
         : 0;
     final subtitleStyle = _profileSubtitleStyle(context);
+    final limitedByBlock =
+        user.blockedByViewer == true || user.viewerIsBlocked == true;
 
     return Container(
       padding: const EdgeInsets.all(24),
@@ -461,6 +464,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          if (!limitedByBlock)
           // Profile photo (tappable to enlarge when a photo exists)
           Center(
             child: Material(
@@ -496,7 +500,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ),
           ),
 
-          const SizedBox(height: 20),
+          if (!limitedByBlock) const SizedBox(height: 20),
 
           // @username (unique) first; optional display name second 
           Center(
@@ -516,7 +520,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   textAlign: TextAlign.center,
                 ),
               ),
-              if (user.isPrivate) ...[
+              if (!limitedByBlock && user.isPrivate) ...[
                 const SizedBox(width: 8),
                 Icon(
                   Icons.lock_outlined,
@@ -558,6 +562,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
           if (user.blockedByViewer == true)
             Text(
               'You blocked this person. Unblock them to see their trips and posts again.',
+              style: subtitleStyle,
+              textAlign: TextAlign.center,
+            )
+          else if (user.viewerIsBlocked == true)
+            Text(
+              'This profile is not available.',
               style: subtitleStyle,
               textAlign: TextAlign.center,
             )
@@ -668,6 +678,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 child: const Text('Unblock'),
               ),
             )
+          else if (user.viewerIsBlocked == true)
+            const SizedBox.shrink()
           else if (isOwnProfile)
             SizedBox(
               width: double.infinity,

@@ -18,6 +18,7 @@ class User {
   final bool? profileComplete;
   final bool? hasGoogleLinked;
   final bool? blockedByViewer;
+  final bool? viewerIsBlocked;
 
   const User({
     required this.id,
@@ -34,6 +35,7 @@ class User {
     this.profileComplete,
     this.hasGoogleLinked,
     this.blockedByViewer,
+    this.viewerIsBlocked,
   });
 
   factory User.fromJson(Map<String, dynamic> json) => _$UserFromJson(json);
@@ -54,6 +56,7 @@ class User {
     bool? profileComplete,
     bool? hasGoogleLinked,
     bool? blockedByViewer,
+    bool? viewerIsBlocked,
   }) {
     return User(
       id: id ?? this.id,
@@ -70,6 +73,7 @@ class User {
       profileComplete: profileComplete ?? this.profileComplete,
       hasGoogleLinked: hasGoogleLinked ?? this.hasGoogleLinked,
       blockedByViewer: blockedByViewer ?? this.blockedByViewer,
+      viewerIsBlocked: viewerIsBlocked ?? this.viewerIsBlocked,
     );
   }
 }
