@@ -99,7 +99,7 @@ Tokens:
 | Local full stack | `docker-compose.yml`: Postgres, API (`node server.cjs`), scheduler loop, Flutter web on nginx port 8080 |
 | Local hybrid | `docker-compose.dev.yml`: Postgres only. Next.js and Flutter run on the host |
 
-The API image entrypoint is `scripts/docker-entrypoint.sh`. It waits for Postgres, runs `prisma migrate deploy` (and baselines an old `db push` volume once), then execs `node server.cjs`.
+The API image entrypoint is `scripts/docker-entrypoint.sh`. It waits for Postgres, runs `prisma migrate deploy` (and baselines an old `db push` volume once, leaving the `READY` to `DRAFT` data migration for that deploy to run), then execs `node server.cjs`. Personalized final posts, Restrict, and Block add no Compose service.
 
 Nginx on the web container proxies `/api`, `/chat`, `/share`, `/.well-known`, `/_next`, and the password-reset pages to the API. The WebSocket upgrade for `/chat` is configured there. The HTTP healthcheck hits `GET /api/health` and does not open a WebSocket.
 

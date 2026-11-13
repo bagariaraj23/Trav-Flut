@@ -242,3 +242,4 @@ Hot-path indexes and the spatial indexes are explained in [Optimizations](./18-o
 | `20261031120000` | Remove check-in entry type |
 | `20261111120000_personalized_final_posts` | One final post per `(tripId, userId)`. Old rows belong to the trip owner |
 | `20261111120000_user_safety_and_conversation_creator` | `UserSafetyRelation`, and `conversations.createdById` |
+| `20261113180000_relabel_ready_final_posts_as_draft` | Data only. Stored `READY` rows become `DRAFT`. The enum value stays |

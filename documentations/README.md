@@ -24,11 +24,10 @@ The full local stack (Postgres, API, scheduler, and the Flutter UI in the browse
 - [QUICKSTART.md](../QUICKSTART.md) - Full-stack and database-only start commands
 - [README.md](../README.md#-quick-start-with-docker-recommended) - Short start path and ports
 
-Production hosting stays Railway / Railpack. This Compose file is for local runs. Restrict, Block, and the media screens use the existing migrate-on-boot path. Rebuild the web image after a Flutter change so port 8080 includes them.
+Production hosting stays Railway / Railpack. This Compose file is for local runs. Personalized final posts, Restrict, Block, and the media screens use the existing migrate-on-boot path. An old `db push` volume leaves the `READY` to `DRAFT` data migration unmarked so that boot runs it. Rebuild the web image after a Flutter change so port 8080 includes them.
 
 ## Scheduler Documentation
 
 The scheduler is an independent module located in `/scheduler`. See:
 - [scheduler/README.md](../scheduler/README.md) - Quick start, deployment, and usage
-- [scheduler/SCHEDULER_ARCHITECTURE.md](../scheduler/SCHEDULER_ARCHITECTURE.md) - Complete architecture deep dive
-- [scheduler/MIGRATION_NOTES.md](../scheduler/MIGRATION_NOTES.md) - Migration from BullMQ to cron-based execution
+- [scheduler/SCHEDULER_ARCHITECTURE.md](../scheduler/SCHEDULER_ARCHITECTURE.md) - Architecture deep dive, including the move off BullMQ

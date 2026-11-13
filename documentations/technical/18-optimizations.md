@@ -49,7 +49,7 @@ Postgres will sequential-scan a small table and look fine. These indexes exist f
 | `follow_requests (followerId, followeeId)` | One request per pair |
 | `likes (userId, entityType, entityId)` | One like. `P2002` is treated as success, so the unique index is the idempotency lock |
 | `trip_participants (tripId, userId)` | Membership test on every thread write |
-| `trip_final_posts (tripId)` | One draft. Generate is idempotent because the second insert fails and the code returns the row |
+| `trip_final_posts (tripId, userId)` | One draft per member. Generate is idempotent because an existing row is returned and a second insert is not attempted |
 | `conversations (tripId)` | One trip room |
 | `media.publicId`, `shares.shareToken`, `places.externalId` | External identity |
 
@@ -144,7 +144,7 @@ What was considered and not cached: the home feed itself. The feed is per user (
 | Expense screen loads summary and the expense page with `Future.wait` | One round trip worth of waiting, two queries |
 | Discover search generation token | A slow keystroke cannot overwrite a newer result (wasted render, not a wasted index, but it avoids applying stale data) |
 | Chat `touchConversation` is not awaited | The sender's response does not wait for the room's `updatedAt` write. The list order catches up on the next fetch or on the socket event |
-| Scheduler is not a queue consumer | Zero Redis commands from cron, so the Upstash budget stays on search, badges, and rate limits. Documented in `scheduler/MIGRATION_NOTES.md` |
+| Scheduler is not a queue consumer | Zero Redis commands from cron, so the Upstash budget stays on search, badges, and rate limits. The BullMQ history is in `scheduler/SCHEDULER_ARCHITECTURE.md` |
 | Read-path trip status sync | Users do not wait for the hourly cron to see `ONGOING`, and the cron query stays small because most active trips were already moved when someone opened them |
 | Settlement `FOR UPDATE` plus "must match an open edge" | Prevents two payees from recording overlapping transfers. That is correctness, and it also avoids a repair job |
 | Fixed-window rate limits fail open | A limiter error does not turn into a Postgres outage caused by retries |

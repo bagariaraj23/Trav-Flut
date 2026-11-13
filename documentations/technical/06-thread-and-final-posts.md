@@ -1,6 +1,6 @@
 # Thread entries and final posts
 
-While a trip is `ONGOING`, members append a thread. When it ends, the owner gets one `TripFinalPost` per trip, edits it, and publishes it into the home feed.
+While a trip is `ONGOING`, members append a thread. When an ongoing trip ends, the owner and every current participant each get one unpublished `TripFinalPost`, marked `DRAFT`. That person edits it and publishes it into the home feed. Ending the trip does not publish it.
 
 Primary files:
 
