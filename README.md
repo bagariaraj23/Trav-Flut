@@ -117,8 +117,10 @@ TripThread/
 │
 ├── scheduler/              # Trip Status Scheduler (Cron Service)
 │   ├── src/
-│   │   ├── index.ts        # Main entry point
-│   │   ├── tripStatus.ts   # Status update logic
+│   │   ├── index.ts            # Main entry point
+│   │   ├── tripStatus.ts       # Status update and personal drafts
+│   │   ├── memberFinalDraft.ts # Shared unpublished draft (also imported by the API)
+│   │   ├── tripEnd.ts          # End-instant helper
 │   │   └── startup-logger.ts
 │   ├── tests/             # Unit and integration tests
 │   ├── dist/              # Compiled JavaScript
@@ -127,8 +129,7 @@ TripThread/
 │   ├── Dockerfile
 │   ├── start.sh
 │   ├── README.md
-│   ├── SCHEDULER_ARCHITECTURE.md
-│   └── MIGRATION_NOTES.md  # Migration from BullMQ to cron
+│   └── SCHEDULER_ARCHITECTURE.md  # Includes the BullMQ history
 │
 ├── src/                    # Next.js Backend
 │   ├── app/

@@ -8,7 +8,7 @@ The scheduler automatically updates trip statuses:
 - **UPCOMING → ONGOING** when `startDate <= now < endDate`
 - **UPCOMING/ONGOING → ENDED** when `endDate <= now`
 
-When trips end, it also creates a "final post" summarizing the trip (media, locations, text entries).
+When a due trip ends, it also creates one unpublished final-post draft per current member, marked `DRAFT`, with up to 12 of that person's photos. The text and photo choice live in `src/memberFinalDraft.ts`, which the API imports, so ending the trip in the app writes the same draft. A member who already has a row is left alone. The scheduler does not publish the post.
 
 ## Quick Start
 
@@ -284,8 +284,7 @@ Output: `dist/index.js`
 
 ## Documentation
 
-- **[SCHEDULER_ARCHITECTURE.md](./SCHEDULER_ARCHITECTURE.md)** - Complete architecture deep dive, execution flow, and design decisions
-- **[MIGRATION_NOTES.md](./MIGRATION_NOTES.md)** - Migration from BullMQ to cron-based execution
+- **[SCHEDULER_ARCHITECTURE.md](./SCHEDULER_ARCHITECTURE.md)** - Execution flow, design decisions, and the earlier BullMQ design
 
 ## License
 

@@ -2,9 +2,9 @@
     "project": {
         "name": "TripThread",
         "workspacePath": "/Users/rajbagaria/Desktop/Bolt-Travello/Flut/project",
-        "generatedAt": "2026-11-11",
+        "generatedAt": "2026-11-13",
         "description": "Travel-focused social platform where users create trips, post thread entries (text/media/location), split trip expenses and settle up on a Money pane, generate/publish final trip posts, and chat via 1:1 DMs, groups, and trip-scoped rooms (realtime WebSocket).",
-        "lastPRReviewed": "PR #56 merged to main on 2026-11-11 (2:44 PM IST). Main runs the full local Docker stack and Mapbox Maps Flutter 3.34.2. Current work is PR #62 (cursor/media-restrict-block-aa71): Restrict and Block, a DM settings screen, conversation media, a shared viewer, and final-post photo order. Restrict stops a direct message both ways and keeps history. Block also stops follows and profile access, and stops the creator of a trip or group from adding the other person. A trip or group someone else created can include both. Settings lists the people you blocked and the people you restricted. Open drafts remain PR #15 (to be discarded) and PR #38 (personalised final posts, 172 commits behind main).",
+        "lastPRReviewed": "PR #56 merged to main on 2026-11-11 (2:44 PM IST). Main runs the full local Docker stack and Mapbox Maps Flutter 3.34.2. Open stack, merge in order: PR #61 (cursor/personalized-final-posts-44b0, base main) gives every current member an unpublished DRAFT with up to 12 of that person's photos, from both the hourly job and ending the trip in the app. Publishing marks the post PUBLISHED. There is no READY label. PR #62 (cursor/media-restrict-block-aa71) adds Restrict and Block, conversation media, a shared viewer, and the 12-photo picker. A block hides posts and trips both ways and leaves both profiles as a name and username. PR #63 (cursor/technical-documentation-becf) is the handbook. Open drafts remain PR #15 (to be discarded) and PR #38 (the older personalised-final-posts branch, behind main; the implementation is #61).",
         "recentProductionPRs": [
             "https://github.com/bagariaraj23/Trav-Flut/pull/56",
             "https://github.com/bagariaraj23/Trav-Flut/pull/54",
@@ -67,7 +67,7 @@
                 "web (Flutter web on port 8080; nginx proxies /api, /chat, /share, /.well-known, /_next, and the password-reset pages to backend)",
                 "scheduler (trip status every SCHEDULER_INTERVAL_SECONDS, default 300, after the API is healthy)"
             ],
-            "entrypoint": "scripts/docker-entrypoint.sh waits for DB, runs prisma migrate deploy (baselining old db-push volumes once), then exec CMD (node server.cjs).",
+            "entrypoint": "scripts/docker-entrypoint.sh waits for DB, runs prisma migrate deploy (baselining old db-push volumes once). Baselining marks schema migrations applied and leaves 20261113180000_relabel_ready_final_posts_as_draft unmarked so that deploy rewrites READY rows. Then exec CMD (node server.cjs). Personalized final posts, Restrict, and Block add no Compose service, port, nginx location, or environment variable. Rebuild the web image after a Flutter change.",
             "hybridMode": "docker-compose.dev.yml launches only Postgres containers for host-based Next.js development",
             "chatCoverage": {
                 "dockerfileBuild": "npm run build && node scripts/build-server.mjs → dist/chat-ws.cjs at image build",
@@ -107,6 +107,7 @@
             "JWTRefreshToken",
             "OAuthAccount",
             "SecurityEvent",
+            "UserSafetyRelation",
             "Conversation",
             "ConversationParticipant",
             "ChatMessage",
@@ -134,14 +135,14 @@
             "Trip has status lifecycle: UPCOMING -> ONGOING -> ENDED",
             "Trip expenseCurrency (default INR), totalSpendMinor, spendVisibleOnDiscover; expense ledger via TripExpense + TripExpenseShare; settlements TripSettlement (v1 writes PAID only)",
             "Trip owner (trips.userId) is a billable member but may not be in trip_participants; GET participants prepends synthetic owner row",
-            "TripFinalPost is currently 1:1 with Trip (tripId unique) - planned migration to personalized posts per participant (composite unique [tripId, userId])",
+            "TripFinalPost is unique on (tripId, userId). Ending an ongoing trip writes one unpublished DRAFT per current member, up to 12 of that person's photos. The scheduler and the API share scheduler/src/memberFinalDraft.ts. An existing row is left alone. Publishing sets PUBLISHED. READY stays on the enum and is not assigned. Migration 20261113180000_relabel_ready_final_posts_as_draft rewrites stored READY rows to DRAFT",
             "Engagement counters (likeCount/commentCount/shareCount) are denormalized on entities",
             "Place model supports external IDs and coordinate index",
             "Soft-delete style fields exist on User (deletedAt/deleteMeta)",
             "Media model supports Cloudinary integration with quota tracking",
             "Notification model supports unified notifications (likes, comments, follows, mentions)",
             "Conversation model supports DM, GROUP, and TRIP type rooms with dynamic participants and leftAt validation. GROUP rows store createdById so only the creator is stopped from adding someone they blocked.",
-            "UserSafetyRelation is one row per actor and target, action RESTRICT or BLOCK. Restrict and Block both stop direct messages in either direction. Block also removes the target's follow of the actor and hides the actor's profile from the target.",
+            "UserSafetyRelation is one row per actor and target, action RESTRICT or BLOCK. Restrict and Block both stop direct messages in either direction. Block deletes the target's follow of the actor and any pending request from the target, and does not restore that follow on Unblock. Both profiles then show a name and username only. Posts and trips are hidden both ways on Home and Discover. Search still finds the person. The person who blocked sees Unblock. The creator of a trip or group cannot add the other person. A trip or group someone else created can include both.",
             "ChatMessage model supports content, soft deletion with deletedAt, and message replyTo hierarchy",
             "Hot-path indexes (PR #55, merged 2026-10-29): migration 20261004153000_add_hot_path_query_indexes plus 20261004180000_add_remaining_hot_path_indexes (trips userId+createdAt, media tripId, trip_join_requests receiverId+status, conversations updatedAt). Earlier slice covers trip threads, published final posts, notifications, follows, trip status+dates, participant userId, likes, comment replies, media by uploader"
         ]
@@ -167,10 +168,10 @@
             "threadEntries": "POST /trips/[id]/entries; GET cursor-paginated page { items, hasMoreOlder, nextOlderCursor } (limit default 30); GET /trips/[id]/entries/[entryId]/context returns a centered window around the target entry for deep-link jumps; DELETE/PATCH /trips/[id]/entries/[entryId] (PATCH: author text edit within 15m, owner may moderate later); shared purge in threadEntryPurge.ts",
             "participantLeave": "POST /trips/[id]/leave { removeMyData: boolean } — non-owner participant leaves; optional purge of author's entries (ONGOING only) now uses bulk cleanup path for scalability; blocked with 409 UNSETTLED_BALANCE when expense net ≠ 0",
             "tripExpenses": "GET/POST /trips/[id]/expenses; GET /trips/[id]/expenses/summary; DELETE /trips/[id]/expenses/[expenseId] (409 after any PAID settlement); POST /trips/[id]/settlements (payee only); DELETE settlements returns 409 (immutable); PATCH /trips/[id]/expense-settings (owner; currency frozen after first live expense)",
-            "endTripAndGenerateFinalPost": "POST /trips/[id]/end — ONGOING marks ENDED, sets endDate to now, and generates the final post. UPCOMING marks ENDED without a final post.",
-            "finalPostDraftEdit": "GET/PUT/DELETE /trips/[id]/final-post (DELETE owner-only; removes post + engagement)",
-            "publishFinalPost": "POST /trips/[id]/publish",
-            "homeFeed": "GET /feed/home (published final posts from self, followed users, and public users). Page/limit still works. Optional cursor (base64url {createdAt,id}) keyset-pages the next slice and returns nextCursor; the mobile FeedProvider sends that cursor. Trip card counts use denormalized entryCount/participantCount, not per-row _count. Discover count and page load in parallel."
+            "endTripAndGenerateFinalPost": "POST /trips/[id]/end — ONGOING marks ENDED, sets endDate to now, and writes one unpublished DRAFT per current member (up to 12 of that person's photos). UPCOMING marks ENDED without a draft. The hourly job and a read that catches a due end write the same draft.",
+            "finalPostDraftEdit": "GET/PUT/DELETE /trips/[id]/final-post. The author edits and deletes their own post. An unpublished edit stays DRAFT. A published edit stays PUBLISHED. Delete removes that post and its engagement.",
+            "publishFinalPost": "POST /trips/[id]/publish — the author. Sets isPublished, publishedAt, and generationStatus PUBLISHED. Ending the trip does not publish.",
+            "homeFeed": "GET /feed/home (published final posts from self, followed users, and public users, excluding anyone in a block with the viewer either way). Page/limit still works. Optional cursor (base64url {createdAt,id}) keyset-pages the next slice and returns nextCursor; the mobile FeedProvider sends that cursor. Trip card counts use denormalized entryCount/participantCount, not per-row _count. Discover count and page load in parallel."
         },
         "allRoutes": [
             {
@@ -783,7 +784,7 @@
         "notableBehaviors": [
             "Prisma: `PrismaTransactionClient` and `AppPrismaClient` exported for extended client + seed/tooling typing",
             "Test DB safety: `dbUrlSafety.ts` refuses Postgres URLs unless database name ends with `_test`; Vitest/seed/setup-test-db enforce via TEST_DATABASE_URL only",
-            "TripFinalizerService builds summary, curates up to 10 images, enforces publish requirements",
+            "TripFinalizerService and the scheduler both call buildMemberFinalDraft. A new draft is DRAFT, unpublished, with up to 12 of that person's images. Publish requires a summary of at least 50 characters and one photo or a cover. An existing row is not rewritten",
             "Comment/Like services create notification records asynchronously (COMMENT_LIKE for comment likes)",
             "Notification service merges follow requests with engagement notifications using opaque cursor pagination",
             "withAuth invalidates tokens issued before user.updatedAt",
@@ -964,15 +965,17 @@
         "sourceFiles": [
             "scheduler/src/index.ts",
             "scheduler/src/startup-logger.ts",
-            "scheduler/src/tripStatus.ts"
+            "scheduler/src/tripStatus.ts",
+            "scheduler/src/tripEnd.ts",
+            "scheduler/src/memberFinalDraft.ts"
         ],
         "jobLogic": [
             "End trips at a chosen end time, or after 11:59:59.999 PM in scheduleTimezone when the end date has no clock time (UTC for a timezone-less midnight date), when status is UPCOMING or ONGOING. A null endDate is manual end only.",
-            "Generate final posts for ended trips if missing",
+            "When a due trip ends, create one unpublished DRAFT per current member if that member has no row yet. Up to 12 of that person's photos. Do not publish",
             "Start trips where startDate <= now and (endDate is null or endDate > now) and status is UPCOMING",
             "Comparisons are UTC instants. Null endDate is manual end only. Trip reads apply the same rules so the app does not wait for the hourly run."
         ],
-        "observedDifferenceVsBackendFinalizer": "Scheduler has its own inline final-post generation logic and does not call backend TripFinalizerService directly.",
+        "observedDifferenceVsBackendFinalizer": "The scheduler does not import TripFinalizerService, because its TypeScript program cannot import src/lib. Both endings call buildMemberFinalDraft in scheduler/src/memberFinalDraft.ts, and the API imports that file. A member who already has a row is left alone. Neither path publishes the post.",
         "timeStorage": "startDate and endDate are absolute UTC instants. scheduleTimezone labels the zone used when the wall time was picked. A chosen start or end time is that instant. An end date with no clock time (midnight in scheduleTimezone) lasts through 11:59:59.999 PM in that zone. Clients convert to the device zone, then format with the device locale so India shows day/month and the US shows month/day. Legacy rows with a null scheduleTimezone and an exact UTC midnight stay date-only in the app and end at 11:59:59.999 PM UTC of that date.",
         "tripType": "Unset type is SOLO. When typeSetByUser is false, participantCount >= 2 promotes the trip to GROUP and a drop back to 1 returns SOLO. COUPLE and FAMILY are never assigned from a headcount; they stay only when the user specified the type."
     },
@@ -1506,13 +1509,14 @@
             "status": "completed",
             "prs": [
                 31,
-                38
+                38,
+                61
             ],
             "features": [
                 {
                     "name": "Final Post Generation",
                     "status": "completed",
-                    "description": "Auto-generate trip summaries with curated media (one per day, up to 10 items) when trip ends",
+                    "description": "Auto-generate an unpublished DRAFT per current member, one photo per day then extras, up to 12 of that person's photos, when an ongoing trip ends",
                     "pr": 31,
                     "merged": "2026-01-04"
                 },
@@ -1528,12 +1532,13 @@
                 },
                 {
                     "name": "Personalized Final Posts Per Participant",
-                    "status": "in_progress",
-                    "description": "Each participant can generate, edit, and publish their own final post for the same trip",
-                    "pr": 38,
+                    "status": "implemented",
+                    "description": "Each current member gets, edits, and publishes their own final post for the same trip. The unpublished row is DRAFT. Up to 12 photos.",
+                    "pr": 61,
                     "state": "open",
+                    "url": "https://github.com/bagariaraj23/Trav-Flut/pull/61",
                     "planFile": "personalized_final_posts_per_participant_efaf83cd.plan.md",
-                    "notes": "Schema migration to add userId to TripFinalPost, refactor service layer, update API endpoints"
+                    "notes": "Implemented on open PR #61. PR #38 is the older draft of the same idea and remains behind main."
                 }
             ]
         },
@@ -2318,19 +2323,48 @@
         ],
         "open": [
             {
+                "number": 61,
+                "title": "Let every participant publish their own final post",
+                "state": "open",
+                "url": "https://github.com/bagariaraj23/Trav-Flut/pull/61",
+                "base": "main",
+                "head": "cursor/personalized-final-posts-44b0",
+                "notes": "Bottom of the stack. One unpublished DRAFT per current member, up to 12 of that person's photos, from both endings. Publishing sets PUBLISHED. Docker baseline leaves the READY-to-DRAFT data migration for migrate deploy. No new Compose service.",
+                "keyFeatures": [
+                    "TripFinalPost unique on tripId and userId",
+                    "Shared buildMemberFinalDraft for the API and the scheduler",
+                    "Unpublished drafts stay DRAFT",
+                    "Up to 12 personal photos"
+                ]
+            },
+            {
                 "number": 62,
                 "title": "Add Restrict, Block, and shared media tools",
                 "state": "open",
                 "url": "https://github.com/bagariaraj23/Trav-Flut/pull/62",
-                "base": "main",
+                "base": "cursor/personalized-final-posts-44b0",
                 "head": "cursor/media-restrict-block-aa71",
-                "notes": "Current work. Restrict and Block, conversation media, the shared viewer, and final-post photo order. Rebuild the web image. The new migration is applied by migrate deploy.",
+                "notes": "Stacked on #61. Restrict and Block, conversation media, the shared viewer, Help and FAQ, and the 12-photo picker. Rebuild the web image. The safety migration is applied by migrate deploy. No new Compose service.",
                 "keyFeatures": [
                     "Restrict and Block from a profile, a direct message, a group or trip chat member list, and Manage Participants, with an info explanation",
                     "Help and FAQ in Settings for the product rules",
-                    "Block also stops follows, profile access, and creator adds",
+                    "Block hides posts, trips, and profile detail both ways. Search still finds a name and username. Unblock is only on the blocker's side",
                     "A trip or group someone else created can include both people",
-                    "Shared media viewer and final-post selection order"
+                    "Shared media viewer and final-post selection order, up to 12 photos"
+                ]
+            },
+            {
+                "number": 63,
+                "title": "Document the full TripThread architecture and every feature",
+                "state": "open",
+                "url": "https://github.com/bagariaraj23/Trav-Flut/pull/63",
+                "base": "cursor/media-restrict-block-aa71",
+                "head": "cursor/technical-documentation-becf",
+                "notes": "Top of the stack. Handbook, context.json, and the operator docs for the combined tree. Documentation only.",
+                "keyFeatures": [
+                    "Technical handbook under documentations/technical",
+                    "context.json matches the stacked code",
+                    "Docker notes for the existing migrate-on-boot path"
                 ]
             },
             {
@@ -2339,7 +2373,7 @@
                 "state": "draft",
                 "url": "https://github.com/bagariaraj23/Trav-Flut/pull/38",
                 "created_at": "2026-02-20",
-                "notes": "Draft on patch-final-post-update. Next product feature. The branch is 172 commits behind main and needs a rebase before more work.",
+                "notes": "Older draft of personalized final posts. The implementation to merge is PR #61. This branch stays behind main.",
                 "keyFeatures": [
                     "Personalized final posts per participant",
                     "Schema migration",
@@ -2358,11 +2392,11 @@
     "implementationStatus": {
         "overallCompletion": "96%",
         "completedFeatures": 62,
-        "inProgressFeatures": 2,
+        "inProgressFeatures": 0,
         "plannedFeatures": 3,
         "totalPRs": 52,
         "mergedPRs": 47,
-        "openPRs": 3,
+        "openPRs": 5,
         "raceConditionFixes": {
             "total": 17,
             "fixed": 15,
@@ -2380,16 +2414,26 @@
             "scheduler": "Partial — behavioral unit tests; DB integration tests exist but scheduler source still low line coverage",
             "reportPath": "coverage/index.html",
             "lastRun": "2026-11-11",
-            "notes": "2026-11-11: user-safety and chat integration tests passed (25). Flutter media_safety_test passed in the Flutter 3.38.5 container. Do not add platform-specific Rolldown bindings to root dependencies."
+            "notes": "2026-11-13: personalized final-post integration tests and scheduler draft tests passed (13). 2026-11-11: user-safety and chat integration tests passed (25). Flutter media_safety_test passed in the Flutter 3.38.5 container. Do not add platform-specific Rolldown bindings to root dependencies."
         },
         "lastMergedFeature": "PR #56 Dockerise the full local stack (merged main 2026-11-11, 2:44 PM IST). PR #54 trip create UX merged 2026-11-06.",
-        "notes": "Main includes the Docker stack and Mapbox 3.34.2. PR #62 (cursor/media-restrict-block-aa71) adds Restrict, Block, conversation media, the shared viewer, and final-post photo order. Rebuild the web image to see those screens at port 8080. The new migration is applied by the existing migrate-on-boot path. Open drafts are PR #15 and PR #38. A road line between saved pins can come later with one cached Mapbox Directions call. A walked-path trace needs background location and stays deferred. Cloudinary dashboard presets and Universal Links ops remain.",
+        "notes": "Main includes the Docker stack and Mapbox 3.34.2. The open stack is #61, then #62, then #63. #61 writes one unpublished DRAFT per member, up to 12 photos, from both trip endings. #62 adds Restrict, Block, conversation media, the shared viewer, and the picker. #63 is the handbook. Rebuild the web image to see the Flutter screens at port 8080. Migrations apply through the existing migrate-on-boot path. An old db-push volume leaves the READY-to-DRAFT update for that deploy. No new Compose service, port, or environment variable. Open drafts are PR #15 and PR #38. A road line between saved pins can come later with one cached Mapbox Directions call. A walked-path trace needs background location and stays deferred. Cloudinary dashboard presets and Universal Links ops remain.",
         "mainBranchStable": true,
         "activeStack": [
             {
+                "pr": 61,
+                "branch": "cursor/personalized-final-posts-44b0",
+                "base": "main"
+            },
+            {
                 "pr": 62,
                 "branch": "cursor/media-restrict-block-aa71",
-                "base": "main"
+                "base": "cursor/personalized-final-posts-44b0"
+            },
+            {
+                "pr": 63,
+                "branch": "cursor/technical-documentation-becf",
+                "base": "cursor/media-restrict-block-aa71"
             }
         ]
     },
@@ -2405,6 +2449,7 @@
         "mobile/lib/providers/user_provider.dart",
         "src/lib/services/notification.ts",
         "scheduler/src/tripStatus.ts",
+        "scheduler/src/memberFinalDraft.ts",
         "src/lib/prisma.ts",
         "src/lib/services/engagement-utils.ts",
         "src/lib/services/tripTagResolution.ts",

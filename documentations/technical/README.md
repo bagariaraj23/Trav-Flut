@@ -2,7 +2,7 @@
 
 This handbook is the implementation reference for TripThread. It was written from the running code (`prisma/schema.prisma`, `src/`, `mobile/lib/`, `scheduler/`, `server.cjs`) and cross-checked against `documentations/context.json`. Where the product snapshot and the code disagree, the code wins and the difference is called out.
 
-TripThread is a travel social platform. People create trips, post a thread of text, media, and location while the trip is ongoing, split costs on a Money pane, publish a final post when the trip ends, and chat in direct messages, groups, and trip rooms.
+TripThread is a travel social platform. People create trips, post a thread of text, media, and location while the trip is ongoing, split costs on a Money pane, and after an ongoing trip ends each member edits and publishes their own final post. They also chat in direct messages, groups, and trip rooms.
 
 ## How to read this
 

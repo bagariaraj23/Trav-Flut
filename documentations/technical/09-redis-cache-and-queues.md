@@ -12,7 +12,7 @@ Primary files:
 - `src/app/api/debug/redis/route.ts`
 - `src/app/api/admin/cache/metrics/route.ts`
 - `src/app/api/admin/cache/warm/route.ts`
-- History of the queue removal: `scheduler/MIGRATION_NOTES.md`, `scheduler/SCHEDULER_ARCHITECTURE.md`
+- History of the queue removal: `scheduler/SCHEDULER_ARCHITECTURE.md`
 
 Credentials are `REDIS_REST_URL` and `REDIS_REST_TOKEN`. Both clients read that pair. If the variables are missing, callers fall through to in-process memory. The API still boots.
 

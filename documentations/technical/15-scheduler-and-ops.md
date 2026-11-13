@@ -4,7 +4,7 @@ The scheduler is a second program with the same database and none of the API's R
 
 ## Scheduler
 
-Files: `scheduler/src/index.ts`, `tripStatus.ts`, `tripEnd.ts`, `startup-logger.ts`. Narrative design: `scheduler/SCHEDULER_ARCHITECTURE.md` and `scheduler/MIGRATION_NOTES.md`.
+Files: `scheduler/src/index.ts`, `tripStatus.ts`, `tripEnd.ts`, `memberFinalDraft.ts`, `startup-logger.ts`. The BullMQ history is in `scheduler/SCHEDULER_ARCHITECTURE.md`. There is no `scheduler/MIGRATION_NOTES.md`.
 
 `index.ts` loads env, constructs Prisma, logs database health, calls `updateTripStatuses`, and exits. Exit is the feature. Cron, GitHub Actions, or the Compose shell starts the next run. Nothing in this process stays resident, so it cannot leak a Redis connection or a BullMQ worker.
 
@@ -44,7 +44,7 @@ Docker is a convenience loop around the same one-shot script. It is not a long-r
 | `web` | Flutter web, nginx port 8080, proxies API, chat, share, well-known, Next assets, reset pages |
 | `scheduler` | The loop described above |
 
-`scripts/docker-entrypoint.sh` waits for Postgres, runs `prisma migrate deploy`, baselines a volume that was previously created with `db push`, then execs the command. Production hosting is Railway / Railpack, not this Dockerfile. The image is for local parity.
+`scripts/docker-entrypoint.sh` waits for Postgres, runs `prisma migrate deploy`, baselines a volume that was previously created with `db push`, then execs the command. Baselining marks schema migrations applied and leaves `20261113180000_relabel_ready_final_posts_as_draft` unmarked, because `db push` does not rewrite `READY` rows. The `migrate deploy` that follows runs that update. A database that already has `_prisma_migrations` just runs `migrate deploy`, which applies the personalized-final-post migration, the safety migration, and that data update with no new Compose service, port, or environment variable. Rebuild the `web` image after a Flutter change. The scheduler image copies `scheduler/` and compiles it, so `memberFinalDraft.ts` is included without a Dockerfile change. Production hosting is Railway / Railpack, not this Dockerfile. The image is for local parity.
 
 `SHARE_LINK_BASE_URL` is passed into the backend so share links in emails and API responses point at the host the web container serves.
 

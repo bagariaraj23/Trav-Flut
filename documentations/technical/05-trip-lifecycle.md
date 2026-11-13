@@ -1,6 +1,6 @@
 # Trip lifecycle
 
-A trip is the aggregate root of the product. It has a schedule, a status, members, a thread, a money ledger, an optional final post, and an optional chat room.
+A trip is the aggregate root of the product. It has a schedule, a status, members, a thread, a money ledger, one unpublished final-post draft per member once an ongoing trip ends, and an optional chat room.
 
 Primary files:
 
@@ -93,7 +93,7 @@ Without `replaceExisting: true` the response is **409** `ConflictError`. With th
 
 ## End, cover, leave
 
-`POST /api/trips/:id/end` is owner-only. Allowed from `ONGOING` or `UPCOMING`. Already `ENDED` is **409**. The handler sets `status = ENDED` and `endDate = now`. A final post is generated only when the previous status was `ONGOING`.
+`POST /api/trips/:id/end` is owner-only. Allowed from `ONGOING` or `UPCOMING`. Already `ENDED` is **409**. The handler sets `status = ENDED` and `endDate = now`. One unpublished `DRAFT` per current member is created only when the previous status was `ONGOING`. An `UPCOMING` end creates none.
 
 `PATCH /api/trips/:id/cover` is owner or participant, trip `ONGOING` or `ENDED`, and the media must be an `IMAGE` the caller uploaded.
 
