@@ -354,7 +354,7 @@ npm start
   - Intelligent summary generation from trip entries
   - Media curation (one per day, up to 12 items)
   - Editable before publishing
-  - Photo picker shows the selection order and stops at 10
+  - Photo picker shows the selection order and stops at 12
   - Published final posts appear in home feed
 
 ### Chat
