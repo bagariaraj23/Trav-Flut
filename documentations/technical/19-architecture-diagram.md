@@ -310,7 +310,7 @@ flowchart TD
   accept --> invite
 ```
 
-There is no block table. Unfollow deletes the follow edge and every request between the pair.
+Unfollow deletes the follow edge and every request between the pair. Restrict and Block live on `user_safety_relations`, not on `follows`. Block also deletes the target's follow of the actor.
 
 ## 8. Media and places
 

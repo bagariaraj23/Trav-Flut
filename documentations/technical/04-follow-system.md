@@ -1,6 +1,6 @@
 # Follow system
 
-Public accounts are followed immediately. Private accounts produce a pending request that the followee accepts or rejects. There is no block, mute, or close-friends model.
+Public accounts are followed immediately. Private accounts produce a pending request that the followee accepts or rejects. Restrict and Block are a separate pair of actions, stored on `UserSafetyRelation`, not on `Follow`. There is no mute list and no close-friends list.
 
 Primary files:
 
@@ -74,6 +74,19 @@ On a public follow the handler fires `createNotification({ type: "FOLLOW", actor
 | Discover and live trips | A private owner's trip is visible when you follow them or you are a member |
 | Trip invite | If the trip owner is private, the invitee must already follow the owner. [Trips](./05-trip-lifecycle.md) |
 | Notifications | Public follow writes `Notification` type `FOLLOW`. Pending requests are read from `follow_requests` and merged as synthetic `FOLLOW_REQUEST` items. [Notifications](./13-notifications.md) |
+
+## Restrict and Block
+
+`user_safety_relations` is unique on `(actorId, targetId)`. `action` is `RESTRICT` or `BLOCK`. Routes: `PUT` and `DELETE /api/users/:id/safety`, and `GET /api/users/me/safety` for the lists. The service is `src/lib/services/userSafety.ts`.
+
+| Action | Direct messages | Follow and profile | Adding people |
+| --- | --- | --- | --- |
+| Restrict | Stopped both ways. The existing chat stays | Unchanged | Unchanged |
+| Block | Stopped both ways, because any safety row stops a DM | The target's follow of the actor, and any pending request, is deleted. The target cannot open the actor's profile or follow them (`BLOCKED`) | The creator of a trip or group cannot add the other person. A trip or group someone else created can still include both |
+
+Downgrading a block to a restrict is rejected until the block is cleared. Blocking yourself is rejected.
+
+The same sheet opens from another person's profile, a direct-message info screen, each member of a group or trip chat, and each person on Manage Participants. Settings lists blocked people and restricted people, and Help and FAQ (`help_faq_screen.dart`, `help_topics.dart`) holds the product rules.
 
 ## Mobile
 

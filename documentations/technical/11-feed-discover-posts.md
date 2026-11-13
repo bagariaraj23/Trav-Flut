@@ -17,13 +17,13 @@ There is also a `src/app/api/feed` mention of discover in older docs. The live d
 
 Authenticated, rate preset `read_hot` (240 per minute), timer name `get_home_feed`.
 
-A post is included when `isPublished` is true and the trip owner is any of:
+A post is included when `isPublished` is true and the post author (`TripFinalPost.userId`, not the trip owner) is any of:
 
 1. The viewer.
 2. Someone the viewer follows.
 3. A public account (`isPrivate = false`).
 
-The three conditions are `OR`. Public posts are on the home feed even when the viewer does not follow the author. Private authors appear only as self or as a follow. The mobile provider also drops items that look private and unfollowed, in case a stale client cache disagrees with the server.
+The three conditions are `OR`. Public posts are on the home feed even when the viewer does not follow the author. Private authors appear only as self or as a follow. A block does not remove that author's public post from this query. The mobile provider also drops items that look private and unfollowed, in case a stale client cache disagrees with the server.
 
 Pagination: `page` and `limit` (1–100, default 20) still work. If `cursor` is set, offset is forced to 0 and the cursor wins. `feedCursor.ts` encodes base64url `{ createdAt, id }`. The filter is "rows strictly older than this `(createdAt, id)` pair", matching `orderBy: [{ createdAt: "desc" }, { id: "desc" }]`. The query takes `limit + 1`. If the extra row exists, `hasNext` is true and `nextCursor` is the last returned row.
 

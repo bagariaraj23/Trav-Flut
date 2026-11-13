@@ -111,7 +111,7 @@ Without `replaceExisting: true` the response is **409** `ConflictError`. With th
 
 `GET /api/trips/:id/participants` returns `trip_participants` rows and prepends a synthetic owner `{ role: "owner" }` when the owner is not in the table.
 
-`POST /api/trips/:id/participants` is owner-only. If the owner is private, the added user must already follow the owner. **201** on success. `participantCount` increments.
+`POST /api/trips/:id/participants` is owner-only. If the owner is private, the added user must already follow the owner. `assertCreatorMayAdd` rejects the add when a block exists either way between the trip owner and that user. **201** on success. `participantCount` increments. The same creator check runs when an invite is accepted (`tripInvitation.ts`). A third person's trip can still include both people.
 
 `DELETE /api/trips/:id/participants?userId=` is owner-only and uses the same unsettled-balance guard on the removed user.
 

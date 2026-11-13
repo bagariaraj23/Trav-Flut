@@ -72,7 +72,9 @@ For one entry it deletes tags, likes, comments, shares, and notifications that p
 
 ## Final post
 
-`TripFinalPost.tripId` is unique. One draft per trip. The planned per-participant post (composite unique on `tripId, userId`) is not the schema today. `context.json` still mentions that plan. The table is 1:1.
+`TripFinalPost` is unique on `(tripId, userId)`. Each member has their own draft. Migration `20261111120000_personalized_final_posts` assigns older rows to the trip owner, drops the old `tripId` unique index, and adds `(userId, isPublished, publishedAt)` plus `tripId`.
+
+Ending a trip drafts a post for the owner and every current participant (`generateFinalPostsForMembers`). The first draft uses that person's notes, photos they uploaded or posted, and photos on entries that tag them. After that, the editor can add any photo from the trip. The picker numbers the selection and stops at 10 (`FinalPostProvider.maxPhotos`). The home feed and the post screen show `post.user`, the author, and a published post follows that author's privacy. A draft stays visible only to its author (`canViewEntity` in `src/lib/auth/permissions.ts`).
 
 | Column | Role |
 | --- | --- |
@@ -90,11 +92,11 @@ For one entry it deletes tags, likes, comments, shares, and notifications that p
 
 | Event | Writer | Status |
 | --- | --- | --- |
-| Scheduler end batch | Inline insert in `scheduler/src/tripStatus.ts` | `DRAFT` (column default). The summary template is simpler than the API generator |
-| Read-path sync that ends a trip | `TripFinalizerService.generateFinalPost` | `READY` |
-| `POST /trips/:id/end` from `ONGOING` | same service | `READY` |
+| Scheduler end batch | Inline insert in `scheduler/src/tripStatus.ts`, one row per member who does not already have a post | `DRAFT` (column default). Personal photos, capped at 6. The summary is shorter than the API generator |
+| Read-path sync that ends a trip | `TripFinalizerService.generateFinalPostsForMembers` | `READY` |
+| `POST /trips/:id/end` from `ONGOING` | same service, one post per member | `READY` |
 | `POST /trips/:id/end` from `UPCOMING` | none | No row |
-| `POST /trips/:id/final-post/generate` | owner, trip must be `ENDED` | `READY`. Idempotent if a row exists |
+| `POST /trips/:id/final-post/generate` | that member, trip must be `ENDED` | `READY`. Idempotent if their row exists |
 
 `generateFinalPost` is idempotent: if the row exists it returns it instead of overwriting the owner's edits.
 
@@ -102,10 +104,10 @@ For one entry it deletes tags, likes, comments, shares, and notifications that p
 
 | Route | Rule |
 | --- | --- |
-| `GET /trips/:id/final-post` | Owner or participant |
-| `PUT /trips/:id/final-post` | Owner draft edit. If the post is already `PUBLISHED`, the status stays `PUBLISHED` |
-| `DELETE /trips/:id/final-post` | Owner. Removes the post and its engagement rows |
-| `POST /trips/:id/publish` | Owner. Summary at least 50 characters, and at least one curated media item or a cover URL. Sets `isPublished`, `publishedAt`, `generationStatus = PUBLISHED` |
+| `GET /trips/:id/final-post` | The caller's own post. A member, or someone who already has a post on this trip |
+| `PUT /trips/:id/final-post` | The author edits their draft. If it is already `PUBLISHED`, the status stays `PUBLISHED` |
+| `DELETE /trips/:id/final-post` | The author. Removes their post and its engagement rows |
+| `POST /trips/:id/publish` | The author. Summary at least 50 characters, and at least one curated media item or a cover URL. Sets `isPublished`, `publishedAt`, `generationStatus = PUBLISHED` |
 
 Publishing the post is what puts it on the home feed. Ending the trip does not publish it. `isPublished` plus `(createdAt DESC, id DESC)` is the feed index. See [Feed](./11-feed-discover-posts.md).
 
@@ -113,7 +115,7 @@ Publishing the post is what puts it on the home feed. Ending the trip does not p
 
 ### Mobile
 
-`FinalPostProvider` loads the draft, calls generate if it is missing, autosaves with a debounce, and publishes via `POST /trips/:id/publish`. The screen is `final_post_edit_screen.dart`.
+`FinalPostProvider` loads the signed-in member's draft, calls generate if it is missing, autosaves with a debounce, and publishes via `POST /trips/:id/publish`. `toggleMedia` appends in selection order and refuses an 11th photo. The screen is `final_post_edit_screen.dart`. `PhotoOrderBadge` in `media_seek.dart` draws the number.
 
 ## Engagement on both kinds of post
 
