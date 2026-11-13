@@ -54,7 +54,7 @@ function decodeCursor(cursor: string): { createdAt: Date; id: string } {
   }
 }
 
-async function blockEitherWay(
+export async function blockEitherWay(
   leftId: string,
   rightId: string
 ): Promise<boolean> {
@@ -111,6 +111,41 @@ export async function isProfileUnavailable(
     select: { action: true },
   });
   return row?.action === UserSafetyAction.BLOCK;
+}
+
+/** The signed-in person blocked this profile, so they see a limited page with Unblock. */
+export async function viewerHasBlocked(
+  viewerId: string | null,
+  profileUserId: string
+): Promise<boolean> {
+  if (!viewerId || viewerId === profileUserId) return false;
+  const row = await prisma.userSafetyRelation.findUnique({
+    where: {
+      actorId_targetId: { actorId: viewerId, targetId: profileUserId },
+    },
+    select: { action: true },
+  });
+  return row?.action === UserSafetyAction.BLOCK;
+}
+
+/**
+ * Authors and trip owners to leave out of Home and Discover.
+ * A block in either direction hides that person's posts and trips.
+ */
+export async function contentHiddenUserIds(viewerId: string): Promise<string[]> {
+  const rows = await prisma.userSafetyRelation.findMany({
+    where: {
+      action: UserSafetyAction.BLOCK,
+      OR: [{ actorId: viewerId }, { targetId: viewerId }],
+    },
+    select: { actorId: true, targetId: true },
+  });
+  const ids = new Set<string>();
+  for (const row of rows) {
+    ids.add(row.actorId === viewerId ? row.targetId : row.actorId);
+  }
+  ids.delete(viewerId);
+  return [...ids];
 }
 
 export async function setSafetyAction(

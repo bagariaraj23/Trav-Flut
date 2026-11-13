@@ -1,11 +1,17 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { MediaType, UserSafetyAction } from "@prisma/client";
+import { GenerationStatus, MediaType, TripStatus, UserSafetyAction } from "@prisma/client";
 import { randomUUID } from "crypto";
 import { NextRequest } from "next/server";
 import { prisma } from "../../src/lib/prisma";
 import { cleanDb, createUser, createTrip, getAuthToken } from "../testUtils";
 import { POST as followPost } from "../../src/app/api/follow/[userId]/route";
 import { GET as getUser } from "../../src/app/api/users/[id]/route";
+import { GET as searchUsers } from "../../src/app/api/users/route";
+import { GET as getHomeFeed } from "../../src/app/api/feed/home/route";
+import { GET as getDiscoverTrips } from "../../src/app/api/discover/trips/route";
+import { GET as getPost } from "../../src/app/api/posts/[entityType]/[entityId]/route";
+import { GET as getTrip } from "../../src/app/api/trips/[id]/route";
+import { canViewEntity } from "../../src/lib/auth/permissions";
 import {
   addGroupParticipant,
   createConversation,
@@ -117,6 +123,142 @@ describe("Restrict and Block", () => {
       { params: Promise.resolve({ id: alice.id }) }
     );
     expect(profileResponse.status).toBe(404);
+  });
+
+  it("keeps a blocked person's posts out of Home and Discover", async () => {
+    const alice = await createUser({
+      email: "alice-feed@test.com",
+      username: "alicefeed",
+      name: "Alice Feed",
+    });
+    const bob = await createUser({
+      email: "bob-feed@test.com",
+      username: "bobfeed",
+      name: "Bob Feed",
+    });
+    const trip = await createTrip({
+      userId: bob.id,
+      title: "Bob public trip",
+      status: TripStatus.ENDED,
+    });
+    const post = await prisma.tripFinalPost.create({
+      data: {
+        tripId: trip.id,
+        userId: bob.id,
+        summaryText: "Bob wrote a public recap long enough to publish here.",
+        curatedMedia: ["https://cdn.example.com/bob.jpg"],
+        isPublished: true,
+        publishedAt: new Date(),
+        generationStatus: GenerationStatus.PUBLISHED,
+      },
+    });
+
+    await setSafetyAction(alice.id, bob.id, UserSafetyAction.BLOCK);
+    const token = await getAuthToken(alice);
+    const auth = { authorization: `Bearer ${token}` };
+
+    const feed = await getHomeFeed(
+      new NextRequest("http://localhost/api/feed/home", { headers: auth })
+    );
+    const feedBody = await feed.json();
+    expect(feed.status).toBe(200);
+    expect(
+      feedBody.data.items.map((item: { id: string }) => item.id)
+    ).not.toContain(post.id);
+
+    const discover = await getDiscoverTrips(
+      new NextRequest(
+        "http://localhost/api/discover/trips?q=Bob%20public",
+        { headers: auth }
+      )
+    );
+    const discoverBody = await discover.json();
+    expect(discover.status).toBe(200);
+    expect(
+      discoverBody.data.items.map((item: { id: string }) => item.id)
+    ).not.toContain(trip.id);
+
+    const search = await searchUsers(
+      new NextRequest("http://localhost/api/users?search=bobfeed", {
+        headers: auth,
+      })
+    );
+    const searchBody = await search.json();
+    expect(search.status).toBe(200);
+    expect(
+      searchBody.data.items.map((item: { id: string }) => item.id)
+    ).toContain(bob.id);
+
+    const profile = await getUser(
+      new NextRequest(`http://localhost/api/users/${bob.id}`, {
+        headers: auth,
+      }),
+      { params: Promise.resolve({ id: bob.id }) }
+    );
+    const profileBody = await profile.json();
+    expect(profile.status).toBe(200);
+    expect(profileBody.data.blockedByViewer).toBe(true);
+    expect(profileBody.data.email).toBe("");
+    expect(profileBody.data.username).toBe("bobfeed");
+    expect(profileBody.data.bio ?? null).toBeNull();
+
+    const opened = await getPost(
+      new NextRequest(
+        `http://localhost/api/posts/TRIP_FINAL_POST/${post.id}`,
+        { headers: auth }
+      ),
+      {
+        params: Promise.resolve({
+          entityType: "TRIP_FINAL_POST",
+          entityId: post.id,
+        }),
+      }
+    );
+    const tripView = await getTrip(
+      new NextRequest(`http://localhost/api/trips/${trip.id}`, {
+        headers: auth,
+      }),
+      { params: Promise.resolve({ id: trip.id }) }
+    );
+    expect(tripView.status).toBe(404);
+
+    expect(opened.status).toBe(403);
+    expect(await canViewEntity(alice.id, "TRIP_FINAL_POST", post.id)).toBe(
+      false
+    );
+
+    await clearSafetyAction(alice.id, bob.id);
+    const restored = await getHomeFeed(
+      new NextRequest("http://localhost/api/feed/home", { headers: auth })
+    );
+    const restoredBody = await restored.json();
+    expect(
+      restoredBody.data.items.map((item: { id: string }) => item.id)
+    ).toContain(post.id);
+    const restoredDiscover = await getDiscoverTrips(
+      new NextRequest(
+        "http://localhost/api/discover/trips?q=Bob%20public",
+        { headers: auth }
+      )
+    );
+    const restoredDiscoverBody = await restoredDiscover.json();
+    expect(
+      restoredDiscoverBody.data.items.map((item: { id: string }) => item.id)
+    ).toContain(trip.id);
+    expect(await canViewEntity(alice.id, "TRIP_FINAL_POST", post.id)).toBe(
+      true
+    );
+
+    const restoredProfile = await getUser(
+      new NextRequest(`http://localhost/api/users/${bob.id}`, {
+        headers: auth,
+      }),
+      { params: Promise.resolve({ id: bob.id }) }
+    );
+    const restoredProfileBody = await restoredProfile.json();
+    expect(restoredProfile.status).toBe(200);
+    expect(restoredProfileBody.data.blockedByViewer ?? false).toBe(false);
+    expect(restoredProfileBody.data.email).toBe(bob.email);
   });
 
   it("lets a third person put both people on their trip and group", async () => {

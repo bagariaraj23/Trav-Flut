@@ -7,6 +7,7 @@ import { enforcePresetRateLimit } from "@/lib/rateLimit";
 import { PerformanceMonitor } from "@/lib/monitoring";
 import { omitHiddenTripSpend } from "@/lib/tripSpendVisibility";
 import { syncTripById } from "@/lib/tripSchedule";
+import { blockEitherWay } from "@/lib/services/userSafety";
 
 // Get trip by ID
 export async function GET(
@@ -110,6 +111,16 @@ export async function GET(
       );
 
       if (!isOwner && !isParticipant) {
+        if (await blockEitherWay(currentUserId, trip.userId)) {
+          return NextResponse.json<ApiResponse>(
+            {
+              success: false,
+              error: "Trip not found",
+            },
+            { status: 404 }
+          );
+        }
+
         // Check if trip owner's profile is public or if current user follows them
         if (trip.user?.isPrivate) {
           const followRelation = await prisma.follow.findUnique({

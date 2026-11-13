@@ -4,7 +4,10 @@ import { AuthService } from "@/lib/auth";
 import { ApiResponse, TripResponse } from "@/types/api";
 import { TripStatus } from "@prisma/client";
 import { omitHiddenTripSpend } from "@/lib/tripSpendVisibility";
-import { isProfileUnavailable } from "@/lib/services/userSafety";
+import {
+  isProfileUnavailable,
+  viewerHasBlocked,
+} from "@/lib/services/userSafety";
 
 /**
  * Trips visible on a user's profile: trips they own or joined as participant.
@@ -46,6 +49,13 @@ export async function GET(
         { success: false, error: "User not found" },
         { status: 404 }
       );
+    }
+
+    if (await viewerHasBlocked(viewerId, profileUserId)) {
+      return NextResponse.json<ApiResponse<TripResponse[]>>({
+        success: true,
+        data: [],
+      });
     }
 
     if (profileUser.isPrivate && viewerId !== profileUserId) {

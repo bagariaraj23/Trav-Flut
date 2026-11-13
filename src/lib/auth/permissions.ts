@@ -1,5 +1,6 @@
 import { EntityType } from '@prisma/client';
 import { prisma } from '../prisma';
+import { blockEitherWay } from '../services/userSafety';
 
 export class PermissionError extends Error {
   constructor(message: string) {
@@ -39,6 +40,14 @@ export async function canViewEntity(
     // A draft belongs to its author until they publish it.
     if (!post.isPublished) {
       return !!userId && userId === post.userId;
+    }
+
+    if (
+      userId &&
+      userId !== post.userId &&
+      (await blockEitherWay(userId, post.userId))
+    ) {
+      return false;
     }
 
     if (!post.user.isPrivate) return true;

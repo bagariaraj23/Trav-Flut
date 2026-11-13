@@ -8,7 +8,10 @@ import {
   AuthenticatedRequest,
 } from "@/lib/middleware";
 import { PerformanceMonitor, ErrorTracker } from "@/lib/monitoring";
-import { isProfileUnavailable } from "@/lib/services/userSafety";
+import {
+  isProfileUnavailable,
+  viewerHasBlocked,
+} from "@/lib/services/userSafety";
 
 // Get user statistics (trip, follower, and following counts)
 export async function GET(
@@ -33,6 +36,15 @@ export async function GET(
                 { success: false, error: "User not found" },
                 { status: 404 }
               );
+            }
+
+            if (
+              await viewerHasBlocked(authenticatedReq.user!.userId, userId)
+            ) {
+              return NextResponse.json<ApiResponse<UserStats>>({
+                success: true,
+                data: { tripCount: 0, followerCount: 0, followingCount: 0 },
+              });
             }
 
             const [followerCount, followingCount, tripCount] = await Promise.all([
