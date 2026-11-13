@@ -27,6 +27,8 @@ export interface UserProfile {
   hasGoogleLinked?: boolean;
   /** The viewer blocked this person. The page is limited until they unblock. */
   blockedByViewer?: boolean;
+  /** This person blocked the viewer. The page shows a name and username only. */
+  viewerIsBlocked?: boolean;
 }
 
 export interface UserStats {

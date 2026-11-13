@@ -47,7 +47,7 @@ export async function GET(
       },
     });
 
-    if (!user || (await isProfileUnavailable(userId, currentUserId))) {
+    if (!user) {
       return NextResponse.json<ApiResponse>(
         {
           success: false,
@@ -57,24 +57,29 @@ export async function GET(
       );
     }
 
-    if (await viewerHasBlocked(currentUserId, userId)) {
+    const blockedByViewer = await viewerHasBlocked(currentUserId, userId);
+    const viewerIsBlocked = await isProfileUnavailable(userId, currentUserId);
+    if (blockedByViewer || viewerIsBlocked) {
       const limitedProfile: UserProfile = {
         id: user.id,
         email: "",
         username: user.username ?? undefined,
         name: user.name ?? undefined,
-        avatarUrl: user.avatarUrl ?? undefined,
+        avatarUrl: undefined,
         bio: undefined,
         isPrivate: user.isPrivate,
         createdAt: user.createdAt.toISOString(),
         updatedAt: user.updatedAt.toISOString(),
-        blockedByViewer: true,
+        blockedByViewer: blockedByViewer || undefined,
+        viewerIsBlocked: viewerIsBlocked || undefined,
       };
 
       return NextResponse.json<ApiResponse<UserProfile>>({
         success: true,
         data: limitedProfile,
-        message: "You blocked this person. Unblock them to see their posts again.",
+        message: blockedByViewer
+          ? "You blocked this person. Unblock them to see their posts again."
+          : "This profile is not available.",
       });
     }
 

@@ -3,7 +3,7 @@ import { prisma } from '@/lib/prisma'
 import { ApiResponse, UserProfile } from '@/types/api'
 import { withAuth, AuthenticatedRequest, handleApiError } from '@/lib/middleware'
 import { AuthService } from '@/lib/auth'
-import { isProfileUnavailable, viewerHasBlocked } from '@/lib/services/userSafety'
+import { blockEitherWay } from '@/lib/services/userSafety'
 
 async function handler(
   request: AuthenticatedRequest,
@@ -24,7 +24,7 @@ async function handler(
       select: { id: true, isPrivate: true },
     })
 
-    if (!targetUser || (await isProfileUnavailable(targetUserId, currentUserId))) {
+    if (!targetUser) {
       return NextResponse.json<ApiResponse>(
         {
           success: false,
@@ -34,7 +34,7 @@ async function handler(
       )
     }
 
-    if (await viewerHasBlocked(currentUserId, targetUserId)) {
+    if (await blockEitherWay(currentUserId, targetUserId)) {
       return NextResponse.json({
         success: true,
         data: {

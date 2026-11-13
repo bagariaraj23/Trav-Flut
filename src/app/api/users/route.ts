@@ -25,6 +25,7 @@ export interface PaginatedResponse<T> {
 }
 
 import { PerformanceMonitor } from "@/lib/monitoring";
+import { contentHiddenUserIds } from "@/lib/services/userSafety";
 
 export async function GET(request: NextRequest) {
   const endTimer = PerformanceMonitor.getInstance().startTimer("get_users_discover");
@@ -262,16 +263,20 @@ export async function GET(request: NextRequest) {
     }
 
     // Transform to DTO
-    const discoverUsers: DiscoverUserDto[] = users.map((user) => ({
-      id: user.id,
-      username: user.username || null,
-      name: user.name || null,
-      avatarUrl: user.avatarUrl || null,
-      bio: user.bio || null,
-      isPrivate: user.isPrivate,
-      isFollowing: user.followers.length > 0,
-      isFollowedBy: user.following.length > 0,
-    }));
+    const hiddenIds = new Set(await contentHiddenUserIds(currentUserId));
+    const discoverUsers: DiscoverUserDto[] = users.map((user) => {
+      const hidden = hiddenIds.has(user.id);
+      return {
+        id: user.id,
+        username: user.username || null,
+        name: user.name || null,
+        avatarUrl: hidden ? null : user.avatarUrl || null,
+        bio: hidden ? null : user.bio || null,
+        isPrivate: user.isPrivate,
+        isFollowing: hidden ? false : user.followers.length > 0,
+        isFollowedBy: hidden ? false : user.following.length > 0,
+      };
+    });
 
     const hasNext = offset + limit < total;
 
