@@ -78,7 +78,7 @@ Without `replaceExisting: true` the response is **409** `ConflictError`. With th
 
 `GET /api/trips/status` returns the first `ONGOING` trip where the caller is owner or participant, or `data: null`.
 
-`GET /api/trips/:id` allows the owner, a participant, anyone if the owner is public, and a follower if the owner is private. Otherwise **403**. Missing trip is **404**. `syncTripById` runs first. `omitHiddenTripSpend` strips `totalSpendMinor` unless the viewer is a member or `spendVisibleOnDiscover` is true.
+`GET /api/trips/:id` allows the owner and a participant. A non-member gets **404** when a block exists either way with the owner. Otherwise a non-member is allowed when the owner is public, or when the owner is private and the viewer follows them. Any other non-member gets **403**. A missing trip is **404**. `syncTripById` runs first. `omitHiddenTripSpend` strips `totalSpendMinor` unless the viewer is a member or `spendVisibleOnDiscover` is true.
 
 ## Dates
 

@@ -74,7 +74,7 @@ For one entry it deletes tags, likes, comments, shares, and notifications that p
 
 `TripFinalPost` is unique on `(tripId, userId)`. Each member has their own draft. Migration `20261111120000_personalized_final_posts` assigns older rows to the trip owner, drops the old `tripId` unique index, and adds `(userId, isPublished, publishedAt)` plus `tripId`.
 
-Ending a trip drafts a post for the owner and every current participant (`generateFinalPostsForMembers`). The first draft uses that person's notes, photos they uploaded or posted, and photos on entries that tag them. After that, the editor can add any photo from the trip. The picker numbers the selection and stops at 10 (`FinalPostProvider.maxPhotos`). The home feed and the post screen show `post.user`, the author, and a published post follows that author's privacy. A draft stays visible only to its author (`canViewEntity` in `src/lib/auth/permissions.ts`).
+Ending a trip drafts a post for the owner and every current participant (`generateFinalPostsForMembers`). The first draft uses that person's notes, photos they uploaded or posted, and photos on entries that tag them. After that, the editor can add any photo from the trip. The picker numbers the selection and stops at 10 (`FinalPostProvider.maxPhotos`). The home feed and the post screen show `post.user`, the author, and a published post follows that author's privacy. A block in either direction hides that post from the other person's feed and from `canViewEntity`. A draft stays visible only to its author (`canViewEntity` in `src/lib/auth/permissions.ts`).
 
 | Column | Role |
 | --- | --- |

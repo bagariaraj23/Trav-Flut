@@ -70,7 +70,7 @@ On a public follow the handler fires `createNotification({ type: "FOLLOW", actor
 | Feature | Rule |
 | --- | --- |
 | Private profile | A follower sees a reduced profile. Everyone else gets 403. [Profiles](./03-profiles-and-privacy.md) |
-| Home feed | Published final posts from self, from people you follow, and from every public account. [Feed](./11-feed-discover-posts.md) |
+| Home feed | Published final posts from self, from people you follow, and from every public account, except anyone in a block with the viewer. [Feed](./11-feed-discover-posts.md) |
 | Discover and live trips | A private owner's trip is visible when you follow them or you are a member |
 | Trip invite | If the trip owner is private, the invitee must already follow the owner. [Trips](./05-trip-lifecycle.md) |
 | Notifications | Public follow writes `Notification` type `FOLLOW`. Pending requests are read from `follow_requests` and merged as synthetic `FOLLOW_REQUEST` items. [Notifications](./13-notifications.md) |
@@ -82,9 +82,9 @@ On a public follow the handler fires `createNotification({ type: "FOLLOW", actor
 | Action | Direct messages | Follow and profile | Adding people |
 | --- | --- | --- | --- |
 | Restrict | Stopped both ways. The existing chat stays | Unchanged | Unchanged |
-| Block | Stopped both ways, because any safety row stops a DM | The target's follow of the actor, and any pending request, is deleted. The target cannot open the actor's profile or follow them (`BLOCKED`) | The creator of a trip or group cannot add the other person. A trip or group someone else created can still include both |
+| Block | Stopped both ways, because any safety row stops a DM | The target's follow of the actor, and any pending request, is deleted. The target cannot open the actor's profile or follow them (`BLOCKED`). The actor can still find the target in search and opens a limited profile with Unblock. Both people's posts and trips leave each other's Home feed and Discover until Unblock | The creator of a trip or group cannot add the other person. A trip or group someone else created can still include both |
 
-Downgrading a block to a restrict is rejected until the block is cleared. Blocking yourself is rejected.
+Downgrading a block to a restrict is rejected until the block is cleared. Blocking yourself is rejected. Unblock deletes the safety row. Posts and trips show again. The follow that Block removed is not put back.
 
 The same sheet opens from another person's profile, a direct-message info screen, each member of a group or trip chat, and each person on Manage Participants. Settings lists blocked people and restricted people, and Help and FAQ (`help_faq_screen.dart`, `help_topics.dart`) holds the product rules.
 
