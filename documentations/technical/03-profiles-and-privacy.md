@@ -1,6 +1,6 @@
 # Profiles and privacy
 
-One `User` row is both the login identity and the public profile. Privacy is a single boolean, `isPrivate`, default `false`. There is no separate profile table. Block is not a second privacy flag. It is a `UserSafetyRelation` row. If the profile owner has blocked the viewer, `isProfileUnavailable` makes `GET /users/:id`, stats, trips, and the follower lists respond as if the profile cannot be opened. Restrict does not hide the profile. See [Follow](./04-follow-system.md).
+One `User` row is both the login identity and the public profile. Privacy is a single boolean, `isPrivate`, default `false`. There is no separate profile table. Block is not a second privacy flag. It is a `UserSafetyRelation` row. If the profile owner has blocked the viewer, `isProfileUnavailable` makes `GET /users/:id`, stats, trips, and the follower lists respond as if the profile cannot be opened. If the viewer blocked the profile owner, the same routes stay available in a limited form: name, username, and photo, with `blockedByViewer: true`, and empty trips, counts, and follower lists. Search still returns that person. Restrict does not hide the profile. See [Follow](./04-follow-system.md).
 
 Primary files:
 
@@ -29,7 +29,11 @@ Derived flags:
 
 ```mermaid
 flowchart TD
-  Start["GET /users/:id"] --> Priv{"Target isPrivate and viewer is not the target?"}
+  Start["GET /users/:id"] --> Gone{"Owner blocked the viewer?"}
+  Gone -->|yes| Missing["404 User not found"]
+  Gone -->|no| Mine{"Viewer blocked the owner?"}
+  Mine -->|yes| Partial["Name, username, photo, blockedByViewer"]
+  Mine -->|no| Priv{"Target isPrivate and viewer is not the target?"}
   Priv -->|no| Full["Return profile including email"]
   Priv -->|yes| Follow{"Follow row exists?"}
   Follow -->|yes| Limited["Limited profile: email empty, bio hidden"]
