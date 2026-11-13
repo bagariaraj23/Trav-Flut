@@ -82,7 +82,7 @@ On a public follow the handler fires `createNotification({ type: "FOLLOW", actor
 | Action | Direct messages | Follow and profile | Adding people |
 | --- | --- | --- | --- |
 | Restrict | Stopped both ways. The existing chat stays | Unchanged | Unchanged |
-| Block | Stopped both ways, because any safety row stops a DM | The target's follow of the actor, and any pending request, is deleted. The target cannot open the actor's profile or follow them (`BLOCKED`). The actor can still find the target in search and opens a limited profile with Unblock. Both people's posts and trips leave each other's Home feed and Discover until Unblock | The creator of a trip or group cannot add the other person. A trip or group someone else created can still include both |
+| Block | Stopped both ways, because any safety row stops a DM | The target's follow of the actor, and any pending request, is deleted. The target cannot follow the actor. Both people still appear in search. Each profile shows a name and username only: no photo, trips, follower counts, or following list. The actor sees Unblock. Both people's posts and trips leave each other's Home feed and Discover until Unblock | The creator of a trip or group cannot add the other person. A trip or group someone else created can still include both |
 
 Downgrading a block to a restrict is rejected until the block is cleared. Blocking yourself is rejected. Unblock deletes the safety row. Posts and trips show again. The follow that Block removed is not put back.
 

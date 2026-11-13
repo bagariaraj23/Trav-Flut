@@ -143,7 +143,7 @@ The API is one deployable, split by folder rather than by network service.
 
 **Keyset pagination.** Home feed, thread entries, notifications, likes, comments, and chat messages page with a cursor instead of a growing `OFFSET`. The cursor is base64url JSON of the sort key (usually `createdAt` plus `id`).
 
-**Privacy.** `User.isPrivate` changes follow (immediate vs request), profile visibility, trip visibility, and who can be invited. `UserSafetyRelation` is separate: Restrict stops direct messages both ways, and Block also hides the actor's profile from the target, stops that follow, and removes both people's posts and trips from each other's Home feed and Discover. See [Follow](./04-follow-system.md).
+**Privacy.** `User.isPrivate` changes follow (immediate vs request), profile visibility, trip visibility, and who can be invited. `UserSafetyRelation` is separate: Restrict stops direct messages both ways, and Block stops that follow, leaves each profile as a name and username, and removes both people's posts and trips from each other's Home feed and Discover. See [Follow](./04-follow-system.md).
 
 **Membership.** The trip owner is `Trip.userId`. They are a billable member for expenses and tags, and they are prepended as a synthetic `owner` row on `GET /trips/:id/participants`. They are not inserted into `trip_participants` at create time.
 
