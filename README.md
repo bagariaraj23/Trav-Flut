@@ -117,8 +117,10 @@ TripThread/
 │
 ├── scheduler/              # Trip Status Scheduler (Cron Service)
 │   ├── src/
-│   │   ├── index.ts        # Main entry point
-│   │   ├── tripStatus.ts   # Status update logic
+│   │   ├── index.ts            # Main entry point
+│   │   ├── tripStatus.ts       # Status update and personal drafts
+│   │   ├── memberFinalDraft.ts # Shared unpublished draft (also imported by the API)
+│   │   ├── tripEnd.ts          # End-instant helper
 │   │   └── startup-logger.ts
 │   ├── tests/             # Unit and integration tests
 │   ├── dist/              # Compiled JavaScript
@@ -127,8 +129,7 @@ TripThread/
 │   ├── Dockerfile
 │   ├── start.sh
 │   ├── README.md
-│   ├── SCHEDULER_ARCHITECTURE.md
-│   └── MIGRATION_NOTES.md  # Migration from BullMQ to cron
+│   └── SCHEDULER_ARCHITECTURE.md  # Includes the BullMQ history
 │
 ├── src/                    # Next.js Backend
 │   ├── app/
@@ -309,9 +310,10 @@ npm start
 
 ### Core Documentation
 
+- **[Technical handbook](./documentations/technical/README.md)** - Feature-by-feature implementation, data model, optimizations, and the full architecture diagram
 - **[Environment Setup](./documentations/ENVIRONMENT_SETUP.md)** - Complete environment configuration guide
-- **[Cache Implementation](./documentations/CACHE.md)** - Redis caching architecture and usage
-- **[Cloudinary Implementation](./documentations/CLOUDINARY_IMPLEMENTATION.md)** - Media storage setup
+- **[Redis, cache, and queues](./documentations/technical/09-redis-cache-and-queues.md)** - Two-tier cache, locks, and rate limits
+- **[Media and Cloudinary](./documentations/technical/07-media-cloudinary.md)** - Signed upload, confirm, and quota
 
 ### Module Documentation
 
@@ -321,7 +323,8 @@ npm start
 
 ### Additional Documentation
 
-- **[Issue Prioritization](./documentations/ISSUE_PRIORITIZATION.md)** - Development priorities
+- **[Architecture diagram](./documentations/technical/19-architecture-diagram.md)** - Mermaid frames for the whole system, including a Miro import order
+- **[Optimizations](./documentations/technical/18-optimizations.md)** - Indexes, N+1 removal, caching, and pagination
 
 ## 🔑 Key Features
 
@@ -338,7 +341,7 @@ npm start
 - Automatic status transitions via scheduler
 - Trip participants and invitations
 - Trip publishing and privacy
-- **Final Posts**: Auto-generated trip summaries with curated media
+- **Final Posts**: Each member gets their own recap, then publishes it themselves
   - Generated automatically when trip ends
   - Editable summary, media selection, and captions
   - Publishing makes final posts visible in home feed
@@ -348,11 +351,11 @@ npm start
 - Text, media, and location entries
 - Place tagging on location entries
 - Media uploads (images/videos) via Cloudinary
-- **Final Posts**: Auto-generated trip summaries with curated media
+- **Final Posts**: Each member gets their own recap, then publishes it themselves
   - Intelligent summary generation from trip entries
   - Media curation (one per day, up to 12 items)
   - Editable before publishing
-  - Photo picker shows the selection order and stops at 10
+  - Photo picker shows the selection order and stops at 12
   - Published final posts appear in home feed
 
 ### Chat
@@ -502,7 +505,7 @@ For complete environment setup, see [ENVIRONMENT_SETUP.md](./documentations/ENVI
 - **Batch operations** for efficiency
 - **Graceful degradation** if Redis unavailable
 
-For detailed cache architecture, see [CACHE.md](./documentations/CACHE.md).
+For detailed cache architecture, see [Redis, cache, and queues](./documentations/technical/09-redis-cache-and-queues.md).
 
 ## 📊 Tech Stack Summary
 
@@ -533,6 +536,6 @@ For detailed cache architecture, see [CACHE.md](./documentations/CACHE.md).
 ## 🔗 Links
 
 - [Documentation Index](./documentations/README.md)
+- [Technical handbook](./documentations/technical/README.md)
 - [Environment Setup](./documentations/ENVIRONMENT_SETUP.md)
-- [Cache Documentation](./documentations/CACHE.md)
 - [Scheduler Architecture](./scheduler/SCHEDULER_ARCHITECTURE.md)

@@ -842,12 +842,12 @@ describe('My Test Suite', () => {
    - [ ] Final post includes summary, curated media, and caption
 
 5. **`/api/trips/[id]/final-post` Route**
-   - [ ] GET: Retrieve final post preview (owner only)
+   - [ ] GET: Retrieve the caller's own final post
    - [ ] PUT: Update final post content (summary, media, caption)
    - [ ] Validation: Empty summary rejection
-   - [ ] Validation: Max 10 media items
-   - [ ] Validation: Published posts cannot be edited
-   - [ ] Authorization: Only trip owner can access
+   - [ ] Validation: A save keeps at most 12 media items
+   - [ ] An unpublished edit stays `DRAFT`. A published edit stays `PUBLISHED`
+   - [ ] Authorization: The author, not every member of the trip
 
 6. **`/api/trips/[id]/publish` Route**
    - [ ] POST: Publish final post

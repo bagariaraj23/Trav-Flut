@@ -62,7 +62,7 @@ src/
 │   │   ├── trips/
 │   │   │   ├── route.ts          # GET/POST /trips
 │   │   │   ├── [id]/route.ts     # GET /trips/:id (trip detail)
-│   │   │   ├── [id]/end/route.ts # POST /trips/:id/end (end trip, auto-generate final post)
+│   │   │   ├── [id]/end/route.ts # POST /trips/:id/end (end trip; ongoing end writes one DRAFT per member)
 │   │   │   ├── [id]/entries/route.ts  # GET /trips/:id/entries (thread entries)
 │   │   │   ├── [id]/participants/route.ts  # GET /trips/:id/participants
 │   │   │   ├── [id]/invites/route.ts  # GET/POST trip invitations
@@ -147,12 +147,12 @@ src/
 | GET | `/users` | Search users |
 | POST | `/trips` | Create trip |
 | GET | `/trips/:id` | Trip detail |
-| POST | `/trips/:id/end` | End trip (auto-generates final post) |
+| POST | `/trips/:id/end` | End trip. An ongoing end writes one unpublished DRAFT per member |
 | GET | `/trips/:id/entries` | Thread entries in trip |
 | POST | `/trips/:id/entries` | Add entry to trip |
-| GET | `/trips/:id/final-post` | Get final post preview |
-| PUT | `/trips/:id/final-post` | Update final post content |
-| POST | `/trips/:id/publish` | Publish final post |
+| GET | `/trips/:id/final-post` | The caller's own final-post draft |
+| PUT | `/trips/:id/final-post` | The author edits their draft. Unpublished stays DRAFT |
+| POST | `/trips/:id/publish` | The author publishes their own final post |
 | POST | `/media/cloudinary-signature` | Get signed upload params |
 | POST | `/media/confirm` | Confirm upload, create Media record |
 | GET | `/follow/:userId` | Follow status |
@@ -334,43 +334,30 @@ Local Docker (`docker-compose.yml`) starts this container after the API is healt
 scheduler/
 ├── src/
 │   ├── index.ts                 # One-shot entry point
-│   ├── tripStatus.ts            # UPCOMING → ONGOING → ENDED
-│   ├── tripEnd.ts               # End-of-trip final post
+│   ├── tripStatus.ts            # UPCOMING → ONGOING → ENDED, plus personal drafts
+│   ├── memberFinalDraft.ts      # Unpublished DRAFT shared with the API
+│   ├── tripEnd.ts               # Scheduled end instant
 │   └── startup-logger.ts        # Startup diagnostics
 │
 ├── tests/
 │   ├── tripStatus.unit.test.ts
-│   └── tripStatus.integration.test.ts
+│   ├── tripStatus.behavior.unit.test.ts
+│   ├── tripStatus.integration.test.ts
+│   └── memberFinalDraft.unit.test.ts
 │
 ├── dist/                        # Compiled output
 ├── Dockerfile                   # Image used by the Compose scheduler service
 ├── package.json
 ├── tsconfig.json
 ├── README.md
-├── SCHEDULER_ARCHITECTURE.md
-└── MIGRATION_NOTES.md           # Why this replaced BullMQ
+└── SCHEDULER_ARCHITECTURE.md    # Includes the BullMQ history
 ```
 
 ### Scheduler Responsibilities
 
-- **Trip Status Updates** (hourly/every 5 mins)
-  - Check if upcoming trips should become ongoing (startDate reached)
-  - Check if ongoing trips should end (endDate passed)
-  - Publish final posts automatically
+The process only moves trip status and, when it ends a due trip, writes a missing unpublished `DRAFT` for each current member. It does not publish that post.
 
-- **Media Cleanup** (daily)
-  - Remove orphaned media (unused, older than 24h)
-  - Clean up Cloudinary assets per retention policy
-
-- **Notifications** (on-demand + scheduled)
-  - Trip reminders
-  - Follow request notifications
-  - Participate invitation reminders
-
-- **Data Retention & Compliance**
-  - Archive deleted user data
-  - Purge old logs
-  - GDPR compliance
+Orphan media cleanup is `npm run cleanup:orphan-media` (`src/scripts/cleanup-orphan-media.ts`). It is not part of this process, and it does not run on deploy. Notification delivery happens in the API when the event occurs. There is no scheduled reminder job in `scheduler/src`.
 
 ---
 
