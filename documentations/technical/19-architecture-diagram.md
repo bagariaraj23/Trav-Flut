@@ -267,10 +267,10 @@ flowchart TD
   create -->|"start > now"| upcoming
   upcoming -->|"start reached\ncron or read-path sync"| ongoing
   upcoming -->|"end passed"| ended
-  ongoing -->|"end passed or POST /end"| ended
+  ongoing -->|"end passed or POST /end\nclaim ENDED, skip duplicate drafts"| ended
   ended -->|"PATCH dates extend\nonly if no final post"| ongoing
   ended --> draft
-  draft -->|"PUT edits\nPOST /publish\nsummary >= 50 chars and media"| published
+  draft -->|"PUT edits, or delete the draft\nPOST /publish\nsummary >= 50 chars and media"| published
 
   ongoing --> text["TEXT entry"]
   ongoing --> media["MEDIA entry\nCloudinary then confirm"]
@@ -310,7 +310,7 @@ flowchart TD
   accept --> invite
 ```
 
-Unfollow deletes the follow edge and every request between the pair. Restrict and Block live on `user_safety_relations`, not on `follows`. Block deletes follows and pending requests in both directions.
+Unfollow deletes the follow edge and every request between the pair. Restrict and Block live on `user_safety_relations`, not on `follows`. Block deletes follows and pending requests in both directions and makes the blocked person look like a missing account. Restrict leaves the profile reachable as a name and username, with trips and follow lists, and removes the restrictor's posts from that person's feeds. The restricted person cannot message the restrictor or add them to a trip they created. Safety rows are cached in Redis, not in process memory, so every API process sees a new block on the next read.
 
 ## 8. Media and places
 

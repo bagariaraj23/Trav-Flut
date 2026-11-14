@@ -31,7 +31,7 @@ Tags are `TripThreadTag`, unique on `(threadEntryId, taggedUserId)`.
 
 `POST /api/trips/:id/entries` requires owner or participant, and the trip must be `ONGOING`. The transaction inserts the entry, the tag rows, and increments `Trip.entryCount`. Tag notifications are fire-and-forget.
 
-`GET` is allowed for a member, or for a follower when the owner is private, or for anyone when the owner is public. A non-member in a block with the owner gets **404** `Trip not found`, the same response as `GET /trips/:id`. Entries whose author is blocked either way are left out of that list, including on someone else's public trip. A member of the trip still sees the thread. The list is cursor-paginated. Restrict does not close the thread.
+`GET` is allowed for a member, or for a follower when the owner is private, or for anyone when the owner is public. A non-member in a block with the owner gets **404** `Trip not found`, the same response as `GET /trips/:id`. Entries whose author is blocked either way, or who restricted this non-member, are left out of that list and out of the context window around another entry. A member of the trip still sees the shared thread. Restrict does not return 404 for the trip. The list is cursor-paginated.
 
 `PATCH` edits text only, and only while `ONGOING`. The author has a **15 minute** window (`EDIT_WINDOW_MS = 15 * 60 * 1000`). The trip owner can edit any text entry with no window, as moderation. Outside the window the author gets **400**.
 

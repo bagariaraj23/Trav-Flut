@@ -41,7 +41,7 @@ Primary files:
 | `POST .../leave` | Set `leftAt` |
 | `PATCH .../read` | Set `lastReadAt` |
 
-DM create looks up an existing room between the two users (`findExistingDM`) and returns it instead of inserting a second pair. Before the room is reused or created, `assertCanDirectMessage` rejects the pair when either person has a Restrict or Block row against the other. The history stays. Group and trip rooms are not closed by Restrict. Group create makes the caller `ADMIN`. Adding a member to a group the caller created also runs `assertCreatorMayAdd`.
+DM create looks up an existing room between the two users (`findExistingDM`) and returns it instead of inserting a second pair. `assertCanDirectMessage` rejects the send when a block exists either way, and when the sender is the person who was restricted. The restrictor can still message them. The history stays. Group and trip rooms are not closed by Restrict. Group create makes the caller `ADMIN`. Adding a member to a group the caller created also runs `assertCreatorMayAdd`, which rejects a block either way and rejects adding someone who has restricted the creator.
 
 `GET /api/chat/conversations/:id/media` pages the room's image, gif, and video attachments. `GET /api/chat/conversations/:id/media/:mediaId/context` returns one window centered on the attachment that was tapped, the same shape as a thread-entry context window. The phone opens `media_gallery_viewer.dart` immediately with that attachment, then replaces the strip with the window. The shared-media grid still pages with the list route.
 
