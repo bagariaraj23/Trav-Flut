@@ -3,7 +3,7 @@ import { prisma } from '@/lib/prisma'
 import { ApiResponse, UserProfile } from '@/types/api'
 import { withAuth, AuthenticatedRequest, handleApiError } from '@/lib/middleware'
 import { AuthService } from '@/lib/auth'
-import { isProfileUnavailable, viewerHasBlocked } from '@/lib/services/userSafety'
+import { blockedUserIds, isProfileUnavailable, viewerHasBlocked } from '@/lib/services/userSafety'
 
 async function handler(
   request: AuthenticatedRequest,
@@ -86,9 +86,13 @@ async function handler(
       }
     }
 
+    const blockedIds = await blockedUserIds(currentUserId)
+    const hiddenFollower =
+      blockedIds.length > 0 ? { followerId: { notIn: blockedIds } } : {}
+
     // Get followers
     const follows = await prisma.follow.findMany({
-      where: { followeeId: targetUserId },
+      where: { followeeId: targetUserId, ...hiddenFollower },
       include: {
         follower: {
           select: {
@@ -111,11 +115,12 @@ async function handler(
 
     // Get total count
     const totalCount = await prisma.follow.count({
-      where: { followeeId: targetUserId },
+      where: { followeeId: targetUserId, ...hiddenFollower },
     })
 
     const followers: UserProfile[] = follows.map((follow) => ({
       ...follow.follower,
+      email: '',
       createdAt: follow.follower.createdAt.toISOString(),
       updatedAt: follow.follower.updatedAt.toISOString(),
     }))

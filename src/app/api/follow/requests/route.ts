@@ -4,6 +4,7 @@ import { AuthService } from "@/lib/auth";
 import { ApiResponse, FollowRequestDto } from "@/types/api";
 import { withAuth, withRateLimit, withLogging } from "@/lib/middleware";
 import { handlePrismaUniqueError } from "@/lib/prismaErrors";
+import { blockedUserIds } from "@/lib/services/userSafety";
 
 // Create a follow request
 export async function POST(request: NextRequest) {
@@ -29,6 +30,17 @@ export async function POST(request: NextRequest) {
             ]);
             if (!follower || !followee) return { code: "NOT_FOUND" };
             if (followerId === followeeId) return { code: "SELF_FOLLOW" };
+            const blocked = await tx.userSafetyRelation.findFirst({
+              where: {
+                action: "BLOCK",
+                OR: [
+                  { actorId: followeeId, targetId: followerId },
+                  { actorId: followerId, targetId: followeeId },
+                ],
+              },
+              select: { id: true },
+            });
+            if (blocked) return { code: "NOT_FOUND" };
             const existingFollow = await tx.follow.findFirst({
               where: { followerId, followeeId },
             });
@@ -175,11 +187,15 @@ export async function GET(request: NextRequest) {
       return withAuth(rateLimitedReq, async (authenticatedReq) => {
         try {
           const userId = authenticatedReq.user!.userId;
+          const blockedIds = await blockedUserIds(userId);
 
           const followRequests = await prisma.followRequest.findMany({
             where: {
               followeeId: userId,
               status: "PENDING",
+              ...(blockedIds.length > 0
+                ? { followerId: { notIn: blockedIds } }
+                : {}),
             },
             include: {
               follower: {

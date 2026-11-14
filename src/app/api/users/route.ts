@@ -25,7 +25,7 @@ export interface PaginatedResponse<T> {
 }
 
 import { PerformanceMonitor } from "@/lib/monitoring";
-import { blockedUserIds } from "@/lib/services/userSafety";
+import { blockedUserIds, feedHiddenUserIds } from "@/lib/services/userSafety";
 
 export async function GET(request: NextRequest) {
   const endTimer = PerformanceMonitor.getInstance().startTimer("get_users_discover");
@@ -97,7 +97,13 @@ export async function GET(request: NextRequest) {
     }
 
     const offset = (page - 1) * limit;
-    const blockedIds = await blockedUserIds(currentUserId);
+    const [blockedIds, feedHiddenIds] = await Promise.all([
+      blockedUserIds(currentUserId),
+      feedHiddenUserIds(currentUserId),
+    ]);
+    const restrictedIds = new Set(
+      feedHiddenIds.filter((id) => !blockedIds.includes(id))
+    );
     const idFilter = {
       not: currentUserId,
       ...(blockedIds.length > 0 ? { notIn: blockedIds } : {}),
@@ -268,12 +274,13 @@ export async function GET(request: NextRequest) {
     }
 
     const discoverUsers: DiscoverUserDto[] = users.map((user) => {
+      const minimal = restrictedIds.has(user.id);
       return {
         id: user.id,
         username: user.username || null,
         name: user.name || null,
-        avatarUrl: user.avatarUrl || null,
-        bio: user.bio || null,
+        avatarUrl: minimal ? null : user.avatarUrl || null,
+        bio: minimal ? null : user.bio || null,
         isPrivate: user.isPrivate,
         isFollowing: user.followers.length > 0,
         isFollowedBy: user.following.length > 0,

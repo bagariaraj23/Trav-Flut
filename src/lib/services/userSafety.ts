@@ -1,5 +1,6 @@
 import { UserSafetyAction } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { getOrSet, invalidateCachedKey } from "@/lib/redis";
 import {
   AuthorizationError,
   NotFoundError,
@@ -14,10 +15,12 @@ type SafetyRow = {
   action: UserSafetyAction;
 };
 
-const safetyCache = new Map<string, { at: number; rows: SafetyRow[] }>();
+function safetyCacheKey(userId: string) {
+  return `safety:rows:${userId}`;
+}
 
-function invalidateSafetyCache(userId: string) {
-  safetyCache.delete(userId);
+async function invalidateSafetyCache(userId: string) {
+  await invalidateCachedKey(safetyCacheKey(userId));
 }
 
 function otherUserId(row: SafetyRow, userId: string) {
@@ -25,14 +28,16 @@ function otherUserId(row: SafetyRow, userId: string) {
 }
 
 async function safetyRowsInvolving(userId: string): Promise<SafetyRow[]> {
-  const hit = safetyCache.get(userId);
-  if (hit && Date.now() - hit.at < SAFETY_CACHE_TTL_MS) return hit.rows;
-  const rows = await prisma.userSafetyRelation.findMany({
-    where: { OR: [{ actorId: userId }, { targetId: userId }] },
-    select: { actorId: true, targetId: true, action: true },
-  });
-  safetyCache.set(userId, { at: Date.now(), rows });
-  return rows;
+  return getOrSet(
+    safetyCacheKey(userId),
+    () =>
+      prisma.userSafetyRelation.findMany({
+        where: { OR: [{ actorId: userId }, { targetId: userId }] },
+        select: { actorId: true, targetId: true, action: true },
+      }),
+    SAFETY_CACHE_TTL_MS,
+    { processCache: false }
+  );
 }
 
 async function invalidateNotificationBadges(leftId: string, rightId: string) {
@@ -105,31 +110,67 @@ export async function blockEitherWay(
   );
 }
 
-/** Direct messages stop when either person has restricted or blocked the other. */
+/**
+ * A block stops a direct message both ways.
+ * A restrict stops only the restricted person from messaging the restrictor.
+ * The restrictor can still message them. A later Requests inbox can hold the
+ * restricted person's messages; until then those sends are refused.
+ */
 export async function assertCanDirectMessage(
   userId: string,
   otherId: string
 ): Promise<void> {
-  const row = await prisma.userSafetyRelation.findFirst({
+  const rows = await prisma.userSafetyRelation.findMany({
     where: {
       OR: [
         { actorId: userId, targetId: otherId },
         { actorId: otherId, targetId: userId },
       ],
     },
-    select: { id: true },
+    select: { actorId: true, targetId: true, action: true },
   });
-  if (row) throw new AuthorizationError(CANNOT_MESSAGE);
+  for (const row of rows) {
+    if (row.action === UserSafetyAction.BLOCK) {
+      throw new AuthorizationError(CANNOT_MESSAGE);
+    }
+    if (
+      row.action === UserSafetyAction.RESTRICT &&
+      row.actorId === otherId &&
+      row.targetId === userId
+    ) {
+      throw new AuthorizationError(CANNOT_MESSAGE);
+    }
+  }
 }
 
-/** The creator of a trip or group cannot add someone when a block exists either way. */
+/**
+ * The creator of a trip or group cannot add someone they have blocked, who
+ * has blocked them, or who has restricted them.
+ */
 export async function assertCreatorMayAdd(
   creatorId: string,
   targetId: string
 ): Promise<void> {
   if (creatorId === targetId) return;
-  if (await blockEitherWay(creatorId, targetId)) {
-    throw new AuthorizationError(CANNOT_ADD);
+  const rows = await prisma.userSafetyRelation.findMany({
+    where: {
+      OR: [
+        { actorId: creatorId, targetId },
+        { actorId: targetId, targetId: creatorId },
+      ],
+    },
+    select: { actorId: true, action: true },
+  });
+  for (const row of rows) {
+    if (row.action === UserSafetyAction.BLOCK) {
+      throw new AuthorizationError(CANNOT_ADD);
+    }
+    if (
+      row.action === UserSafetyAction.RESTRICT &&
+      row.actorId === targetId
+    ) {
+      throw new AuthorizationError(CANNOT_ADD);
+    }
   }
 }
 
@@ -145,6 +186,44 @@ export async function isProfileUnavailable(
     select: { action: true },
   });
   return row?.action === UserSafetyAction.BLOCK;
+}
+
+/** This profile restricted the viewer. The page keeps a name, username, trips, and follow lists. */
+export async function viewerIsRestricted(
+  profileUserId: string,
+  viewerId: string | null
+): Promise<boolean> {
+  if (!viewerId || viewerId === profileUserId) return false;
+  const row = await prisma.userSafetyRelation.findUnique({
+    where: {
+      actorId_targetId: { actorId: profileUserId, targetId: viewerId },
+    },
+    select: { action: true },
+  });
+  return row?.action === UserSafetyAction.RESTRICT;
+}
+
+/**
+ * The viewer's feeds and direct post views omit this author.
+ * A block hides either person. A restrict hides the restrictor from the
+ * restricted person, and leaves the other direction alone.
+ */
+export async function postsHiddenFromViewer(
+  authorId: string,
+  viewerId: string | null
+): Promise<boolean> {
+  if (!viewerId || viewerId === authorId) return false;
+  const rows = await safetyRowsInvolving(viewerId);
+  return rows.some((row) => {
+    const other = otherUserId(row, viewerId);
+    if (other !== authorId) return false;
+    if (row.action === UserSafetyAction.BLOCK) return true;
+    return (
+      row.action === UserSafetyAction.RESTRICT &&
+      row.actorId === authorId &&
+      row.targetId === viewerId
+    );
+  });
 }
 
 /** The signed-in person blocked this profile, so they see a limited page with Unblock. */
@@ -275,8 +354,10 @@ export async function setSafetyAction(
     return row;
   });
 
-  invalidateSafetyCache(actorId);
-  invalidateSafetyCache(targetId);
+  await Promise.all([
+    invalidateSafetyCache(actorId),
+    invalidateSafetyCache(targetId),
+  ]);
   if (action === UserSafetyAction.BLOCK) {
     await invalidateNotificationBadges(actorId, targetId);
   }
@@ -296,8 +377,10 @@ export async function clearSafetyAction(
     where: { actorId, targetId },
   });
   if (removed.count === 0) throw new NotFoundError("No restriction or block");
-  invalidateSafetyCache(actorId);
-  invalidateSafetyCache(targetId);
+  await Promise.all([
+    invalidateSafetyCache(actorId),
+    invalidateSafetyCache(targetId),
+  ]);
   await invalidateNotificationBadges(actorId, targetId);
 }
 

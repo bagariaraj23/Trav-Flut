@@ -1,6 +1,6 @@
 import { EntityType } from '@prisma/client';
 import { prisma } from '../prisma';
-import { blockEitherWay } from '../services/userSafety';
+import { postsHiddenFromViewer } from '../services/userSafety';
 
 export class PermissionError extends Error {
   constructor(message: string) {
@@ -45,7 +45,7 @@ export async function canViewEntity(
     if (
       userId &&
       userId !== post.userId &&
-      (await blockEitherWay(userId, post.userId))
+      (await postsHiddenFromViewer(post.userId, userId))
     ) {
       return false;
     }
@@ -117,9 +117,9 @@ export async function canViewEntity(
     if (
       userId &&
       !isMember &&
-      ((await blockEitherWay(userId, entry.trip.userId)) ||
+      ((await postsHiddenFromViewer(entry.trip.userId, userId)) ||
         (entry.authorId !== userId &&
-          (await blockEitherWay(userId, entry.authorId))))
+          (await postsHiddenFromViewer(entry.authorId, userId))))
     ) {
       return false;
     }

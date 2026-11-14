@@ -13,6 +13,7 @@ import {
 } from "./engagement-utils";
 import { getEntityOwner, getPostFromComment, getTripIdFromEntry, getTripTitle } from "../entity-owner";
 import { canViewEntity } from "../auth/permissions";
+import { blockedUserIds } from "./userSafety";
 import { createNotification } from "./notification";
 import {
   loadTripForTagging,
@@ -434,12 +435,15 @@ export async function getCommentsByEntity(
   entityType: EntityType,
   entityId: string,
   cursor?: string,
-  limit: number = ENGAGEMENT_CONSTANTS.PAGINATION.DEFAULT_LIMIT
+  limit: number = ENGAGEMENT_CONSTANTS.PAGINATION.DEFAULT_LIMIT,
+  viewerId?: string | null
 ) {
+  const hiddenIds = viewerId ? await blockedUserIds(viewerId) : [];
   const where: any = {
     entityType,
     entityId,
     parentCommentId: null,
+    ...(hiddenIds.length > 0 ? { userId: { notIn: hiddenIds } } : {}),
   };
 
   if (cursor) {
@@ -489,10 +493,13 @@ export async function getCommentsByEntity(
 export async function getCommentReplies(
   commentId: string,
   cursor?: string,
-  limit: number = ENGAGEMENT_CONSTANTS.PAGINATION.DEFAULT_LIMIT
+  limit: number = ENGAGEMENT_CONSTANTS.PAGINATION.DEFAULT_LIMIT,
+  viewerId?: string | null
 ) {
+  const hiddenIds = viewerId ? await blockedUserIds(viewerId) : [];
   const where: any = {
     parentCommentId: commentId,
+    ...(hiddenIds.length > 0 ? { userId: { notIn: hiddenIds } } : {}),
   };
 
   if (cursor) {

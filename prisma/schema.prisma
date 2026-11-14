@@ -170,8 +170,9 @@ enum UserSafetyAction {
   BLOCK
 }
 
-// One row per actor. RESTRICT stops direct messages both ways.
-// BLOCK does that and also stops the target following or opening the actor.
+// One row per actor. RESTRICT limits the target: they cannot message or add
+// the actor, and the actor's posts stay off their feeds. BLOCK hides both
+// people from each other.
 model UserSafetyRelation {
   id        String           @id @default(uuid())
   actorId   String

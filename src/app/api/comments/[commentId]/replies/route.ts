@@ -33,9 +33,13 @@ export async function GET(
           );
         }
 
-        const result = await getCommentReplies(commentId, cursor, limit);
-
         const user = await getOptionalUser(rateLimitedReq);
+        const result = await getCommentReplies(
+          commentId,
+          cursor,
+          limit,
+          user?.userId
+        );
         if (user && result.items.length > 0) {
           const replyIds = result.items.map((c: { id: string }) => c.id);
           const likedMap = await checkLikeStatus(

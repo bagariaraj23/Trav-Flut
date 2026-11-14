@@ -18,9 +18,10 @@ class HelpTopic {
 }
 
 const safetyHelpPreview =
-    'Restrict stops a direct message both ways and keeps the history. '
-    'Their posts stay off your Home and Discover feeds, and you do not see their last seen, typing, or read receipts. '
-    'You can still open their profile. '
+    'Restrict keeps their posts off your Home, Discover, and search. '
+    'Their profile shows a name and username, plus trips, followers, and following. '
+    'You cannot message them or add them to a trip or group you created. '
+    'You do not see their last seen, typing, or read receipts. '
     'Block hides each of you from the other, including search. Their profile looks the same as an account that is not there. '
     'You can unblock them from Settings. '
     'A trip or group someone else created can still include both of you.';
@@ -33,12 +34,12 @@ const helpTopics = <HelpTopic>[
       HelpItem(
         question: 'What does Restrict do?',
         answer:
-            'Restrict stops a direct message in both directions. Neither of you can send a new message, and the existing chat stays so you can both still read it. Typing and read receipts stop in that direct message too. Their posts stay off your Home and Discover feeds. You can still open their profile and see those posts there. You do not see their last seen, typing, or read receipts. They can still see yours outside a direct message. Group chats and trip chats still accept messages. Restrict does not hide a profile or stop a follow.',
+            'If you restrict someone, they no longer see your posts on Home, Discover, or search. Their profile of you keeps your name and username, and your trips, followers, and following. Your photo, bio, and posts stay off that page. They cannot message you or add you to a trip or group they created. You can still message them. They do not see your last seen, typing, or read receipts. You still see their posts. A trip or group someone else created can include both of you.',
       ),
       HelpItem(
         question: 'What does Block do?',
         answer:
-            'Block includes Restrict, in both directions. Search does not list either of you. Their profile looks the same as an account that is not there: no name, photo, trips, or posts. You see Unblock on their profile and in Settings under Blocked. They do not see that they were blocked. Follows are removed in both directions and are not restored when you unblock. Unblock brings their posts and profile back. Neither of you sees the other\'s last seen, typing, or read receipts. Neither of you can add the other to a trip or a group chat that you created. A trip or group that someone else created can include both of you. People already on a trip or in a chat stay there.',
+            'Block works in both directions. Search does not list either of you. Their profile looks the same as an account that is not there: no name, photo, trips, or posts. You see Unblock on their profile and in Settings under Blocked. They do not see that they were blocked. Follows are removed in both directions and are not restored when you unblock. Unblock brings their posts and profile back. Neither of you sees the other\'s last seen, typing, or read receipts. Neither of you can add the other to a trip or a group chat that you created. A trip or group that someone else created can include both of you. People already on a trip or in a chat stay there.',
       ),
       HelpItem(
         question: 'Where can I restrict or block someone?',

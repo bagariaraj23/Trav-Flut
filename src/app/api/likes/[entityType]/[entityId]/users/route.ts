@@ -69,7 +69,8 @@ export async function GET(
           entityType as EntityType,
           entityId,
           cursor,
-          limit
+          limit,
+          viewerId
         );
 
         return NextResponse.json<ApiResponse>({

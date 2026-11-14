@@ -43,14 +43,14 @@ export async function GET(
           );
         }
 
+        const user = await getOptionalUser(rateLimitedReq);
         const result = await getCommentsByEntity(
           entityType as EntityType,
           entityId,
           cursor,
-          limit
+          limit,
+          user?.userId
         );
-
-        const user = await getOptionalUser(rateLimitedReq);
         if (user && result.items.length > 0) {
           const commentIds = result.items.map((c: { id: string }) => c.id);
           const likedMap = await checkLikeStatus(

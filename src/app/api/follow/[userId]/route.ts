@@ -5,6 +5,7 @@ import { ApiResponse, FollowResponse, FollowStatusResponse } from "@/types/api";
 import { withAuth, withRateLimit, withLogging } from "@/lib/middleware";
 import { enforcePresetRateLimit } from "@/lib/rateLimit";
 import { handlePrismaUniqueError } from "@/lib/prismaErrors";
+import { blockEitherWay } from "@/lib/services/userSafety";
 import { createNotification } from "@/lib/services/notification";
 
 export async function GET(
@@ -48,7 +49,7 @@ export async function GET(
       select: { isPrivate: true },
     });
 
-    if (!targetUser) {
+    if (!targetUser || (await blockEitherWay(followerId, followeeId))) {
       return NextResponse.json<ApiResponse>(
         {
           success: false,

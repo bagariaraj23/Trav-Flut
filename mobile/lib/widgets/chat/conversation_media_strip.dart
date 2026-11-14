@@ -118,24 +118,7 @@ class _ConversationMediaStripState extends State<ConversationMediaStrip> {
   }
 
   void _open(ChatMediaItem item) {
-    final index = _items.indexWhere((media) => media.id == item.id);
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => MediaGalleryViewer(
-          initialIndex: index < 0 ? 0 : index,
-          items: _items
-              .map(
-                (media) => GalleryMedia(
-                  id: media.id,
-                  url: media.url,
-                  isVideo: media.isVideo,
-                  sharedAt: media.createdAt,
-                ),
-              )
-              .toList(),
-        ),
-      ),
-    );
+    openConversationMedia(context, widget.conversationId, item);
   }
 
   @override

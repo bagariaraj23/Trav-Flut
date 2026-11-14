@@ -453,6 +453,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final subtitleStyle = _profileSubtitleStyle(context);
     final limitedByBlock =
         user.blockedByViewer == true || user.viewerIsBlocked == true;
+    final hidePhoto = limitedByBlock || user.restrictedByThem == true;
 
     return Container(
       padding: const EdgeInsets.all(24),
@@ -464,7 +465,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          if (!limitedByBlock)
+          if (!hidePhoto)
           // Profile photo (tappable to enlarge when a photo exists)
           Center(
             child: Material(
@@ -500,7 +501,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ),
           ),
 
-          if (!limitedByBlock) const SizedBox(height: 20),
+          if (!hidePhoto) const SizedBox(height: 20),
 
           // @username (unique) first; optional display name second 
           Center(

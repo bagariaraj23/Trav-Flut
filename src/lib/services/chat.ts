@@ -2,7 +2,7 @@ import type { ConversationType, Prisma } from '@prisma/client'
 import { v4 as uuid } from 'uuid'
 import { prisma } from '@/lib/prisma'
 import { NotFoundError, ValidationError, AuthorizationError } from '@/lib/errors'
-import { assertCanDirectMessage, assertCreatorMayAdd, presenceHiddenRecipientIds } from '@/lib/services/userSafety'
+import { assertCanDirectMessage, assertCreatorMayAdd, feedHiddenUserIds, presenceHiddenRecipientIds } from '@/lib/services/userSafety'
 import { publishChatEvent, type ChatMessagePayload } from '@/lib/chat-events'
 import { LRUCache } from '@/lib/cache'
 
@@ -209,7 +209,8 @@ const conversationListInclude = {
 function formatConversationSummarySync(
   conv: any,
   currentUserId: string,
-  unreadCount: number
+  unreadCount: number,
+  hiddenSignalUserIds: Set<string> = new Set()
 ): ConversationSummary {
   const myParticipant = conv.participants.find((p: any) => p.userId === currentUserId)
   const lastMsg = conv.messages[0] ?? null
@@ -230,7 +231,10 @@ function formatConversationSummarySync(
         name: p.user.name,
         avatarUrl: p.user.avatarUrl,
         role: p.role,
-        lastReadAt: p.lastReadAt ? toISODate(p.lastReadAt) : null,
+        lastReadAt:
+          hiddenSignalUserIds.has(p.userId) || !p.lastReadAt
+            ? null
+            : toISODate(p.lastReadAt),
       })),
     lastMessage: lastMsg
       ? {
@@ -277,7 +281,13 @@ async function formatConversationSummary(
       })
     }
   }
-  return formatConversationSummarySync(conv, currentUserId, unreadCount)
+  const hiddenSignalUserIds = new Set(await feedHiddenUserIds(currentUserId))
+  return formatConversationSummarySync(
+    conv,
+    currentUserId,
+    unreadCount,
+    hiddenSignalUserIds
+  )
 }
 
 /**
@@ -599,10 +609,19 @@ export async function listConversations(
 
   // Fetch all unread counts in ONE query instead of N COUNT queries.
   const conversationIds = list.map((c) => c.id)
-  const unreadMap = await batchFetchUnreadCounts(conversationIds, userId, participantsByConvId)
+  const [unreadMap, hiddenIds] = await Promise.all([
+    batchFetchUnreadCounts(conversationIds, userId, participantsByConvId),
+    feedHiddenUserIds(userId),
+  ])
+  const hiddenSignalUserIds = new Set(hiddenIds)
 
   return list.map((conv) =>
-    formatConversationSummarySync(conv, userId, unreadMap.get(conv.id) ?? 0)
+    formatConversationSummarySync(
+      conv,
+      userId,
+      unreadMap.get(conv.id) ?? 0,
+      hiddenSignalUserIds
+    )
   )
 }
 
@@ -1373,7 +1392,8 @@ export async function promoteToAdmin(
 
 /**
  * Recipients of a live signal (typing or read) from userId in this conversation.
- * Direct messages that are restricted or blocked produce no recipients.
+ * A blocked direct message produces no recipients. A restricted person cannot
+ * message the restrictor, and the restrictor's signals stay hidden from them.
  * In a group, Block hides the signal both ways and Restrict hides it from
  * the person who was restricted.
  */
@@ -1444,7 +1464,7 @@ export async function listConversationMedia(
   nextCursor: string | null
   hasMore: boolean
 }> {
-  const limit = Math.min(Math.max(options.limit ?? 24, 1), 50)
+  const limit = boundedInt(options.limit, 24, 1, 50)
   const member = await prisma.conversationParticipant.findUnique({
     where: { conversationId_userId: { conversationId, userId } },
     select: { leftAt: true },
@@ -1540,6 +1560,16 @@ function toConversationMediaItem(row: {
   }
 }
 
+function boundedInt(
+  value: number | undefined,
+  fallback: number,
+  min: number,
+  max: number
+) {
+  if (value == null || !Number.isFinite(value)) return fallback
+  return Math.min(Math.max(Math.trunc(value), min), max)
+}
+
 const conversationMediaWhere = (conversationId: string) => ({
   type: { in: ['IMAGE', 'GIF', 'VIDEO'] as ('IMAGE' | 'GIF' | 'VIDEO')[] },
   chatMessage: { conversationId, deletedAt: null },
@@ -1567,7 +1597,7 @@ export async function getConversationMediaContext(
   })
   if (!member || member.leftAt) throw new AuthorizationError('Not a participant')
 
-  const size = Math.min(Math.max(contextSize, 3), 60)
+  const size = boundedInt(contextSize, 25, 3, 60)
   const olderTake = Math.floor((size - 1) / 2)
   const newerTake = size - 1 - olderTake
 

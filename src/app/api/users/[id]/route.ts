@@ -8,6 +8,7 @@ import { PerformanceMonitor } from "@/lib/monitoring";
 import {
   isProfileUnavailable,
   viewerHasBlocked,
+  viewerIsRestricted,
 } from "@/lib/services/userSafety";
 import type { Prisma } from "@prisma/client";
 
@@ -69,6 +70,27 @@ export async function GET(
         },
         { status: 404 }
       );
+    }
+    if (
+      !blockedByViewer &&
+      (await viewerIsRestricted(userId, currentUserId))
+    ) {
+      const limitedProfile: UserProfile = {
+        id: user.id,
+        email: "",
+        username: user.username ?? undefined,
+        name: user.name ?? undefined,
+        avatarUrl: undefined,
+        bio: undefined,
+        isPrivate: user.isPrivate,
+        createdAt: user.createdAt.toISOString(),
+        updatedAt: user.updatedAt.toISOString(),
+        restrictedByThem: true,
+      };
+      return NextResponse.json<ApiResponse<UserProfile>>({
+        success: true,
+        data: limitedProfile,
+      });
     }
     if (blockedByViewer) {
       const limitedProfile: UserProfile = {

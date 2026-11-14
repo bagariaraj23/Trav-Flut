@@ -10,7 +10,7 @@ import {
 } from "@/types/api";
 import { serializePlace } from "@/lib/place";
 import { checkLikeStatus } from "@/lib/services/like";
-import { blockEitherWay } from "@/lib/services/userSafety";
+import { blockEitherWay, feedHiddenUserIds, postsHiddenFromViewer } from "@/lib/services/userSafety";
 
 const THREAD_ENTRY_LIST_INCLUDE = {
   author: {
@@ -187,7 +187,7 @@ export async function GET(
       !isOwner &&
       !isParticipant &&
       target.authorId !== userId &&
-      (await blockEitherWay(userId, target.authorId))
+      (await postsHiddenFromViewer(target.authorId, userId))
     ) {
       return NextResponse.json<ApiResponse>(
         { success: false, error: "Thread entry not found" },
@@ -203,10 +203,15 @@ export async function GET(
     );
     const olderTake = Math.floor((contextSize - 1) / 2);
     const newerTake = contextSize - 1 - olderTake;
+    const hiddenAuthors =
+      !isOwner && !isParticipant ? await feedHiddenUserIds(userId) : [];
+    const authorFilter =
+      hiddenAuthors.length > 0 ? { authorId: { notIn: hiddenAuthors } } : {};
 
     const older = await prisma.tripThreadEntry.findMany({
       where: {
         tripId,
+        ...authorFilter,
         OR: [
           { createdAt: { lt: target.createdAt } },
           {
@@ -225,6 +230,7 @@ export async function GET(
     const newer = await prisma.tripThreadEntry.findMany({
       where: {
         tripId,
+        ...authorFilter,
         OR: [
           { createdAt: { gt: target.createdAt } },
           {
@@ -246,6 +252,7 @@ export async function GET(
       ? !!(await prisma.tripThreadEntry.findFirst({
           where: {
             tripId,
+            ...authorFilter,
             OR: [
               { createdAt: { lt: oldest.createdAt } },
               {

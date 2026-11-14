@@ -16,7 +16,7 @@ import { EntityType, Prisma } from "@prisma/client";
 import { enforcePresetRateLimit } from "@/lib/rateLimit";
 import { canViewEntity } from "@/lib/auth/permissions";
 import { resolveTaggedUserIdsForTripThread } from "@/lib/services/tripTagResolution";
-import { blockEitherWay, blockedUserIds } from "@/lib/services/userSafety";
+import { blockEitherWay, feedHiddenUserIds } from "@/lib/services/userSafety";
 
 const THREAD_ENTRY_LIST_INCLUDE = {
   author: {
@@ -613,7 +613,7 @@ export async function GET(
     const cursorParam = searchParams.get("cursor");
 
     const hiddenAuthors =
-      !isOwner && !isParticipant ? await blockedUserIds(userId) : [];
+      !isOwner && !isParticipant ? await feedHiddenUserIds(userId) : [];
     let whereClause: Prisma.TripThreadEntryWhereInput = {
       tripId,
       ...(hiddenAuthors.length > 0 ? { authorId: { notIn: hiddenAuthors } } : {}),

@@ -29,6 +29,8 @@ export interface UserProfile {
   blockedByViewer?: boolean;
   /** This person blocked the viewer. The page shows a name and username only. */
   viewerIsBlocked?: boolean;
+  /** This person restricted the viewer. Name, username, trips, and follow lists stay. */
+  restrictedByThem?: boolean;
 }
 
 export interface UserStats {

@@ -43,7 +43,7 @@ void main() {
     await tester.tap(find.byTooltip('What Restrict and Block do'));
     await tester.pumpAndSettle();
     expect(find.text('Restrict and Block'), findsOneWidget);
-    expect(find.textContaining('direct message both ways'), findsOneWidget);
+    expect(find.textContaining('cannot message them'), findsOneWidget);
     expect(find.text('Read the full guide'), findsOneWidget);
   });
 }

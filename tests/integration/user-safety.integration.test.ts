@@ -4,7 +4,8 @@ import { randomUUID } from "crypto";
 import { NextRequest } from "next/server";
 import { prisma } from "../../src/lib/prisma";
 import { cleanDb, createUser, createTrip, getAuthToken } from "../testUtils";
-import { POST as followPost } from "../../src/app/api/follow/[userId]/route";
+import { GET as followGet, POST as followPost } from "../../src/app/api/follow/[userId]/route";
+import { GET as listFollowRequests, POST as createFollowRequest } from "../../src/app/api/follow/requests/route";
 import { GET as getUser } from "../../src/app/api/users/[id]/route";
 import { GET as searchUsers } from "../../src/app/api/users/route";
 import { GET as getHomeFeed } from "../../src/app/api/feed/home/route";
@@ -59,12 +60,18 @@ describe("Restrict and Block", () => {
     ).rejects.toThrow(CANNOT_MESSAGE);
     await expect(
       sendMessage(conv.id, alice.id, { content: "again" })
-    ).rejects.toThrow(CANNOT_MESSAGE);
+    ).resolves.toMatchObject({ content: "again" });
+    await expect(
+      createConversation(
+        { type: "GROUP", name: "Bob cannot add Alice", participantIds: [alice.id] },
+        bob.id
+      )
+    ).rejects.toThrow(CANNOT_ADD);
 
     const stored = await prisma.chatMessage.findMany({
       where: { conversationId: conv.id },
     });
-    expect(stored).toHaveLength(1);
+    expect(stored).toHaveLength(2);
 
     const carol = await createUser({ email: "carol-restrict@test.com" });
     await setSafetyAction(alice.id, carol.id, UserSafetyAction.BLOCK);
@@ -148,6 +155,38 @@ describe("Restrict and Block", () => {
     expect(profileResponse.status).toBe(404);
     expect(profileBody.error).toBe("User not found");
     expect(profileBody.data).toBeUndefined();
+
+    const statusResponse = await followGet(
+      new NextRequest(`http://localhost/api/follow/${alice.id}`, {
+        headers: { authorization: `Bearer ${token}` },
+      }),
+      { params: Promise.resolve({ userId: alice.id }) }
+    );
+    expect(statusResponse.status).toBe(404);
+
+    const requestResponse = await createFollowRequest(
+      new NextRequest("http://localhost/api/follow/requests", {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${token}`,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({ followeeId: alice.id }),
+      })
+    );
+    expect(requestResponse.status).toBe(404);
+    expect(await prisma.followRequest.count()).toBe(0);
+
+    await prisma.followRequest.create({
+      data: { followerId: bob.id, followeeId: alice.id, status: "PENDING" },
+    });
+    const inbox = await listFollowRequests(
+      new NextRequest("http://localhost/api/follow/requests", {
+        headers: { authorization: `Bearer ${aliceToken}` },
+      })
+    );
+    const inboxBody = await inbox.json();
+    expect(inboxBody.data).toEqual([]);
   });
 
   it("keeps a blocked person's posts out of Home and Discover", async () => {
@@ -466,6 +505,13 @@ describe("Restrict and Block", () => {
         generationStatus: GenerationStatus.PUBLISHED,
       },
     });
+    await prisma.user.update({
+      where: { id: alice.id },
+      data: {
+        avatarUrl: "https://cdn.example.com/alice-restrict.png",
+        bio: "Alice bio",
+      },
+    });
     await setSafetyAction(alice.id, bob.id, UserSafetyAction.RESTRICT);
     const bobToken = await getAuthToken(bob);
     const auth = { authorization: `Bearer ${bobToken}` };
@@ -495,14 +541,18 @@ describe("Restrict and Block", () => {
     const profileBody = await profile.json();
     expect(profile.status).toBe(200);
     expect(profileBody.data.username).toBe("alicerestrict");
-    expect(profileBody.data.viewerIsBlocked ?? false).toBe(false);
+    expect(profileBody.data.name).toBe("Alice Restrict");
+    expect(profileBody.data.restrictedByThem).toBe(true);
+    expect(profileBody.data.avatarUrl ?? null).toBeNull();
+    expect(profileBody.data.bio ?? null).toBeNull();
+    expect(profileBody.data.email ?? "").toBe("");
 
     const tripView = await getTrip(
       new NextRequest(`http://localhost/api/trips/${trip.id}`, { headers: auth }),
       { params: Promise.resolve({ id: trip.id }) }
     );
     expect(tripView.status).toBe(200);
-    expect(await canViewEntity(bob.id, "TRIP_FINAL_POST", post.id)).toBe(true);
+    expect(await canViewEntity(bob.id, "TRIP_FINAL_POST", post.id)).toBe(false);
 
     const search = await searchUsers(
       new NextRequest("http://localhost/api/users?search=alicerestrict", {
@@ -510,9 +560,12 @@ describe("Restrict and Block", () => {
       })
     );
     const searchBody = await search.json();
-    expect(
-      searchBody.data.items.find((item: { id: string }) => item.id === alice.id)
-    ).toBeTruthy();
+    const found = searchBody.data.items.find(
+      (item: { id: string }) => item.id === alice.id
+    );
+    expect(found?.username).toBe("alicerestrict");
+    expect(found?.avatarUrl ?? null).toBeNull();
+    expect(found?.bio ?? null).toBeNull();
   });
 
   it("hides a public trip thread from someone who is blocked", async () => {
