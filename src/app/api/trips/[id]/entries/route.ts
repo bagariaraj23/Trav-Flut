@@ -16,6 +16,7 @@ import { EntityType, Prisma } from "@prisma/client";
 import { enforcePresetRateLimit } from "@/lib/rateLimit";
 import { canViewEntity } from "@/lib/auth/permissions";
 import { resolveTaggedUserIdsForTripThread } from "@/lib/services/tripTagResolution";
+import { blockEitherWay, blockedUserIds } from "@/lib/services/userSafety";
 
 const THREAD_ENTRY_LIST_INCLUDE = {
   author: {
@@ -576,6 +577,12 @@ export async function GET(
     const isParticipant = trip.participants.some((p) => p.userId === userId);
 
     if (!isOwner && !isParticipant) {
+      if (await blockEitherWay(userId, trip.userId)) {
+        return NextResponse.json<ApiResponse>(
+          { success: false, error: "Trip not found" },
+          { status: 404 }
+        );
+      }
       // Check if trip owner's profile is public or if current user follows them
       if (trip.user?.isPrivate) {
         const followRelation = await prisma.follow.findUnique({
@@ -605,7 +612,12 @@ export async function GET(
     const limit = Math.min(Math.max(Number.isFinite(limitRaw) ? limitRaw : 30, 1), 100);
     const cursorParam = searchParams.get("cursor");
 
-    let whereClause: Prisma.TripThreadEntryWhereInput = { tripId };
+    const hiddenAuthors =
+      !isOwner && !isParticipant ? await blockedUserIds(userId) : [];
+    let whereClause: Prisma.TripThreadEntryWhereInput = {
+      tripId,
+      ...(hiddenAuthors.length > 0 ? { authorId: { notIn: hiddenAuthors } } : {}),
+    };
 
     if (cursorParam) {
       let decoded: { createdAt: Date; id: string };
@@ -618,13 +630,17 @@ export async function GET(
         );
       }
       whereClause = {
-        tripId,
-        OR: [
-          { createdAt: { lt: decoded.createdAt } },
+        AND: [
+          whereClause,
           {
-            AND: [
-              { createdAt: decoded.createdAt },
-              { id: { lt: decoded.id } },
+            OR: [
+              { createdAt: { lt: decoded.createdAt } },
+              {
+                AND: [
+                  { createdAt: decoded.createdAt },
+                  { id: { lt: decoded.id } },
+                ],
+              },
             ],
           },
         ],

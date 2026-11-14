@@ -9,7 +9,7 @@ import {
 } from "@/lib/middleware";
 import { PerformanceMonitor } from "@/lib/monitoring";
 import { omitHiddenTripSpend } from "@/lib/tripSpendVisibility";
-import { contentHiddenUserIds } from "@/lib/services/userSafety";
+import { feedHiddenUserIds } from "@/lib/services/userSafety";
 
 const userSelect = {
   id: true,
@@ -151,7 +151,7 @@ export async function GET(request: NextRequest) {
               where: { followerId: currentUserId },
               select: { followeeId: true },
             }),
-            contentHiddenUserIds(currentUserId),
+            feedHiddenUserIds(currentUserId),
           ]);
 
           if (!me) {

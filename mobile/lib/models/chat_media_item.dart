@@ -27,6 +27,32 @@ class ChatMediaItem {
   }
 }
 
+class ChatMediaWindow {
+  final List<ChatMediaItem> items;
+  final int index;
+  final bool hasMoreOlder;
+  final bool hasMoreNewer;
+
+  const ChatMediaWindow({
+    required this.items,
+    required this.index,
+    required this.hasMoreOlder,
+    required this.hasMoreNewer,
+  });
+
+  factory ChatMediaWindow.fromJson(Map<String, dynamic> json) {
+    final raw = json['items'] as List<dynamic>? ?? [];
+    return ChatMediaWindow(
+      items: raw
+          .map((item) => ChatMediaItem.fromJson(item as Map<String, dynamic>))
+          .toList(),
+      index: (json['index'] as num?)?.toInt() ?? 0,
+      hasMoreOlder: json['hasMoreOlder'] == true,
+      hasMoreNewer: json['hasMoreNewer'] == true,
+    );
+  }
+}
+
 class ChatMediaPage {
   final List<ChatMediaItem> items;
   final String? nextCursor;

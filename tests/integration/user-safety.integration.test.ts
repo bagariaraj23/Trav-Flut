@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { GenerationStatus, MediaType, TripStatus, UserSafetyAction } from "@prisma/client";
+import { GenerationStatus, MediaType, ThreadEntryType, TripStatus, UserSafetyAction } from "@prisma/client";
 import { randomUUID } from "crypto";
 import { NextRequest } from "next/server";
 import { prisma } from "../../src/lib/prisma";
@@ -11,13 +11,22 @@ import { GET as getHomeFeed } from "../../src/app/api/feed/home/route";
 import { GET as getDiscoverTrips } from "../../src/app/api/discover/trips/route";
 import { GET as getPost } from "../../src/app/api/posts/[entityType]/[entityId]/route";
 import { GET as getTrip } from "../../src/app/api/trips/[id]/route";
+import { GET as getEntries } from "../../src/app/api/trips/[id]/entries/route";
+import { GET as getEntryContext } from "../../src/app/api/trips/[id]/entries/[entryId]/context/route";
 import { canViewEntity } from "../../src/lib/auth/permissions";
 import {
   addGroupParticipant,
   createConversation,
+  getConversationMediaContext,
   listConversationMedia,
   sendMessage,
+  signalRecipients,
 } from "../../src/lib/services/chat";
+import {
+  createNotification,
+  getMergedNotifications,
+  getUnreadNotificationCount,
+} from "../../src/lib/services/notification";
 import {
   CANNOT_ADD,
   CANNOT_MESSAGE,
@@ -78,17 +87,20 @@ describe("Restrict and Block", () => {
     await prisma.follow.create({
       data: { followerId: bob.id, followeeId: alice.id },
     });
+    await prisma.follow.create({
+      data: { followerId: alice.id, followeeId: bob.id },
+    });
     await prisma.followRequest.create({
       data: { followerId: bob.id, followeeId: alice.id, status: "PENDING" },
+    });
+    await prisma.followRequest.create({
+      data: { followerId: alice.id, followeeId: bob.id, status: "PENDING" },
     });
 
     await setSafetyAction(alice.id, bob.id, UserSafetyAction.BLOCK);
 
-    expect(
-      await prisma.follow.count({
-        where: { followerId: bob.id, followeeId: alice.id },
-      })
-    ).toBe(0);
+    expect(await prisma.follow.count()).toBe(0);
+    expect(await prisma.followRequest.count()).toBe(0);
     expect(await isProfileUnavailable(alice.id, bob.id)).toBe(true);
     expect(await isProfileUnavailable(bob.id, alice.id)).toBe(false);
 
@@ -114,7 +126,17 @@ describe("Restrict and Block", () => {
       }),
       { params: Promise.resolve({ userId: alice.id }) }
     );
-    expect(followResponse.status).toBe(403);
+    expect(followResponse.status).toBe(404);
+
+    const aliceToken = await getAuthToken(alice);
+    const reverseFollow = await followPost(
+      new NextRequest(`http://localhost/api/follow/${bob.id}`, {
+        method: "POST",
+        headers: { authorization: `Bearer ${aliceToken}` },
+      }),
+      { params: Promise.resolve({ userId: bob.id }) }
+    );
+    expect(reverseFollow.status).toBe(404);
 
     const profileResponse = await getUser(
       new NextRequest(`http://localhost/api/users/${alice.id}`, {
@@ -123,13 +145,9 @@ describe("Restrict and Block", () => {
       { params: Promise.resolve({ id: alice.id }) }
     );
     const profileBody = await profileResponse.json();
-    expect(profileResponse.status).toBe(200);
-    expect(profileBody.data.viewerIsBlocked).toBe(true);
-    expect(profileBody.data.blockedByViewer ?? false).toBe(false);
-    expect(profileBody.data.email).toBe("");
-    expect(profileBody.data.avatarUrl ?? null).toBeNull();
-    expect(profileBody.data.bio ?? null).toBeNull();
-    expect(profileBody.data.username).toBe(alice.username);
+    expect(profileResponse.status).toBe(404);
+    expect(profileBody.error).toBe("User not found");
+    expect(profileBody.data).toBeUndefined();
   });
 
   it("keeps a blocked person's posts out of Home and Discover", async () => {
@@ -206,13 +224,22 @@ describe("Restrict and Block", () => {
     );
     const searchBody = await search.json();
     expect(search.status).toBe(200);
-    const bobHit = searchBody.data.items.find(
-      (item: { id: string }) => item.id === bob.id
+    expect(
+      searchBody.data.items.find((item: { id: string }) => item.id === bob.id)
+    ).toBeUndefined();
+
+    const bobToken = await getAuthToken(bob);
+    const bobSearch = await searchUsers(
+      new NextRequest("http://localhost/api/users?search=alicefeed", {
+        headers: { authorization: `Bearer ${bobToken}` },
+      })
     );
-    expect(bobHit).toBeTruthy();
-    expect(bobHit.avatarUrl ?? null).toBeNull();
-    expect(bobHit.bio ?? null).toBeNull();
-    expect(bobHit.username).toBe("bobfeed");
+    const bobSearchBody = await bobSearch.json();
+    expect(
+      bobSearchBody.data.items.find(
+        (item: { id: string }) => item.id === alice.id
+      )
+    ).toBeUndefined();
 
     const profile = await getUser(
       new NextRequest(`http://localhost/api/users/${bob.id}`, {
@@ -230,7 +257,6 @@ describe("Restrict and Block", () => {
     expect(profileBody.data.avatarUrl ?? null).toBeNull();
     expect(profileBody.data.bio ?? null).toBeNull();
 
-    const bobToken = await getAuthToken(bob);
     const aliceProfile = await getUser(
       new NextRequest(`http://localhost/api/users/${alice.id}`, {
         headers: { authorization: `Bearer ${bobToken}` },
@@ -238,13 +264,9 @@ describe("Restrict and Block", () => {
       { params: Promise.resolve({ id: alice.id }) }
     );
     const aliceProfileBody = await aliceProfile.json();
-    expect(aliceProfile.status).toBe(200);
-    expect(aliceProfileBody.data.viewerIsBlocked).toBe(true);
-    expect(aliceProfileBody.data.blockedByViewer ?? false).toBe(false);
-    expect(aliceProfileBody.data.email).toBe("");
-    expect(aliceProfileBody.data.username).toBe("alicefeed");
-    expect(aliceProfileBody.data.avatarUrl ?? null).toBeNull();
-    expect(aliceProfileBody.data.bio ?? null).toBeNull();
+    expect(aliceProfile.status).toBe(404);
+    expect(aliceProfileBody.error).toBe("User not found");
+    expect(aliceProfileBody.data).toBeUndefined();
 
     const bobFeed = await getHomeFeed(
       new NextRequest("http://localhost/api/feed/home", {
@@ -397,5 +419,216 @@ describe("Restrict and Block", () => {
     });
     expect(next.items.map((item) => item.id)).toEqual([first.id]);
     expect(next.hasMore).toBe(false);
+
+    const third = await prisma.media.create({
+      data: {
+        url: "https://cdn.example.com/three.jpg",
+        publicId: `three-${randomUUID()}`,
+        type: MediaType.IMAGE,
+        uploadedById: alice.id,
+        createdAt: new Date(Date.now() + 2000),
+      },
+    });
+    await sendMessage(conv.id, alice.id, {
+      content: "three",
+      attachmentMediaIds: [third.id],
+    });
+    const window = await getConversationMediaContext(conv.id, bob.id, first.id, 3);
+    expect(window.items.map((item) => item.id)).toContain(first.id);
+    expect(window.items[window.index].id).toBe(first.id);
+    expect(window.hasMoreNewer).toBe(true);
+  });
+
+  it("keeps a restricted person's feed clear while the profile stays open", async () => {
+    const alice = await createUser({
+      email: "alice-restrict-feed@test.com",
+      username: "alicerestrict",
+      name: "Alice Restrict",
+    });
+    const bob = await createUser({
+      email: "bob-restrict-feed@test.com",
+      username: "bobrestrict",
+      name: "Bob Restrict",
+    });
+    const trip = await createTrip({
+      userId: alice.id,
+      title: "Alice restricted trip",
+      status: TripStatus.ENDED,
+    });
+    const post = await prisma.tripFinalPost.create({
+      data: {
+        tripId: trip.id,
+        userId: alice.id,
+        summaryText: "Alice wrote a public recap that Bob should not see in the feed.",
+        curatedMedia: ["https://cdn.example.com/alice-restrict.jpg"],
+        isPublished: true,
+        publishedAt: new Date(),
+        generationStatus: GenerationStatus.PUBLISHED,
+      },
+    });
+    await setSafetyAction(alice.id, bob.id, UserSafetyAction.RESTRICT);
+    const bobToken = await getAuthToken(bob);
+    const auth = { authorization: `Bearer ${bobToken}` };
+
+    const feed = await getHomeFeed(
+      new NextRequest("http://localhost/api/feed/home", { headers: auth })
+    );
+    const feedBody = await feed.json();
+    expect(
+      feedBody.data.items.map((item: { id: string }) => item.id)
+    ).not.toContain(post.id);
+
+    const discover = await getDiscoverTrips(
+      new NextRequest("http://localhost/api/discover/trips?q=Alice%20restricted", {
+        headers: auth,
+      })
+    );
+    const discoverBody = await discover.json();
+    expect(
+      discoverBody.data.items.map((item: { id: string }) => item.id)
+    ).not.toContain(trip.id);
+
+    const profile = await getUser(
+      new NextRequest(`http://localhost/api/users/${alice.id}`, { headers: auth }),
+      { params: Promise.resolve({ id: alice.id }) }
+    );
+    const profileBody = await profile.json();
+    expect(profile.status).toBe(200);
+    expect(profileBody.data.username).toBe("alicerestrict");
+    expect(profileBody.data.viewerIsBlocked ?? false).toBe(false);
+
+    const tripView = await getTrip(
+      new NextRequest(`http://localhost/api/trips/${trip.id}`, { headers: auth }),
+      { params: Promise.resolve({ id: trip.id }) }
+    );
+    expect(tripView.status).toBe(200);
+    expect(await canViewEntity(bob.id, "TRIP_FINAL_POST", post.id)).toBe(true);
+
+    const search = await searchUsers(
+      new NextRequest("http://localhost/api/users?search=alicerestrict", {
+        headers: auth,
+      })
+    );
+    const searchBody = await search.json();
+    expect(
+      searchBody.data.items.find((item: { id: string }) => item.id === alice.id)
+    ).toBeTruthy();
+  });
+
+  it("hides a public trip thread from someone who is blocked", async () => {
+    const alice = await createUser({ email: "alice-thread@test.com" });
+    const bob = await createUser({ email: "bob-thread@test.com" });
+    const cara = await createUser({ email: "cara-thread@test.com" });
+    const aliceTrip = await createTrip({
+      userId: alice.id,
+      title: "Alice public thread",
+      status: TripStatus.ONGOING,
+    });
+    const media = await prisma.media.create({
+      data: {
+        url: "https://cdn.example.com/alice-thread.jpg",
+        publicId: `thread-${randomUUID()}`,
+        type: MediaType.IMAGE,
+        uploadedById: alice.id,
+        tripId: aliceTrip.id,
+      },
+    });
+    const entry = await prisma.tripThreadEntry.create({
+      data: {
+        tripId: aliceTrip.id,
+        authorId: alice.id,
+        type: ThreadEntryType.MEDIA,
+        mediaId: media.id,
+      },
+    });
+    await setSafetyAction(alice.id, bob.id, UserSafetyAction.BLOCK);
+    const bobToken = await getAuthToken(bob);
+    const entries = await getEntries(
+      new NextRequest(`http://localhost/api/trips/${aliceTrip.id}/entries`, {
+        headers: { authorization: `Bearer ${bobToken}` },
+      }),
+      { params: Promise.resolve({ id: aliceTrip.id }) }
+    );
+    expect(entries.status).toBe(404);
+
+    const context = await getEntryContext(
+      new NextRequest(
+        `http://localhost/api/trips/${aliceTrip.id}/entries/${entry.id}/context`,
+        { headers: { authorization: `Bearer ${bobToken}` } }
+      ),
+      { params: Promise.resolve({ id: aliceTrip.id, entryId: entry.id }) }
+    );
+    expect(context.status).toBe(404);
+    expect(await canViewEntity(bob.id, "TRIP_THREAD_ENTRY", entry.id)).toBe(false);
+
+    const caraTrip = await createTrip({
+      userId: cara.id,
+      title: "Cara public thread",
+      status: TripStatus.ONGOING,
+    });
+    const caraEntry = await prisma.tripThreadEntry.create({
+      data: {
+        tripId: caraTrip.id,
+        authorId: alice.id,
+        type: ThreadEntryType.TEXT,
+        contentText: "Alice wrote this on Cara's trip",
+      },
+    });
+    const caraEntries = await getEntries(
+      new NextRequest(`http://localhost/api/trips/${caraTrip.id}/entries`, {
+        headers: { authorization: `Bearer ${bobToken}` },
+      }),
+      { params: Promise.resolve({ id: caraTrip.id }) }
+    );
+    const caraBody = await caraEntries.json();
+    expect(caraEntries.status).toBe(200);
+    expect(
+      caraBody.data.items.map((item: { id: string }) => item.id)
+    ).not.toContain(caraEntry.id);
+  });
+
+  it("drops notifications and live signals across a block, and hides the restrictor's signals", async () => {
+    const alice = await createUser({ email: "alice-signal@test.com" });
+    const bob = await createUser({ email: "bob-signal@test.com" });
+    const cara = await createUser({ email: "cara-signal@test.com" });
+    const group = await createConversation(
+      { type: "GROUP", name: "Signals", participantIds: [bob.id, cara.id] },
+      alice.id
+    );
+    const dm = await createConversation(
+      { type: "DM", participantIds: [bob.id] },
+      alice.id
+    );
+    await createNotification({
+      type: "LIKE",
+      actorId: bob.id,
+      recipientId: alice.id,
+      metadata: { contentPreview: "liked" },
+    });
+    await setSafetyAction(alice.id, bob.id, UserSafetyAction.BLOCK);
+    expect(
+      await createNotification({
+        type: "COMMENT",
+        actorId: bob.id,
+        recipientId: alice.id,
+      })
+    ).toBeNull();
+    const inbox = await getMergedNotifications(alice.id);
+    expect(inbox.items.map((item) => item.actor.id)).not.toContain(bob.id);
+    expect(await getUnreadNotificationCount(alice.id)).toBe(0);
+
+    expect(await signalRecipients(group.id, alice.id)).not.toContain(bob.id);
+    expect(await signalRecipients(group.id, alice.id)).toContain(cara.id);
+    expect(await signalRecipients(group.id, bob.id)).not.toContain(alice.id);
+    expect(await signalRecipients(dm.id, alice.id)).toEqual([]);
+    expect(await signalRecipients(dm.id, bob.id)).toEqual([]);
+
+    await clearSafetyAction(alice.id, bob.id);
+    await setSafetyAction(alice.id, bob.id, UserSafetyAction.RESTRICT);
+    expect(await signalRecipients(dm.id, alice.id)).toEqual([]);
+    expect(await signalRecipients(dm.id, bob.id)).toEqual([]);
+    expect(await signalRecipients(group.id, alice.id)).not.toContain(bob.id);
+    expect(await signalRecipients(group.id, alice.id)).toContain(cara.id);
+    expect(await signalRecipients(group.id, bob.id)).toContain(alice.id);
   });
 });

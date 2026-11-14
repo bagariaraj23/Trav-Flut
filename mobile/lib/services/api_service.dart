@@ -3154,6 +3154,38 @@ class ApiService {
     }
   }
 
+  Future<ApiResponse<ChatMediaWindow>> getConversationMediaContext(
+    String conversationId,
+    String mediaId, {
+    int contextSize = 25,
+  }) async {
+    try {
+      final response = await _dio.get(
+        '/chat/conversations/$conversationId/media/$mediaId/context',
+        queryParameters: {'contextSize': contextSize},
+      );
+      if (response.data['success'] == true && response.data['data'] != null) {
+        return ApiResponse(
+          success: true,
+          data: ChatMediaWindow.fromJson(
+            response.data['data'] as Map<String, dynamic>,
+          ),
+        );
+      }
+      return ApiResponse(
+        success: false,
+        error: response.data['error'] ?? 'Failed to load media',
+      );
+    } on DioException catch (e) {
+      return ApiResponse(
+        success: false,
+        error: e.response?.data['error'] ?? 'Network error',
+      );
+    } catch (e) {
+      return ApiResponse(success: false, error: 'An unexpected error occurred');
+    }
+  }
+
   Future<ApiResponse<SafetyPeoplePage>> listSafetyPeople({
     required String action,
     String? cursor,
