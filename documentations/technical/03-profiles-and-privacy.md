@@ -1,6 +1,6 @@
 # Profiles and privacy
 
-One `User` row is both the login identity and the public profile. Privacy is a single boolean, `isPrivate`, default `false`. There is no separate profile table. Block is not a second privacy flag. It is a `UserSafetyRelation` row. A block in either direction returns the same limited profile from `GET /users/:id`: name and username only. The photo, bio, and email are omitted. Stats, trips, and the follower and following lists are empty. `blockedByViewer` is set when the viewer blocked that person, so the screen can show Unblock. `viewerIsBlocked` is set when that person blocked the viewer. Search still returns the person, without a photo or bio. Restrict does not hide the profile. See [Follow](./04-follow-system.md).
+One `User` row is both the login identity and the public profile. Privacy is a single boolean, `isPrivate`, default `false`. There is no separate profile table. Block is not a second privacy flag. It is a `UserSafetyRelation` row. When the profile owner blocked the viewer, `GET /users/:id` returns **404** `User not found`, the same body as a missing account. Stats, trips, and the follower and following lists do the same. Search omits both people. When the viewer blocked the profile, the response is a limited page: name and username, no photo, bio, or email, empty stats and trips, and `blockedByViewer: true` so the screen can show Unblock. That flag is not returned to the person who was blocked. Restrict does not hide the profile. See [Follow](./04-follow-system.md).
 
 Primary files:
 
@@ -29,9 +29,11 @@ Derived flags:
 
 ```mermaid
 flowchart TD
-  Start["GET /users/:id"] --> Block{"A block exists either way?"}
-  Block -->|yes| Partial["Name and username only"]
-  Block -->|no| Priv{"Target isPrivate and viewer is not the target?"}
+  Start["GET /users/:id"] --> Missing{"Did this profile block the viewer?"}
+  Missing -->|yes| Gone["404 User not found"]
+  Missing -->|no| Own{"Did the viewer block this profile?"}
+  Own -->|yes| Partial["Name and username, blockedByViewer"]
+  Own -->|no| Priv{"Target isPrivate and viewer is not the target?"}
   Priv -->|no| Full["Return profile including email"]
   Priv -->|yes| Follow{"Follow row exists?"}
   Follow -->|yes| Limited["Limited profile: email empty, bio hidden"]
@@ -42,7 +44,7 @@ A follower of a private account sees a reduced profile, not a 403. A stranger, i
 
 `PUT /api/users/:id` is owner-only. `PATCH /api/users/:id/privacy` ignores the body and flips `isPrivate` to its opposite. The mobile toggle calls that PATCH.
 
-`GET /api/users/:id/stats` is authenticated (`read_hot`) and returns `{ tripCount, followerCount, followingCount }` for any caller who is signed in. It does not apply the private-profile wall. Counts are `count()` queries, not denormalized columns on `User`.
+`GET /api/users/:id/stats` is authenticated (`read_hot`) and returns `{ tripCount, followerCount, followingCount }` for any caller who is signed in. It does not apply the private-profile wall. A viewer who was blocked gets **404**. A viewer who blocked the profile gets zeros. Counts are `count()` queries, not denormalized columns on `User`.
 
 `GET /api/users/:id/followers` hides the list of a private account unless the viewer and the target follow each other.
 
@@ -53,6 +55,7 @@ A follower of a private account sees a reduced profile, not a 403. A stranger, i
 - Default page size 20, maximum 50.
 - Case-insensitive `contains` on `username` and `name`.
 - The current user is excluded.
+- Anyone in a block with the viewer, either direction, is excluded. Restrict does not remove someone from search.
 - `deletedAt` is **not** filtered. Soft-deleted users have null usernames and rewritten emails, so they rarely match a name search, but the query itself does not exclude them.
 - Each row is a `DiscoverUserDto` with `isFollowing` and `isFollowedBy`.
 - This route does not use `withRateLimit`.

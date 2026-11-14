@@ -31,7 +31,7 @@ Tags are `TripThreadTag`, unique on `(threadEntryId, taggedUserId)`.
 
 `POST /api/trips/:id/entries` requires owner or participant, and the trip must be `ONGOING`. The transaction inserts the entry, the tag rows, and increments `Trip.entryCount`. Tag notifications are fire-and-forget.
 
-`GET` is allowed for a member, or for a follower when the owner is private, or for anyone when the owner is public. The list is cursor-paginated.
+`GET` is allowed for a member, or for a follower when the owner is private, or for anyone when the owner is public. A non-member in a block with the owner gets **404** `Trip not found`, the same response as `GET /trips/:id`. Entries whose author is blocked either way are left out of that list, including on someone else's public trip. A member of the trip still sees the thread. The list is cursor-paginated. Restrict does not close the thread.
 
 `PATCH` edits text only, and only while `ONGOING`. The author has a **15 minute** window (`EDIT_WINDOW_MS = 15 * 60 * 1000`). The trip owner can edit any text entry with no window, as moderation. Outside the window the author gets **400**.
 
@@ -74,7 +74,7 @@ For one entry it deletes tags, likes, comments, shares, and notifications that p
 
 `TripFinalPost` is unique on `(tripId, userId)`. Each member has their own draft. Migration `20261111120000_personalized_final_posts` assigns older rows to the trip owner, drops the old `tripId` unique index, and adds `(userId, isPublished, publishedAt)` plus `tripId`.
 
-Ending a trip drafts a post for the owner and every current participant (`generateFinalPostsForMembers`). The first draft uses that person's notes, photos they uploaded or posted, and photos on entries that tag them. After that, the editor can add any photo from the trip. The picker numbers the selection and stops at 12 (`FinalPostProvider.maxPhotos`). The home feed and the post screen show `post.user`, the author, and a published post follows that author's privacy. A block in either direction hides that post from the other person's feed and from `canViewEntity`. A draft stays visible only to its author (`canViewEntity` in `src/lib/auth/permissions.ts`).
+Ending a trip drafts a post for the owner and every current participant (`generateFinalPostsForMembers`). The trip, its entries, and its media are loaded once inside the open transaction, then each member's draft is built in memory, the same way the scheduler does. The first draft uses that person's notes, photos they uploaded or posted, and photos on entries that tag them. After that, the editor can add any photo from the trip. `PUT` rejects a `curatedMedia` or `coverMediaUrl` value that is not a media URL already stored on that trip. A Cloudinary host alone is not enough, because other people's private photos use the same account. Publish checks the saved URLs again. The picker numbers the selection and stops at 12 (`FinalPostProvider.maxPhotos`). The home feed and the post screen show `post.user`, the author, and a published post follows that author's privacy. A block in either direction hides that post from the other person's feed and from `canViewEntity`. A draft stays visible only to its author (`canViewEntity` in `src/lib/auth/permissions.ts`).
 
 | Column | Role |
 | --- | --- |

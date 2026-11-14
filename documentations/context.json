@@ -4,7 +4,7 @@
         "workspacePath": "/Users/rajbagaria/Desktop/Bolt-Travello/Flut/project",
         "generatedAt": "2026-11-13",
         "description": "Travel-focused social platform where users create trips, post thread entries (text/media/location), split trip expenses and settle up on a Money pane, generate/publish final trip posts, and chat via 1:1 DMs, groups, and trip-scoped rooms (realtime WebSocket).",
-        "lastPRReviewed": "PR #56 merged to main on 2026-11-11 (2:44 PM IST). Main runs the full local Docker stack and Mapbox Maps Flutter 3.34.2. Open stack, merge in order: PR #61 (cursor/personalized-final-posts-44b0, base main) gives every current member an unpublished DRAFT with up to 12 of that person's photos, from both the hourly job and ending the trip in the app. Publishing marks the post PUBLISHED. There is no READY label. PR #62 (cursor/media-restrict-block-aa71) adds Restrict and Block, conversation media, a shared viewer, and the 12-photo picker. A block hides posts and trips both ways and leaves both profiles as a name and username. PR #63 (cursor/technical-documentation-becf) is the handbook. Open drafts remain PR #15 (to be discarded) and PR #38 (the older personalised-final-posts branch, behind main; the implementation is #61).",
+        "lastPRReviewed": "PR #56 merged to main on 2026-11-11 (2:44 PM IST). Main runs the full local Docker stack and Mapbox Maps Flutter 3.34.2. Open stack, merge in order: PR #61 (cursor/personalized-final-posts-44b0, base main) gives every current member an unpublished DRAFT with up to 12 of that person's photos, from both the hourly job and ending the trip in the app. Publishing marks the post PUBLISHED. There is no READY label. PR #62 (cursor/media-restrict-block-aa71) adds Restrict and Block, conversation media, a shared viewer, and the 12-photo picker. A block hides posts and trips both ways. Search omits both people. The blocked person gets the same not-found profile as a missing account, and the blocker keeps Unblock. Restrict keeps the profile open and removes the restrictor's posts from the restricted person's feeds. PR #63 (cursor/technical-documentation-becf) is the handbook. Open drafts remain PR #15 (to be discarded) and PR #38 (the older personalised-final-posts branch, behind main; the implementation is #61).",
         "recentProductionPRs": [
             "https://github.com/bagariaraj23/Trav-Flut/pull/56",
             "https://github.com/bagariaraj23/Trav-Flut/pull/54",
@@ -142,7 +142,7 @@
             "Media model supports Cloudinary integration with quota tracking",
             "Notification model supports unified notifications (likes, comments, follows, mentions)",
             "Conversation model supports DM, GROUP, and TRIP type rooms with dynamic participants and leftAt validation. GROUP rows store createdById so only the creator is stopped from adding someone they blocked.",
-            "UserSafetyRelation is one row per actor and target, action RESTRICT or BLOCK. Restrict and Block both stop direct messages in either direction. Block deletes the target's follow of the actor and any pending request from the target, and does not restore that follow on Unblock. Both profiles then show a name and username only. Posts and trips are hidden both ways on Home and Discover. Search still finds the person. The person who blocked sees Unblock. The creator of a trip or group cannot add the other person. A trip or group someone else created can include both.",
+            "UserSafetyRelation is one row per actor and target, action RESTRICT or BLOCK. Restrict and Block both stop direct messages in either direction. Restrict keeps the profile open and removes the restrictor's posts from the restricted person's Home, Discover, and live trips, and hides the restrictor's last seen, typing, and read receipts. Block deletes follows and pending requests in both directions and does not restore them on Unblock. Search omits both people. The blocked person gets 404 User not found. The blocker sees a name and username with Unblock. Posts and trips are hidden both ways on Home and Discover. Notifications from a blocked actor are not created or listed. The creator of a trip or group cannot add the other person. A trip or group someone else created can include both.",
             "ChatMessage model supports content, soft deletion with deletedAt, and message replyTo hierarchy",
             "Hot-path indexes (PR #55, merged 2026-10-29): migration 20261004153000_add_hot_path_query_indexes plus 20261004180000_add_remaining_hot_path_indexes (trips userId+createdAt, media tripId, trip_join_requests receiverId+status, conversations updatedAt). Earlier slice covers trip threads, published final posts, notifications, follows, trip status+dates, participant userId, likes, comment replies, media by uploader"
         ]
@@ -160,7 +160,7 @@
             "follow",
             "likes/comments/shares (POST /shares shareSource: SYSTEM_SHEET default, no shareCount bump; IN_APP_DM increments — wire from chat share UI; Universal Links still ops-only)",
             "notifications",
-            "chat (merged PR #48: REST /api/chat + WS /chat on server.cjs; DM/GROUP/TRIP. GET /chat/conversations/:id/media pages image, gif, and video attachments. PUT/DELETE /users/:id/safety and GET /users/me/safety store Restrict and Block. Trip chats default to the trip title and use the same add/remove/promote/leave controls as groups. Leaving a chat does not leave the trip, and that leave is not undone on the next trip sync. Single-node event bus; rate-limit + Redis Pub/Sub + offline push deferred)"
+            "chat (merged PR #48: REST /api/chat + WS /chat on server.cjs; DM/GROUP/TRIP. GET /chat/conversations/:id/media pages image, gif, and video attachments. GET .../media/:mediaId/context opens a centered window. Typing, read receipts, and presence skip a blocked pair and skip the restrictor's signals for the person they restricted. PUT/DELETE /users/:id/safety and GET /users/me/safety store Restrict and Block. Trip chats default to the trip title and use the same add/remove/promote/leave controls as groups. Leaving a chat does not leave the trip, and that leave is not undone on the next trip sync. Single-node event bus; rate-limit + Redis Pub/Sub + offline push deferred)"
         ],
         "keyTripFlow": {
             "createTrip": "POST /trips — startDate optional (defaults to now, status ONGOING); endDate optional (null = manual end only). Start and end times are optional. A midnight end date is stored as 11:59:59.999 PM in scheduleTimezone. A chosen end time is stored as that instant. Future start stays UPCOMING. Dates are UTC instants. scheduleTimezone is the IANA zone the wall time was chosen in. Omitted type becomes SOLO with typeSetByUser false.",
@@ -2329,10 +2329,12 @@
                 "url": "https://github.com/bagariaraj23/Trav-Flut/pull/61",
                 "base": "main",
                 "head": "cursor/personalized-final-posts-44b0",
-                "notes": "Bottom of the stack. One unpublished DRAFT per current member, up to 12 of that person's photos, from both endings. Publishing sets PUBLISHED. Docker baseline leaves the READY-to-DRAFT data migration for migrate deploy. No new Compose service.",
+                "notes": "Bottom of the stack. One unpublished DRAFT per current member, up to 12 of that person's photos, from both endings. The ending loads the trip once. A saved photo must already belong to that trip. Publishing sets PUBLISHED. Docker baseline leaves the READY-to-DRAFT data migration for migrate deploy. No new Compose service.",
                 "keyFeatures": [
                     "TripFinalPost unique on tripId and userId",
                     "Shared buildMemberFinalDraft for the API and the scheduler",
+                    "One trip load when drafting every member",
+                    "Curated photos must be media already on the trip",
                     "Unpublished drafts stay DRAFT",
                     "Up to 12 personal photos"
                 ]
@@ -2348,7 +2350,9 @@
                 "keyFeatures": [
                     "Restrict and Block from a profile, a direct message, a group or trip chat member list, and Manage Participants, with an info explanation",
                     "Help and FAQ in Settings for the product rules",
-                    "Block hides posts, trips, and profile detail both ways. Search still finds a name and username. Unblock is only on the blocker's side",
+                    "Block is opaque both ways. Search omits both people. The blocked person gets User not found. The blocker keeps Unblock. Follows are removed both ways",
+                    "Restrict keeps the profile open and hides the restrictor's posts from the restricted person's feeds, plus last seen, typing, and read receipts",
+                    "Chat media opens on the tapped item and loads one centered window",
                     "A trip or group someone else created can include both people",
                     "Shared media viewer and final-post selection order, up to 12 photos"
                 ]
@@ -2417,7 +2421,7 @@
             "notes": "2026-11-13: personalized final-post integration tests and scheduler draft tests passed (13). 2026-11-11: user-safety and chat integration tests passed (25). Flutter media_safety_test passed in the Flutter 3.38.5 container. Do not add platform-specific Rolldown bindings to root dependencies."
         },
         "lastMergedFeature": "PR #56 Dockerise the full local stack (merged main 2026-11-11, 2:44 PM IST). PR #54 trip create UX merged 2026-11-06.",
-        "notes": "Main includes the Docker stack and Mapbox 3.34.2. The open stack is #61, then #62, then #63. #61 writes one unpublished DRAFT per member, up to 12 photos, from both trip endings. #62 adds Restrict, Block, conversation media, the shared viewer, and the picker. #63 is the handbook. Rebuild the web image to see the Flutter screens at port 8080. Migrations apply through the existing migrate-on-boot path. An old db-push volume leaves the READY-to-DRAFT update for that deploy. No new Compose service, port, or environment variable. Open drafts are PR #15 and PR #38. A road line between saved pins can come later with one cached Mapbox Directions call. A walked-path trace needs background location and stays deferred. Cloudinary dashboard presets and Universal Links ops remain.",
+        "notes": "Main includes the Docker stack and Mapbox 3.34.2. The open stack is #61, then #62, then #63. #61 writes one unpublished DRAFT per member, up to 12 photos, from both trip endings, from one trip load, and only accepts photos already on that trip. #62 adds Restrict and Block. Block is opaque both ways. Restrict keeps the profile open and hides the restrictor's posts and presence signals from the restricted person. Chat media opens on the tapped item. #63 is the handbook. Rebuild the web image to see the Flutter screens at port 8080. Migrations apply through the existing migrate-on-boot path. An old db-push volume leaves the READY-to-DRAFT update for that deploy. No new Compose service, port, or environment variable. Open drafts are PR #15 and PR #38. A road line between saved pins can come later with one cached Mapbox Directions call. A walked-path trace needs background location and stays deferred. Cloudinary dashboard presets and Universal Links ops remain.",
         "mainBranchStable": true,
         "activeStack": [
             {

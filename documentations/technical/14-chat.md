@@ -43,7 +43,7 @@ Primary files:
 
 DM create looks up an existing room between the two users (`findExistingDM`) and returns it instead of inserting a second pair. Before the room is reused or created, `assertCanDirectMessage` rejects the pair when either person has a Restrict or Block row against the other. The history stays. Group and trip rooms are not closed by Restrict. Group create makes the caller `ADMIN`. Adding a member to a group the caller created also runs `assertCreatorMayAdd`.
 
-`GET /api/chat/conversations/:id/media` pages the room's image, gif, and video attachments. The phone shows six thumbnails, then a wider grid, and opens `media_gallery_viewer.dart` for chat and for trip-thread photos and videos.
+`GET /api/chat/conversations/:id/media` pages the room's image, gif, and video attachments. `GET /api/chat/conversations/:id/media/:mediaId/context` returns one window centered on the attachment that was tapped, the same shape as a thread-entry context window. The phone opens `media_gallery_viewer.dart` immediately with that attachment, then replaces the strip with the window. The shared-media grid still pages with the list route.
 
 Trip create calls `getOrCreateTripConversation`. Adding or removing trip participants updates the room membership with `createMany` rather than one insert per person. A user who already left is not forced back in on that sync.
 
@@ -77,7 +77,7 @@ History: `before` is a message id. The query takes `limit + 1` on `(conversation
 
 `listConversations` used to count unread messages once per room. It now calls `batchFetchUnreadCounts`, one SQL `GROUP BY conversationId` for the whole page: messages in those rooms, newer than that participant's `lastReadAt`, not sent by the viewer, not deleted. The index `(conversationId, createdAt DESC)` serves the per-room range. The `(userId, lastReadAt)` index serves "which of my rooms are behind".
 
-`PATCH .../read` writes `lastReadAt` and publishes `conversation.read` so other devices of the same user can clear the badge.
+`PATCH .../read` writes `lastReadAt` and publishes `conversation.read` to `signalRecipients`. A direct message that is restricted or blocked publishes no receipt. In a group, Block drops the receipt both ways, and Restrict drops the restrictor's receipt for the person they restricted.
 
 ## WebSocket
 
@@ -89,6 +89,8 @@ Protocol:
 - Heartbeat every **30 seconds**, grace **10 seconds**.
 - One user can have several sockets (`connectionsByUserId`), so two devices both get `message.new`.
 - Events: `message.new`, `message.updated`, `message.deleted`, `typing`, `conversation.read`, `presence.update`.
+- Typing uses `signalRecipients`, so a blocked or restricted direct message does not broadcast "is typing", and a group does not send the restrictor's typing to the person they restricted.
+- `presence.update` drops recipients in `presenceHiddenRecipientIds`: a block both ways, and a restrict from the person who went online or offline to the person they restricted. The restricted person's own last seen still reaches the restrictor.
 
 The Next.js route bundle and the WebSocket bundle are separate compiles. They share the bus only because `server.cjs` assigns `global.chatEventBus` before either runs, and `chat-events.ts` publishes to `global.chatEventBus` when it is present. A unit test that imports the service without that global simply does not fan out. That is expected.
 

@@ -70,7 +70,7 @@ On a public follow the handler fires `createNotification({ type: "FOLLOW", actor
 | Feature | Rule |
 | --- | --- |
 | Private profile | A follower sees a reduced profile. Everyone else gets 403. [Profiles](./03-profiles-and-privacy.md) |
-| Home feed | Published final posts from self, from people you follow, and from every public account, except anyone in a block with the viewer. [Feed](./11-feed-discover-posts.md) |
+| Home feed | Published final posts from self, from people you follow, and from every public account, except anyone in a block with the viewer and except someone who restricted the viewer. [Feed](./11-feed-discover-posts.md) |
 | Discover and live trips | A private owner's trip is visible when you follow them or you are a member |
 | Trip invite | If the trip owner is private, the invitee must already follow the owner. [Trips](./05-trip-lifecycle.md) |
 | Notifications | Public follow writes `Notification` type `FOLLOW`. Pending requests are read from `follow_requests` and merged as synthetic `FOLLOW_REQUEST` items. [Notifications](./13-notifications.md) |
@@ -81,10 +81,10 @@ On a public follow the handler fires `createNotification({ type: "FOLLOW", actor
 
 | Action | Direct messages | Follow and profile | Adding people |
 | --- | --- | --- | --- |
-| Restrict | Stopped both ways. The existing chat stays | Unchanged | Unchanged |
-| Block | Stopped both ways, because any safety row stops a DM | The target's follow of the actor, and any pending request, is deleted. The target cannot follow the actor. Both people still appear in search. Each profile shows a name and username only: no photo, trips, follower counts, or following list. The actor sees Unblock. Both people's posts and trips leave each other's Home feed and Discover until Unblock | The creator of a trip or group cannot add the other person. A trip or group someone else created can still include both |
+| Restrict | Stopped both ways. The existing chat stays. Typing and read receipts stop in that direct message. The restricted person does not see the restrictor's last seen, group typing, or read receipts | The profile stays open, including posts opened from it. The restrictor's posts and trips leave the restricted person's Home, Discover, and live trips | Unchanged |
+| Block | Stopped both ways, because any safety row stops a DM. Last seen, typing, and read receipts stop both ways | Follows and pending requests are deleted in both directions and are not restored. Neither person appears in search. The blocked person gets **404** `User not found`. The blocker gets a name and username with Unblock. Posts and trips leave both people's Home feed and Discover until Unblock | The creator of a trip or group cannot add the other person. A trip or group someone else created can still include both |
 
-Downgrading a block to a restrict is rejected until the block is cleared. Blocking yourself is rejected. Unblock deletes the safety row. Posts and trips show again. The follow that Block removed is not put back.
+Downgrading a block to a restrict is rejected until the block is cleared. Blocking yourself is rejected. A follow attempt while a block exists either way returns **404** `User not found`, the same as a missing account. Unblock deletes the safety row. Posts and trips show again. Follows that Block removed are not put back.
 
 The same sheet opens from another person's profile, a direct-message info screen, each member of a group or trip chat, and each person on Manage Participants. Settings lists blocked people and restricted people, and Help and FAQ (`help_faq_screen.dart`, `help_topics.dart`) holds the product rules.
 

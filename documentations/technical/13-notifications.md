@@ -44,7 +44,7 @@ All of these call `createNotification` and do not await it on the user's request
 | Public follow | `FOLLOW` | The followee | `POST /follow/:userId` |
 | Private follow request | none | The request row is the inbox item | `follow_requests` |
 
-`createNotification` returns immediately when `actorId === recipientId`. It then deletes Redis key `notif:unread:{recipientId}` so the badge is not stuck for the 20 second TTL.
+`createNotification` returns immediately when `actorId === recipientId`, and when `blockEitherWay(actorId, recipientId)` is true. It then deletes Redis key `notif:unread:{recipientId}` so the badge is not stuck for the 20 second TTL. Blocking also deletes that key for both people.
 
 Metadata keys the inbox understands: `postEntityType`, `postEntityId`, `commentId`, `parentCommentId`, `tripId`, `tripName`, `threadEntryId`, `contentPreview`. They are copied onto the DTO so the client can route a tap without a second round trip per row.
 
@@ -54,14 +54,14 @@ There is no push transport. No APNs, no FCM. The badge is polling `unread-count`
 
 `getMergedNotifications`:
 
-1. Fetch pending follow requests and notification rows in parallel.
+1. Fetch pending follow requests and notification rows in parallel. Actors and requesters in a block with the recipient, either direction, are excluded. Restrict does not filter the inbox.
 2. Each source is limited to `max(limit * 3, 50)` so a flood of one type cannot starve the merge, while still filling a page.
 3. Sort by `createdAt`, then by source rank (`FOLLOW_REQUEST` before `NOTIFICATION` at the same timestamp), then by `id`.
 4. Cursor is base64 JSON `{ v, createdAt, id, source }`. Versioned so the merge order can change later without reusing an old cursor.
 
 `GET /api/users/me/notifications?limit=&cursor=`. Limit 1–50. Preset `read_hot`.
 
-`GET .../unread-count` uses `getOrSet` with TTL **20,000 ms**. The loader counts notifications with `readAt` null whose actor is not soft-deleted. Follow requests are **not** in that number. The mobile provider treats the badge as engagement-unread and loads requests separately, which matches the API comment in `user_provider.dart`.
+`GET .../unread-count` uses `getOrSet` with TTL **20,000 ms**. The loader counts notifications with `readAt` null whose actor is not soft-deleted and is not in a block with the recipient. Follow requests are **not** in that number. The mobile provider treats the badge as engagement-unread and loads requests separately, which matches the API comment in `user_provider.dart`.
 
 `PUT .../read` sets `readAt` on every unread row for the caller and clears the cache key.
 
