@@ -7,6 +7,7 @@ import 'package:tripthread/providers/trip_provider.dart';
 import 'package:tripthread/providers/feed_provider.dart';
 import 'package:tripthread/providers/user_provider.dart';
 import 'package:tripthread/providers/engagement_provider.dart';
+import 'package:tripthread/services/api_service.dart';
 import 'package:tripthread/services/trip_service.dart';
 import 'package:tripthread/models/live_trip_story.dart';
 import 'package:tripthread/models/trip.dart';
@@ -264,8 +265,9 @@ class _HomeFeedScreenState extends State<HomeFeedScreen> {
       ),
     );
     if (ok != true || !context.mounted) return;
-    final tripService = context.read<TripService>();
-    final res = await tripService.deleteFinalPost(post.tripId);
+    final res = post.isDirectPost
+        ? await context.read<ApiService>().deleteDirectPost(post.id)
+        : await context.read<TripService>().deleteFinalPost(post.tripId!);
     if (!context.mounted) return;
     if (res.success) {
       context.read<FeedProvider>().removeHomeFeedPostById(post.id);
@@ -315,6 +317,16 @@ class _HomeFeedScreenState extends State<HomeFeedScreen> {
           ],
         ),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.add_box_outlined),
+            tooltip: 'New post',
+            onPressed: () async {
+              final created = await context.push('/compose');
+              if (created == true && context.mounted) {
+                await context.read<FeedProvider>().loadHomeFeed(refresh: true);
+              }
+            },
+          ),
           IconButton(
             icon: const Icon(Icons.chat_bubble_outline),
             tooltip: 'Messages',
@@ -669,7 +681,11 @@ class _HomeFeedScreenState extends State<HomeFeedScreen> {
                     onSelected: (value) async {
                       if (!context.mounted) return;
                       if (value == 'edit') {
-                        context.push('/trip/${post.tripId}/final-post');
+                        if (post.isDirectPost) {
+                          context.push('/compose/${post.id}');
+                        } else {
+                          context.push('/trip/${post.tripId}/final-post');
+                        }
                       } else if (value == 'delete') {
                         await _confirmDeleteFinalPost(context, post);
                       }
@@ -686,10 +702,14 @@ class _HomeFeedScreenState extends State<HomeFeedScreen> {
           ),
           InkWell(
             onTap: () {
-              context.push(
-                '/trip/${post.tripId}',
-                extra: {'from': '/home'},
-              );
+              if (post.isDirectPost) {
+                context.push('/post/USER_POST/${post.id}');
+              } else {
+                context.push(
+                  '/trip/${post.tripId}',
+                  extra: {'from': '/home'},
+                );
+              }
             },
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -766,7 +786,15 @@ class _HomeFeedScreenState extends State<HomeFeedScreen> {
                         post.summaryText,
                         style: Theme.of(context).textTheme.bodyLarge,
                       ),
-                      if (post.caption != null) ...[
+                      if (post.isDirectPost &&
+                          (post.locationName ?? '').trim().isNotEmpty) ...[
+                        const SizedBox(height: 8),
+                        Text(
+                          post.locationName!,
+                          style: Theme.of(context).textTheme.bodyMedium,
+                        ),
+                      ],
+                      if (!post.isDirectPost && post.caption != null) ...[
                         const SizedBox(height: 8),
                         Text(
                           post.caption!,
@@ -788,7 +816,7 @@ class _HomeFeedScreenState extends State<HomeFeedScreen> {
                             child: Align(
                               alignment: Alignment.centerLeft,
                               child: EngagementActionBar(
-                                entityType: 'TRIP_FINAL_POST',
+                                entityType: post.engagementEntityType,
                                 entityId: post.id,
                                 likeCount: post.likeCount,
                                 commentCount: post.commentCount,
@@ -800,7 +828,7 @@ class _HomeFeedScreenState extends State<HomeFeedScreen> {
                                     isScrollControlled: true,
                                     backgroundColor: Colors.transparent,
                                     builder: (context) => CommentBottomSheet(
-                                      entityType: 'TRIP_FINAL_POST',
+                                      entityType: post.engagementEntityType,
                                       entityId: post.id,
                                     ),
                                   );
@@ -810,7 +838,7 @@ class _HomeFeedScreenState extends State<HomeFeedScreen> {
                                     context: context,
                                     backgroundColor: Colors.transparent,
                                     builder: (context) => ShareBottomSheet(
-                                      entityType: 'TRIP_FINAL_POST',
+                                      entityType: post.engagementEntityType,
                                       entityId: post.id,
                                     ),
                                   );
@@ -838,15 +866,16 @@ class _HomeFeedScreenState extends State<HomeFeedScreen> {
                               ),
                             ),
                           ),
-                          TextButton(
-                            onPressed: () {
-                              context.push(
-                                '/trip/${post.tripId}',
-                                extra: {'from': '/home'},
-                              );
-                            },
-                            child: const Text('View Trip'),
-                          ),
+                          if (!post.isDirectPost)
+                            TextButton(
+                              onPressed: () {
+                                context.push(
+                                  '/trip/${post.tripId}',
+                                  extra: {'from': '/home'},
+                                );
+                              },
+                              child: const Text('View Trip'),
+                            ),
                         ],
                       ),
                     ],

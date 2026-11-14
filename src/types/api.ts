@@ -188,7 +188,7 @@ export interface PlaceResponse {
 
 export interface TripFinalPostResponse {
   id: string;
-  tripId: string;
+  tripId: string | null;
   userId: string;
   summaryText: string;
   curatedMedia: string[];
@@ -199,6 +199,12 @@ export interface TripFinalPostResponse {
   publishedAt?: string | null;
   createdAt: string;
   updatedAt: string;
+  /** "direct" is a post that was not written inside a trip. */
+  postKind?: "trip" | "direct";
+  locationName?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
+  placeId?: string | null;
   /** Author of this personal final post. */
   user?: UserProfile | null;
   trip?: TripResponse | null;

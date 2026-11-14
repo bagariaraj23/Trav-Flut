@@ -104,7 +104,7 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (context) => CommentBottomSheet(
-        entityType: 'TRIP_FINAL_POST',
+        entityType: _post!.engagementEntityType,
         entityId: _post!.id,
         scrollToCommentId: scrollToCommentId,
       ),
@@ -137,7 +137,9 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
       ),
     );
     if (ok != true || !mounted) return;
-    final res = await context.read<TripService>().deleteFinalPost(post.tripId);
+    final res = post.isDirectPost
+        ? await context.read<ApiService>().deleteDirectPost(post.id)
+        : await context.read<TripService>().deleteFinalPost(post.tripId!);
     if (!mounted) return;
     if (res.success) {
       context.read<FeedProvider>().removeHomeFeedPostById(post.id);
@@ -182,7 +184,11 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
               onSelected: (value) async {
                 if (!mounted) return;
                 if (value == 'edit') {
-                  context.push('/trip/${_post!.tripId}/final-post');
+                  if (_post!.isDirectPost) {
+                    context.push('/compose/${_post!.id}');
+                  } else {
+                    context.push('/trip/${_post!.tripId}/final-post');
+                  }
                 } else if (value == 'delete') {
                   await _confirmDeleteFinalPost();
                 }
@@ -352,7 +358,15 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
                   text: post.summaryText,
                   style: Theme.of(context).textTheme.bodyLarge,
                 ),
-                if (post.caption != null) ...[
+                if (post.isDirectPost &&
+                    (post.locationName ?? '').trim().isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    post.locationName!,
+                    style: Theme.of(context).textTheme.bodyMedium,
+                  ),
+                ],
+                if (!post.isDirectPost && post.caption != null) ...[
                   const SizedBox(height: 8),
                   MentionText(
                     text: post.caption!,
@@ -371,7 +385,7 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
                       child: Align(
                         alignment: Alignment.centerLeft,
                         child: EngagementActionBar(
-                          entityType: 'TRIP_FINAL_POST',
+                          entityType: post.engagementEntityType,
                           entityId: post.id,
                           likeCount: post.likeCount,
                           commentCount: post.commentCount,
@@ -383,7 +397,7 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
                               context: context,
                               backgroundColor: Colors.transparent,
                               builder: (context) => ShareBottomSheet(
-                                entityType: 'TRIP_FINAL_POST',
+                                entityType: post.engagementEntityType,
                                 entityId: post.id,
                               ),
                             );
@@ -405,15 +419,16 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
                         ),
                       ),
                     ),
-                    TextButton(
-                      onPressed: () {
-                        context.push(
-                          '/trip/${post.tripId}',
-                          extra: {'from': '/post'},
-                        );
-                      },
-                      child: const Text('View Trip'),
-                    ),
+                    if (!post.isDirectPost)
+                      TextButton(
+                        onPressed: () {
+                          context.push(
+                            '/trip/${post.tripId}',
+                            extra: {'from': '/post'},
+                          );
+                        },
+                        child: const Text('View Trip'),
+                      ),
                   ],
                 ),
               ],

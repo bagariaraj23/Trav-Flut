@@ -210,9 +210,11 @@ const _$ThreadEntryTypeEnumMap = {
 TripFinalPost _$TripFinalPostFromJson(Map<String, dynamic> json) =>
     TripFinalPost(
       id: json['id'] as String,
-      tripId: json['tripId'] as String,
+      tripId: json['tripId'] as String?,
       userId: json['userId'] as String?,
       summaryText: json['summaryText'] as String,
+      postKind: json['postKind'] as String? ?? 'trip',
+      locationName: json['locationName'] as String?,
       curatedMedia: (json['curatedMedia'] as List<dynamic>)
           .map((e) => e as String)
           .toList(),
@@ -248,6 +250,8 @@ Map<String, dynamic> _$TripFinalPostToJson(TripFinalPost instance) =>
       'tripId': instance.tripId,
       'userId': instance.userId,
       'summaryText': instance.summaryText,
+      'postKind': instance.postKind,
+      'locationName': instance.locationName,
       'curatedMedia': instance.curatedMedia,
       'caption': instance.caption,
       'coverMediaUrl': instance.coverMediaUrl,

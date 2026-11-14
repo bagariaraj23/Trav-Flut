@@ -4,10 +4,10 @@ Three read models sit on top of trips and final posts.
 
 | Surface | Route | What it lists |
 | --- | --- | --- |
-| Home | `GET /api/feed/home` | Published `TripFinalPost` rows |
+| Home | `GET /api/feed/home` | Published final posts and direct posts |
 | Happening now | `GET /api/feed/live-trips` | One ongoing trip per person, story rail |
 | Discover | `GET /api/discover/trips` | Other people's ongoing and ended trips, ranked |
-| Deeplink | `GET /api/posts/:entityType/:entityId` | One published final post |
+| Deeplink | `GET /api/posts/:entityType/:entityId` | One published final post or direct post |
 
 Primary files: `src/app/api/feed/home/route.ts`, `src/app/api/feed/live-trips/route.ts`, `src/app/api/discover/trips/route.ts`, `src/app/api/posts/[entityType]/[entityId]/route.ts`, `src/lib/feedCursor.ts`, `src/lib/tripSpendVisibility.ts`, `mobile/lib/providers/feed_provider.dart`.
 
@@ -23,7 +23,7 @@ A post is included when `isPublished` is true and the post author (`TripFinalPos
 2. Someone the viewer follows.
 3. A public account (`isPrivate = false`).
 
-The three conditions are `OR`. Public posts are on the home feed even when the viewer does not follow the author. Private authors appear only as self or as a follow. `feedHiddenUserIds` then excludes every author in a block with the viewer, in either direction, and every author who restricted the viewer, with `userId: { notIn }`. A restrict does not hide the restricted person's posts from the restrictor. It does not make `canViewEntity` refuse the restrictor's final post. The profile lists that post, and `GET /posts/TRIP_FINAL_POST/:id` returns it. Home, Discover, live trips, and search are the surfaces that omit it. The profile returned to the restricted person is a name and username, without photo or bio. Unblock, or clearing the restrict, removes the feed exclusion. The mobile provider also drops items that look private and unfollowed, in case a stale client cache disagrees with the server.
+The three conditions are `OR`. Public posts are on the home feed even when the viewer does not follow the author. Private authors appear only as self or as a follow. The same audience applies to direct posts (`user_posts`), which have no trip. A direct post is a caption, up to 12 photos the author uploaded from their phone, and an optional location name and coordinates. Home merges the two lists by `createdAt` and id, and marks those rows with `postKind: "direct"`. `feedHiddenUserIds` then excludes every author in a block with the viewer, in either direction, and every author who restricted the viewer, with `userId: { notIn }`. A restrict does not hide the restricted person's posts from the restrictor. It does not make `canViewEntity` refuse the restrictor's final post or direct post. The profile lists that final post, and `GET /posts/TRIP_FINAL_POST/:id` returns it. Home, Discover, live trips, and search are the surfaces that omit the restrictor's posts, including a direct post. The profile returned to the restricted person keeps photo and bio. Only a block hides them. Unblock, or clearing the restrict, removes the feed exclusion. The mobile provider also drops items that look private and unfollowed, in case a stale client cache disagrees with the server.
 
 Pagination: `page` and `limit` (1–100, default 20) still work. If `cursor` is set, offset is forced to 0 and the cursor wins. `feedCursor.ts` encodes base64url `{ createdAt, id }`. The filter is "rows strictly older than this `(createdAt, id)` pair", matching `orderBy: [{ createdAt: "desc" }, { id: "desc" }]`. The query takes `limit + 1`. If the extra row exists, `hasNext` is true and `nextCursor` is the last returned row.
 
@@ -86,6 +86,8 @@ Spend is passed through `omitHiddenTripSpend(trip, false)`. Discover never treat
 `GET /api/posts/:entityType/:entityId`. `read_hot`.
 
 `TRIP_FINAL_POST`: load post, trip, and owner. **404** if it is not published. `canViewEntity` returns false when a block exists either way, and the route then returns **403**. A restrict does not refuse this read. Otherwise a published post is readable by its author, by a member of its trip, by anyone when the author is public, and by a follower when the author is private. The payload includes the denormalized counts and `checkLikeStatus` for that single id.
+
+`USER_POST`: `UserPostService.getVisible`. **404** when the post is missing, unpublished, or `canViewEntity` refuses it. A block refuses it. A restrict does not, so opening the post by id still works. Home is the surface that omits it.
 
 `TRIP_THREAD_ENTRY`: **404** with a message that direct view is not supported. Thread deep links go to `GET /trips/:id/entries/:entryId/context` instead, because an entry only makes sense inside the thread window.
 

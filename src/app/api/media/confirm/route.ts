@@ -4,6 +4,7 @@ import { ok, badRequest, serverError } from "@/lib/response-helpers";
 import { withAuth, AuthenticatedRequest, withLogging, withRateLimit } from "@/lib/middleware";
 import { prisma } from "@/lib/prisma";
 import { CloudinaryService } from "@/lib/cloudinary";
+import { assertTripUploadAccess } from "@/lib/services/postMedia";
 
 const mediaUsageEnum = z.enum([
   "trip_cover",
@@ -11,6 +12,8 @@ const mediaUsageEnum = z.enum([
   "general",
   "chat",
   "group_avatar",
+  "final_post",
+  "user_post",
 ]);
 
 const confirmSchema = z.object({
@@ -35,23 +38,20 @@ async function handler(request: AuthenticatedRequest) {
 
     const { tripId, chatMessageId, usage, ...cloudinaryPayload } = confirmSchema.parse(body);
 
-    if (tripId) {
-      const trip = await prisma.trip.findFirst({
-        where: {
-          id: tripId,
-          OR: [
-            { userId: request.user!.userId },
-            {
-              participants: {
-                some: { userId: request.user!.userId },
-              },
-            },
-          ],
-        },
-        select: { id: true },
-      });
+    if (usage === "final_post" && !tripId) {
+      return badRequest("A trip is required when adding a photo to a final post");
+    }
+    if (usage === "user_post" && tripId) {
+      return badRequest("A direct post photo is not attached to a trip");
+    }
 
-      if (!trip) {
+    if (tripId) {
+      const allowed = await assertTripUploadAccess(
+        prisma,
+        request.user!.userId,
+        tripId
+      );
+      if (!allowed) {
         return badRequest("Trip not found or access denied");
       }
     }

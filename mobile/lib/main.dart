@@ -36,6 +36,7 @@ import 'package:tripthread/screens/auth/reset_password_screen.dart';
 import 'package:tripthread/screens/auth/reset_password_success_screen.dart';
 import 'package:tripthread/screens/auth/complete_profile_screen.dart';
 import 'package:tripthread/screens/home/home_screen.dart';
+import 'package:tripthread/screens/post/compose_post_screen.dart';
 import 'package:tripthread/screens/profile/profile_screen.dart';
 import 'package:tripthread/screens/profile/edit_profile_screen.dart';
 import 'package:tripthread/screens/profile/followers_following_screen.dart';
@@ -747,6 +748,16 @@ class _TripThreadAppRouterState extends State<TripThreadAppRouter> {
               final conversationId = state.pathParameters['conversationId']!;
               return ChatSettingsScreen(conversationId: conversationId);
             },
+          ),
+          GoRoute(
+            path: '/compose',
+            builder: (context, state) => const ComposePostScreen(),
+          ),
+          GoRoute(
+            path: '/compose/:postId',
+            builder: (context, state) => ComposePostScreen(
+              postId: state.pathParameters['postId'],
+            ),
           ),
           GoRoute(
             path: '/post/:entityType/:entityId',

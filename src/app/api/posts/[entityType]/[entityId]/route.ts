@@ -14,6 +14,7 @@ import {
   TripFinalPostResponse,
 } from "@/types/api";
 import { canViewEntity } from "@/lib/auth/permissions";
+import { UserPostService } from "@/lib/services/userPost";
 
 /**
  * GET /posts/:entityType/:entityId
@@ -39,9 +40,16 @@ export async function GET(
           }
 
           const type = entityType as EntityType;
+          if (type === "USER_POST") {
+            const post = await UserPostService.getVisible(entityId, userId);
+            return NextResponse.json<ApiResponse<TripFinalPostResponse>>({
+              success: true,
+              data: post,
+            });
+          }
           if (type !== "TRIP_FINAL_POST" && type !== "TRIP_THREAD_ENTRY") {
             return NextResponse.json(
-              { success: false, error: "Invalid entity type. Supported: TRIP_FINAL_POST, TRIP_THREAD_ENTRY" },
+              { success: false, error: "Invalid entity type. Supported: TRIP_FINAL_POST, TRIP_THREAD_ENTRY, USER_POST" },
               { status: 400 }
             );
           }

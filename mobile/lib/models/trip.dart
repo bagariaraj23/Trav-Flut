@@ -217,12 +217,14 @@ class TripThreadEntry {
 @JsonSerializable()
 class TripFinalPost {
   final String id;
-  final String tripId;
+  final String? tripId;
   final String? userId;
   final String summaryText;
   final List<String> curatedMedia;
   final String? caption;
   final String? coverMediaUrl;
+  final String postKind;
+  final String? locationName;
   final GenerationStatus generationStatus;
   final bool isPublished;
   final DateTime? publishedAt;
@@ -241,12 +243,14 @@ class TripFinalPost {
 
   const TripFinalPost({
     required this.id,
-    required this.tripId,
+    this.tripId,
     this.userId,
     required this.summaryText,
     required this.curatedMedia,
     this.caption,
     this.coverMediaUrl,
+    this.postKind = 'trip',
+    this.locationName,
     this.generationStatus = GenerationStatus.draft,
     required this.isPublished,
     this.publishedAt,
@@ -270,6 +274,12 @@ class TripFinalPost {
   String? get displayAuthorId =>
       userId ?? user?.id ?? trip?.user?.id ?? trip?.userId;
 
+  bool get isDirectPost =>
+      postKind == 'direct' || tripId == null || tripId!.isEmpty;
+
+  String get engagementEntityType =>
+      isDirectPost ? 'USER_POST' : 'TRIP_FINAL_POST';
+
   TripFinalPost copyWith({
     String? id,
     String? tripId,
@@ -278,6 +288,8 @@ class TripFinalPost {
     List<String>? curatedMedia,
     String? caption,
     String? coverMediaUrl,
+    String? postKind,
+    String? locationName,
     GenerationStatus? generationStatus,
     bool? isPublished,
     DateTime? publishedAt,
@@ -298,6 +310,8 @@ class TripFinalPost {
       curatedMedia: curatedMedia ?? this.curatedMedia,
       caption: caption ?? this.caption,
       coverMediaUrl: coverMediaUrl ?? this.coverMediaUrl,
+      postKind: postKind ?? this.postKind,
+      locationName: locationName ?? this.locationName,
       generationStatus: generationStatus ?? this.generationStatus,
       isPublished: isPublished ?? this.isPublished,
       publishedAt: publishedAt ?? this.publishedAt,

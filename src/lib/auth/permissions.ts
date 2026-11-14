@@ -140,6 +140,44 @@ export async function canViewEntity(
     return !!follow;
   }
 
+  if (entityType === 'USER_POST') {
+    const post = await prisma.userPost.findUnique({
+      where: { id: entityId },
+      select: {
+        id: true,
+        userId: true,
+        isPublished: true,
+        user: { select: { isPrivate: true } },
+      },
+    });
+
+    if (!post || !post.isPublished) {
+      return !!userId && userId === post?.userId && !!post;
+    }
+
+    if (
+      userId &&
+      userId !== post.userId &&
+      (await postsHiddenFromViewer(post.userId, userId))
+    ) {
+      return false;
+    }
+
+    if (!post.user.isPrivate) return true;
+    if (!userId) return false;
+    if (userId === post.userId) return true;
+
+    const follow = await prisma.follow.findUnique({
+      where: {
+        followerId_followeeId: {
+          followerId: userId,
+          followeeId: post.userId,
+        },
+      },
+    });
+    return !!follow;
+  }
+
   if (entityType === 'COMMENT') {
     const comment = await prisma.comment.findUnique({
       where: { id: entityId },
@@ -219,6 +257,14 @@ export async function canDeleteComment(userId: string, commentId: string): Promi
     });
 
     return post?.userId === userId || post?.trip.userId === userId;
+  }
+
+  if (comment.entityType === 'USER_POST') {
+    const post = await prisma.userPost.findUnique({
+      where: { id: comment.entityId },
+      select: { userId: true },
+    });
+    return post?.userId === userId;
   }
 
   if (comment.entityType === 'TRIP_THREAD_ENTRY') {

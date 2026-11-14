@@ -6,7 +6,7 @@ import { EntityType } from "@prisma/client";
 import { z } from "zod";
 
 const statusQuerySchema = z.object({
-  entityType: z.enum(["TRIP_FINAL_POST", "TRIP_THREAD_ENTRY", "COMMENT"]),
+  entityType: z.enum(["TRIP_FINAL_POST", "TRIP_THREAD_ENTRY", "COMMENT", "USER_POST"]),
   entityIds: z.string().transform((val) => {
     if (typeof val === "string") {
       return val.split(",").filter(Boolean);

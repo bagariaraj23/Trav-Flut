@@ -71,6 +71,10 @@ export async function validateEntityExists(
       return !!(await prisma.tripThreadEntry.findUnique({
         where: { id: entityId },
       }));
+    case "USER_POST":
+      return !!(await prisma.userPost.findUnique({
+        where: { id: entityId },
+      }));
     case "COMMENT":
       return !!(await prisma.comment.findUnique({
         where: { id: entityId },
@@ -163,6 +167,12 @@ export async function incrementEntityCount(
         data: { [countType]: { increment: 1 } },
       });
       break;
+    case "USER_POST":
+      await tx.userPost.update({
+        where: { id: entityId },
+        data: { [countType]: { increment: 1 } },
+      });
+      break;
     case "COMMENT":
       // Comments don't have commentCount on themselves
       if (countType !== "commentCount") {
@@ -211,6 +221,20 @@ export async function decrementEntityCount(
       const currentCount = (entity as any)?.[countType] ?? 0;
       if (typeof currentCount === "number" && currentCount > 0) {
         await tx.tripThreadEntry.update({
+          where: { id: entityId },
+          data: { [countType]: { decrement: 1 } },
+        });
+      }
+      break;
+    }
+    case "USER_POST": {
+      const entity = await tx.userPost.findUnique({
+        where: { id: entityId },
+        select: { [countType]: true },
+      });
+      const currentCount = (entity as any)?.[countType] ?? 0;
+      if (typeof currentCount === "number" && currentCount > 0) {
+        await tx.userPost.update({
           where: { id: entityId },
           data: { [countType]: { decrement: 1 } },
         });
