@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma'
 import { ApiResponse, UserProfile } from '@/types/api'
 import { withAuth, AuthenticatedRequest, handleApiError } from '@/lib/middleware'
 import { AuthService } from '@/lib/auth'
+import { isProfileUnavailable, viewerHasBlocked } from '@/lib/services/userSafety'
 
 async function handler(
   request: AuthenticatedRequest,
@@ -31,6 +32,23 @@ async function handler(
         },
         { status: 404 }
       )
+    }
+
+    if (await isProfileUnavailable(targetUserId, currentUserId)) {
+      return NextResponse.json<ApiResponse>(
+        { success: false, error: 'User not found' },
+        { status: 404 }
+      )
+    }
+
+    if (await viewerHasBlocked(currentUserId, targetUserId)) {
+      return NextResponse.json({
+        success: true,
+        data: {
+          followers: [],
+          pagination: { page, limit, total: 0, totalPages: 0 },
+        },
+      })
     }
 
     // Privacy check: For private accounts, only show if:

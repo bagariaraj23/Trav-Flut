@@ -9,6 +9,7 @@ import { TripJoinRequestStatus } from "@prisma/client";
 import { handlePrismaUniqueError } from "./prismaErrors";
 import { ensureTripConversation } from "./services/chat";
 import { applyAutoTripType } from "./tripSchedule";
+import { assertCreatorMayAdd } from "./services/userSafety";
 
 export class TripInvitationService {
   // Send a trip invitation
@@ -41,6 +42,22 @@ export class TripInvitationService {
         // 3. Prevent self-invitation
         if (senderId === receiverId) {
           throw new ConflictError("Cannot invite yourself to a trip");
+        }
+
+        const blocked = await tx.userSafetyRelation.findFirst({
+          where: {
+            action: "BLOCK",
+            OR: [
+              { actorId: trip.userId, targetId: receiverId },
+              { actorId: receiverId, targetId: trip.userId },
+            ],
+          },
+          select: { id: true },
+        });
+        if (blocked) {
+          throw new AuthorizationError(
+            "You can't add this person to a trip or group you created."
+          );
         }
 
         // 3b. Private trip owner: invitee must already follow the owner
@@ -210,6 +227,13 @@ export class TripInvitationService {
     }
 
     if (action === "accept") {
+      const trip = await prisma.trip.findUnique({
+        where: { id: request.tripId },
+        select: { userId: true },
+      });
+      if (!trip) throw new NotFoundError("Trip not found");
+      await assertCreatorMayAdd(trip.userId, request.receiverId);
+
       const updatedRequest = await prisma.$transaction(async (tx) => {
         // Update invitation status
         const updated = await tx.tripJoinRequest.update({

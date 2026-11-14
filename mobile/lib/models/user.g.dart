@@ -22,6 +22,8 @@ User _$UserFromJson(Map<String, dynamic> json) => User(
   deleteMeta: json['deleteMeta'] as Map<String, dynamic>?,
   profileComplete: json['profileComplete'] as bool?,
   hasGoogleLinked: json['hasGoogleLinked'] as bool?,
+  blockedByViewer: json['blockedByViewer'] as bool?,
+  viewerIsBlocked: json['viewerIsBlocked'] as bool?,
 );
 
 Map<String, dynamic> _$UserToJson(User instance) => <String, dynamic>{
@@ -38,6 +40,8 @@ Map<String, dynamic> _$UserToJson(User instance) => <String, dynamic>{
   'deleteMeta': instance.deleteMeta,
   'profileComplete': instance.profileComplete,
   'hasGoogleLinked': instance.hasGoogleLinked,
+  'blockedByViewer': instance.blockedByViewer,
+  'viewerIsBlocked': instance.viewerIsBlocked,
 };
 
 UserStats _$UserStatsFromJson(Map<String, dynamic> json) => UserStats(

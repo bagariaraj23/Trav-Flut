@@ -12,6 +12,7 @@ import 'package:tripthread/utils/app_layout.dart';
 import 'package:tripthread/utils/app_theme.dart';
 import 'package:tripthread/utils/cloudinary_utils.dart';
 import 'package:tripthread/utils/user_display_labels.dart';
+import 'package:tripthread/widgets/safety/safety_actions.dart';
 import 'package:go_router/go_router.dart';
 
 class ProfileScreen extends StatefulWidget {
@@ -69,6 +70,21 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   // The refresh action now uses the same centralized method.
+  Future<void> _unblock() async {
+    final response =
+        await context.read<ApiService>().clearSafety(widget.userId);
+    if (!mounted) return;
+    if (!response.success) {
+      AppFeedback.showError(context, response.error ?? 'Could not unblock');
+      return;
+    }
+    await _refreshProfile();
+    if (!mounted) return;
+    final feed = context.read<FeedProvider>();
+    await feed.loadHomeFeed(refresh: true);
+    await feed.loadDiscoverTrips(refresh: true);
+  }
+
   Future<void> _refreshProfile() async {
     final authProvider = context.read<AuthProvider>();
     if (authProvider.currentUser != null) {
@@ -262,6 +278,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ),
               actions: _buildAppBarActions(
                 context,
+                user,
                 isOwnProfile,
                 userProvider
                     .pendingFollowRequests, // Data comes directly from the provider.
@@ -287,8 +304,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       userProvider
                           .isLoading, // Pass loading state for the button.
                     ),
-                    const SizedBox(height: 24),
-                    _buildTripsSection(context, user, isOwnProfile),
+                    if (user.blockedByViewer != true &&
+                        user.viewerIsBlocked != true) ...[
+                      const SizedBox(height: 24),
+                      _buildTripsSection(context, user, isOwnProfile),
+                    ],
                   ],
                 ),
               ),
@@ -302,13 +322,27 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   List<Widget> _buildAppBarActions(
     BuildContext context,
+    User user,
     bool isOwnProfile,
     List<dynamic> pendingRequests,
     List<dynamic> pendingTripInvitations,
   ) {
-    // Show actions only on own profile (mail = trip invites, follow requests, settings).
     if (!isOwnProfile) {
-      return [];
+      return [
+        IconButton(
+          tooltip: 'Restrict or block',
+          icon: const Icon(Icons.more_vert),
+          onPressed: () => showUserSafetySheet(
+            context,
+            userId: user.id,
+            name: userPrimaryLabel(
+              id: user.id,
+              username: user.username,
+              name: user.name,
+            ),
+          ),
+        ),
+      ];
     }
 
     final tripInvitesAction = Stack(
@@ -417,6 +451,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
         ? (bioText.length / charsPerLine).ceil().clamp(1, maxBioLinesCap)
         : 0;
     final subtitleStyle = _profileSubtitleStyle(context);
+    final limitedByBlock =
+        user.blockedByViewer == true || user.viewerIsBlocked == true;
 
     return Container(
       padding: const EdgeInsets.all(24),
@@ -428,6 +464,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          if (!limitedByBlock)
           // Profile photo (tappable to enlarge when a photo exists)
           Center(
             child: Material(
@@ -463,7 +500,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ),
           ),
 
-          const SizedBox(height: 20),
+          if (!limitedByBlock) const SizedBox(height: 20),
 
           // @username (unique) first; optional display name second 
           Center(
@@ -483,7 +520,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   textAlign: TextAlign.center,
                 ),
               ),
-              if (user.isPrivate) ...[
+              if (!limitedByBlock && user.isPrivate) ...[
                 const SizedBox(width: 8),
                 Icon(
                   Icons.lock_outlined,
@@ -522,6 +559,19 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
           const SizedBox(height: 20),
 
+          if (user.blockedByViewer == true)
+            Text(
+              'You blocked this person. Unblock them to see their trips and posts again.',
+              style: subtitleStyle,
+              textAlign: TextAlign.center,
+            )
+          else if (user.viewerIsBlocked == true)
+            Text(
+              'This profile is not available.',
+              style: subtitleStyle,
+              textAlign: TextAlign.center,
+            )
+          else
           // Stats Row
           Builder(
             builder: (context) {
@@ -620,7 +670,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
           const SizedBox(height: 20),
 
           // Action Buttons
-          if (isOwnProfile)
+          if (user.blockedByViewer == true)
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton(
+                onPressed: _unblock,
+                child: const Text('Unblock'),
+              ),
+            )
+          else if (user.viewerIsBlocked == true)
+            const SizedBox.shrink()
+          else if (isOwnProfile)
             SizedBox(
               width: double.infinity,
               child: OutlinedButton(

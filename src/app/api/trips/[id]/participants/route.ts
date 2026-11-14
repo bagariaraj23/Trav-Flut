@@ -8,6 +8,8 @@ import { UnsettledBalanceError } from "@/lib/errors";
 import { enforcePresetRateLimit } from "@/lib/rateLimit";
 import { ensureTripConversation, markTripMemberLeftChat } from "@/lib/services/chat";
 import { applyAutoTripType } from "@/lib/tripSchedule";
+import { assertCreatorMayAdd } from "@/lib/services/userSafety";
+import { AuthorizationError } from "@/lib/errors";
 
 // Add participant to trip
 export async function POST(
@@ -74,6 +76,18 @@ export async function POST(
         },
         { status: 403 }
       );
+    }
+
+    try {
+      await assertCreatorMayAdd(trip.userId, validatedData.userId);
+    } catch (error) {
+      if (error instanceof AuthorizationError) {
+        return NextResponse.json<ApiResponse>(
+          { success: false, error: error.message },
+          { status: 403 }
+        );
+      }
+      throw error;
     }
 
     const ownerProfile = await prisma.user.findUnique({

@@ -12,6 +12,7 @@ import {
 } from "@/lib/middleware";
 import { PerformanceMonitor, ErrorTracker } from "@/lib/monitoring";
 import { omitHiddenTripSpend } from "@/lib/tripSpendVisibility";
+import { feedHiddenUserIds } from "@/lib/services/userSafety";
 
 // Get discoverable trips (ongoing and completed trips from followed users and public profiles)
 export async function GET(request: NextRequest) {
@@ -68,10 +69,13 @@ export async function GET(request: NextRequest) {
           console.log(
             `[API] GET /discover/trips - Fetching followed users for user: ${currentUserId}`
           );
-          const followedUsers = await prisma.follow.findMany({
-            where: { followerId: currentUserId },
-            select: { followeeId: true },
-          });
+          const [followedUsers, hiddenUserIds] = await Promise.all([
+            prisma.follow.findMany({
+              where: { followerId: currentUserId },
+              select: { followeeId: true },
+            }),
+            feedHiddenUserIds(currentUserId),
+          ]);
 
           const followedUserIds = followedUsers.map((f) => f.followeeId);
           console.log(
@@ -140,6 +144,10 @@ export async function GET(request: NextRequest) {
                 )
               )`
             : Prisma.empty;
+          const hiddenSql =
+            hiddenUserIds.length > 0
+              ? Prisma.sql`AND t."userId" NOT IN (${Prisma.join(hiddenUserIds)})`
+              : Prisma.empty;
 
           const [totalRows, rankedIds] = await Promise.all([
             prisma.$queryRaw<Array<{ count: bigint }>>`
@@ -151,6 +159,7 @@ export async function GET(request: NextRequest) {
                 ${moodSql}
                 AND ${audienceSql}
                 ${searchSql}
+                ${hiddenSql}
             `,
             prisma.$queryRaw<Array<{ id: string }>>`
               SELECT t.id
@@ -161,6 +170,7 @@ export async function GET(request: NextRequest) {
                 ${moodSql}
                 AND ${audienceSql}
                 ${searchSql}
+                ${hiddenSql}
               ORDER BY
                 ${followedRank},
                 (t."entryCount" + t."participantCount") DESC,

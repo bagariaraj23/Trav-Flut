@@ -132,6 +132,18 @@ export async function POST(
             if (!followee) return { code: "NOT_FOUND" };
             if (followerId === followeeId) return { code: "SELF_FOLLOW" };
 
+            const blocked = await tx.userSafetyRelation.findFirst({
+              where: {
+                action: "BLOCK",
+                OR: [
+                  { actorId: followeeId, targetId: followerId },
+                  { actorId: followerId, targetId: followeeId },
+                ],
+              },
+              select: { id: true },
+            });
+            if (blocked) return { code: "NOT_FOUND" };
+
             // Already following?
             const existingFollow = await tx.follow.findUnique({
               where: {

@@ -25,6 +25,13 @@ class AppVideoController {
 
   Future<void> pause() => _controller.pause();
 
+  Duration get position => _controller.value.position;
+
+  Future<void> seekTo(Duration position) => _controller.seekTo(position);
+
+  Future<void> setPlaybackSpeed(double speed) =>
+      _controller.setPlaybackSpeed(speed);
+
   bool get isInitialized => _controller.value.isInitialized;
 
   bool get isPlaying => _controller.value.isPlaying;

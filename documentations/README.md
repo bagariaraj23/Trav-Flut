@@ -17,7 +17,7 @@ The full local stack (Postgres, API, scheduler, and the Flutter UI in the browse
 - [QUICKSTART.md](../QUICKSTART.md) - Full-stack and database-only start commands
 - [README.md](../README.md#-quick-start-with-docker-recommended) - Short start path and ports
 
-Production hosting stays Railway / Railpack. This Compose file is for local runs.
+Production hosting stays Railway / Railpack. This Compose file is for local runs. Restrict, Block, and the media screens use the existing migrate-on-boot path. Rebuild the web image after a Flutter change so port 8080 includes them.
 
 ## Scheduler Documentation
 

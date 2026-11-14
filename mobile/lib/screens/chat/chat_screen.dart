@@ -6,10 +6,13 @@ import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:tripthread/models/chat_conversation.dart';
+import 'package:tripthread/models/chat_media_item.dart';
 import 'package:tripthread/models/chat_message.dart';
 import 'package:tripthread/providers/chat_provider.dart';
 import 'package:tripthread/providers/auth_provider.dart';
+import 'package:tripthread/services/api_service.dart';
 import 'package:tripthread/services/media_service.dart';
+import 'package:tripthread/widgets/chat/conversation_media_strip.dart';
 import 'package:tripthread/widgets/media/local_file_image.dart';
 import 'package:tripthread/utils/app_layout.dart';
 import 'package:tripthread/utils/app_theme.dart';
@@ -40,6 +43,8 @@ class _ChatScreenState extends State<ChatScreen> {
   Timer? _highlightTimer;
   List<ChatParticipant> _mentionSuggestions = [];
   String? _activeMentionQuery;
+  bool _dmClosed = false;
+  String? _dmIncoming;
 
   Future<void> _handleMessageActions(ChatMessageModel message) async {
     try {
@@ -170,8 +175,30 @@ class _ChatScreenState extends State<ChatScreen> {
       if (!mounted) return;
       await chat.loadMessages(widget.conversationId);
       if (!mounted) return;
+      await _loadDmSafety();
+      if (!mounted) return;
       chat.markRead(widget.conversationId);
       _scrollController.addListener(_onScroll);
+    });
+  }
+
+  Future<void> _loadDmSafety() async {
+    final chat = context.read<ChatProvider>();
+    ChatConversationSummary? conversation;
+    for (final item in chat.conversations) {
+      if (item.id == widget.conversationId) conversation = item;
+    }
+    if (conversation == null || conversation.type != 'DM') return;
+    final myId = context.read<AuthProvider>().currentUser?.id;
+    final other = conversation.participants.where((person) => person.userId != myId);
+    if (other.isEmpty) return;
+    final response = await context.read<ApiService>().getSafetyPair(other.first.userId);
+    if (!mounted || response.data == null) return;
+    final outgoing = response.data!['outgoing'];
+    final incoming = response.data!['incoming'];
+    setState(() {
+      _dmClosed = outgoing != null || incoming != null;
+      _dmIncoming = incoming as String?;
     });
   }
 
@@ -384,6 +411,7 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   Future<void> _send() async {
+    if (_dmClosed) return;
     if (_editingMessage != null) {
       await _submitEdit();
       return;
@@ -584,7 +612,11 @@ class _ChatScreenState extends State<ChatScreen> {
                 extra: GoRouterState.of(context).extra,
               );
             } else if (other.isNotEmpty) {
-              context.push('/profile/${other.first.userId}');
+              if (_dmIncoming == 'BLOCK') {
+                context.push('/chat/${conversation.id}/settings');
+              } else {
+                context.push('/profile/${other.first.userId}');
+              }
             }
           },
           borderRadius: BorderRadius.circular(8),
@@ -660,18 +692,19 @@ class _ChatScreenState extends State<ChatScreen> {
             ),
           ),
         ),
-        actions: isGroup || isTrip
-            ? [
-                IconButton(
-                  icon: const Icon(Icons.info_outline),
-                  onPressed: () => context.push(
-                    '/chat/${conversation.id}/settings',
-                    extra: GoRouterState.of(context).extra,
-                  ),
-                  tooltip: 'Chat details',
-                ),
-              ]
-            : null,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.info_outline),
+            onPressed: () async {
+              await context.push(
+                '/chat/${conversation.id}/settings',
+                extra: GoRouterState.of(context).extra,
+              );
+              if (mounted) await _loadDmSafety();
+            },
+            tooltip: 'Chat details',
+          ),
+        ],
       );
     }
 
@@ -763,6 +796,7 @@ class _ChatScreenState extends State<ChatScreen> {
                                   ? () => _handleMessageActions(msg)
                                   : null,
                               participants: conversation?.participants ?? const [],
+                              conversationId: widget.conversationId,
                             ),
                           );
 
@@ -1004,7 +1038,16 @@ class _ChatScreenState extends State<ChatScreen> {
                 },
               ),
             ),
-          // Input area
+          if (_dmClosed)
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Text(
+                "You can't message this person.",
+                textAlign: TextAlign.center,
+                style: TextStyle(color: Theme.of(context).colorScheme.error),
+              ),
+            )
+          else
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
             child: Row(
@@ -1123,6 +1166,7 @@ class _MessageBubble extends StatelessWidget {
   final VoidCallback? onReplyTap;
   final VoidCallback? onLongPressAction;
   final List<ChatParticipant> participants;
+  final String conversationId;
 
   const _MessageBubble({
     this.bubbleKey,
@@ -1132,6 +1176,7 @@ class _MessageBubble extends StatelessWidget {
     this.onReplyTap,
     this.onLongPressAction,
     this.participants = const [],
+    required this.conversationId,
   });
 
   @override
@@ -1251,7 +1296,20 @@ class _MessageBubble extends StatelessWidget {
               if (message.attachments.isNotEmpty && !isDeleted)
                 ...message.attachments.map((a) {
                   if (a.type == 'IMAGE' || a.type == 'GIF') {
-                    return Padding(
+                    return GestureDetector(
+                      onTap: () => openConversationMedia(
+                        context,
+                        conversationId,
+                        ChatMediaItem(
+                          id: a.id,
+                          url: a.url,
+                          type: a.type,
+                          messageId: message.id,
+                          createdAt: DateTime.tryParse(message.createdAt) ??
+                              DateTime.now(),
+                        ),
+                      ),
+                      child: Padding(
                       padding: const EdgeInsets.only(top: 4),
                       child: ClipRRect(
                         borderRadius: BorderRadius.circular(8),
@@ -1262,10 +1320,24 @@ class _MessageBubble extends StatelessWidget {
                           maxHeightDiskCache: 400,
                         ),
                       ),
+                    ),
                     );
                   }
                   if (a.type == 'VIDEO') {
-                    return Padding(
+                    return GestureDetector(
+                      onTap: () => openConversationMedia(
+                        context,
+                        conversationId,
+                        ChatMediaItem(
+                          id: a.id,
+                          url: a.url,
+                          type: a.type,
+                          messageId: message.id,
+                          createdAt: DateTime.tryParse(message.createdAt) ??
+                              DateTime.now(),
+                        ),
+                      ),
+                      child: Padding(
                       padding: const EdgeInsets.only(top: 4),
                       child: Container(
                         height: 200,
@@ -1286,6 +1358,7 @@ class _MessageBubble extends StatelessWidget {
                           ],
                         ),
                       ),
+                    ),
                     );
                   }
                   return Padding(

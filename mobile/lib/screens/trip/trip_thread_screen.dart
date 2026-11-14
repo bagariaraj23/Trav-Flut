@@ -20,6 +20,7 @@ import 'package:tripthread/widgets/thread/thread_entry_card.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:tripthread/widgets/media/app_video.dart';
+import 'package:tripthread/widgets/media/media_gallery_viewer.dart';
 import 'package:tripthread/widgets/media/local_file_image.dart';
 
 class TripThreadScreen extends StatefulWidget {
@@ -1609,7 +1610,7 @@ class _TripThreadScreenState extends State<TripThreadScreen>
         : buildOptimizedImageUrl(mediaUrl, width: 1080);
 
     return GestureDetector(
-      onTap: () => _openMediaViewer(heroTag, mediaUrl, isVideo),
+      onTap: () => _openMediaViewer(entry),
       child: Container(
         margin: const EdgeInsets.only(top: 8),
         decoration: BoxDecoration(
@@ -1692,109 +1693,45 @@ class _TripThreadScreenState extends State<TripThreadScreen>
     );
   }
 
-  void _openMediaViewer(String heroTag, String mediaUrl, bool isVideo) {
-    if (isVideo) {
-      Navigator.of(context).push(
-        MaterialPageRoute(
-          builder: (_) =>
-              _TripVideoViewer(heroTag: heroTag, mediaUrl: mediaUrl),
-          fullscreenDialog: true,
-        ),
-      );
-      return;
+  void _openMediaViewer(TripThreadEntry selected) {
+    final entries = context
+        .read<TripProvider>()
+        .currentTripEntries
+        .where(
+          (entry) =>
+              entry.tripId == widget.tripId &&
+              entry.media != null &&
+              entry.media!.url.isNotEmpty &&
+              (entry.media!.type == MediaType.image ||
+                  entry.media!.type == MediaType.video),
+        )
+        .toList()
+      ..sort((a, b) => a.createdAt.compareTo(b.createdAt));
+    if (entries.isEmpty && selected.media != null) {
+      entries.add(selected);
     }
-
-    showDialog(
-      context: context,
-      barrierDismissible: true,
-      builder: (context) {
-        return GestureDetector(
-          onTap: () => Navigator.of(context).pop(),
-          child: Container(
-            color: Colors.black.withValues(alpha: 0.95),
-            child: SafeArea(
-              child: Stack(
-                children: [
-                  Center(
-                    child: Hero(
-                      tag: heroTag,
-                      child: InteractiveViewer(
-                        maxScale: 5.0,
-                        minScale: 0.5,
-                        child: Image.network(
-                          buildOptimizedImageUrl(mediaUrl, width: 2400),
-                          fit: BoxFit.contain,
-                          errorBuilder: (context, error, stackTrace) {
-                            return Padding(
-                              padding: const EdgeInsets.all(24.0),
-                              child: Column(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  const Icon(
-                                    Icons.broken_image_outlined,
-                                    color: Colors.white70,
-                                    size: 64,
-                                  ),
-                                  const SizedBox(height: 16),
-                                  Text(
-                                    'Unable to load media.',
-                                    style: Theme.of(context)
-                                        .textTheme
-                                        .titleMedium
-                                        ?.copyWith(color: Colors.white70),
-                                  ),
-                                ],
-                              ),
-                            );
-                          },
-                        ),
-                      ),
-                    ),
-                  ),
-                  if (isVideo)
-                    Positioned(
-                      bottom: 24,
-                      left: 0,
-                      right: 0,
-                      child: Column(
-                        children: [
-                          const Icon(
-                            Icons.play_arrow_rounded,
-                            color: Colors.white,
-                            size: 48,
-                          ),
-                          const SizedBox(height: 12),
-                          Text(
-                            'Video playback coming soon',
-                            style: Theme.of(context).textTheme.bodyMedium
-                                ?.copyWith(color: Colors.white70),
-                          ),
-                        ],
-                      ),
-                    ),
-                  Positioned(
-                    top: 16,
-                    right: 16,
-                    child: IconButton(
-                      onPressed: () => Navigator.of(context).pop(),
-                      icon: const Icon(Icons.close, color: Colors.white),
-                      style: IconButton.styleFrom(
-                        backgroundColor: Colors.black45,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
+    final items = entries
+        .map(
+          (entry) => GalleryMedia(
+            id: entry.media!.id,
+            url: entry.media!.url,
+            isVideo: entry.media!.type == MediaType.video,
+            sharedAt: entry.createdAt,
           ),
-        );
-      },
+        )
+        .toList();
+    final index = items.indexWhere((item) => item.id == selected.media?.id);
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        fullscreenDialog: true,
+        builder: (_) => MediaGalleryViewer(
+          items: items,
+          initialIndex: index < 0 ? 0 : index,
+        ),
+      ),
     );
   }
 
-  /// Max height for the bottom compose panel. When the keyboard is open, cap
-  /// aggressively so the thread list keeps most of the viewport (fixes entries
-  /// hidden behind keyboard + bottom overflow on location + comment).
   double _composePanelMaxHeight(MediaQueryData mediaQuery) {
     final keyboardInset = mediaQuery.viewInsets.bottom;
     final screenHeight = mediaQuery.size.height;
@@ -2971,182 +2908,6 @@ class _EditThreadEntryDialogState extends State<_EditThreadEntryDialog> {
           child: const Text('Save'),
         ),
       ],
-    );
-  }
-}
-
-class _TripVideoViewer extends StatefulWidget {
-  final String heroTag;
-  final String mediaUrl;
-
-  const _TripVideoViewer({required this.heroTag, required this.mediaUrl});
-
-  @override
-  State<_TripVideoViewer> createState() => _TripVideoViewerState();
-}
-
-class _TripVideoViewerState extends State<_TripVideoViewer> {
-  AppVideoController? _controller;
-  bool _isInitialized = false;
-  bool _isPlaying = true;
-  String? _errorMessage;
-
-  @override
-  void initState() {
-    super.initState();
-    _initializeVideo();
-  }
-
-  Future<void> _initializeVideo() async {
-    try {
-      // Use original URL directly for videos - Cloudinary serves videos as-is
-      // Only apply transformations if needed for bandwidth optimization
-      final videoUrl = widget.mediaUrl.contains('/upload/')
-          ? buildOptimizedVideoUrl(widget.mediaUrl, maxWidth: 1920)
-          : widget.mediaUrl;
-
-      debugPrint('[TripVideoViewer] Initializing video: $videoUrl');
-
-      _controller = AppVideoController.networkUrl(Uri.parse(videoUrl));
-
-      await _controller!.initialize();
-
-      if (!mounted) {
-        _controller?.dispose();
-        return;
-      }
-
-      setState(() {
-        _isInitialized = true;
-      });
-
-      _controller!
-        ..setLooping(true)
-        ..play();
-    } catch (e, stackTrace) {
-      debugPrint('[TripVideoViewer] Failed to initialize video: $e');
-      debugPrint('[TripVideoViewer] Stack trace: $stackTrace');
-
-      if (mounted) {
-        setState(() {
-          _errorMessage = 'Failed to load video. Please try again.';
-        });
-      }
-
-      _controller?.dispose();
-      _controller = null;
-    }
-  }
-
-  @override
-  void dispose() {
-    _controller?.dispose();
-    super.dispose();
-  }
-
-  void _togglePlayback() {
-    if (!_isInitialized || _controller == null) return;
-    setState(() {
-      if (_controller!.isPlaying) {
-        _controller!.pause();
-        _isPlaying = false;
-      } else {
-        _controller!.play();
-        _isPlaying = true;
-      }
-    });
-  }
-
-  void _retry() {
-    setState(() {
-      _errorMessage = null;
-      _isInitialized = false;
-    });
-    _initializeVideo();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.black,
-      body: SafeArea(
-        child: Stack(
-          children: [
-            Center(
-              child: Hero(
-                tag: widget.heroTag,
-                child: _errorMessage != null
-                    ? Padding(
-                        padding: const EdgeInsets.all(24.0),
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const Icon(
-                              Icons.error_outline,
-                              color: Colors.white70,
-                              size: 64,
-                            ),
-                            const SizedBox(height: 16),
-                            Text(
-                              _errorMessage!,
-                              style: const TextStyle(
-                                color: Colors.white70,
-                                fontSize: 16,
-                              ),
-                              textAlign: TextAlign.center,
-                            ),
-                            const SizedBox(height: 24),
-                            ElevatedButton.icon(
-                              onPressed: _retry,
-                              icon: const Icon(Icons.refresh),
-                              label: const Text('Retry'),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.white,
-                                foregroundColor: Colors.black,
-                              ),
-                            ),
-                          ],
-                        ),
-                      )
-                    : _isInitialized && _controller != null
-                    ? GestureDetector(
-                        onTap: _togglePlayback,
-                        child: AspectRatio(
-                          aspectRatio: _controller!.aspectRatio,
-                          child: _controller!.buildView(),
-                        ),
-                      )
-                    : const CircularProgressIndicator(color: Colors.white),
-              ),
-            ),
-            Positioned(
-              top: 16,
-              right: 16,
-              child: IconButton(
-                onPressed: () => Navigator.of(context).pop(),
-                icon: const Icon(Icons.close, color: Colors.white),
-                style: IconButton.styleFrom(backgroundColor: Colors.black45),
-              ),
-            ),
-            if (_isInitialized)
-              Positioned(
-                bottom: 24,
-                left: 0,
-                right: 0,
-                child: Center(
-                  child: IconButton(
-                    onPressed: _togglePlayback,
-                    icon: Icon(
-                      _isPlaying ? Icons.pause_circle : Icons.play_circle,
-                      color: Colors.white,
-                      size: 48,
-                    ),
-                  ),
-                ),
-              ),
-          ],
-        ),
-      ),
     );
   }
 }

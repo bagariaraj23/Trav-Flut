@@ -242,9 +242,23 @@ class SettingsScreen extends StatelessWidget {
                 const Divider(),
                 _buildSettingsTile(
                   context: context,
+                  icon: Icons.block,
+                  title: 'Blocked and restricted',
+                  onTap: () => context.push('/settings/safety'),
+                ),
+                const Divider(),
+                _buildSettingsTile(
+                  context: context,
                   icon: Icons.privacy_tip_outlined,
                   title: 'Permissions and data',
                   onTap: () => context.push('/settings/permissions'),
+                ),
+                const Divider(),
+                _buildSettingsTile(
+                  context: context,
+                  icon: Icons.help_outline,
+                  title: 'Help and FAQ',
+                  onTap: () => context.push('/settings/help'),
                 ),
                 const Divider(),
                 _buildSettingsTile(

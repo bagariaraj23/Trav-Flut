@@ -1,5 +1,6 @@
 import { EntityType } from '@prisma/client';
 import { prisma } from '../prisma';
+import { blockEitherWay } from '../services/userSafety';
 
 export class PermissionError extends Error {
   constructor(message: string) {
@@ -41,6 +42,14 @@ export async function canViewEntity(
       return !!userId && userId === post.userId;
     }
 
+    if (
+      userId &&
+      userId !== post.userId &&
+      (await blockEitherWay(userId, post.userId))
+    ) {
+      return false;
+    }
+
     if (!post.user.isPrivate) return true;
 
     if (!userId) return false;
@@ -75,6 +84,7 @@ export async function canViewEntity(
       select: {
         id: true,
         tripId: true,
+        authorId: true,
         trip: {
           select: {
             userId: true,
@@ -91,21 +101,32 @@ export async function canViewEntity(
     if (!entry) return false;
 
     const owner = entry.trip.user;
+    const isOwner = !!userId && userId === entry.trip.userId;
+    const participant = userId
+      ? await prisma.tripParticipant.findUnique({
+          where: {
+            tripId_userId: {
+              tripId: entry.tripId,
+              userId,
+            },
+          },
+        })
+      : null;
+    const isMember = isOwner || !!participant;
+
+    if (
+      userId &&
+      !isMember &&
+      ((await blockEitherWay(userId, entry.trip.userId)) ||
+        (entry.authorId !== userId &&
+          (await blockEitherWay(userId, entry.authorId))))
+    ) {
+      return false;
+    }
+
     if (!owner.isPrivate) return true;
-
     if (!userId) return false;
-
-    if (userId === entry.trip.userId) return true;
-
-    const participant = await prisma.tripParticipant.findUnique({
-      where: {
-        tripId_userId: {
-          tripId: entry.tripId,
-          userId,
-        },
-      },
-    });
-    if (participant) return true;
+    if (isMember) return true;
 
     const follow = await prisma.follow.findUnique({
       where: {

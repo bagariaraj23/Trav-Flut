@@ -10,6 +10,7 @@ import {
 } from "@/types/api";
 import { serializePlace } from "@/lib/place";
 import { checkLikeStatus } from "@/lib/services/like";
+import { blockEitherWay } from "@/lib/services/userSafety";
 
 const THREAD_ENTRY_LIST_INCLUDE = {
   author: {
@@ -145,6 +146,12 @@ export async function GET(
 
     const isOwner = trip.userId === userId;
     const isParticipant = trip.participants.some((p) => p.userId === userId);
+    if (!isOwner && !isParticipant && (await blockEitherWay(userId, trip.userId))) {
+      return NextResponse.json<ApiResponse>(
+        { success: false, error: "Trip not found" },
+        { status: 404 }
+      );
+    }
     if (!isOwner && !isParticipant && trip.user?.isPrivate) {
       const followRelation = await prisma.follow.findUnique({
         where: {
@@ -171,6 +178,17 @@ export async function GET(
       include: THREAD_ENTRY_LIST_INCLUDE,
     });
     if (!target || target.tripId !== tripId) {
+      return NextResponse.json<ApiResponse>(
+        { success: false, error: "Thread entry not found" },
+        { status: 404 }
+      );
+    }
+    if (
+      !isOwner &&
+      !isParticipant &&
+      target.authorId !== userId &&
+      (await blockEitherWay(userId, target.authorId))
+    ) {
       return NextResponse.json<ApiResponse>(
         { success: false, error: "Thread entry not found" },
         { status: 404 }

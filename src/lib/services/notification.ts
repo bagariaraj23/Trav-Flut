@@ -1,6 +1,7 @@
 import type { EntityType, NotificationType, Prisma } from '@prisma/client'
 import { prisma } from '../prisma'
 import { getOrSet, invalidateCachedKey } from '../redis'
+import { blockEitherWay, blockedUserIds } from './userSafety'
 
 const UNREAD_COUNT_TTL_MS = 20_000
 
@@ -10,6 +11,10 @@ function unreadCountCacheKey(recipientId: string): string {
 
 async function invalidateUnreadCount(recipientId: string): Promise<void> {
   await invalidateCachedKey(unreadCountCacheKey(recipientId))
+}
+
+export async function invalidateUnreadNotificationCount(recipientId: string): Promise<void> {
+  await invalidateUnreadCount(recipientId)
 }
 
 export type CreateNotificationParams = {
@@ -153,6 +158,9 @@ export async function createNotification(params: CreateNotificationParams) {
   if (actorId === recipientId) {
     return null
   }
+  if (await blockEitherWay(actorId, recipientId)) {
+    return null
+  }
 
   const data = {
     type: type as NotificationType,
@@ -189,6 +197,8 @@ export async function getMergedNotifications(
   const parsedCursor = parseCursor(before)
   const beforeDate = parsedCursor ? new Date(parsedCursor.createdAt) : undefined
   const useStrictCursor = !!parsedCursor
+  const blockedIds = await blockedUserIds(recipientId)
+  const actorNotBlocked = blockedIds.length > 0 ? { id: { notIn: blockedIds } } : {}
   const takePerSource = useStrictCursor
     ? Math.max(limit * STRICT_CURSOR_FETCH_MULTIPLIER, MIN_FETCH_PER_SOURCE)
     : limit + 1
@@ -196,23 +206,23 @@ export async function getMergedNotifications(
     ? {
       followeeId: recipientId,
       status: 'PENDING' as const,
-      follower: { deletedAt: null },
+      follower: { deletedAt: null, ...actorNotBlocked },
       createdAt: { [useStrictCursor ? 'lte' : 'lt']: beforeDate }
     }
     : {
       followeeId: recipientId,
       status: 'PENDING' as const,
-      follower: { deletedAt: null }
+      follower: { deletedAt: null, ...actorNotBlocked },
     }
   const notifWhere = beforeDate
     ? {
       recipientId,
-      actor: { deletedAt: null },
+      actor: { deletedAt: null, ...actorNotBlocked },
       createdAt: { [useStrictCursor ? 'lte' : 'lt']: beforeDate }
     }
     : {
       recipientId,
-      actor: { deletedAt: null }
+      actor: { deletedAt: null, ...actorNotBlocked },
     }
 
   const [followRequests, engagementNotifications] = await Promise.all([
@@ -357,14 +367,19 @@ export async function markNotificationRead(
 export async function getUnreadNotificationCount(recipientId: string): Promise<number> {
   return getOrSet(
     unreadCountCacheKey(recipientId),
-    () =>
-      prisma.notification.count({
+    async () => {
+      const blockedIds = await blockedUserIds(recipientId)
+      return prisma.notification.count({
         where: {
           recipientId,
           readAt: null,
-          actor: { deletedAt: null },
+          actor: {
+            deletedAt: null,
+            ...(blockedIds.length > 0 ? { id: { notIn: blockedIds } } : {}),
+          },
         },
-      }),
+      })
+    },
     UNREAD_COUNT_TTL_MS
   )
 }
