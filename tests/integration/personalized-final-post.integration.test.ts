@@ -10,6 +10,7 @@ import { updateTripStatuses } from "../../scheduler/src/tripStatus";
 import { cleanDb, createTrip, createUser, getAuthToken } from "../testUtils";
 import { POST as endTripRoute } from "../../src/app/api/trips/[id]/end/route";
 import {
+  DELETE as deleteFinalPostRoute,
   GET as getFinalPostRoute,
   PUT as updateFinalPostRoute,
 } from "../../src/app/api/trips/[id]/final-post/route";
@@ -471,5 +472,105 @@ describe("Personalized final posts", () => {
     });
     expect(saved.curatedMedia).toEqual([photo]);
     expect(saved.coverMediaUrl).toBe(photo);
+  });
+
+  it("keeps one draft per member when two endings insert together", async () => {
+    const owner = await createUser({ email: "race-owner@test.com", name: "Owner" });
+    const member = await createUser({ email: "race-member@test.com", name: "Member" });
+    const trip = await createTrip({
+      userId: owner.id,
+      title: "Race",
+      status: TripStatus.ONGOING,
+    });
+    await prisma.tripParticipant.create({
+      data: { tripId: trip.id, userId: member.id },
+    });
+
+    const [first, second] = await Promise.all([
+      TripFinalizerService.generateFinalPostsForMembers(trip.id),
+      TripFinalizerService.generateFinalPostsForMembers(trip.id),
+    ]);
+
+    expect(first.map((post) => post.userId).sort()).toEqual(
+      [owner.id, member.id].sort()
+    );
+    expect(second.map((post) => post.userId).sort()).toEqual(
+      [owner.id, member.id].sort()
+    );
+    const stored = await prisma.tripFinalPost.findMany({
+      where: { tripId: trip.id },
+    });
+    expect(stored).toHaveLength(2);
+    expect(stored.every((post) => post.generationStatus === GenerationStatus.DRAFT)).toBe(
+      true
+    );
+  });
+
+  it("lets the author delete an unpublished draft and refuses a stranger", async () => {
+    const owner = await createUser({ email: "drop-owner@test.com", name: "Owner" });
+    const member = await createUser({ email: "drop-member@test.com", name: "Member" });
+    const stranger = await createUser({
+      email: "drop-stranger@test.com",
+      name: "Stranger",
+    });
+    const memberToken = await getAuthToken(member);
+    const strangerToken = await getAuthToken(stranger);
+    const trip = await createTrip({
+      userId: owner.id,
+      title: "Discard",
+      status: TripStatus.ENDED,
+    });
+    await prisma.tripParticipant.create({
+      data: { tripId: trip.id, userId: member.id },
+    });
+    await TripFinalizerService.generateFinalPostsForMembers(trip.id);
+    const params = { params: Promise.resolve({ id: trip.id }) };
+
+    const strangerPublish = await json(
+      await publishFinalPostRoute(
+        authRequest(
+          `http://localhost/api/trips/${trip.id}/publish`,
+          "POST",
+          strangerToken
+        ),
+        params
+      )
+    );
+    expect(strangerPublish.success).toBe(false);
+
+    const strangerDelete = await json(
+      await deleteFinalPostRoute(
+        authRequest(
+          `http://localhost/api/trips/${trip.id}/final-post`,
+          "DELETE",
+          strangerToken
+        ),
+        params
+      )
+    );
+    expect(strangerDelete.success).toBe(false);
+
+    await prisma.tripParticipant.delete({
+      where: { tripId_userId: { tripId: trip.id, userId: member.id } },
+    });
+    const deleted = await json(
+      await deleteFinalPostRoute(
+        authRequest(
+          `http://localhost/api/trips/${trip.id}/final-post`,
+          "DELETE",
+          memberToken
+        ),
+        params
+      )
+    );
+    expect(deleted.success).toBe(true);
+    const gone = await prisma.tripFinalPost.findUnique({
+      where: { tripId_userId: { tripId: trip.id, userId: member.id } },
+    });
+    expect(gone).toBeNull();
+    const ownerPost = await prisma.tripFinalPost.findUnique({
+      where: { tripId_userId: { tripId: trip.id, userId: owner.id } },
+    });
+    expect(ownerPost?.generationStatus).toBe(GenerationStatus.DRAFT);
   });
 });

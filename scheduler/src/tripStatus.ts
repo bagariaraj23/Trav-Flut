@@ -68,6 +68,17 @@ export async function updateTripStatuses(
   for (const trip of tripsToEnd) {
     try {
       await prisma.$transaction(async (tx) => {
+        // Claim the end first. A second runner (the owner tapping End, or this
+        // job overlapping itself) sees count 0 and leaves the winner's drafts.
+        const claimed = await tx.trip.updateMany({
+          where: {
+            id: trip.id,
+            status: { in: [TripStatus.UPCOMING, TripStatus.ONGOING] },
+          },
+          data: { status: TripStatus.ENDED },
+        });
+        if (claimed.count !== 1) return;
+
         // Personal draft for the owner and each participant. Kept inline so the
         // scheduler build does not import the API service.
         const tripData = await tx.trip.findUnique({
@@ -132,27 +143,28 @@ export async function updateTripStatuses(
           })),
         };
 
+        const drafts = [];
         for (const memberId of memberIds) {
           if (existingUserIds.has(memberId)) continue;
           const draft = buildMemberFinalDraft(draftTrip, memberId);
-          await tx.tripFinalPost.create({
-            data: {
-              tripId: trip.id,
-              userId: memberId,
-              summaryText: draft.summaryText,
-              curatedMedia: draft.curatedMedia,
-              caption: draft.caption,
-              coverMediaUrl: draft.coverMediaUrl,
-              generationStatus: draft.generationStatus,
-            },
+          drafts.push({
+            tripId: trip.id,
+            userId: memberId,
+            summaryText: draft.summaryText,
+            curatedMedia: draft.curatedMedia,
+            caption: draft.caption,
+            coverMediaUrl: draft.coverMediaUrl,
+            generationStatus: draft.generationStatus,
           });
         }
-
-        // Update trip status (inside transaction)
-        await tx.trip.update({
-          where: { id: trip.id },
-          data: { status: TripStatus.ENDED },
-        });
+        if (drafts.length > 0) {
+          // skipDuplicates is INSERT ... ON CONFLICT DO NOTHING. A unique
+          // violation must not abort this transaction after the status claim.
+          await tx.tripFinalPost.createMany({
+            data: drafts,
+            skipDuplicates: true,
+          });
+        }
       });
     } catch (error) {
       console.error(

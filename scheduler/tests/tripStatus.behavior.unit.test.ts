@@ -41,7 +41,7 @@ function createPrismaMock(options: {
           }))
         );
       }),
-      create: vi.fn(({ data }: any) => Promise.resolve({ id: `post-${data.tripId}`, ...data })),
+      createMany: vi.fn(({ data }: any) => Promise.resolve({ count: data.length })),
       update: vi.fn(({ data }: any) => Promise.resolve(data)),
     },
     trip: {
@@ -76,13 +76,18 @@ function createPrismaMock(options: {
           ],
         });
       }),
-      update: vi.fn(({ where, data }: any) => {
-        if (failTripIds.has(where.id)) {
+      update: vi.fn(({ where, data }: any) =>
+        Promise.resolve({ id: where.id, ...data })
+      ),
+      updateMany: vi.fn(({ where }: any) => {
+        if (where?.id && failTripIds.has(where.id)) {
           throw new Error(`forced failure for ${where.id}`);
         }
-        return Promise.resolve({ id: where.id, ...data });
+        if (where?.id?.in) {
+          return Promise.resolve({ count: options.ongoingCount ?? 0 });
+        }
+        return Promise.resolve({ count: 1 });
       }),
-      updateMany: vi.fn(() => Promise.resolve({ count: options.ongoingCount ?? 0 })),
     },
     tripThreadEntry: {
       findMany: vi.fn(({ where }: any) =>
@@ -151,9 +156,9 @@ describe("updateTripStatuses behavior", () => {
         scheduleTimezone: true,
       },
     });
-    expect(tx.tripFinalPost.create).toHaveBeenCalledWith(
-      expect.objectContaining({
-        data: expect.objectContaining({
+    expect(tx.tripFinalPost.createMany).toHaveBeenCalledWith({
+      data: [
+        expect.objectContaining({
           tripId: "trip-ended",
           userId: "owner-1",
           summaryText: expect.stringContaining("Japan"),
@@ -161,10 +166,14 @@ describe("updateTripStatuses behavior", () => {
           generationStatus: "DRAFT",
           coverMediaUrl: "https://cdn.example.com/trip-ended.jpg",
         }),
-      })
-    );
-    expect(tx.trip.update).toHaveBeenCalledWith({
-      where: { id: "trip-ended" },
+      ],
+      skipDuplicates: true,
+    });
+    expect(tx.trip.updateMany).toHaveBeenCalledWith({
+      where: {
+        id: "trip-ended",
+        status: { in: [TripStatus.UPCOMING, TripStatus.ONGOING] },
+      },
       data: { status: TripStatus.ENDED },
     });
     expect(tx.trip.updateMany).toHaveBeenCalledWith({
@@ -195,9 +204,12 @@ describe("updateTripStatuses behavior", () => {
       where: { tripId: "trip-existing", userId: { in: ["owner-1"] } },
       select: { userId: true },
     });
-    expect(tx.tripFinalPost.create).not.toHaveBeenCalled();
-    expect(tx.trip.update).toHaveBeenCalledWith({
-      where: { id: "trip-existing" },
+    expect(tx.tripFinalPost.createMany).not.toHaveBeenCalled();
+    expect(tx.trip.updateMany).toHaveBeenCalledWith({
+      where: {
+        id: "trip-existing",
+        status: { in: [TripStatus.UPCOMING, TripStatus.ONGOING] },
+      },
       data: { status: TripStatus.ENDED },
     });
   });
@@ -217,12 +229,18 @@ describe("updateTripStatuses behavior", () => {
       new Date("2026-02-01T00:00:00.000Z")
     );
 
-    expect(tx.trip.update).toHaveBeenCalledWith({
-      where: { id: "trip-fails" },
+    expect(tx.trip.updateMany).toHaveBeenCalledWith({
+      where: {
+        id: "trip-fails",
+        status: { in: [TripStatus.UPCOMING, TripStatus.ONGOING] },
+      },
       data: { status: TripStatus.ENDED },
     });
-    expect(tx.trip.update).toHaveBeenCalledWith({
-      where: { id: "trip-succeeds" },
+    expect(tx.trip.updateMany).toHaveBeenCalledWith({
+      where: {
+        id: "trip-succeeds",
+        status: { in: [TripStatus.UPCOMING, TripStatus.ONGOING] },
+      },
       data: { status: TripStatus.ENDED },
     });
     expect(errorSpy).toHaveBeenCalledWith(

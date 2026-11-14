@@ -69,18 +69,24 @@ export class TripFinalizerService {
     }
 
     const draft = await this.composeDraft(db, tripId, userId);
-    return db.tripFinalPost.create({
-      data: {
+    await insertDrafts(db, [
+      {
         tripId,
         userId,
         summaryText: draft.summaryText,
         curatedMedia: draft.curatedMedia,
         caption: draft.caption,
         coverMediaUrl: draft.coverMediaUrl,
-        generationStatus: GenerationStatus.DRAFT,
       },
+    ]);
+    const saved = await db.tripFinalPost.findUnique({
+      where: { tripId_userId: { tripId, userId } },
       select: finalPostSelect,
     });
+    if (!saved) {
+      throw new ConflictError("Final post could not be saved");
+    }
+    return saved;
   }
 
   private static async composeDraft(db: DbClient, tripId: string, userId: string) {
@@ -145,30 +151,35 @@ export class TripFinalizerService {
       select: finalPostSelect,
     });
     const existingByUser = new Map(existing.map((post) => [post.userId, post]));
-    const posts = [];
-    for (const memberId of memberIds) {
-      const already = existingByUser.get(memberId);
-      if (already) {
-        posts.push(already);
-        continue;
-      }
+    const missing = memberIds.flatMap((memberId) => {
+      if (existingByUser.has(memberId)) return [];
       const draft = buildMemberFinalDraft(draftTrip, memberId);
-      posts.push(
-        await db.tripFinalPost.create({
-          data: {
-            tripId,
-            userId: memberId,
-            summaryText: draft.summaryText,
-            curatedMedia: draft.curatedMedia,
-            caption: draft.caption,
-            coverMediaUrl: draft.coverMediaUrl,
-            generationStatus: GenerationStatus.DRAFT,
-          },
-          select: finalPostSelect,
-        })
-      );
+      return [
+        {
+          tripId,
+          userId: memberId,
+          summaryText: draft.summaryText,
+          curatedMedia: draft.curatedMedia,
+          caption: draft.caption,
+          coverMediaUrl: draft.coverMediaUrl,
+        },
+      ];
+    });
+    await insertDrafts(db, missing);
+    if (missing.length > 0) {
+      const created = await db.tripFinalPost.findMany({
+        where: { tripId, userId: { in: missing.map((row) => row.userId) } },
+        select: finalPostSelect,
+      });
+      for (const post of created) existingByUser.set(post.userId, post);
     }
-    return posts;
+    return memberIds.map((memberId) => {
+      const post = existingByUser.get(memberId);
+      if (!post) {
+        throw new ConflictError("Final post could not be saved");
+      }
+      return post;
+    });
   }
 
   static async getFinalPost(tripId: string, userId: string) {
@@ -420,6 +431,33 @@ async function deleteEngagementForTripFinalPost(
   });
   await tx.notification.deleteMany({
     where: { entityType: postEntity, entityId: finalPostId },
+  });
+}
+
+/**
+ * Insert drafts with ON CONFLICT DO NOTHING.
+ * A caught P2002 aborts the surrounding Postgres transaction, so a concurrent
+ * end (the owner and the hourly job) must not throw. The caller reads the rows
+ * back, whether this call inserted them or the other transaction did.
+ */
+async function insertDrafts(
+  db: DbClient,
+  rows: Array<{
+    tripId: string;
+    userId: string;
+    summaryText: string;
+    curatedMedia: string[];
+    caption: string | null;
+    coverMediaUrl: string | null;
+  }>
+) {
+  if (rows.length === 0) return;
+  await db.tripFinalPost.createMany({
+    data: rows.map((row) => ({
+      ...row,
+      generationStatus: GenerationStatus.DRAFT,
+    })),
+    skipDuplicates: true,
   });
 }
 

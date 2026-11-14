@@ -579,6 +579,44 @@ class _FinalPostEditScreenState extends State<FinalPostEditScreen> {
     );
   }
 
+  Future<void> _confirmDeleteDraft(FinalPostProvider provider) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Delete this draft?'),
+        content: const Text(
+          'This removes your unpublished final post. The trip and everyone else’s posts stay.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Keep'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    final messenger = ScaffoldMessenger.of(context);
+    final success = await provider.deleteFinalPost();
+    if (!mounted) return;
+    if (!success) {
+      messenger.showSnackBar(
+        SnackBar(content: Text(provider.error ?? 'Could not delete the draft')),
+      );
+      return;
+    }
+    messenger.showSnackBar(const SnackBar(content: Text('Draft deleted')));
+    if (context.canPop()) {
+      context.pop();
+    } else {
+      context.go('/trip/${widget.tripId}');
+    }
+  }
+
   Widget _buildBottomBar(
       BuildContext context, FinalPostProvider provider, TripFinalPost draft) {
     if (draft.isPublished) {
@@ -644,67 +682,78 @@ class _FinalPostEditScreenState extends State<FinalPostEditScreen> {
 
     return SafeArea(
       child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Row(
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            Expanded(
-              child: OutlinedButton(
-                onPressed: provider.isSaving
-                    ? null
-                    : () async {
-                        final messenger = ScaffoldMessenger.of(context);
-                        final success = await provider.saveDraft();
-                        if (!mounted) return;
-                        if (success) {
-                          messenger.showSnackBar(
-                            const SnackBar(
-                              content: Text('Draft saved'),
-                            ),
-                          );
-                        }
-                      },
-                child: provider.isSaving
-                    ? const SizedBox(
-                        height: 20,
-                        width: 20,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Text('Save Draft'),
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: ElevatedButton(
-                onPressed: provider.isPublishing
-                    ? null
-                    : () async {
-                        final messenger = ScaffoldMessenger.of(context);
-                        final router = GoRouter.of(context);
-                        final success = await provider.publish();
-                        if (!mounted) return;
-                        if (success) {
-                          messenger.showSnackBar(
-                            const SnackBar(
-                              content: Text('Trip published to your feed!'),
-                            ),
-                          );
-                          router.go('/home');
-                        }
-                      },
-                style: ElevatedButton.styleFrom(
-                  minimumSize: const Size.fromHeight(48),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: provider.isSaving
+                        ? null
+                        : () async {
+                            final messenger = ScaffoldMessenger.of(context);
+                            final success = await provider.saveDraft();
+                            if (!mounted) return;
+                            if (success) {
+                              messenger.showSnackBar(
+                                const SnackBar(
+                                  content: Text('Draft saved'),
+                                ),
+                              );
+                            }
+                          },
+                    child: provider.isSaving
+                        ? const SizedBox(
+                            height: 20,
+                            width: 20,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Text('Save Draft'),
+                  ),
                 ),
-                child: provider.isPublishing
-                    ? const SizedBox(
-                        height: 20,
-                        width: 20,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: Colors.white,
-                        ),
-                      )
-                    : const Text('Publish'),
-              ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: ElevatedButton(
+                    onPressed: provider.isPublishing
+                        ? null
+                        : () async {
+                            final messenger = ScaffoldMessenger.of(context);
+                            final router = GoRouter.of(context);
+                            final success = await provider.publish();
+                            if (!mounted) return;
+                            if (success) {
+                              messenger.showSnackBar(
+                                const SnackBar(
+                                  content: Text('Trip published to your feed!'),
+                                ),
+                              );
+                              router.go('/home');
+                            }
+                          },
+                    style: ElevatedButton.styleFrom(
+                      minimumSize: const Size.fromHeight(48),
+                    ),
+                    child: provider.isPublishing
+                        ? const SizedBox(
+                            height: 20,
+                            width: 20,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
+                          )
+                        : const Text('Publish'),
+                  ),
+                ),
+              ],
+            ),
+            TextButton(
+              onPressed: provider.isSaving || provider.isPublishing
+                  ? null
+                  : () => _confirmDeleteDraft(provider),
+              child: const Text('Delete draft'),
             ),
           ],
         ),
