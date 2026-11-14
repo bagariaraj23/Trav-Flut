@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:tripthread/models/chat_conversation.dart';
+import 'package:tripthread/models/chat_media_item.dart';
 import 'package:tripthread/models/chat_message.dart';
 import 'package:tripthread/providers/chat_provider.dart';
 import 'package:tripthread/providers/auth_provider.dart';
@@ -1299,7 +1300,14 @@ class _MessageBubble extends StatelessWidget {
                       onTap: () => openConversationMedia(
                         context,
                         conversationId,
-                        a.id,
+                        ChatMediaItem(
+                          id: a.id,
+                          url: a.url,
+                          type: a.type,
+                          messageId: message.id,
+                          createdAt: DateTime.tryParse(message.createdAt) ??
+                              DateTime.now(),
+                        ),
                       ),
                       child: Padding(
                       padding: const EdgeInsets.only(top: 4),
@@ -1320,7 +1328,14 @@ class _MessageBubble extends StatelessWidget {
                       onTap: () => openConversationMedia(
                         context,
                         conversationId,
-                        a.id,
+                        ChatMediaItem(
+                          id: a.id,
+                          url: a.url,
+                          type: a.type,
+                          messageId: message.id,
+                          createdAt: DateTime.tryParse(message.createdAt) ??
+                              DateTime.now(),
+                        ),
                       ),
                       child: Padding(
                       padding: const EdgeInsets.only(top: 4),

@@ -12,7 +12,7 @@ import {
 } from "@/lib/middleware";
 import { PerformanceMonitor, ErrorTracker } from "@/lib/monitoring";
 import { omitHiddenTripSpend } from "@/lib/tripSpendVisibility";
-import { contentHiddenUserIds } from "@/lib/services/userSafety";
+import { feedHiddenUserIds } from "@/lib/services/userSafety";
 
 // Get discoverable trips (ongoing and completed trips from followed users and public profiles)
 export async function GET(request: NextRequest) {
@@ -74,7 +74,7 @@ export async function GET(request: NextRequest) {
               where: { followerId: currentUserId },
               select: { followeeId: true },
             }),
-            contentHiddenUserIds(currentUserId),
+            feedHiddenUserIds(currentUserId),
           ]);
 
           const followedUserIds = followedUsers.map((f) => f.followeeId);

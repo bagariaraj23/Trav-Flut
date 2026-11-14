@@ -2,7 +2,7 @@ import type { ConversationType, Prisma } from '@prisma/client'
 import { v4 as uuid } from 'uuid'
 import { prisma } from '@/lib/prisma'
 import { NotFoundError, ValidationError, AuthorizationError } from '@/lib/errors'
-import { assertCanDirectMessage, assertCreatorMayAdd } from '@/lib/services/userSafety'
+import { assertCanDirectMessage, assertCreatorMayAdd, presenceHiddenRecipientIds } from '@/lib/services/userSafety'
 import { publishChatEvent, type ChatMessagePayload } from '@/lib/chat-events'
 import { LRUCache } from '@/lib/cache'
 
@@ -1132,8 +1132,9 @@ export async function markConversationRead(
   })
 
   // Notify other participants in real-time so senders can show "Seen".
-  const allParticipantIds = await getCachedParticipantIds(conversationId)
-  const recipientUserIds = allParticipantIds.filter((id) => id !== userId)
+  // A blocked or restricted direct message does not emit a receipt, and a
+  // restrict hides the restrictor's receipt from the person they restricted.
+  const recipientUserIds = await signalRecipients(conversationId, userId)
   if (recipientUserIds.length > 0) {
     publishChatEvent({
       event: 'conversation.read',
@@ -1370,6 +1371,38 @@ export async function promoteToAdmin(
   return await formatConversationSummary(updated!, adminUserId)
 }
 
+/**
+ * Recipients of a live signal (typing or read) from userId in this conversation.
+ * Direct messages that are restricted or blocked produce no recipients.
+ * In a group, Block hides the signal both ways and Restrict hides it from
+ * the person who was restricted.
+ */
+export async function signalRecipients(
+  conversationId: string,
+  userId: string
+): Promise<string[]> {
+  const participantIds = await getCachedParticipantIds(conversationId)
+  if (!participantIds.includes(userId)) return []
+
+  const conv = await prisma.conversation.findUnique({
+    where: { id: conversationId },
+    select: { type: true },
+  })
+  if (!conv) return []
+  if (conv.type === 'DM') {
+    const other = participantIds.find((id) => id !== userId)
+    if (!other) return []
+    try {
+      await assertCanDirectMessage(userId, other)
+    } catch {
+      return []
+    }
+  }
+
+  const hidden = await presenceHiddenRecipientIds(userId)
+  return participantIds.filter((id) => id !== userId && !hidden.has(id))
+}
+
 async function assertDmMessagingAllowed(
   conversationId: string,
   userId: string
@@ -1478,5 +1511,142 @@ export async function listConversationMedia(
     })),
     nextCursor: hasMore && slice.length > 0 ? slice[slice.length - 1].id : null,
     hasMore,
+  }
+}
+
+function toConversationMediaItem(row: {
+  id: string
+  url: string
+  type: string
+  publicId: string
+  width: number | null
+  height: number | null
+  duration: number | null
+  createdAt: Date
+  chatMessage: { id: string; createdAt: Date } | null
+}): ConversationMediaItem {
+  return {
+    id: row.id,
+    url: row.url,
+    type: row.type,
+    publicId: row.publicId,
+    width: row.width,
+    height: row.height,
+    duration: row.duration,
+    messageId: row.chatMessage?.id ?? '',
+    createdAt: row.chatMessage
+      ? toISODate(row.chatMessage.createdAt)
+      : toISODate(row.createdAt),
+  }
+}
+
+const conversationMediaWhere = (conversationId: string) => ({
+  type: { in: ['IMAGE', 'GIF', 'VIDEO'] as ('IMAGE' | 'GIF' | 'VIDEO')[] },
+  chatMessage: { conversationId, deletedAt: null },
+})
+
+/**
+ * One window of shared media centered on the item the viewer tapped.
+ * Older and newer neighbors come back together so the gallery does not
+ * page through the whole conversation first.
+ */
+export async function getConversationMediaContext(
+  conversationId: string,
+  userId: string,
+  mediaId: string,
+  contextSize = 25
+): Promise<{
+  items: ConversationMediaItem[]
+  index: number
+  hasMoreOlder: boolean
+  hasMoreNewer: boolean
+}> {
+  const member = await prisma.conversationParticipant.findUnique({
+    where: { conversationId_userId: { conversationId, userId } },
+    select: { leftAt: true },
+  })
+  if (!member || member.leftAt) throw new AuthorizationError('Not a participant')
+
+  const size = Math.min(Math.max(contextSize, 3), 60)
+  const olderTake = Math.floor((size - 1) / 2)
+  const newerTake = size - 1 - olderTake
+
+  const target = await prisma.media.findUnique({
+    where: { id: mediaId },
+    include: { chatMessage: { select: { id: true, createdAt: true, conversationId: true, deletedAt: true } } },
+  })
+  if (
+    !target?.chatMessage ||
+    target.chatMessage.conversationId !== conversationId ||
+    target.chatMessage.deletedAt ||
+    !['IMAGE', 'GIF', 'VIDEO'].includes(target.type)
+  ) {
+    throw new NotFoundError('Media not found')
+  }
+
+  const olderThan = {
+    OR: [
+      { createdAt: { lt: target.createdAt } },
+      { createdAt: target.createdAt, id: { lt: target.id } },
+    ],
+  }
+  const newerThan = {
+    OR: [
+      { createdAt: { gt: target.createdAt } },
+      { createdAt: target.createdAt, id: { gt: target.id } },
+    ],
+  }
+
+  const [older, newer] = await Promise.all([
+    prisma.media.findMany({
+      where: { ...conversationMediaWhere(conversationId), ...olderThan },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      take: olderTake,
+      include: { chatMessage: { select: { id: true, createdAt: true } } },
+    }),
+    prisma.media.findMany({
+      where: { ...conversationMediaWhere(conversationId), ...newerThan },
+      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+      take: newerTake,
+      include: { chatMessage: { select: { id: true, createdAt: true } } },
+    }),
+  ])
+
+  const rows = [...older.reverse(), target, ...newer]
+  const oldest = rows[0]
+  const newest = rows[rows.length - 1]
+  const [olderEdge, newerEdge] = await Promise.all([
+    oldest
+      ? prisma.media.findFirst({
+          where: {
+            ...conversationMediaWhere(conversationId),
+            OR: [
+              { createdAt: { lt: oldest.createdAt } },
+              { createdAt: oldest.createdAt, id: { lt: oldest.id } },
+            ],
+          },
+          select: { id: true },
+        })
+      : null,
+    newest
+      ? prisma.media.findFirst({
+          where: {
+            ...conversationMediaWhere(conversationId),
+            OR: [
+              { createdAt: { gt: newest.createdAt } },
+              { createdAt: newest.createdAt, id: { gt: newest.id } },
+            ],
+          },
+          select: { id: true },
+        })
+      : null,
+  ])
+
+  const items = rows.map(toConversationMediaItem)
+  return {
+    items,
+    index: items.findIndex((item) => item.id === target.id),
+    hasMoreOlder: !!olderEdge,
+    hasMoreNewer: !!newerEdge,
   }
 }

@@ -18,7 +18,7 @@ import { checkLikeStatus } from "@/lib/services/like";
 import { decodeFeedCursor, encodeFeedCursor } from "@/lib/feedCursor";
 import { EntityType, Prisma } from "@prisma/client";
 import { omitHiddenTripSpend } from "@/lib/tripSpendVisibility";
-import { contentHiddenUserIds } from "@/lib/services/userSafety";
+import { feedHiddenUserIds } from "@/lib/services/userSafety";
 
 // Get home feed (final posts from followed users and public profiles)
 export async function GET(request: NextRequest) {
@@ -71,7 +71,7 @@ export async function GET(request: NextRequest) {
           });
 
           const followedUserIds = followedUsers.map((f) => f.followeeId);
-          const hiddenUserIds = await contentHiddenUserIds(currentUserId);
+          const hiddenUserIds = await feedHiddenUserIds(currentUserId);
           console.log(
             `[API] GET /feed/home - Found ${followedUserIds.length} followed users: ${followedUserIds}`
           );

@@ -6,6 +6,43 @@ import {
   ValidationError,
 } from "@/lib/errors";
 
+const SAFETY_CACHE_TTL_MS = 15_000;
+
+type SafetyRow = {
+  actorId: string;
+  targetId: string;
+  action: UserSafetyAction;
+};
+
+const safetyCache = new Map<string, { at: number; rows: SafetyRow[] }>();
+
+function invalidateSafetyCache(userId: string) {
+  safetyCache.delete(userId);
+}
+
+function otherUserId(row: SafetyRow, userId: string) {
+  return row.actorId === userId ? row.targetId : row.actorId;
+}
+
+async function safetyRowsInvolving(userId: string): Promise<SafetyRow[]> {
+  const hit = safetyCache.get(userId);
+  if (hit && Date.now() - hit.at < SAFETY_CACHE_TTL_MS) return hit.rows;
+  const rows = await prisma.userSafetyRelation.findMany({
+    where: { OR: [{ actorId: userId }, { targetId: userId }] },
+    select: { actorId: true, targetId: true, action: true },
+  });
+  safetyCache.set(userId, { at: Date.now(), rows });
+  return rows;
+}
+
+async function invalidateNotificationBadges(leftId: string, rightId: string) {
+  const { invalidateUnreadNotificationCount } = await import("./notification");
+  await Promise.all([
+    invalidateUnreadNotificationCount(leftId),
+    invalidateUnreadNotificationCount(rightId),
+  ]);
+}
+
 export const CANNOT_MESSAGE = "You can't message this person.";
 export const CANNOT_ADD =
   "You can't add this person to a trip or group you created.";
@@ -58,17 +95,14 @@ export async function blockEitherWay(
   leftId: string,
   rightId: string
 ): Promise<boolean> {
-  const row = await prisma.userSafetyRelation.findFirst({
-    where: {
-      action: UserSafetyAction.BLOCK,
-      OR: [
-        { actorId: leftId, targetId: rightId },
-        { actorId: rightId, targetId: leftId },
-      ],
-    },
-    select: { id: true },
-  });
-  return row != null;
+  if (!leftId || !rightId || leftId === rightId) return false;
+  const rows = await safetyRowsInvolving(leftId);
+  return rows.some(
+    (row) =>
+      row.action === UserSafetyAction.BLOCK &&
+      ((row.actorId === leftId && row.targetId === rightId) ||
+        (row.actorId === rightId && row.targetId === leftId))
+  );
 }
 
 /** Direct messages stop when either person has restricted or blocked the other. */
@@ -128,24 +162,64 @@ export async function viewerHasBlocked(
   return row?.action === UserSafetyAction.BLOCK;
 }
 
-/**
- * Authors and trip owners to leave out of Home and Discover.
- * A block in either direction hides that person's posts and trips.
- */
-export async function contentHiddenUserIds(viewerId: string): Promise<string[]> {
-  const rows = await prisma.userSafetyRelation.findMany({
-    where: {
-      action: UserSafetyAction.BLOCK,
-      OR: [{ actorId: viewerId }, { targetId: viewerId }],
-    },
-    select: { actorId: true, targetId: true },
-  });
+/** People blocked in either direction. They are absent from search and from each other's profiles. */
+export async function blockedUserIds(viewerId: string): Promise<string[]> {
   const ids = new Set<string>();
-  for (const row of rows) {
-    ids.add(row.actorId === viewerId ? row.targetId : row.actorId);
+  for (const row of await safetyRowsInvolving(viewerId)) {
+    if (row.action === UserSafetyAction.BLOCK) ids.add(otherUserId(row, viewerId));
   }
   ids.delete(viewerId);
   return [...ids];
+}
+
+/**
+ * Authors and trip owners to leave out of Home, Discover, and live trips.
+ * A block in either direction hides that person.
+ * A restrict hides the restrictor's posts from the restricted person's feeds.
+ * Profile pages stay available under Restrict.
+ */
+export async function feedHiddenUserIds(viewerId: string): Promise<string[]> {
+  const ids = new Set<string>();
+  for (const row of await safetyRowsInvolving(viewerId)) {
+    if (row.action === UserSafetyAction.BLOCK) {
+      ids.add(otherUserId(row, viewerId));
+    } else if (
+      row.action === UserSafetyAction.RESTRICT &&
+      row.targetId === viewerId
+    ) {
+      ids.add(row.actorId);
+    }
+  }
+  ids.delete(viewerId);
+  return [...ids];
+}
+
+/** Blocked people, either direction. Feeds that should also hide a restrictor use feedHiddenUserIds. */
+export async function contentHiddenUserIds(viewerId: string): Promise<string[]> {
+  return blockedUserIds(viewerId);
+}
+
+/**
+ * People who must not see this person's last seen, typing, or read receipts.
+ * Block hides those signals both ways. Restrict hides the restrictor's signals
+ * from the person they restricted.
+ */
+export async function presenceHiddenRecipientIds(
+  subjectId: string
+): Promise<Set<string>> {
+  const ids = new Set<string>();
+  for (const row of await safetyRowsInvolving(subjectId)) {
+    if (row.action === UserSafetyAction.BLOCK) {
+      ids.add(otherUserId(row, subjectId));
+    } else if (
+      row.action === UserSafetyAction.RESTRICT &&
+      row.actorId === subjectId
+    ) {
+      ids.add(row.targetId);
+    }
+  }
+  ids.delete(subjectId);
+  return ids;
 }
 
 export async function setSafetyAction(
@@ -182,14 +256,30 @@ export async function setSafetyAction(
     });
     if (action === UserSafetyAction.BLOCK) {
       await tx.follow.deleteMany({
-        where: { followerId: targetId, followeeId: actorId },
+        where: {
+          OR: [
+            { followerId: targetId, followeeId: actorId },
+            { followerId: actorId, followeeId: targetId },
+          ],
+        },
       });
       await tx.followRequest.deleteMany({
-        where: { followerId: targetId, followeeId: actorId },
+        where: {
+          OR: [
+            { followerId: targetId, followeeId: actorId },
+            { followerId: actorId, followeeId: targetId },
+          ],
+        },
       });
     }
     return row;
   });
+
+  invalidateSafetyCache(actorId);
+  invalidateSafetyCache(targetId);
+  if (action === UserSafetyAction.BLOCK) {
+    await invalidateNotificationBadges(actorId, targetId);
+  }
 
   return {
     ...target,
@@ -206,6 +296,9 @@ export async function clearSafetyAction(
     where: { actorId, targetId },
   });
   if (removed.count === 0) throw new NotFoundError("No restriction or block");
+  invalidateSafetyCache(actorId);
+  invalidateSafetyCache(targetId);
+  await invalidateNotificationBadges(actorId, targetId);
 }
 
 export async function getSafetyPair(
@@ -222,6 +315,14 @@ export async function getSafetyPair(
       select: { action: true },
     }),
   ]);
+  // A block is opaque to the person who was blocked. Their safety lookup
+  // looks the same as a missing account. The blocker still sees their own block.
+  if (
+    incoming?.action === UserSafetyAction.BLOCK &&
+    outgoing?.action !== UserSafetyAction.BLOCK
+  ) {
+    throw new NotFoundError("User not found");
+  }
   return {
     outgoing: outgoing?.action ?? null,
     incoming: incoming?.action ?? null,

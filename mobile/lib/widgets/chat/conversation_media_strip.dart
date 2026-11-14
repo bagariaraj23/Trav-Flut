@@ -7,49 +7,82 @@ import 'package:tripthread/utils/cloudinary_utils.dart';
 import 'package:tripthread/widgets/media/media_gallery_viewer.dart';
 import 'package:tripthread/widgets/media/media_seek.dart';
 
+GalleryMedia _galleryMedia(ChatMediaItem media) {
+  return GalleryMedia(
+    id: media.id,
+    url: media.url,
+    isVideo: media.isVideo,
+    sharedAt: media.createdAt,
+  );
+}
+
+/// Opens the tapped photo or video immediately, then fills in neighbors
+/// from one centered window instead of paging the whole conversation first.
 Future<void> openConversationMedia(
   BuildContext context,
   String conversationId,
-  String mediaId,
+  ChatMediaItem initial,
 ) async {
-  final api = context.read<ApiService>();
-  final collected = <ChatMediaItem>[];
-  String? cursor;
-  var hasMore = true;
-  var pages = 0;
-  while (hasMore && pages < 8) {
-    final response = await api.getConversationMedia(
-      conversationId,
-      limit: 24,
-      cursor: cursor,
-    );
-    final page = response.data;
-    if (page == null) break;
-    collected.addAll(page.items);
-    cursor = page.nextCursor;
-    hasMore = page.hasMore;
-    pages += 1;
-    if (collected.any((item) => item.id == mediaId)) break;
-  }
-  if (!context.mounted || collected.isEmpty) return;
-  final index = collected.indexWhere((item) => item.id == mediaId);
   await Navigator.of(context).push(
     MaterialPageRoute(
-      builder: (_) => MediaGalleryViewer(
-        initialIndex: index < 0 ? 0 : index,
-        items: collected
-            .map(
-              (media) => GalleryMedia(
-                id: media.id,
-                url: media.url,
-                isVideo: media.isVideo,
-                sharedAt: media.createdAt,
-              ),
-            )
-            .toList(),
+      builder: (_) => _ConversationMediaViewer(
+        conversationId: conversationId,
+        initial: initial,
       ),
     ),
   );
+}
+
+class _ConversationMediaViewer extends StatefulWidget {
+  const _ConversationMediaViewer({
+    required this.conversationId,
+    required this.initial,
+  });
+
+  final String conversationId;
+  final ChatMediaItem initial;
+
+  @override
+  State<_ConversationMediaViewer> createState() =>
+      _ConversationMediaViewerState();
+}
+
+class _ConversationMediaViewerState extends State<_ConversationMediaViewer> {
+  late List<ChatMediaItem> _items;
+  late int _index;
+
+  @override
+  void initState() {
+    super.initState();
+    _items = [widget.initial];
+    _index = 0;
+    _loadWindow();
+  }
+
+  Future<void> _loadWindow() async {
+    final api = context.read<ApiService>();
+    final response = await api.getConversationMediaContext(
+      widget.conversationId,
+      widget.initial.id,
+    );
+    if (!mounted) return;
+    final window = response.data;
+    if (window == null || window.items.isEmpty) return;
+    final index = window.items.indexWhere((item) => item.id == widget.initial.id);
+    setState(() {
+      _items = window.items;
+      _index = index < 0 ? window.index : index;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return MediaGalleryViewer(
+      key: ValueKey(_items.map((item) => item.id).join(',')),
+      initialIndex: _index,
+      items: _items.map(_galleryMedia).toList(),
+    );
+  }
 }
 
 class ConversationMediaStrip extends StatefulWidget {

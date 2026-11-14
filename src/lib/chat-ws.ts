@@ -2,7 +2,8 @@ import type { WebSocket } from "ws";
 import { AuthService } from "@/lib/auth";
 import { type ChatEventPayload } from "@/lib/chat-events";
 import { prisma } from "@/lib/prisma";
-import { getCachedParticipantIds } from "@/lib/services/chat";
+import { signalRecipients } from "@/lib/services/chat";
+import { presenceHiddenRecipientIds } from "@/lib/services/userSafety";
 
 function getChatEventBus(): {
   subscribe: (fn: (p: ChatEventPayload) => void) => () => void;
@@ -89,13 +90,15 @@ async function broadcastPresence(
 ): Promise<void> {
   try {
     const coParticipants = await getCoParticipantIds(userId);
-    if (coParticipants.length === 0) return;
+    const hidden = await presenceHiddenRecipientIds(userId);
+    const recipientUserIds = coParticipants.filter((id) => !hidden.has(id));
+    if (recipientUserIds.length === 0) return;
     bus.publish({
       event: "presence.update",
       userId,
       status,
       lastSeen: lastSeen ?? new Date().toISOString(),
-      recipientUserIds: coParticipants,
+      recipientUserIds,
     });
   } catch (e) {
     console.error("[ChatWS] broadcastPresence error:", e);
@@ -248,11 +251,9 @@ export function attachChatWebSocket(
             const conversationId = msg.conversationId as string;
             const senderId = extWs.userId;
 
-            // Use the cached participant list (avoids a DB round-trip per keystroke).
-            const participantIds = await getCachedParticipantIds(conversationId);
-            if (!participantIds.includes(senderId)) return;
-
-            const recipientUserIds = participantIds.filter((id) => id !== senderId);
+            // Direct messages that are blocked or restricted, and group
+            // recipients who must not see this person, get no typing event.
+            const recipientUserIds = await signalRecipients(conversationId, senderId);
             if (recipientUserIds.length === 0) return;
 
             const until = new Date(Date.now() + 3000).toISOString();

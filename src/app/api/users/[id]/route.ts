@@ -59,7 +59,18 @@ export async function GET(
 
     const blockedByViewer = await viewerHasBlocked(currentUserId, userId);
     const viewerIsBlocked = await isProfileUnavailable(userId, currentUserId);
-    if (blockedByViewer || viewerIsBlocked) {
+    // A block is silent for the person who was blocked: the same 404 as a
+    // missing account. The blocker still gets a limited page with Unblock.
+    if (viewerIsBlocked && !blockedByViewer) {
+      return NextResponse.json<ApiResponse>(
+        {
+          success: false,
+          error: "User not found",
+        },
+        { status: 404 }
+      );
+    }
+    if (blockedByViewer) {
       const limitedProfile: UserProfile = {
         id: user.id,
         email: "",
@@ -70,16 +81,13 @@ export async function GET(
         isPrivate: user.isPrivate,
         createdAt: user.createdAt.toISOString(),
         updatedAt: user.updatedAt.toISOString(),
-        blockedByViewer: blockedByViewer || undefined,
-        viewerIsBlocked: viewerIsBlocked || undefined,
+        blockedByViewer: true,
       };
 
       return NextResponse.json<ApiResponse<UserProfile>>({
         success: true,
         data: limitedProfile,
-        message: blockedByViewer
-          ? "You blocked this person. Unblock them to see their posts again."
-          : "This profile is not available.",
+        message: "You blocked this person. Unblock them to see their posts again.",
       });
     }
 
