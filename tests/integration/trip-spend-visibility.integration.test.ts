@@ -44,6 +44,7 @@ describe("public trip spend", () => {
     await prisma.tripFinalPost.create({
       data: {
         tripId: trip.id,
+        userId: owner.id,
         summaryText: "We went",
         curatedMedia: [],
         isPublished: true,

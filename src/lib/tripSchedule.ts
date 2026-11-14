@@ -243,7 +243,7 @@ async function syncTripRecords(trips: ScheduleTrip[]): Promise<void> {
             where: { id: trip.id },
             data: { status: TripStatus.ENDED, updatedAt: now },
           });
-          await TripFinalizerService.generateFinalPost(trip.id, trip.userId, tx);
+          await TripFinalizerService.generateFinalPostsForMembers(trip.id, tx);
         });
       } else {
         await prisma.trip.updateMany({

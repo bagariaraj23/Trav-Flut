@@ -96,7 +96,23 @@ export async function POST(
                   threadEntries: {
                     include: {
                       media: true,
-                      taggedUsers: true,
+                      taggedUsers: {
+                        include: {
+                          taggedUser: {
+                            select: {
+                              id: true,
+                              email: true,
+                              username: true,
+                              name: true,
+                              avatarUrl: true,
+                              bio: true,
+                              isPrivate: true,
+                              createdAt: true,
+                              updatedAt: true,
+                            },
+                          },
+                        },
+                      },
                       author: true,
                     },
                     orderBy: { createdAt: "asc" },
@@ -105,13 +121,15 @@ export async function POST(
               });
 
               // A trip that never started is cancelled: no final post.
-              const generatedFinalPost = endingBeforeStart
-                ? null
-                : await TripFinalizerService.generateFinalPost(
+              // A trip that ran gets one personal draft per member.
+              const generatedPosts = endingBeforeStart
+                ? []
+                : await TripFinalizerService.generateFinalPostsForMembers(
                     tripId,
-                    userId,
                     tx
                   );
+              const generatedFinalPost =
+                generatedPosts.find((post) => post.userId === userId) ?? null;
 
               return [updated, generatedFinalPost] as const;
             }

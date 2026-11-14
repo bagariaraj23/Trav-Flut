@@ -30,23 +30,48 @@ function createPrismaMock(options: {
 
   const tx = {
     tripFinalPost: {
-      findUnique: vi.fn(({ where }: any) =>
-        Promise.resolve(existing.has(where.tripId) ? { id: `post-${where.tripId}` } : null)
-      ),
+      findMany: vi.fn(({ where }: any) => {
+        if (!existing.has(where.tripId)) return Promise.resolve([]);
+        const ids: string[] = where.userId?.in ?? [];
+        return Promise.resolve(
+          ids.map((userId) => ({
+            userId,
+            generationStatus: "DRAFT",
+            isPublished: false,
+          }))
+        );
+      }),
       create: vi.fn(({ data }: any) => Promise.resolve({ id: `post-${data.tripId}`, ...data })),
+      update: vi.fn(({ data }: any) => Promise.resolve(data)),
     },
     trip: {
       findUnique: vi.fn(({ where }: any) => {
         const trip = tripsToEnd.find((t) => t.id === where.id);
         if (!trip) return Promise.resolve(null);
+        const userId = "owner-1";
         return Promise.resolve({
           ...trip,
+          userId,
+          participants: [],
+          media: [],
+          mood: "ADVENTURE",
           threadEntries: [
             {
               id: `media-entry-${trip.id}`,
+              authorId: userId,
               type: "MEDIA",
               mediaId: `media-${trip.id}`,
-              media: { url: `https://cdn.example.com/${trip.id}.jpg` },
+              createdAt: new Date("2026-01-01T10:00:00.000Z"),
+              contentText: null,
+              locationName: null,
+              place: null,
+              taggedUsers: [],
+              media: {
+                url: `https://cdn.example.com/${trip.id}.jpg`,
+                type: "IMAGE",
+                processingStatus: "COMPLETED",
+                uploadedById: userId,
+              },
             },
           ],
         });
@@ -130,8 +155,11 @@ describe("updateTripStatuses behavior", () => {
       expect.objectContaining({
         data: expect.objectContaining({
           tripId: "trip-ended",
-          summaryText: expect.stringContaining("Tokyo, Kyoto"),
+          userId: "owner-1",
+          summaryText: expect.stringContaining("Japan"),
           curatedMedia: ["https://cdn.example.com/trip-ended.jpg"],
+          generationStatus: "DRAFT",
+          coverMediaUrl: "https://cdn.example.com/trip-ended.jpg",
         }),
       })
     );
@@ -163,8 +191,9 @@ describe("updateTripStatuses behavior", () => {
 
     await updateTripStatuses(prisma, new Date("2026-02-01T00:00:00.000Z"));
 
-    expect(tx.tripFinalPost.findUnique).toHaveBeenCalledWith({
-      where: { tripId: "trip-existing" },
+    expect(tx.tripFinalPost.findMany).toHaveBeenCalledWith({
+      where: { tripId: "trip-existing", userId: { in: ["owner-1"] } },
+      select: { userId: true },
     });
     expect(tx.tripFinalPost.create).not.toHaveBeenCalled();
     expect(tx.trip.update).toHaveBeenCalledWith({

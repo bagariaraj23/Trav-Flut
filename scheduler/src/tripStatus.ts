@@ -1,4 +1,5 @@
 import type { PrismaClient } from "@prisma/client";
+import { buildMemberFinalDraft, type DraftTrip } from "./memberFinalDraft";
 import { scheduledEndInstant } from "./tripEnd";
 
 export enum TripStatus {
@@ -7,10 +8,8 @@ export enum TripStatus {
   ENDED = "ENDED",
 }
 
-// Note: The scheduler runs as a separate service with its own TypeScript compilation.
-// We cannot import from the main app's source code due to rootDir constraints.
-// The inline implementation below matches the logic from TripFinalizerService
-// to ensure consistency. If the service logic changes, this should be updated accordingly.
+// The scheduler cannot import the API service. The personal draft itself lives in
+// memberFinalDraft.ts, which the API finalizer imports, so both endings write the same unpublished draft.
 
 /** Result of a run for logging */
 export type UpdateTripStatusesResult = {
@@ -69,63 +68,82 @@ export async function updateTripStatuses(
   for (const trip of tripsToEnd) {
     try {
       await prisma.$transaction(async (tx) => {
-        // Check if final post already exists (inside transaction)
-        const existingFinalPost = await tx.tripFinalPost.findUnique({
-          where: { tripId: trip.id },
-        });
-
-        if (!existingFinalPost) {
-          // Generate final post using inline implementation
-          // This matches TripFinalizerService.generateFinalPost logic for consistency
-          // Fetch full trip with thread entries for summary (inside tx)
-          const tripData = await tx.trip.findUnique({
-            where: { id: trip.id },
-            include: {
-              threadEntries: {
-                where: { type: "MEDIA", mediaId: { not: null } },
-                include: { media: true },
-                orderBy: { createdAt: "asc" },
+        // Personal draft for the owner and each participant. Kept inline so the
+        // scheduler build does not import the API service.
+        const tripData = await tx.trip.findUnique({
+          where: { id: trip.id },
+          include: {
+            participants: { select: { userId: true } },
+            media: true,
+            threadEntries: {
+              include: {
+                media: true,
+                place: true,
+                taggedUsers: { select: { taggedUserId: true } },
               },
+              orderBy: { createdAt: "asc" },
             },
-          });
-          if (!tripData) throw new Error("Trip not found");
+          },
+        });
+        if (!tripData) throw new Error("Trip not found");
 
-          // Fetch all thread entries for full summary
-          const allThreadEntries = await tx.tripThreadEntry.findMany({
-            where: { tripId: trip.id },
-            orderBy: { createdAt: "asc" },
-          });
-          const textEntries = allThreadEntries.filter(
-            (entry) => entry.type === "TEXT" && entry.contentText
-          );
-          const mediaEntries = (tripData.threadEntries || []).filter(
-            (entry) => entry.type === "MEDIA" && entry.mediaId
-          );
-          const locationEntries = allThreadEntries.filter(
-            (entry) => entry.type === "LOCATION" && entry.locationName
-          );
-          const titleTrim = trip.title?.trim() ?? "";
-          const destLabel =
-            trip.destinations?.length > 0
-              ? trip.destinations.join(", ")
-              : titleTrim || "your trip";
-          let summaryText = `Amazing trip to ${destLabel}! `;
-          if (locationEntries.length > 0)
-            summaryText += `Visited ${locationEntries.length} amazing places. `;
-          if (textEntries.length > 0)
-            summaryText += `Shared ${textEntries.length} memorable moments. `;
-          if (mediaEntries.length > 0)
-            summaryText += `Captured ${mediaEntries.length} beautiful memories.`;
-          const curatedMedia = mediaEntries
-            .slice(0, 6)
-            .map((entry) => entry.media?.url)
-            .filter((url): url is string => Boolean(url));
+        const memberIds = [
+          ...new Set([
+            tripData.userId,
+            ...(tripData.participants ?? []).map(
+              (participant) => participant.userId
+            ),
+          ]),
+        ];
+        const existingPosts = await tx.tripFinalPost.findMany({
+          where: { tripId: trip.id, userId: { in: memberIds } },
+          select: { userId: true },
+        });
+        const existingUserIds = new Set(existingPosts.map((post) => post.userId));
+        const draftTrip: DraftTrip = {
+          title: tripData.title,
+          startDate: tripData.startDate,
+          endDate: tripData.endDate,
+          destinations: tripData.destinations ?? [],
+          mood: tripData.mood,
+          entries: (tripData.threadEntries ?? []).map((entry) => ({
+            authorId: entry.authorId,
+            contentText: entry.contentText,
+            createdAt: entry.createdAt,
+            locationName: entry.locationName,
+            media: entry.media
+              ? {
+                  url: entry.media.url,
+                  type: entry.media.type,
+                  processingStatus: entry.media.processingStatus,
+                  uploadedById: entry.media.uploadedById,
+                }
+              : null,
+            taggedUserIds: (entry.taggedUsers ?? []).map(
+              (tag) => tag.taggedUserId
+            ),
+            placeName: entry.place?.name ?? null,
+          })),
+          uploadedMedia: (tripData.media ?? []).map((media) => ({
+            url: media.url,
+            type: media.type,
+            processingStatus: media.processingStatus,
+            uploadedById: media.uploadedById,
+          })),
+        };
+
+        for (const memberId of memberIds) {
+          if (existingUserIds.has(memberId)) continue;
+          const draft = buildMemberFinalDraft(draftTrip, memberId);
           await tx.tripFinalPost.create({
             data: {
               tripId: trip.id,
-              summaryText,
-              curatedMedia,
-              caption: `My trip to ${titleTrim || destLabel} was incredible! 🌟`,
+              userId: memberId,
+              summaryText: draft.summaryText,
+              curatedMedia: draft.curatedMedia,
+              caption: draft.caption,
+              coverMediaUrl: draft.coverMediaUrl,
+              generationStatus: draft.generationStatus,
             },
           });
         }
