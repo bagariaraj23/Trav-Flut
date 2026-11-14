@@ -20,7 +20,7 @@ Files: `scheduler/src/index.ts`, `tripStatus.ts`, `tripEnd.ts`, `memberFinalDraf
 4. Start batch: `updateMany` the filtered `UPCOMING` ids to `ONGOING`.
 5. Return `{ endedCount, ongoingCount, nowIso }`.
 
-The API does not wait for this. `syncViewerTripSchedule` and `syncTripById` apply the same status rules on read, and when they end a trip they call `TripFinalizerService.generateFinalPostsForMembers`. That service imports the same `buildMemberFinalDraft`, so a manual end, a read that catches a due end, and this cron write the same unpublished draft. A trip that nobody opens still ends, because cron is the backstop. See [Thread and final posts](./06-thread-and-final-posts.md).
+The API does not wait for this. `syncViewerTripSchedule` and `syncTripById` apply the same status rules on read, and when they end a trip they call `TripFinalizerService.generateFinalPostsForMembers`. That service loads the trip once and imports the same `buildMemberFinalDraft`, so a manual end, a read that catches a due end, and this cron write the same unpublished draft. A trip that nobody opens still ends, because cron is the backstop. See [Thread and final posts](./06-thread-and-final-posts.md).
 
 ### How it is invoked
 
