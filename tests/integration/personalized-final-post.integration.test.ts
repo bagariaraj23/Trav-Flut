@@ -3,6 +3,7 @@ import { NextRequest } from "next/server";
 import { randomUUID } from "crypto";
 import { GenerationStatus, MediaType, ThreadEntryType, TripStatus } from "@prisma/client";
 import { prisma } from "../../src/lib/prisma";
+import { ValidationError } from "../../src/lib/errors";
 import { TripFinalizerService } from "../../src/lib/services/tripFinalizer";
 import { syncTripById } from "../../src/lib/tripSchedule";
 import { updateTripStatuses } from "../../scheduler/src/tripStatus";
@@ -425,5 +426,50 @@ describe("Personalized final posts", () => {
     expect(posts.every((post) => post.isPublished === false)).toBe(true);
     const stored = await prisma.trip.findUnique({ where: { id: trip.id } });
     expect(stored?.status).toBe(TripStatus.ENDED);
+  });
+
+  it("rejects a final-post photo that is not on the trip", async () => {
+    const owner = await createUser({ email: "media-owner@test.com", name: "Owner" });
+    const trip = await createTrip({
+      userId: owner.id,
+      title: "Photo gate",
+      status: TripStatus.ENDED,
+    });
+    const photo = "https://cdn.example.com/on-trip.jpg";
+    await prisma.media.create({
+      data: {
+        url: photo,
+        publicId: `gate-${randomUUID()}`,
+        type: MediaType.IMAGE,
+        uploadedById: owner.id,
+        tripId: trip.id,
+      },
+    });
+    await TripFinalizerService.generateFinalPost(trip.id, owner.id);
+
+    await expect(
+      TripFinalizerService.updateFinalPost(trip.id, owner.id, {
+        curatedMedia: ["https://evil.example/not-on-trip.jpg"],
+      })
+    ).rejects.toBeInstanceOf(ValidationError);
+    await expect(
+      TripFinalizerService.updateFinalPost(trip.id, owner.id, {
+        curatedMedia: [
+          "https://res.cloudinary.com/other-cloud/image/upload/private.jpg",
+        ],
+      })
+    ).rejects.toBeInstanceOf(ValidationError);
+    await expect(
+      TripFinalizerService.updateFinalPost(trip.id, owner.id, {
+        coverMediaUrl: "https://cdn.example.com/someone-else.jpg",
+      })
+    ).rejects.toBeInstanceOf(ValidationError);
+
+    const saved = await TripFinalizerService.updateFinalPost(trip.id, owner.id, {
+      curatedMedia: [photo],
+      coverMediaUrl: photo,
+    });
+    expect(saved.curatedMedia).toEqual([photo]);
+    expect(saved.coverMediaUrl).toBe(photo);
   });
 });
