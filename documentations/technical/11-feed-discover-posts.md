@@ -23,7 +23,7 @@ A post is included when `isPublished` is true and the post author (`TripFinalPos
 2. Someone the viewer follows.
 3. A public account (`isPrivate = false`).
 
-The three conditions are `OR`. Public posts are on the home feed even when the viewer does not follow the author. Private authors appear only as self or as a follow. `feedHiddenUserIds` then excludes every author in a block with the viewer, in either direction, and every author who restricted the viewer, with `userId: { notIn }`. A restrict does not hide the restricted person's posts from the restrictor, and it does not block `canViewEntity` or the profile. Unblock, or clearing the restrict, removes that exclusion. The mobile provider also drops items that look private and unfollowed, in case a stale client cache disagrees with the server.
+The three conditions are `OR`. Public posts are on the home feed even when the viewer does not follow the author. Private authors appear only as self or as a follow. `feedHiddenUserIds` then excludes every author in a block with the viewer, in either direction, and every author who restricted the viewer, with `userId: { notIn }`. A restrict does not hide the restricted person's posts from the restrictor. It does make `canViewEntity` refuse the restrictor's final post, and the profile returned to the restricted person is a name and username. Unblock, or clearing the restrict, removes that exclusion. The mobile provider also drops items that look private and unfollowed, in case a stale client cache disagrees with the server.
 
 Pagination: `page` and `limit` (1–100, default 20) still work. If `cursor` is set, offset is forced to 0 and the cursor wins. `feedCursor.ts` encodes base64url `{ createdAt, id }`. The filter is "rows strictly older than this `(createdAt, id)` pair", matching `orderBy: [{ createdAt: "desc" }, { id: "desc" }]`. The query takes `limit + 1`. If the extra row exists, `hasNext` is true and `nextCursor` is the last returned row.
 
@@ -64,7 +64,7 @@ The 60 row cap is a bound on work, not a product promise that a user with more t
 
 Excludes the viewer's own trips (`userId != currentUserId`). Default statuses are `ONGOING` and `ENDED` (upcoming trips stay off discover). Optional `status`, `mood`, and `q`. `q` is trimmed to 80 characters and matched with `ILIKE` against title, description, owner name, username, and destinations.
 
-Audience `OR`: the owner is someone the viewer follows, or the owner is public. The ranked SQL also excludes owners in `feedHiddenUserIds` (a block either way, or someone who restricted the viewer). `GET /api/users` omits a blocked person entirely. A restricted person still appears in search, and their profile still opens.
+Audience `OR`: the owner is someone the viewer follows, or the owner is public. The ranked SQL also excludes owners in `feedHiddenUserIds` (a block either way, or someone who restricted the viewer). `GET /api/users` omits a blocked person entirely. A restricted person still appears in search, with no photo or bio.
 
 Ranking is raw SQL, then a single Prisma `findMany` by those ids:
 
@@ -85,7 +85,7 @@ Spend is passed through `omitHiddenTripSpend(trip, false)`. Discover never treat
 
 `GET /api/posts/:entityType/:entityId`. `read_hot`.
 
-`TRIP_FINAL_POST`: load post, trip, and owner. **404** if it is not published. `canViewEntity` returns false when a block exists either way between the viewer and the post author, including when that author is public, and the route then returns **403**. Otherwise a published post is readable by its author, by a member of its trip, by anyone when the author is public, and by a follower when the author is private. The payload includes the denormalized counts and `checkLikeStatus` for that single id.
+`TRIP_FINAL_POST`: load post, trip, and owner. **404** if it is not published. `canViewEntity` returns false when a block exists either way, and when the author has restricted the viewer, including when that author is public, and the route then returns **403**. Otherwise a published post is readable by its author, by a member of its trip, by anyone when the author is public, and by a follower when the author is private. The payload includes the denormalized counts and `checkLikeStatus` for that single id.
 
 `TRIP_THREAD_ENTRY`: **404** with a message that direct view is not supported. Thread deep links go to `GET /trips/:id/entries/:entryId/context` instead, because an entry only makes sense inside the thread window.
 

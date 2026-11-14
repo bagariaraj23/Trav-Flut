@@ -77,7 +77,7 @@ History: `before` is a message id. The query takes `limit + 1` on `(conversation
 
 `listConversations` used to count unread messages once per room. It now calls `batchFetchUnreadCounts`, one SQL `GROUP BY conversationId` for the whole page: messages in those rooms, newer than that participant's `lastReadAt`, not sent by the viewer, not deleted. The index `(conversationId, createdAt DESC)` serves the per-room range. The `(userId, lastReadAt)` index serves "which of my rooms are behind".
 
-`PATCH .../read` writes `lastReadAt` and publishes `conversation.read` to `signalRecipients`. A direct message that is restricted or blocked publishes no receipt. In a group, Block drops the receipt both ways, and Restrict drops the restrictor's receipt for the person they restricted.
+`PATCH .../read` writes `lastReadAt` and publishes `conversation.read` to `signalRecipients`. The conversation summary also returns `lastReadAt: null` for anyone in `feedHiddenUserIds`, so a blocked or restricted viewer does not learn that the other person has read. A blocked direct message publishes no receipt. The restricted person cannot send, so they publish none. The restrictor can send, and their receipt is still omitted for the person they restricted. In a group, Block drops the receipt both ways, and Restrict drops the restrictor's receipt for the person they restricted.
 
 ## WebSocket
 

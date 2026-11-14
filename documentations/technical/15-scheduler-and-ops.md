@@ -16,7 +16,7 @@ Files: `scheduler/src/index.ts`, `tripStatus.ts`, `tripEnd.ts`, `memberFinalDraf
 
 1. Load trips in `UPCOMING` or `ONGOING` whose stored `endDate` is at or before now, plus `UPCOMING` trips whose `startDate` is at or before now. This is a coarse fetch. Indexes `(status, endDate)` and `(status, startDate)` exist for it.
 2. Recompute with `scheduledEndInstant` (copy in `tripEnd.ts`). Midnight ends expand to 23:59:59.999 in `scheduleTimezone`. A trip with `endDate` null is not in the end batch.
-3. End batch, one transaction per trip: write one unpublished personal draft per current member with `buildMemberFinalDraft`, then set `status = ENDED`. The draft is `DRAFT` and `isPublished` stays false. A member who already has a row is left alone.
+3. End batch, one transaction per trip: claim `ENDED` with `updateMany` while the trip is still upcoming or ongoing, then insert missing personal drafts with `createMany` and `skipDuplicates`. A trip the app already ended is skipped. The draft is `DRAFT` and `isPublished` stays false. A member who already has a row is left alone.
 4. Start batch: `updateMany` the filtered `UPCOMING` ids to `ONGOING`.
 5. Return `{ endedCount, ongoingCount, nowIso }`.
 
