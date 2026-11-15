@@ -27,7 +27,7 @@ Start with the system overview, then the feature that you are changing. The data
 | [Chat](./14-chat.md) | REST, WebSocket, DM, group, trip rooms |
 | [Scheduler and operations](./15-scheduler-and-ops.md) | Status cron, Docker, health, email |
 | [Security and middleware](./16-security-middleware.md) | Auth wrapper, rate limits, headers, moderation |
-| [Data model](./17-data-model.md) | Every model, enum, and relationship |
+| [Data model](./17-data-model.md) | All 28 tables, the entity-relationship diagrams, and every foreign key |
 | [Optimizations](./18-optimizations.md) | Indexes, N+1 removal, caching, pagination |
 | [Architecture diagram](./19-architecture-diagram.md) | Full-system diagram for Miro |
 

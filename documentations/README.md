@@ -2,7 +2,7 @@
 
 ## Technical handbook
 
-Feature-by-feature implementation notes, the data model, the optimizations, and the full architecture diagram (Mermaid frames you can import into Miro):
+Feature-by-feature implementation notes, the data model (entity-relationship diagrams and the foreign-key schema map), the optimizations, and the full architecture diagram (Mermaid frames you can import into Miro):
 
 - [Technical handbook](./technical/README.md)
 

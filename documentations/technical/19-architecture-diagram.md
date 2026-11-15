@@ -415,7 +415,7 @@ Paste this as a table frame next to the large diagram.
 
 | Store | Holds | Does not hold |
 | --- | --- | --- |
-| PostgreSQL | Users, sessions, resets, follows, trips, entries, final posts, places, media rows, expenses, settlements, likes, comments, shares, notifications, conversations, messages | File bytes, map tiles, email |
+| PostgreSQL | Users, sessions, resets, follows, safety rows, trips, entries, final posts, places, media rows, expenses, settlements, likes, comments, shares, notifications, conversations, messages. The table-by-table map is [Data model](./17-data-model.md) | File bytes, map tiles, email |
 | Upstash Redis | Place search and identity, unread badge, share token, rate-limit windows, resolve locks, cache locks | Jobs, chat pub/sub, scheduler state |
 | Process memory | LRU in front of Redis, chat participant LRU, chat event bus, performance timings, last 1000 errors | Anything that must survive a restart |
 | Cloudinary | Image and video bytes, `public_id` under `tripthread_uploads/{userId}` | The `Media` row. That is Postgres |
