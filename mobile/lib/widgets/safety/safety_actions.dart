@@ -43,7 +43,8 @@ List<SafetyChoice> safetyChoices(String? outgoing) {
   return const [
     SafetyChoice(
       label: 'Restrict',
-      subtitle: 'Neither of you can send messages. This chat stays.',
+      subtitle:
+          'They no longer see your posts, and they cannot message you. You can still message them. This chat stays.',
       action: 'RESTRICT',
     ),
     SafetyChoice(

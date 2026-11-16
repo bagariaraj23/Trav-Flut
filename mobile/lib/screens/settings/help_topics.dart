@@ -18,10 +18,10 @@ class HelpTopic {
 }
 
 const safetyHelpPreview =
-    'Restrict keeps their posts off your Home, Discover, and search. '
-    'Their profile shows a name and username, plus trips, followers, and following. '
-    'You cannot message them or add them to a trip or group you created. '
-    'You do not see their last seen, typing, or read receipts. '
+    'If you restrict someone, they no longer see your posts on Home, Discover, or search. '
+    'Their profile of you keeps your name and username, and your trips, followers, and following. '
+    'They cannot message you or add you to a trip or group they created. You can still message them. '
+    'They do not see your last seen, typing, or read receipts. You still see their posts. '
     'Block hides each of you from the other, including search. Their profile looks the same as an account that is not there. '
     'You can unblock them from Settings. '
     'A trip or group someone else created can still include both of you.';
