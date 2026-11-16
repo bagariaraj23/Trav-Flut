@@ -1,6 +1,6 @@
 # Profiles and privacy
 
-One `User` row is both the login identity and the public profile. Privacy is a single boolean, `isPrivate`, default `false`. There is no separate profile table. Block is not a second privacy flag. It is a `UserSafetyRelation` row. When the profile owner blocked the viewer, `GET /users/:id` returns **404** `User not found`, the same body as a missing account. Stats, trips, and the follower and following lists do the same. Search omits both people. When the viewer blocked the profile, the response is a limited page: name and username, no photo, bio, or email, empty stats and trips, and `blockedByViewer: true` so the screen can show Unblock. That flag is not returned to the person who was blocked. When the profile owner restricted the viewer, the response stays **200** with `restrictedByThem: true`: name and username, no photo, bio, or email. Stats, trips, followers, and following stay available. Posts do not. See [Follow](./04-follow-system.md).
+One `User` row is both the login identity and the public profile. Privacy is a single boolean, `isPrivate`, default `false`. There is no separate profile table. Block is not a second privacy flag. It is a `UserSafetyRelation` row. When the profile owner blocked the viewer, `GET /users/:id` returns **404** `User not found`, the same body as a missing account. Stats, trips, and the follower and following lists do the same. Search omits both people. When the viewer blocked the profile, the response is a limited page: name and username, no photo, bio, or email, empty stats and trips, and `blockedByViewer: true` so the screen can show Unblock. That flag is not returned to the person who was blocked. When the profile owner restricted the viewer, the response stays **200** with `restrictedByThem: true`: name and username, no photo, bio, or email. Stats, trips, followers, following, and published posts stay available. Photo and bio do not. `GET /api/users/:id/posts` is the profile list. See [Follow](./04-follow-system.md).
 
 Primary files:
 
@@ -34,7 +34,7 @@ flowchart TD
   Missing -->|no| Own{"Did the viewer block this profile?"}
   Own -->|yes| Partial["Name and username, blockedByViewer"]
   Own -->|no| Restricted{"Did this profile restrict the viewer?"}
-  Restricted -->|yes| Thin["Name and username, restrictedByThem\ntrips and follow lists stay, posts do not"]
+  Restricted -->|yes| Thin["Name and username, restrictedByThem\ntrips, follow lists, and posts stay\nphoto and bio do not"]
   Restricted -->|no| Priv{"Target isPrivate and viewer is not the target?"}
   Priv -->|no| Full["Return profile including email"]
   Priv -->|yes| Follow{"Follow row exists?"}
