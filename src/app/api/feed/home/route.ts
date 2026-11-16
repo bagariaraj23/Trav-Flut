@@ -204,7 +204,7 @@ export async function GET(request: NextRequest) {
             postIds
           );
           const commentCounts = await visibleFinalPostCommentCounts(
-            finalPosts.map((post) => ({ id: post.id, userId: post.userId })),
+            rows.map((post) => ({ id: post.id, userId: post.userId })),
             currentUserId
           );
 
