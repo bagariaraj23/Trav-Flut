@@ -1296,7 +1296,7 @@
                 {
                     "name": "Password Reset Flow",
                     "status": "completed",
-                    "description": "Complete password reset system with email verification, secure token handling, and security event logging",
+                    "description": "Complete password reset system with email verification and secure token handling. The reset row is the audit; security events stay limited to abuse and moderation",
                     "pr": 21,
                     "merged": "2025-10-25"
                 },

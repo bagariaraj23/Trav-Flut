@@ -77,4 +77,3 @@ Password-reset cleanup and media cleanup are not inside the trip scheduler. Runn
 - No trace across the phone, the API, and Cloudinary. A failed confirm is a client log plus an API log.
 - Cache hit rate is the in-process counter behind `/api/admin/cache/metrics`, not a hosted dashboard.
 - Chat liveness is not in `/api/health`.
-- Security events for password reset do not persist, because the type strings are outside the enum. Rate-limit events do persist. See [Security](./16-security-middleware.md).

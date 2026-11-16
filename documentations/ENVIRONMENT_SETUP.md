@@ -279,7 +279,7 @@ Duration timeout = AppConfig.connectTimeout;
 
 - **Current password validation**: Users must enter their current password
 - **Token invalidation**: All refresh tokens are revoked after password reset
-- **Security logging**: All password reset events are logged with metadata
+- **Reset audit**: Each reset is stored on `password_resets` (token hash, expiry, use, IP, user agent). `security_events` keeps abuse and moderation, and a password reset stays off that log
 - **Password sanitization**: Sensitive data is automatically redacted from logs
 
 ### CORS Configuration

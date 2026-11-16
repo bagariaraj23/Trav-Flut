@@ -63,9 +63,9 @@ Zod schemas live in `src/lib/validation.ts`. `withValidation` turns a Zod error 
 
 `security_events` columns: `eventType`, optional `userId`, optional `entityType` and `entityId`, `ipAddress`, required `metadata` JSON, `createdAt`. Indexes `(eventType, createdAt)`, `(userId, createdAt)`, `(entityType, entityId)`.
 
-Enum: `COMMENT_REPORT`, `PROFANITY_DETECTED`, `RATE_LIMIT_HIT`, `ABUSE_DETECTED`, `UNAUTHORIZED_ACCESS`.
+Enum: `COMMENT_REPORT`, `PROFANITY_DETECTED`, `RATE_LIMIT_HIT`, `ABUSE_DETECTED`, `UNAUTHORIZED_ACCESS`. That set is abuse and moderation. A password reset is audited on `password_resets` (hash, expiry, use, IP, user agent) and by the password-changed email, which keeps account recovery out of this log.
 
-`recordSecurityEvent` from the password-reset service is called with `PASSWORD_RESET_REQUESTED`, `PASSWORD_RESET_SUCCESS`, and `PASSWORD_CHANGED`. Those are not in the enum. The Prisma create throws, and the `.catch(() => {})` drops it. Password resets are still real (the `password_resets` row and the email exist). They do not show up in `security_events`. If you add audit for password changes, extend the enum in a migration first.
+`recordSecurityEvent` from the password-reset service is called with `PASSWORD_RESET_REQUESTED`, `PASSWORD_RESET_SUCCESS`, and `PASSWORD_CHANGED`. Those strings are outside the enum, so the insert is dropped. That drop is the split above, and the enum stays limited to abuse and moderation. Rate-limit hits, including on the reset routes, still persist as `RATE_LIMIT_HIT`.
 
 ## Upload safety
 

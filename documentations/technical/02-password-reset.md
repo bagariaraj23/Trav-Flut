@@ -95,7 +95,9 @@ The transaction:
 4. Set `usedAt` **before** updating the password, so a crash cannot leave a valid token beside a new hash.
 5. `bcrypt.hash(newPassword, 12)` and update the user.
 
-After the transaction commits, `revokeAllRefreshTokens(userId)` deletes every refresh row. `sendSecurityEmail` notifies the address. `recordSecurityEvent` is called with string types `PASSWORD_RESET_REQUESTED`, `PASSWORD_RESET_SUCCESS`, and `PASSWORD_CHANGED`. Those strings are **not** members of the Prisma `SecurityEventType` enum (`COMMENT_REPORT`, `PROFANITY_DETECTED`, `RATE_LIMIT_HIT`, `ABUSE_DETECTED`, `UNAUTHORIZED_ACCESS`), and the call is `.catch(() => {})`. Those events do not persist. Rate-limit events, which use a real enum value, do persist. See [Security](./16-security-middleware.md).
+After the transaction commits, `revokeAllRefreshTokens(userId)` deletes every refresh row. `sendSecurityEmail` notifies the address.
+
+The audit of a reset is the `password_resets` row: `tokenHash`, `expiresAt`, `usedAt`, `createdIp`, and `userAgent`, plus the password-changed email. `security_events` is the abuse and moderation log (`COMMENT_REPORT`, `PROFANITY_DETECTED`, `RATE_LIMIT_HIT`, `ABUSE_DETECTED`, `UNAUTHORIZED_ACCESS`). Account recovery stays off that log. `recordSecurityEvent` is still called with `PASSWORD_RESET_REQUESTED`, `PASSWORD_RESET_SUCCESS`, and `PASSWORD_CHANGED`. Those strings sit outside `SecurityEventType`, the insert is dropped, and that is the intended split. A rate-limit hit on these routes still persists as `RATE_LIMIT_HIT`. See [Security](./16-security-middleware.md).
 
 ## Email
 

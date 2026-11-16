@@ -343,7 +343,7 @@ No denormalized follower counts. Stats are `count()` queries.
 
 ### SecurityEvent (`security_events`)
 
-`eventType`, optional user and entity, `ipAddress`, `metadata` JSON, `createdAt`. Indexes on type+time, user+time, entity.
+`eventType`, optional user and entity, `ipAddress`, `metadata` JSON, `createdAt`. Indexes on type+time, user+time, entity. The enum is abuse and moderation only. A password reset is audited on `password_resets`, and recovery strings passed to `recordSecurityEvent` are dropped because they are outside `SecurityEventType`.
 
 ## Social graph
 
