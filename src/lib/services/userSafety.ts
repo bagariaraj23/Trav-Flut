@@ -204,9 +204,9 @@ export async function viewerIsRestricted(
 }
 
 /**
- * The viewer's feeds and direct post views omit this author.
- * A block hides either person. A restrict hides the restrictor from the
- * restricted person, and leaves the other direction alone.
+ * Direct views of a post or thread entry omit this author only for a block.
+ * A restrict leaves the post on the author's profile and on a direct open.
+ * Home, Discover, live trips, and search use feedHiddenUserIds instead.
  */
 export async function postsHiddenFromViewer(
   authorId: string,
@@ -216,13 +216,7 @@ export async function postsHiddenFromViewer(
   const rows = await safetyRowsInvolving(viewerId);
   return rows.some((row) => {
     const other = otherUserId(row, viewerId);
-    if (other !== authorId) return false;
-    if (row.action === UserSafetyAction.BLOCK) return true;
-    return (
-      row.action === UserSafetyAction.RESTRICT &&
-      row.actorId === authorId &&
-      row.targetId === viewerId
-    );
+    return other === authorId && row.action === UserSafetyAction.BLOCK;
   });
 }
 
@@ -254,8 +248,8 @@ export async function blockedUserIds(viewerId: string): Promise<string[]> {
 /**
  * Authors and trip owners to leave out of Home, Discover, and live trips.
  * A block in either direction hides that person.
- * A restrict hides the restrictor's posts from the restricted person's feeds.
- * Profile pages stay available under Restrict.
+ * A restrict hides the restrictor's posts from the restricted person's
+ * Home, Discover, live trips, and search. The profile still lists them.
  */
 export async function feedHiddenUserIds(viewerId: string): Promise<string[]> {
   const ids = new Set<string>();

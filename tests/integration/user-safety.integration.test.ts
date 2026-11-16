@@ -7,6 +7,7 @@ import { cleanDb, createUser, createTrip, getAuthToken } from "../testUtils";
 import { GET as followGet, POST as followPost } from "../../src/app/api/follow/[userId]/route";
 import { GET as listFollowRequests, POST as createFollowRequest } from "../../src/app/api/follow/requests/route";
 import { GET as getUser } from "../../src/app/api/users/[id]/route";
+import { GET as getProfilePosts } from "../../src/app/api/users/[id]/posts/route";
 import { GET as searchUsers } from "../../src/app/api/users/route";
 import { GET as getHomeFeed } from "../../src/app/api/feed/home/route";
 import { GET as getDiscoverTrips } from "../../src/app/api/discover/trips/route";
@@ -552,7 +553,52 @@ describe("Restrict and Block", () => {
       { params: Promise.resolve({ id: trip.id }) }
     );
     expect(tripView.status).toBe(200);
-    expect(await canViewEntity(bob.id, "TRIP_FINAL_POST", post.id)).toBe(false);
+    expect(await canViewEntity(bob.id, "TRIP_FINAL_POST", post.id)).toBe(true);
+
+    const opened = await getPost(
+      new NextRequest(`http://localhost/api/posts/TRIP_FINAL_POST/${post.id}`, {
+        headers: auth,
+      }),
+      {
+        params: Promise.resolve({
+          entityType: "TRIP_FINAL_POST",
+          entityId: post.id,
+        }),
+      }
+    );
+    expect(opened.status).toBe(200);
+
+    const profilePosts = await getProfilePosts(
+      new NextRequest(`http://localhost/api/users/${alice.id}/posts`, {
+        headers: auth,
+      }),
+      { params: Promise.resolve({ id: alice.id }) }
+    );
+    const profilePostsBody = await profilePosts.json();
+    expect(profilePosts.status).toBe(200);
+    expect(
+      profilePostsBody.data.map((item: { id: string }) => item.id)
+    ).toContain(post.id);
+
+    const entry = await prisma.tripThreadEntry.create({
+      data: {
+        tripId: trip.id,
+        authorId: alice.id,
+        type: ThreadEntryType.TEXT,
+        contentText: "Visible on Alice's trip",
+      },
+    });
+    const entries = await getEntries(
+      new NextRequest(`http://localhost/api/trips/${trip.id}/entries`, {
+        headers: auth,
+      }),
+      { params: Promise.resolve({ id: trip.id }) }
+    );
+    const entriesBody = await entries.json();
+    expect(entries.status).toBe(200);
+    expect(
+      entriesBody.data.items.map((item: { id: string }) => item.id)
+    ).toContain(entry.id);
 
     const search = await searchUsers(
       new NextRequest("http://localhost/api/users?search=alicerestrict", {

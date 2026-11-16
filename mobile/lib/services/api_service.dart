@@ -1786,6 +1786,40 @@ class ApiService {
     }
   }
 
+  /// Published final posts on a profile. Restrict still returns them.
+  Future<ApiResponse<List<Map<String, dynamic>>>> getPostsForUser(
+    String userId,
+  ) async {
+    try {
+      final response = await _dio.get('/users/$userId/posts');
+      if (response.data['success'] == true && response.data['data'] is List) {
+        final posts = (response.data['data'] as List)
+            .whereType<Map>()
+            .map((item) => Map<String, dynamic>.from(item))
+            .toList();
+        return ApiResponse<List<Map<String, dynamic>>>(
+          success: true,
+          data: posts,
+        );
+      }
+      return ApiResponse<List<Map<String, dynamic>>>(
+        success: false,
+        error: response.data['error'] ?? 'Failed to load posts',
+      );
+    } on DioException catch (e) {
+      return ApiResponse<List<Map<String, dynamic>>>(
+        success: false,
+        error: e.response?.data['error'] ?? 'Network error occurred',
+      );
+    } catch (e) {
+      debugPrint('[ApiService] getPostsForUser error: $e');
+      return ApiResponse<List<Map<String, dynamic>>>(
+        success: false,
+        error: 'An unexpected error occurred',
+      );
+    }
+  }
+
   /// Profile: trips owned by or joined by [userId] (server enforces privacy).
   Future<ApiResponse<List<Trip>>> getTripsForUser(String userId) async {
     try {

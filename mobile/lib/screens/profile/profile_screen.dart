@@ -28,6 +28,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   List<Trip> _profileTrips = [];
   bool _profileTripsLoading = false;
   String? _profileTripsError;
+  List<Map<String, dynamic>> _profilePosts = [];
 
   @override
   void initState() {
@@ -47,7 +48,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
         authProvider.currentUser!.id,
       );
       await _loadProfileTrips();
+      await _loadProfilePosts();
     }
+  }
+
+  Future<void> _loadProfilePosts() async {
+    if (!mounted) return;
+    final res = await context.read<ApiService>().getPostsForUser(widget.userId);
+    if (!mounted) return;
+    setState(() {
+      _profilePosts = res.success && res.data != null ? res.data! : [];
+    });
   }
 
   Future<void> _loadProfileTrips() async {
@@ -93,6 +104,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         authProvider.currentUser!.id,
       );
       await _loadProfileTrips();
+      await _loadProfilePosts();
     }
   }
 
@@ -182,6 +194,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         authProvider.currentUser!.id,
       );
       await _loadProfileTrips();
+      await _loadProfilePosts();
     }
   }
 
@@ -306,6 +319,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     ),
                     if (user.blockedByViewer != true &&
                         user.viewerIsBlocked != true) ...[
+                      const SizedBox(height: 24),
+                      _buildPostsSection(context, user, isOwnProfile),
                       const SizedBox(height: 24),
                       _buildTripsSection(context, user, isOwnProfile),
                     ],
@@ -847,6 +862,69 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   );
                 },
               ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPostsSection(
+    BuildContext context,
+    User user,
+    bool isOwnProfile,
+  ) {
+    final title = isOwnProfile
+        ? 'Your posts'
+        : '${userPrimaryLabel(id: user.id, username: user.username, name: user.name)}\'s posts';
+    return Container(
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: Theme.of(context).colorScheme.outlineVariant,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(title, style: Theme.of(context).textTheme.headlineSmall),
+          const SizedBox(height: 16),
+          if (_profilePosts.isEmpty)
+            AppFeedback.empty(
+              context: context,
+              icon: Icons.article_outlined,
+              title: 'No posts yet',
+              subtitle: isOwnProfile
+                  ? 'A published final post will show up here'
+                  : 'Published posts stay on this profile',
+              expand: false,
+            )
+          else
+            ListView.separated(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: _profilePosts.length,
+              separatorBuilder: (_, _) => const Divider(height: 1),
+              itemBuilder: (context, index) {
+                final post = _profilePosts[index];
+                final caption = (post['caption'] as String?)?.trim();
+                final summary = (post['summaryText'] as String?)?.trim() ?? '';
+                return ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: Text(
+                    caption != null && caption.isNotEmpty ? caption : summary,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () {
+                    final id = post['id'] as String?;
+                    if (id == null) return;
+                    context.push('/post/TRIP_FINAL_POST/$id');
+                  },
+                );
+              },
             ),
         ],
       ),

@@ -44,7 +44,7 @@ List<SafetyChoice> safetyChoices(String? outgoing) {
     SafetyChoice(
       label: 'Restrict',
       subtitle:
-          'They no longer see your posts, and they cannot message you. You can still message them. This chat stays.',
+          'Your posts leave their Home, Discover, and search, and stay on your profile. They cannot message you. You can still message them.',
       action: 'RESTRICT',
     ),
     SafetyChoice(

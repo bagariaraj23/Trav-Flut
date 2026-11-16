@@ -18,8 +18,8 @@ class HelpTopic {
 }
 
 const safetyHelpPreview =
-    'If you restrict someone, they no longer see your posts on Home, Discover, or search. '
-    'Their profile of you keeps your name and username, and your trips, followers, and following. '
+    'If you restrict someone, your posts leave their Home, Discover, and search. '
+    'Your posts stay on your profile. That page keeps your name and username, and your trips, followers, and following. '
     'They cannot message you or add you to a trip or group they created. You can still message them. '
     'They do not see your last seen, typing, or read receipts. You still see their posts. '
     'Block hides each of you from the other, including search. Their profile looks the same as an account that is not there. '
@@ -34,7 +34,7 @@ const helpTopics = <HelpTopic>[
       HelpItem(
         question: 'What does Restrict do?',
         answer:
-            'If you restrict someone, they no longer see your posts on Home, Discover, or search. Their profile of you keeps your name and username, and your trips, followers, and following. Your photo, bio, and posts stay off that page. They cannot message you or add you to a trip or group they created. You can still message them. They do not see your last seen, typing, or read receipts. You still see their posts. A trip or group someone else created can include both of you.',
+            'If you restrict someone, your posts leave their Home, Discover, and search. Your posts stay on your profile. That page keeps your name and username, and your trips, followers, and following. Your photo and bio stay off that page. They cannot message you or add you to a trip or group they created. You can still message them. They do not see your last seen, typing, or read receipts. You still see their posts. A trip or group someone else created can include both of you.',
       ),
       HelpItem(
         question: 'What does Block do?',

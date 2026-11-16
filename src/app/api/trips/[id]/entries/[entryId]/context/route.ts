@@ -10,7 +10,7 @@ import {
 } from "@/types/api";
 import { serializePlace } from "@/lib/place";
 import { checkLikeStatus } from "@/lib/services/like";
-import { blockEitherWay, feedHiddenUserIds, postsHiddenFromViewer } from "@/lib/services/userSafety";
+import { blockEitherWay, blockedUserIds, postsHiddenFromViewer } from "@/lib/services/userSafety";
 
 const THREAD_ENTRY_LIST_INCLUDE = {
   author: {
@@ -204,7 +204,7 @@ export async function GET(
     const olderTake = Math.floor((contextSize - 1) / 2);
     const newerTake = contextSize - 1 - olderTake;
     const hiddenAuthors =
-      !isOwner && !isParticipant ? await feedHiddenUserIds(userId) : [];
+      !isOwner && !isParticipant ? await blockedUserIds(userId) : [];
     const authorFilter =
       hiddenAuthors.length > 0 ? { authorId: { notIn: hiddenAuthors } } : {};
 
