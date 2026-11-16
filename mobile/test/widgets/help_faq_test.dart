@@ -43,7 +43,7 @@ void main() {
     await tester.tap(find.byTooltip('What Restrict and Block do'));
     await tester.pumpAndSettle();
     expect(find.text('Restrict and Block'), findsOneWidget);
-    expect(find.textContaining('Your posts stay on your profile'), findsOneWidget);
+    expect(find.textContaining('photo, and bio stay on your profile'), findsOneWidget);
     expect(find.textContaining('cannot message you'), findsOneWidget);
     expect(find.text('Read the full guide'), findsOneWidget);
   });

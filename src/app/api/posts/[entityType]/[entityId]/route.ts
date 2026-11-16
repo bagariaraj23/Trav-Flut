@@ -7,6 +7,7 @@ import {
   handleApiError,
 } from "@/lib/middleware";
 import { checkLikeStatus } from "@/lib/services/like";
+import { visibleFinalPostCommentCounts } from "@/lib/services/comment";
 import { EntityType } from "@prisma/client";
 import {
   ApiResponse,
@@ -119,6 +120,10 @@ export async function GET(
             EntityType.TRIP_FINAL_POST,
             [post.id]
           );
+          const commentCounts = await visibleFinalPostCommentCounts(
+            [{ id: post.id, userId: post.userId }],
+            userId
+          );
 
           const response: TripFinalPostResponse & {
             likeCount: number;
@@ -139,7 +144,7 @@ export async function GET(
             createdAt: post.createdAt.toISOString(),
             updatedAt: post.updatedAt.toISOString(),
             likeCount: post.likeCount,
-            commentCount: post.commentCount,
+            commentCount: commentCounts.get(post.id) ?? post.commentCount,
             shareCount: post.shareCount,
             hasLiked: likeStatusMap[post.id] ?? false,
             user: post.user

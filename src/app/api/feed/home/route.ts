@@ -15,6 +15,7 @@ import {
 } from "@/lib/middleware";
 import { PerformanceMonitor, ErrorTracker } from "@/lib/monitoring";
 import { checkLikeStatus } from "@/lib/services/like";
+import { visibleFinalPostCommentCounts } from "@/lib/services/comment";
 import { decodeFeedCursor, encodeFeedCursor } from "@/lib/feedCursor";
 import { EntityType, Prisma } from "@prisma/client";
 import { omitHiddenTripSpend } from "@/lib/tripSpendVisibility";
@@ -189,6 +190,10 @@ export async function GET(request: NextRequest) {
             EntityType.TRIP_FINAL_POST,
             postIds
           );
+          const commentCounts = await visibleFinalPostCommentCounts(
+            finalPosts.map((post) => ({ id: post.id, userId: post.userId })),
+            currentUserId
+          );
 
           // Transform to response format with engagement data
           const finalPostsResponse: (TripFinalPostResponse & {
@@ -212,7 +217,7 @@ export async function GET(request: NextRequest) {
             createdAt: post.createdAt.toISOString(),
             updatedAt: post.updatedAt.toISOString(),
             likeCount: post.likeCount,
-            commentCount: post.commentCount,
+            commentCount: commentCounts.get(post.id) ?? post.commentCount,
             shareCount: post.shareCount,
             hasLiked: likeStatusMap[post.id] || false,
             user: post.user

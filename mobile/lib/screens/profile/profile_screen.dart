@@ -468,7 +468,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final subtitleStyle = _profileSubtitleStyle(context);
     final limitedByBlock =
         user.blockedByViewer == true || user.viewerIsBlocked == true;
-    final hidePhoto = limitedByBlock || user.restrictedByThem == true;
+    final hidePhoto = limitedByBlock;
 
     return Container(
       padding: const EdgeInsets.all(24),

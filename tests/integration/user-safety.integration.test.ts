@@ -12,6 +12,9 @@ import { GET as searchUsers } from "../../src/app/api/users/route";
 import { GET as getHomeFeed } from "../../src/app/api/feed/home/route";
 import { GET as getDiscoverTrips } from "../../src/app/api/discover/trips/route";
 import { GET as getPost } from "../../src/app/api/posts/[entityType]/[entityId]/route";
+import { POST as createCommentRoute } from "../../src/app/api/comments/route";
+import { PUT as updateCommentRoute } from "../../src/app/api/comments/[commentId]/route";
+import { GET as listCommentsRoute } from "../../src/app/api/comments/entity/[entityType]/[entityId]/route";
 import { GET as getTrip } from "../../src/app/api/trips/[id]/route";
 import { GET as getEntries } from "../../src/app/api/trips/[id]/entries/route";
 import { GET as getEntryContext } from "../../src/app/api/trips/[id]/entries/[entryId]/context/route";
@@ -543,10 +546,8 @@ describe("Restrict and Block", () => {
     expect(profile.status).toBe(200);
     expect(profileBody.data.username).toBe("alicerestrict");
     expect(profileBody.data.name).toBe("Alice Restrict");
-    expect(profileBody.data.restrictedByThem).toBe(true);
-    expect(profileBody.data.avatarUrl ?? null).toBeNull();
-    expect(profileBody.data.bio ?? null).toBeNull();
-    expect(profileBody.data.email ?? "").toBe("");
+    expect(profileBody.data.avatarUrl).toBe("https://cdn.example.com/alice-restrict.png");
+    expect(profileBody.data.bio).toBe("Alice bio");
 
     const tripView = await getTrip(
       new NextRequest(`http://localhost/api/trips/${trip.id}`, { headers: auth }),
@@ -610,8 +611,8 @@ describe("Restrict and Block", () => {
       (item: { id: string }) => item.id === alice.id
     );
     expect(found?.username).toBe("alicerestrict");
-    expect(found?.avatarUrl ?? null).toBeNull();
-    expect(found?.bio ?? null).toBeNull();
+    expect(found?.avatarUrl).toBe("https://cdn.example.com/alice-restrict.png");
+    expect(found?.bio).toBe("Alice bio");
   });
 
   it("hides a public trip thread from someone who is blocked", async () => {
@@ -729,5 +730,127 @@ describe("Restrict and Block", () => {
     expect(await signalRecipients(group.id, alice.id)).not.toContain(bob.id);
     expect(await signalRecipients(group.id, alice.id)).toContain(cara.id);
     expect(await signalRecipients(group.id, bob.id)).toContain(alice.id);
+  });
+
+  it("keeps a restricted person's final-post comment between the two of them", async () => {
+    const alice = await createUser({
+      email: "alice-quiet@test.com",
+      username: "alicequiet",
+    });
+    const bob = await createUser({
+      email: "bob-quiet@test.com",
+      username: "bobquiet",
+    });
+    const cara = await createUser({
+      email: "cara-quiet@test.com",
+      username: "caraquiet",
+    });
+    const trip = await createTrip({
+      userId: alice.id,
+      title: "Alice quiet post",
+      status: TripStatus.ENDED,
+    });
+    const post = await prisma.tripFinalPost.create({
+      data: {
+        tripId: trip.id,
+        userId: alice.id,
+        summaryText: "Public recap",
+        curatedMedia: ["https://cdn.example.com/alice-quiet.jpg"],
+        isPublished: true,
+        publishedAt: new Date(),
+        generationStatus: GenerationStatus.PUBLISHED,
+      },
+    });
+    await setSafetyAction(alice.id, bob.id, UserSafetyAction.RESTRICT);
+    const bobToken = await getAuthToken(bob);
+    const aliceToken = await getAuthToken(alice);
+    const caraToken = await getAuthToken(cara);
+
+    const mention = await createCommentRoute(
+      new NextRequest("http://localhost/api/comments", {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${bobToken}`,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          entityType: "TRIP_FINAL_POST",
+          entityId: post.id,
+          contentText: "hello @alicequiet",
+        }),
+      })
+    );
+    expect(mention.status).toBe(400);
+
+    const created = await createCommentRoute(
+      new NextRequest("http://localhost/api/comments", {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${bobToken}`,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          entityType: "TRIP_FINAL_POST",
+          entityId: post.id,
+          contentText: "only we should see this",
+        }),
+      })
+    );
+    const createdBody = await created.json();
+    expect(created.status).toBe(200);
+    const commentId = createdBody.data.id as string;
+
+    const edited = await updateCommentRoute(
+      new NextRequest(`http://localhost/api/comments/${commentId}`, {
+        method: "PUT",
+        headers: {
+          authorization: `Bearer ${bobToken}`,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({ contentText: "still @alicequiet" }),
+      }),
+      { params: Promise.resolve({ commentId }) }
+    );
+    expect(edited.status).toBe(400);
+
+    async function visibleIds(token: string) {
+      const response = await listCommentsRoute(
+        new NextRequest(
+          `http://localhost/api/comments/entity/TRIP_FINAL_POST/${post.id}`,
+          { headers: { authorization: `Bearer ${token}` } }
+        ),
+        {
+          params: Promise.resolve({
+            entityType: "TRIP_FINAL_POST",
+            entityId: post.id,
+          }),
+        }
+      );
+      const body = await response.json();
+      return body.data.items.map((item: { id: string }) => item.id) as string[];
+    }
+
+    async function shownCount(token: string) {
+      const response = await getPost(
+        new NextRequest(`http://localhost/api/posts/TRIP_FINAL_POST/${post.id}`, {
+          headers: { authorization: `Bearer ${token}` },
+        }),
+        {
+          params: Promise.resolve({
+            entityType: "TRIP_FINAL_POST",
+            entityId: post.id,
+          }),
+        }
+      );
+      const body = await response.json();
+      return body.data.commentCount as number;
+    }
+
+    expect(await visibleIds(aliceToken)).toContain(commentId);
+    expect(await visibleIds(bobToken)).toContain(commentId);
+    expect(await visibleIds(caraToken)).not.toContain(commentId);
+    expect(await shownCount(aliceToken)).toBe(1);
+    expect(await shownCount(bobToken)).toBe(1);
+    expect(await shownCount(caraToken)).toBe(0);
   });
 });
