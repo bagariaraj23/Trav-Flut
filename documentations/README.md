@@ -24,7 +24,7 @@ The full local stack (Postgres, API, scheduler, and the Flutter UI in the browse
 - [QUICKSTART.md](../QUICKSTART.md) - Full-stack and database-only start commands
 - [README.md](../README.md#-quick-start-with-docker-recommended) - Short start path and ports
 
-Production hosting stays Railway / Railpack. This Compose file is for local runs. Personalized final posts, Restrict, Block, and the media screens use the existing migrate-on-boot path. An old `db push` volume leaves the `READY` to `DRAFT` data migration unmarked so that boot runs it. Rebuild the web image after a Flutter change so port 8080 includes them.
+Production hosting stays Railway / Railpack. This Compose file is for local runs. Boot applies `prisma/migrations` with `prisma migrate deploy`. An old `db push` volume is baselined once, and data-only migrations stay unmarked so that boot can rewrite stored rows. Rebuild the web image after a Flutter change.
 
 ## Scheduler Documentation
 

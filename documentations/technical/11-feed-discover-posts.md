@@ -64,7 +64,7 @@ The 60 row cap is a bound on work, not a product promise that a user with more t
 
 Excludes the viewer's own trips (`userId != currentUserId`). Default statuses are `ONGOING` and `ENDED` (upcoming trips stay off discover). Optional `status`, `mood`, and `q`. `q` is trimmed to 80 characters and matched with `ILIKE` against title, description, owner name, username, and destinations.
 
-Audience `OR`: the owner is someone the viewer follows, or the owner is public. The ranked SQL also excludes owners in `feedHiddenUserIds` (a block either way, or someone who restricted the viewer). `GET /api/users` omits a blocked person entirely. Someone who restricted the viewer still appears in that viewer's search, with no photo or bio. The restrictor's own search still shows the restricted person as usual.
+Audience `OR`: the owner is someone the viewer follows, or the owner is public. The ranked SQL also excludes owners in `feedHiddenUserIds` (a block either way, or someone who restricted the viewer). `GET /api/users` omits a blocked person entirely. Someone who restricted the viewer still appears in that viewer's search, with photo and bio. The restrictor's own search still shows the restricted person as usual.
 
 Ranking is raw SQL, then a single Prisma `findMany` by those ids:
 

@@ -57,8 +57,9 @@ Rules in `comment.ts`:
 
 - A top-level comment targets `TRIP_FINAL_POST` or `TRIP_THREAD_ENTRY`.
 - A reply sets `parentCommentId`. `validateParentComment` rejects a parent that is itself a reply. Depth is one.
-- Only a top-level comment increments the parent entity's `commentCount`. Replies do not. The reply count on a comment is `_count.replies` at read time, not a column.
-- Mentions: `@all` is trip-scoped and expands through `tripTagResolution.ts` to members except the actor. Other `@username` tokens are looked up globally and kept only if `canViewEntity` says that person can see the parent. Each mention is a `TAG` notification.
+- Only a top-level comment increments the stored `commentCount`. Replies do not. Home and the post page do not show that stored number for a final post. They count the top-level comments the current viewer is allowed to see. The reply count on a final-post comment is the same kind of visible count. A thread entry still uses the stored `commentCount`, and its reply count is `_count.replies`.
+- Mentions: `@all` is trip-scoped and expands through `tripTagResolution.ts` to members except the actor. Other `@username` tokens are looked up globally and kept only if `canViewEntity` says that person can see the parent. Each mention is a `TAG` notification. On a final post, a comment or an edit is rejected when it mentions someone who has restricted the commenter. Trip-thread tags are a separate path and are not part of that check.
+- A comment on a final post from someone the author restricted is returned to the author and to that commenter. Other viewers do not get the comment or its replies. The comment count on the post, and the reply count on a parent, are counted from what that viewer can see. The author still receives the `COMMENT` notification. A mention inside that comment does not notify someone who cannot see it.
 - A top-level comment notifies the entity owner with type `COMMENT`. A reply notifies the parent author with `COMMENT_REPLY`. Metadata carries `contentPreview`, ids, and trip context so the inbox can route the tap.
 
 `PUT /api/comments/:commentId` edits text. `DELETE` is the author or the owner of the parent entity. Delete cascades replies and likes on those replies, and decrements `commentCount` once for a top-level comment.

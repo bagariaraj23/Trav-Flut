@@ -1,6 +1,6 @@
 # Profiles and privacy
 
-One `User` row is both the login identity and the public profile. Privacy is a single boolean, `isPrivate`, default `false`. There is no separate profile table. Block is not a second privacy flag. It is a `UserSafetyRelation` row. When the profile owner blocked the viewer, `GET /users/:id` returns **404** `User not found`, the same body as a missing account. Stats, trips, and the follower and following lists do the same. Search omits both people. When the viewer blocked the profile, the response is a limited page: name and username, no photo, bio, or email, empty stats and trips, and `blockedByViewer: true` so the screen can show Unblock. That flag is not returned to the person who was blocked. When the profile owner restricted the viewer, the response stays **200** with `restrictedByThem: true`: name and username, no photo, bio, or email. Stats, trips, followers, following, and published posts stay available. Photo and bio do not. `GET /api/users/:id/posts` is the profile list. See [Follow](./04-follow-system.md).
+One `User` row is both the login identity and the public profile. Privacy is a single boolean, `isPrivate`, default `false`. There is no separate profile table. Block is not a second privacy flag. It is a `UserSafetyRelation` row. When the profile owner blocked the viewer, `GET /users/:id` returns **404** `User not found`, the same body as a missing account. Stats, trips, and the follower and following lists do the same. Search omits both people. When the viewer blocked the profile, the response is a limited page: name and username, no photo, bio, or email, empty stats and trips, and `blockedByViewer: true` so the screen can show Unblock. That flag is not returned to the person who was blocked. When the profile owner restricted the viewer, the response stays **200** and is the same profile any other viewer of that account would get, including photo and bio. Stats, trips, followers, following, and published posts stay available. `GET /api/users/:id/posts` is the profile list. Search keeps the photo and bio as well. Only a block removes them. See [Follow](./04-follow-system.md).
 
 Primary files:
 
@@ -33,16 +33,14 @@ flowchart TD
   Missing -->|yes| Gone["404 User not found"]
   Missing -->|no| Own{"Did the viewer block this profile?"}
   Own -->|yes| Partial["Name and username, blockedByViewer"]
-  Own -->|no| Restricted{"Did this profile restrict the viewer?"}
-  Restricted -->|yes| Thin["Name and username, restrictedByThem\ntrips, follow lists, and posts stay\nphoto and bio do not"]
-  Restricted -->|no| Priv{"Target isPrivate and viewer is not the target?"}
+  Own -->|no| Priv{"Target isPrivate and viewer is not the target?"}
   Priv -->|no| Full["Return profile including email"]
   Priv -->|yes| Follow{"Follow row exists?"}
   Follow -->|yes| Limited["Limited profile: email empty, bio hidden"]
   Follow -->|no| Deny["403 This profile is private"]
 ```
 
-A follower of a private account sees a reduced profile, not a 403. A stranger, including an anonymous caller, gets **403**.
+A follower of a private account sees a reduced profile, not a 403. A stranger, including an anonymous caller, gets **403**. Restrict does not take a different branch. The restricted viewer gets the same profile, photo, and bio as anyone else who may see that account.
 
 `PUT /api/users/:id` is owner-only. `PATCH /api/users/:id/privacy` ignores the body and flips `isPrivate` to its opposite. The mobile toggle calls that PATCH.
 
@@ -57,7 +55,7 @@ A follower of a private account sees a reduced profile, not a 403. A stranger, i
 - Default page size 20, maximum 50.
 - Case-insensitive `contains` on `username` and `name`.
 - The current user is excluded.
-- Anyone in a block with the viewer, either direction, is excluded. Someone who restricted the viewer still appears, with no photo or bio.
+- Anyone in a block with the viewer, either direction, is excluded. Someone who restricted the viewer still appears, with photo and bio.
 - `deletedAt` is **not** filtered. Soft-deleted users have null usernames and rewritten emails, so they rarely match a name search, but the query itself does not exclude them.
 - Each row is a `DiscoverUserDto` with `isFollowing` and `isFollowedBy`.
 - This route does not use `withRateLimit`.
