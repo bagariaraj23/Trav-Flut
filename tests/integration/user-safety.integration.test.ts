@@ -1,0 +1,856 @@
+import { describe, it, expect, beforeEach } from "vitest";
+import { GenerationStatus, MediaType, ThreadEntryType, TripStatus, UserSafetyAction } from "@prisma/client";
+import { randomUUID } from "crypto";
+import { NextRequest } from "next/server";
+import { prisma } from "../../src/lib/prisma";
+import { cleanDb, createUser, createTrip, getAuthToken } from "../testUtils";
+import { GET as followGet, POST as followPost } from "../../src/app/api/follow/[userId]/route";
+import { GET as listFollowRequests, POST as createFollowRequest } from "../../src/app/api/follow/requests/route";
+import { GET as getUser } from "../../src/app/api/users/[id]/route";
+import { GET as getProfilePosts } from "../../src/app/api/users/[id]/posts/route";
+import { GET as searchUsers } from "../../src/app/api/users/route";
+import { GET as getHomeFeed } from "../../src/app/api/feed/home/route";
+import { GET as getDiscoverTrips } from "../../src/app/api/discover/trips/route";
+import { GET as getPost } from "../../src/app/api/posts/[entityType]/[entityId]/route";
+import { POST as createCommentRoute } from "../../src/app/api/comments/route";
+import { PUT as updateCommentRoute } from "../../src/app/api/comments/[commentId]/route";
+import { GET as listCommentsRoute } from "../../src/app/api/comments/entity/[entityType]/[entityId]/route";
+import { GET as getTrip } from "../../src/app/api/trips/[id]/route";
+import { GET as getEntries } from "../../src/app/api/trips/[id]/entries/route";
+import { GET as getEntryContext } from "../../src/app/api/trips/[id]/entries/[entryId]/context/route";
+import { canViewEntity } from "../../src/lib/auth/permissions";
+import {
+  addGroupParticipant,
+  createConversation,
+  getConversationMediaContext,
+  listConversationMedia,
+  sendMessage,
+  signalRecipients,
+} from "../../src/lib/services/chat";
+import {
+  createNotification,
+  getMergedNotifications,
+  getUnreadNotificationCount,
+} from "../../src/lib/services/notification";
+import {
+  CANNOT_ADD,
+  CANNOT_MESSAGE,
+  isProfileUnavailable,
+  listSafetyActions,
+  setSafetyAction,
+  clearSafetyAction,
+} from "../../src/lib/services/userSafety";
+import { AuthorizationError } from "../../src/lib/errors";
+import { TripInvitationService } from "../../src/lib/tripInvitation";
+
+describe("Restrict and Block", () => {
+  beforeEach(async () => {
+    await cleanDb();
+  });
+
+  it("stops direct messages both ways and keeps the existing thread", async () => {
+    const alice = await createUser({ email: "alice-restrict@test.com" });
+    const bob = await createUser({ email: "bob-restrict@test.com" });
+    const conv = await createConversation(
+      { type: "DM", participantIds: [bob.id] },
+      alice.id
+    );
+    await sendMessage(conv.id, alice.id, { content: "hello" });
+
+    await setSafetyAction(alice.id, bob.id, UserSafetyAction.RESTRICT);
+
+    await expect(
+      sendMessage(conv.id, bob.id, { content: "reply" })
+    ).rejects.toThrow(CANNOT_MESSAGE);
+    await expect(
+      sendMessage(conv.id, alice.id, { content: "again" })
+    ).resolves.toMatchObject({ content: "again" });
+    await expect(
+      createConversation(
+        { type: "GROUP", name: "Bob cannot add Alice", participantIds: [alice.id] },
+        bob.id
+      )
+    ).rejects.toThrow(CANNOT_ADD);
+
+    const stored = await prisma.chatMessage.findMany({
+      where: { conversationId: conv.id },
+    });
+    expect(stored).toHaveLength(2);
+
+    const carol = await createUser({ email: "carol-restrict@test.com" });
+    await setSafetyAction(alice.id, carol.id, UserSafetyAction.BLOCK);
+    await expect(
+      createConversation({ type: "DM", participantIds: [carol.id] }, alice.id)
+    ).rejects.toThrow(AuthorizationError);
+
+    const group = await createConversation(
+      { type: "GROUP", name: "Still open", participantIds: [bob.id] },
+      alice.id
+    );
+    await expect(
+      sendMessage(group.id, alice.id, { content: "group still works" })
+    ).resolves.toMatchObject({ content: "group still works" });
+  });
+
+  it("removes their follow and hides the profile", async () => {
+    const alice = await createUser({ email: "alice-block@test.com" });
+    const bob = await createUser({ email: "bob-block@test.com" });
+    await prisma.follow.create({
+      data: { followerId: bob.id, followeeId: alice.id },
+    });
+    await prisma.follow.create({
+      data: { followerId: alice.id, followeeId: bob.id },
+    });
+    await prisma.followRequest.create({
+      data: { followerId: bob.id, followeeId: alice.id, status: "PENDING" },
+    });
+    await prisma.followRequest.create({
+      data: { followerId: alice.id, followeeId: bob.id, status: "PENDING" },
+    });
+
+    await setSafetyAction(alice.id, bob.id, UserSafetyAction.BLOCK);
+
+    expect(await prisma.follow.count()).toBe(0);
+    expect(await prisma.followRequest.count()).toBe(0);
+    expect(await isProfileUnavailable(alice.id, bob.id)).toBe(true);
+    expect(await isProfileUnavailable(bob.id, alice.id)).toBe(false);
+
+    const listed = await listSafetyActions(alice.id, UserSafetyAction.BLOCK);
+    expect(listed.people.map((person) => person.id)).toEqual([bob.id]);
+
+    await expect(
+      setSafetyAction(alice.id, bob.id, UserSafetyAction.RESTRICT)
+    ).rejects.toThrow(/Unblock/);
+    await clearSafetyAction(alice.id, bob.id);
+    expect(await isProfileUnavailable(alice.id, bob.id)).toBe(false);
+  });
+
+  it("refuses a follow from someone who was blocked", async () => {
+    const alice = await createUser({ email: "alice-follow@test.com" });
+    const bob = await createUser({ email: "bob-follow@test.com" });
+    await setSafetyAction(alice.id, bob.id, UserSafetyAction.BLOCK);
+    const token = await getAuthToken(bob);
+    const followResponse = await followPost(
+      new NextRequest(`http://localhost/api/follow/${alice.id}`, {
+        method: "POST",
+        headers: { authorization: `Bearer ${token}` },
+      }),
+      { params: Promise.resolve({ userId: alice.id }) }
+    );
+    expect(followResponse.status).toBe(404);
+
+    const aliceToken = await getAuthToken(alice);
+    const reverseFollow = await followPost(
+      new NextRequest(`http://localhost/api/follow/${bob.id}`, {
+        method: "POST",
+        headers: { authorization: `Bearer ${aliceToken}` },
+      }),
+      { params: Promise.resolve({ userId: bob.id }) }
+    );
+    expect(reverseFollow.status).toBe(404);
+
+    const profileResponse = await getUser(
+      new NextRequest(`http://localhost/api/users/${alice.id}`, {
+        headers: { authorization: `Bearer ${token}` },
+      }),
+      { params: Promise.resolve({ id: alice.id }) }
+    );
+    const profileBody = await profileResponse.json();
+    expect(profileResponse.status).toBe(404);
+    expect(profileBody.error).toBe("User not found");
+    expect(profileBody.data).toBeUndefined();
+
+    const statusResponse = await followGet(
+      new NextRequest(`http://localhost/api/follow/${alice.id}`, {
+        headers: { authorization: `Bearer ${token}` },
+      }),
+      { params: Promise.resolve({ userId: alice.id }) }
+    );
+    expect(statusResponse.status).toBe(404);
+
+    const requestResponse = await createFollowRequest(
+      new NextRequest("http://localhost/api/follow/requests", {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${token}`,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({ followeeId: alice.id }),
+      })
+    );
+    expect(requestResponse.status).toBe(404);
+    expect(await prisma.followRequest.count()).toBe(0);
+
+    await prisma.followRequest.create({
+      data: { followerId: bob.id, followeeId: alice.id, status: "PENDING" },
+    });
+    const inbox = await listFollowRequests(
+      new NextRequest("http://localhost/api/follow/requests", {
+        headers: { authorization: `Bearer ${aliceToken}` },
+      })
+    );
+    const inboxBody = await inbox.json();
+    expect(inboxBody.data).toEqual([]);
+  });
+
+  it("keeps a blocked person's posts out of Home and Discover", async () => {
+    const alice = await createUser({
+      email: "alice-feed@test.com",
+      username: "alicefeed",
+      name: "Alice Feed",
+    });
+    const bob = await createUser({
+      email: "bob-feed@test.com",
+      username: "bobfeed",
+      name: "Bob Feed",
+    });
+    const trip = await createTrip({
+      userId: bob.id,
+      title: "Bob public trip",
+      status: TripStatus.ENDED,
+    });
+    const post = await prisma.tripFinalPost.create({
+      data: {
+        tripId: trip.id,
+        userId: bob.id,
+        summaryText: "Bob wrote a public recap long enough to publish here.",
+        curatedMedia: ["https://cdn.example.com/bob.jpg"],
+        isPublished: true,
+        publishedAt: new Date(),
+        generationStatus: GenerationStatus.PUBLISHED,
+      },
+    });
+
+    await prisma.user.update({
+      where: { id: alice.id },
+      data: {
+        avatarUrl: "https://cdn.example.com/alice.png",
+        bio: "Alice bio",
+      },
+    });
+    await prisma.user.update({
+      where: { id: bob.id },
+      data: {
+        avatarUrl: "https://cdn.example.com/bob.png",
+        bio: "Bob bio",
+      },
+    });
+    await setSafetyAction(alice.id, bob.id, UserSafetyAction.BLOCK);
+    const token = await getAuthToken(alice);
+    const auth = { authorization: `Bearer ${token}` };
+
+    const feed = await getHomeFeed(
+      new NextRequest("http://localhost/api/feed/home", { headers: auth })
+    );
+    const feedBody = await feed.json();
+    expect(feed.status).toBe(200);
+    expect(
+      feedBody.data.items.map((item: { id: string }) => item.id)
+    ).not.toContain(post.id);
+
+    const discover = await getDiscoverTrips(
+      new NextRequest(
+        "http://localhost/api/discover/trips?q=Bob%20public",
+        { headers: auth }
+      )
+    );
+    const discoverBody = await discover.json();
+    expect(discover.status).toBe(200);
+    expect(
+      discoverBody.data.items.map((item: { id: string }) => item.id)
+    ).not.toContain(trip.id);
+
+    const search = await searchUsers(
+      new NextRequest("http://localhost/api/users?search=bobfeed", {
+        headers: auth,
+      })
+    );
+    const searchBody = await search.json();
+    expect(search.status).toBe(200);
+    expect(
+      searchBody.data.items.find((item: { id: string }) => item.id === bob.id)
+    ).toBeUndefined();
+
+    const bobToken = await getAuthToken(bob);
+    const bobSearch = await searchUsers(
+      new NextRequest("http://localhost/api/users?search=alicefeed", {
+        headers: { authorization: `Bearer ${bobToken}` },
+      })
+    );
+    const bobSearchBody = await bobSearch.json();
+    expect(
+      bobSearchBody.data.items.find(
+        (item: { id: string }) => item.id === alice.id
+      )
+    ).toBeUndefined();
+
+    const profile = await getUser(
+      new NextRequest(`http://localhost/api/users/${bob.id}`, {
+        headers: auth,
+      }),
+      { params: Promise.resolve({ id: bob.id }) }
+    );
+    const profileBody = await profile.json();
+    expect(profile.status).toBe(200);
+    expect(profileBody.data.blockedByViewer).toBe(true);
+    expect(profileBody.data.viewerIsBlocked ?? false).toBe(false);
+    expect(profileBody.data.email).toBe("");
+    expect(profileBody.data.username).toBe("bobfeed");
+    expect(profileBody.data.name).toBe("Bob Feed");
+    expect(profileBody.data.avatarUrl ?? null).toBeNull();
+    expect(profileBody.data.bio ?? null).toBeNull();
+
+    const aliceProfile = await getUser(
+      new NextRequest(`http://localhost/api/users/${alice.id}`, {
+        headers: { authorization: `Bearer ${bobToken}` },
+      }),
+      { params: Promise.resolve({ id: alice.id }) }
+    );
+    const aliceProfileBody = await aliceProfile.json();
+    expect(aliceProfile.status).toBe(404);
+    expect(aliceProfileBody.error).toBe("User not found");
+    expect(aliceProfileBody.data).toBeUndefined();
+
+    const bobFeed = await getHomeFeed(
+      new NextRequest("http://localhost/api/feed/home", {
+        headers: { authorization: `Bearer ${bobToken}` },
+      })
+    );
+    const bobFeedBody = await bobFeed.json();
+    expect(
+      bobFeedBody.data.items.map((item: { userId: string }) => item.userId)
+    ).not.toContain(alice.id);
+
+    const opened = await getPost(
+      new NextRequest(
+        `http://localhost/api/posts/TRIP_FINAL_POST/${post.id}`,
+        { headers: auth }
+      ),
+      {
+        params: Promise.resolve({
+          entityType: "TRIP_FINAL_POST",
+          entityId: post.id,
+        }),
+      }
+    );
+    const tripView = await getTrip(
+      new NextRequest(`http://localhost/api/trips/${trip.id}`, {
+        headers: auth,
+      }),
+      { params: Promise.resolve({ id: trip.id }) }
+    );
+    expect(tripView.status).toBe(404);
+
+    expect(opened.status).toBe(403);
+    expect(await canViewEntity(alice.id, "TRIP_FINAL_POST", post.id)).toBe(
+      false
+    );
+
+    await clearSafetyAction(alice.id, bob.id);
+    const restored = await getHomeFeed(
+      new NextRequest("http://localhost/api/feed/home", { headers: auth })
+    );
+    const restoredBody = await restored.json();
+    expect(
+      restoredBody.data.items.map((item: { id: string }) => item.id)
+    ).toContain(post.id);
+    const restoredDiscover = await getDiscoverTrips(
+      new NextRequest(
+        "http://localhost/api/discover/trips?q=Bob%20public",
+        { headers: auth }
+      )
+    );
+    const restoredDiscoverBody = await restoredDiscover.json();
+    expect(
+      restoredDiscoverBody.data.items.map((item: { id: string }) => item.id)
+    ).toContain(trip.id);
+    expect(await canViewEntity(alice.id, "TRIP_FINAL_POST", post.id)).toBe(
+      true
+    );
+
+    const restoredProfile = await getUser(
+      new NextRequest(`http://localhost/api/users/${bob.id}`, {
+        headers: auth,
+      }),
+      { params: Promise.resolve({ id: bob.id }) }
+    );
+    const restoredProfileBody = await restoredProfile.json();
+    expect(restoredProfile.status).toBe(200);
+    expect(restoredProfileBody.data.blockedByViewer ?? false).toBe(false);
+    expect(restoredProfileBody.data.email).toBe(bob.email);
+  });
+
+  it("lets a third person put both people on their trip and group", async () => {
+    const alice = await createUser({ email: "alice-trip@test.com" });
+    const bob = await createUser({ email: "bob-trip@test.com" });
+    const cara = await createUser({ email: "cara-trip@test.com" });
+    await setSafetyAction(alice.id, bob.id, UserSafetyAction.BLOCK);
+
+    const aliceTrip = await createTrip({
+      userId: alice.id,
+      title: "Alice trip",
+    });
+    await expect(
+      TripInvitationService.sendInvitation(aliceTrip.id, alice.id, bob.id)
+    ).rejects.toThrow(CANNOT_ADD);
+
+    const caraTrip = await createTrip({ userId: cara.id, title: "Cara trip" });
+    await expect(
+      TripInvitationService.sendInvitation(caraTrip.id, cara.id, alice.id)
+    ).resolves.toMatchObject({ status: "PENDING" });
+    await expect(
+      TripInvitationService.sendInvitation(caraTrip.id, cara.id, bob.id)
+    ).resolves.toMatchObject({ status: "PENDING" });
+
+    const caraGroup = await createConversation(
+      { type: "GROUP", name: "Cara group", participantIds: [alice.id] },
+      cara.id
+    );
+    await expect(
+      addGroupParticipant(caraGroup.id, cara.id, bob.id)
+    ).resolves.toBeTruthy();
+
+    const aliceGroup = await createConversation(
+      { type: "GROUP", name: "Alice group", participantIds: [cara.id] },
+      alice.id
+    );
+    await expect(
+      addGroupParticipant(aliceGroup.id, alice.id, bob.id)
+    ).rejects.toThrow(CANNOT_ADD);
+  });
+
+  it("pages conversation media newest first", async () => {
+    const alice = await createUser({ email: "alice-media@test.com" });
+    const bob = await createUser({ email: "bob-media@test.com" });
+    const conv = await createConversation(
+      { type: "DM", participantIds: [bob.id] },
+      alice.id
+    );
+    const first = await prisma.media.create({
+      data: {
+        url: "https://cdn.example.com/one.jpg",
+        publicId: `one-${randomUUID()}`,
+        type: MediaType.IMAGE,
+        uploadedById: alice.id,
+      },
+    });
+    const second = await prisma.media.create({
+      data: {
+        url: "https://cdn.example.com/two.jpg",
+        publicId: `two-${randomUUID()}`,
+        type: MediaType.IMAGE,
+        uploadedById: alice.id,
+        createdAt: new Date(Date.now() + 1000),
+      },
+    });
+    await sendMessage(conv.id, alice.id, {
+      content: "one",
+      attachmentMediaIds: [first.id],
+    });
+    await sendMessage(conv.id, alice.id, {
+      content: "two",
+      attachmentMediaIds: [second.id],
+    });
+
+    const page = await listConversationMedia(conv.id, bob.id, { limit: 1 });
+    expect(page.items).toHaveLength(1);
+    expect(page.hasMore).toBe(true);
+    expect(page.items[0].id).toBe(second.id);
+    const next = await listConversationMedia(conv.id, bob.id, {
+      limit: 1,
+      cursor: page.nextCursor!,
+    });
+    expect(next.items.map((item) => item.id)).toEqual([first.id]);
+    expect(next.hasMore).toBe(false);
+
+    const third = await prisma.media.create({
+      data: {
+        url: "https://cdn.example.com/three.jpg",
+        publicId: `three-${randomUUID()}`,
+        type: MediaType.IMAGE,
+        uploadedById: alice.id,
+        createdAt: new Date(Date.now() + 2000),
+      },
+    });
+    await sendMessage(conv.id, alice.id, {
+      content: "three",
+      attachmentMediaIds: [third.id],
+    });
+    const window = await getConversationMediaContext(conv.id, bob.id, first.id, 3);
+    expect(window.items.map((item) => item.id)).toContain(first.id);
+    expect(window.items[window.index].id).toBe(first.id);
+    expect(window.hasMoreNewer).toBe(true);
+  });
+
+  it("keeps a restricted person's feed clear while the profile stays open", async () => {
+    const alice = await createUser({
+      email: "alice-restrict-feed@test.com",
+      username: "alicerestrict",
+      name: "Alice Restrict",
+    });
+    const bob = await createUser({
+      email: "bob-restrict-feed@test.com",
+      username: "bobrestrict",
+      name: "Bob Restrict",
+    });
+    const trip = await createTrip({
+      userId: alice.id,
+      title: "Alice restricted trip",
+      status: TripStatus.ENDED,
+    });
+    const post = await prisma.tripFinalPost.create({
+      data: {
+        tripId: trip.id,
+        userId: alice.id,
+        summaryText: "Alice wrote a public recap that Bob should not see in the feed.",
+        curatedMedia: ["https://cdn.example.com/alice-restrict.jpg"],
+        isPublished: true,
+        publishedAt: new Date(),
+        generationStatus: GenerationStatus.PUBLISHED,
+      },
+    });
+    await prisma.user.update({
+      where: { id: alice.id },
+      data: {
+        avatarUrl: "https://cdn.example.com/alice-restrict.png",
+        bio: "Alice bio",
+      },
+    });
+    await setSafetyAction(alice.id, bob.id, UserSafetyAction.RESTRICT);
+    const bobToken = await getAuthToken(bob);
+    const auth = { authorization: `Bearer ${bobToken}` };
+
+    const feed = await getHomeFeed(
+      new NextRequest("http://localhost/api/feed/home", { headers: auth })
+    );
+    const feedBody = await feed.json();
+    expect(
+      feedBody.data.items.map((item: { id: string }) => item.id)
+    ).not.toContain(post.id);
+
+    const discover = await getDiscoverTrips(
+      new NextRequest("http://localhost/api/discover/trips?q=Alice%20restricted", {
+        headers: auth,
+      })
+    );
+    const discoverBody = await discover.json();
+    expect(
+      discoverBody.data.items.map((item: { id: string }) => item.id)
+    ).not.toContain(trip.id);
+
+    const profile = await getUser(
+      new NextRequest(`http://localhost/api/users/${alice.id}`, { headers: auth }),
+      { params: Promise.resolve({ id: alice.id }) }
+    );
+    const profileBody = await profile.json();
+    expect(profile.status).toBe(200);
+    expect(profileBody.data.username).toBe("alicerestrict");
+    expect(profileBody.data.name).toBe("Alice Restrict");
+    expect(profileBody.data.avatarUrl).toBe("https://cdn.example.com/alice-restrict.png");
+    expect(profileBody.data.bio).toBe("Alice bio");
+
+    const tripView = await getTrip(
+      new NextRequest(`http://localhost/api/trips/${trip.id}`, { headers: auth }),
+      { params: Promise.resolve({ id: trip.id }) }
+    );
+    expect(tripView.status).toBe(200);
+    expect(await canViewEntity(bob.id, "TRIP_FINAL_POST", post.id)).toBe(true);
+
+    const opened = await getPost(
+      new NextRequest(`http://localhost/api/posts/TRIP_FINAL_POST/${post.id}`, {
+        headers: auth,
+      }),
+      {
+        params: Promise.resolve({
+          entityType: "TRIP_FINAL_POST",
+          entityId: post.id,
+        }),
+      }
+    );
+    expect(opened.status).toBe(200);
+
+    const profilePosts = await getProfilePosts(
+      new NextRequest(`http://localhost/api/users/${alice.id}/posts`, {
+        headers: auth,
+      }),
+      { params: Promise.resolve({ id: alice.id }) }
+    );
+    const profilePostsBody = await profilePosts.json();
+    expect(profilePosts.status).toBe(200);
+    expect(
+      profilePostsBody.data.map((item: { id: string }) => item.id)
+    ).toContain(post.id);
+
+    const entry = await prisma.tripThreadEntry.create({
+      data: {
+        tripId: trip.id,
+        authorId: alice.id,
+        type: ThreadEntryType.TEXT,
+        contentText: "Visible on Alice's trip",
+      },
+    });
+    const entries = await getEntries(
+      new NextRequest(`http://localhost/api/trips/${trip.id}/entries`, {
+        headers: auth,
+      }),
+      { params: Promise.resolve({ id: trip.id }) }
+    );
+    const entriesBody = await entries.json();
+    expect(entries.status).toBe(200);
+    expect(
+      entriesBody.data.items.map((item: { id: string }) => item.id)
+    ).toContain(entry.id);
+
+    const search = await searchUsers(
+      new NextRequest("http://localhost/api/users?search=alicerestrict", {
+        headers: auth,
+      })
+    );
+    const searchBody = await search.json();
+    const found = searchBody.data.items.find(
+      (item: { id: string }) => item.id === alice.id
+    );
+    expect(found?.username).toBe("alicerestrict");
+    expect(found?.avatarUrl).toBe("https://cdn.example.com/alice-restrict.png");
+    expect(found?.bio).toBe("Alice bio");
+  });
+
+  it("hides a public trip thread from someone who is blocked", async () => {
+    const alice = await createUser({ email: "alice-thread@test.com" });
+    const bob = await createUser({ email: "bob-thread@test.com" });
+    const cara = await createUser({ email: "cara-thread@test.com" });
+    const aliceTrip = await createTrip({
+      userId: alice.id,
+      title: "Alice public thread",
+      status: TripStatus.ONGOING,
+    });
+    const media = await prisma.media.create({
+      data: {
+        url: "https://cdn.example.com/alice-thread.jpg",
+        publicId: `thread-${randomUUID()}`,
+        type: MediaType.IMAGE,
+        uploadedById: alice.id,
+        tripId: aliceTrip.id,
+      },
+    });
+    const entry = await prisma.tripThreadEntry.create({
+      data: {
+        tripId: aliceTrip.id,
+        authorId: alice.id,
+        type: ThreadEntryType.MEDIA,
+        mediaId: media.id,
+      },
+    });
+    await setSafetyAction(alice.id, bob.id, UserSafetyAction.BLOCK);
+    const bobToken = await getAuthToken(bob);
+    const entries = await getEntries(
+      new NextRequest(`http://localhost/api/trips/${aliceTrip.id}/entries`, {
+        headers: { authorization: `Bearer ${bobToken}` },
+      }),
+      { params: Promise.resolve({ id: aliceTrip.id }) }
+    );
+    expect(entries.status).toBe(404);
+
+    const context = await getEntryContext(
+      new NextRequest(
+        `http://localhost/api/trips/${aliceTrip.id}/entries/${entry.id}/context`,
+        { headers: { authorization: `Bearer ${bobToken}` } }
+      ),
+      { params: Promise.resolve({ id: aliceTrip.id, entryId: entry.id }) }
+    );
+    expect(context.status).toBe(404);
+    expect(await canViewEntity(bob.id, "TRIP_THREAD_ENTRY", entry.id)).toBe(false);
+
+    const caraTrip = await createTrip({
+      userId: cara.id,
+      title: "Cara public thread",
+      status: TripStatus.ONGOING,
+    });
+    const caraEntry = await prisma.tripThreadEntry.create({
+      data: {
+        tripId: caraTrip.id,
+        authorId: alice.id,
+        type: ThreadEntryType.TEXT,
+        contentText: "Alice wrote this on Cara's trip",
+      },
+    });
+    const caraEntries = await getEntries(
+      new NextRequest(`http://localhost/api/trips/${caraTrip.id}/entries`, {
+        headers: { authorization: `Bearer ${bobToken}` },
+      }),
+      { params: Promise.resolve({ id: caraTrip.id }) }
+    );
+    const caraBody = await caraEntries.json();
+    expect(caraEntries.status).toBe(200);
+    expect(
+      caraBody.data.items.map((item: { id: string }) => item.id)
+    ).not.toContain(caraEntry.id);
+  });
+
+  it("drops notifications and live signals across a block, and hides the restrictor's signals", async () => {
+    const alice = await createUser({ email: "alice-signal@test.com" });
+    const bob = await createUser({ email: "bob-signal@test.com" });
+    const cara = await createUser({ email: "cara-signal@test.com" });
+    const group = await createConversation(
+      { type: "GROUP", name: "Signals", participantIds: [bob.id, cara.id] },
+      alice.id
+    );
+    const dm = await createConversation(
+      { type: "DM", participantIds: [bob.id] },
+      alice.id
+    );
+    await createNotification({
+      type: "LIKE",
+      actorId: bob.id,
+      recipientId: alice.id,
+      metadata: { contentPreview: "liked" },
+    });
+    await setSafetyAction(alice.id, bob.id, UserSafetyAction.BLOCK);
+    expect(
+      await createNotification({
+        type: "COMMENT",
+        actorId: bob.id,
+        recipientId: alice.id,
+      })
+    ).toBeNull();
+    const inbox = await getMergedNotifications(alice.id);
+    expect(inbox.items.map((item) => item.actor.id)).not.toContain(bob.id);
+    expect(await getUnreadNotificationCount(alice.id)).toBe(0);
+
+    expect(await signalRecipients(group.id, alice.id)).not.toContain(bob.id);
+    expect(await signalRecipients(group.id, alice.id)).toContain(cara.id);
+    expect(await signalRecipients(group.id, bob.id)).not.toContain(alice.id);
+    expect(await signalRecipients(dm.id, alice.id)).toEqual([]);
+    expect(await signalRecipients(dm.id, bob.id)).toEqual([]);
+
+    await clearSafetyAction(alice.id, bob.id);
+    await setSafetyAction(alice.id, bob.id, UserSafetyAction.RESTRICT);
+    expect(await signalRecipients(dm.id, alice.id)).toEqual([]);
+    expect(await signalRecipients(dm.id, bob.id)).toEqual([]);
+    expect(await signalRecipients(group.id, alice.id)).not.toContain(bob.id);
+    expect(await signalRecipients(group.id, alice.id)).toContain(cara.id);
+    expect(await signalRecipients(group.id, bob.id)).toContain(alice.id);
+  });
+
+  it("keeps a restricted person's final-post comment between the two of them", async () => {
+    const alice = await createUser({
+      email: "alice-quiet@test.com",
+      username: "alicequiet",
+    });
+    const bob = await createUser({
+      email: "bob-quiet@test.com",
+      username: "bobquiet",
+    });
+    const cara = await createUser({
+      email: "cara-quiet@test.com",
+      username: "caraquiet",
+    });
+    const trip = await createTrip({
+      userId: alice.id,
+      title: "Alice quiet post",
+      status: TripStatus.ENDED,
+    });
+    const post = await prisma.tripFinalPost.create({
+      data: {
+        tripId: trip.id,
+        userId: alice.id,
+        summaryText: "Public recap",
+        curatedMedia: ["https://cdn.example.com/alice-quiet.jpg"],
+        isPublished: true,
+        publishedAt: new Date(),
+        generationStatus: GenerationStatus.PUBLISHED,
+      },
+    });
+    await setSafetyAction(alice.id, bob.id, UserSafetyAction.RESTRICT);
+    const bobToken = await getAuthToken(bob);
+    const aliceToken = await getAuthToken(alice);
+    const caraToken = await getAuthToken(cara);
+
+    const mention = await createCommentRoute(
+      new NextRequest("http://localhost/api/comments", {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${bobToken}`,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          entityType: "TRIP_FINAL_POST",
+          entityId: post.id,
+          contentText: "hello @alicequiet",
+        }),
+      })
+    );
+    expect(mention.status).toBe(400);
+
+    const created = await createCommentRoute(
+      new NextRequest("http://localhost/api/comments", {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${bobToken}`,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          entityType: "TRIP_FINAL_POST",
+          entityId: post.id,
+          contentText: "only we should see this",
+        }),
+      })
+    );
+    const createdBody = await created.json();
+    expect(created.status).toBe(200);
+    const commentId = createdBody.data.id as string;
+
+    const edited = await updateCommentRoute(
+      new NextRequest(`http://localhost/api/comments/${commentId}`, {
+        method: "PUT",
+        headers: {
+          authorization: `Bearer ${bobToken}`,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({ contentText: "still @alicequiet" }),
+      }),
+      { params: Promise.resolve({ commentId }) }
+    );
+    expect(edited.status).toBe(400);
+
+    async function visibleIds(token: string) {
+      const response = await listCommentsRoute(
+        new NextRequest(
+          `http://localhost/api/comments/entity/TRIP_FINAL_POST/${post.id}`,
+          { headers: { authorization: `Bearer ${token}` } }
+        ),
+        {
+          params: Promise.resolve({
+            entityType: "TRIP_FINAL_POST",
+            entityId: post.id,
+          }),
+        }
+      );
+      const body = await response.json();
+      return body.data.items.map((item: { id: string }) => item.id) as string[];
+    }
+
+    async function shownCount(token: string) {
+      const response = await getPost(
+        new NextRequest(`http://localhost/api/posts/TRIP_FINAL_POST/${post.id}`, {
+          headers: { authorization: `Bearer ${token}` },
+        }),
+        {
+          params: Promise.resolve({
+            entityType: "TRIP_FINAL_POST",
+            entityId: post.id,
+          }),
+        }
+      );
+      const body = await response.json();
+      return body.data.commentCount as number;
+    }
+
+    expect(await visibleIds(aliceToken)).toContain(commentId);
+    expect(await visibleIds(bobToken)).toContain(commentId);
+    expect(await visibleIds(caraToken)).not.toContain(commentId);
+    expect(await shownCount(aliceToken)).toBe(1);
+    expect(await shownCount(bobToken)).toBe(1);
+    expect(await shownCount(caraToken)).toBe(0);
+  });
+});

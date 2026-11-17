@@ -1,5 +1,6 @@
 import { EntityType } from '@prisma/client';
 import { prisma } from '../prisma';
+import { postsHiddenFromViewer } from '../services/userSafety';
 
 export class PermissionError extends Error {
   constructor(message: string) {
@@ -19,15 +20,16 @@ export async function canViewEntity(
       select: {
         id: true,
         tripId: true,
+        userId: true,
         isPublished: true,
+        user: {
+          select: {
+            isPrivate: true,
+          },
+        },
         trip: {
           select: {
             userId: true,
-            user: {
-              select: {
-                isPrivate: true,
-              },
-            },
           },
         },
       },
@@ -35,28 +37,24 @@ export async function canViewEntity(
 
     if (!post) return false;
 
-    // If draft (not published), restrict access to owner and participants only
+    // A draft belongs to its author until they publish it.
     if (!post.isPublished) {
-      if (!userId) return false;
-      if (userId === post.trip.userId) return true;
-
-      const participant = await prisma.tripParticipant.findUnique({
-        where: {
-          tripId_userId: {
-            tripId: post.tripId,
-            userId,
-          },
-        },
-      });
-      return !!participant;
+      return !!userId && userId === post.userId;
     }
 
-    const owner = post.trip.user;
-    if (!owner.isPrivate) return true;
+    if (
+      userId &&
+      userId !== post.userId &&
+      (await postsHiddenFromViewer(post.userId, userId))
+    ) {
+      return false;
+    }
+
+    if (!post.user.isPrivate) return true;
 
     if (!userId) return false;
 
-    if (userId === post.trip.userId) return true;
+    if (userId === post.userId || userId === post.trip.userId) return true;
 
     const participant = await prisma.tripParticipant.findUnique({
       where: {
@@ -72,7 +70,7 @@ export async function canViewEntity(
       where: {
         followerId_followeeId: {
           followerId: userId,
-          followeeId: post.trip.userId,
+          followeeId: post.userId,
         },
       },
     });
@@ -86,6 +84,7 @@ export async function canViewEntity(
       select: {
         id: true,
         tripId: true,
+        authorId: true,
         trip: {
           select: {
             userId: true,
@@ -102,21 +101,32 @@ export async function canViewEntity(
     if (!entry) return false;
 
     const owner = entry.trip.user;
+    const isOwner = !!userId && userId === entry.trip.userId;
+    const participant = userId
+      ? await prisma.tripParticipant.findUnique({
+          where: {
+            tripId_userId: {
+              tripId: entry.tripId,
+              userId,
+            },
+          },
+        })
+      : null;
+    const isMember = isOwner || !!participant;
+
+    if (
+      userId &&
+      !isMember &&
+      ((await postsHiddenFromViewer(entry.trip.userId, userId)) ||
+        (entry.authorId !== userId &&
+          (await postsHiddenFromViewer(entry.authorId, userId))))
+    ) {
+      return false;
+    }
+
     if (!owner.isPrivate) return true;
-
     if (!userId) return false;
-
-    if (userId === entry.trip.userId) return true;
-
-    const participant = await prisma.tripParticipant.findUnique({
-      where: {
-        tripId_userId: {
-          tripId: entry.tripId,
-          userId,
-        },
-      },
-    });
-    if (participant) return true;
+    if (isMember) return true;
 
     const follow = await prisma.follow.findUnique({
       where: {
@@ -199,6 +209,7 @@ export async function canDeleteComment(userId: string, commentId: string): Promi
     const post = await prisma.tripFinalPost.findUnique({
       where: { id: comment.entityId },
       select: {
+        userId: true,
         trip: {
           select: {
             userId: true,
@@ -207,7 +218,7 @@ export async function canDeleteComment(userId: string, commentId: string): Promi
       },
     });
 
-    return post?.trip.userId === userId;
+    return post?.userId === userId || post?.trip.userId === userId;
   }
 
   if (comment.entityType === 'TRIP_THREAD_ENTRY') {

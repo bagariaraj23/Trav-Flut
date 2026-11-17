@@ -1189,25 +1189,19 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
                 ),
                 const SizedBox(height: 8),
               ],
-              if (isOwner)
+              if (_isOwnerOrParticipant())
                 ElevatedButton.icon(
                   onPressed: () {
                     context.go('/trip/${widget.tripId}/final-post');
                   },
                   icon: const Icon(Icons.auto_awesome),
                   label: Text(
-                    _trip!.finalPost != null
-                        ? 'View Final Post'
-                        : 'Create Final Post',
+                    _trip!.finalPost == null
+                        ? 'Create your final post'
+                        : _trip!.finalPost!.isPublished
+                            ? 'Your final post'
+                            : 'Edit your final post',
                   ),
-                )
-              else if (_trip!.finalPost != null && _isOwnerOrParticipant())
-                ElevatedButton.icon(
-                  onPressed: () {
-                    context.go('/trip/${widget.tripId}/final-post');
-                  },
-                  icon: const Icon(Icons.auto_awesome),
-                  label: const Text('View Final Post'),
                 ),
             ],
           ],

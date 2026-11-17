@@ -25,6 +25,12 @@ export interface UserProfile {
   profileComplete?: boolean;
   /** True when the user has linked a Google account (for Settings UI). */
   hasGoogleLinked?: boolean;
+  /** The viewer blocked this person. The page is limited until they unblock. */
+  blockedByViewer?: boolean;
+  /** This person blocked the viewer. The page shows a name and username only. */
+  viewerIsBlocked?: boolean;
+  /** This person restricted the viewer. Name, username, trips, and follow lists stay. */
+  restrictedByThem?: boolean;
 }
 
 export interface UserStats {
@@ -183,6 +189,7 @@ export interface PlaceResponse {
 export interface TripFinalPostResponse {
   id: string;
   tripId: string;
+  userId: string;
   summaryText: string;
   curatedMedia: string[];
   caption?: string | null;
@@ -192,6 +199,8 @@ export interface TripFinalPostResponse {
   publishedAt?: string | null;
   createdAt: string;
   updatedAt: string;
+  /** Author of this personal final post. */
+  user?: UserProfile | null;
   trip?: TripResponse | null;
   likeCount?: number;
   commentCount?: number;

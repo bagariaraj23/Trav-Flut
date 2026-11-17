@@ -39,6 +39,7 @@ model User {
   likes                    Like[]            @relation("UserLikes")
   comments                 Comment[]         @relation("UserComments")
   shares                   Share[]           @relation("UserShares")
+  finalPosts               TripFinalPost[]
   sentNotifications        Notification[]    @relation("NotificationActor")
   receivedNotifications    Notification[]    @relation("NotificationRecipient")
   conversationParticipants ConversationParticipant[]
@@ -49,6 +50,9 @@ model User {
   settlementsFrom          TripSettlement[]  @relation("SettlementFrom")
   settlementsTo            TripSettlement[]  @relation("SettlementTo")
   recordedSettlements      TripSettlement[]  @relation("SettlementRecordedBy")
+  safetyActions            UserSafetyRelation[] @relation("SafetyActor")
+  safetyTargets            UserSafetyRelation[] @relation("SafetyTarget")
+  createdConversations     Conversation[]    @relation("ConversationCreator")
 
   @@map("users")
 }
@@ -161,6 +165,30 @@ model FollowRequest {
   @@map("follow_requests")
 }
 
+enum UserSafetyAction {
+  RESTRICT
+  BLOCK
+}
+
+// One row per actor. RESTRICT limits the target: they cannot message or add
+// the actor, and the actor's posts stay off their feeds. BLOCK hides both
+// people from each other.
+model UserSafetyRelation {
+  id        String           @id @default(uuid())
+  actorId   String
+  targetId  String
+  action    UserSafetyAction
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+  actor     User             @relation("SafetyActor", fields: [actorId], references: [id], onDelete: Cascade)
+  target    User             @relation("SafetyTarget", fields: [targetId], references: [id], onDelete: Cascade)
+
+  @@unique([actorId, targetId])
+  @@index([actorId, action, createdAt(sort: Desc), id(sort: Desc)])
+  @@index([targetId, action])
+  @@map("user_safety_relations")
+}
+
 model JWTRefreshToken {
   id           String   @id @default(uuid())
   userId       String
@@ -195,7 +223,7 @@ model Trip {
   createdAt        DateTime          @default(now())
   updatedAt        DateTime          @default(now()) @updatedAt
   media            Media[]
-  finalPost        TripFinalPost?
+  finalPosts       TripFinalPost[]
   joinRequests     TripJoinRequest[]
   participants     TripParticipant[]
   threadEntries    TripThreadEntry[]
@@ -365,7 +393,8 @@ model TripThreadTag {
 
 model TripFinalPost {
   id               String           @id @default(uuid())
-  tripId           String           @unique
+  tripId           String
+  userId           String
   summaryText      String
   curatedMedia     String[]
   caption          String?
@@ -376,10 +405,14 @@ model TripFinalPost {
   createdAt        DateTime         @default(now())
   updatedAt        DateTime         @default(now()) @updatedAt
   trip             Trip             @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  user             User             @relation(fields: [userId], references: [id], onDelete: Cascade)
   likeCount        Int              @default(0)
   commentCount     Int              @default(0)
   shareCount       Int              @default(0)
 
+  @@unique([tripId, userId])
+  @@index([tripId])
+  @@index([userId, isPublished, publishedAt])
   @@index([isPublished, createdAt(sort: Desc), id(sort: Desc)])
   @@map("trip_final_posts")
 }
@@ -425,15 +458,17 @@ enum ConversationParticipantRole {
 }
 
 model Conversation {
-  id        String             @id @default(uuid())
-  type      ConversationType
-  tripId    String?            @unique
-  name      String?
-  avatarUrl String?
-  createdAt DateTime           @default(now())
-  updatedAt DateTime           @updatedAt
+  id          String             @id @default(uuid())
+  type        ConversationType
+  tripId      String?            @unique
+  name        String?
+  avatarUrl   String?
+  createdById String?
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
 
   trip         Trip?                    @relation("TripConversation", fields: [tripId], references: [id], onDelete: Cascade)
+  createdBy    User?                    @relation("ConversationCreator", fields: [createdById], references: [id], onDelete: SetNull)
   participants ConversationParticipant[]
   messages     ChatMessage[]
 

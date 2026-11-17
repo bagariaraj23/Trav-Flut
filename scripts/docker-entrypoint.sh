@@ -35,7 +35,8 @@ column_exists() {
 # Databases created by the old entrypoint (prisma db push) have tables but no
 # _prisma_migrations. Push the current schema, replay the data step in
 # 20261014150000_trip_open_ended_schedule (db push cannot run it), then mark
-# every migration applied so later boots use migrate deploy.
+# schema migrations applied. A data-only migration stays unmarked so the
+# migrate deploy below actually runs it. db push does not rewrite row values.
 baseline_pushed_database() {
   echo "Existing schema without _prisma_migrations — baselining."
   local had_type_flag=false
@@ -54,6 +55,12 @@ baseline_pushed_database() {
 
   for dir in prisma/migrations/*/; do
     name="$(basename "$dir")"
+    case "$name" in
+      20261113180000_relabel_ready_final_posts_as_draft)
+        echo "  leaving $name for migrate deploy (rewrites READY drafts to DRAFT)"
+        continue
+        ;;
+    esac
     npx prisma migrate resolve --applied "$name" > /dev/null
     echo "  marked $name as applied"
   done

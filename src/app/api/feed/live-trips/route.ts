@@ -9,6 +9,7 @@ import {
 } from "@/lib/middleware";
 import { PerformanceMonitor } from "@/lib/monitoring";
 import { omitHiddenTripSpend } from "@/lib/tripSpendVisibility";
+import { feedHiddenUserIds } from "@/lib/services/userSafety";
 
 const userSelect = {
   id: true,
@@ -141,7 +142,7 @@ export async function GET(request: NextRequest) {
         try {
           const currentUserId = authenticatedReq.user!.userId;
 
-          const [me, followedUsers] = await Promise.all([
+          const [me, followedUsers, hiddenUserIds] = await Promise.all([
             prisma.user.findUnique({
               where: { id: currentUserId },
               select: userSelect,
@@ -150,6 +151,7 @@ export async function GET(request: NextRequest) {
               where: { followerId: currentUserId },
               select: { followeeId: true },
             }),
+            feedHiddenUserIds(currentUserId),
           ]);
 
           if (!me) {
@@ -161,6 +163,7 @@ export async function GET(request: NextRequest) {
 
           const followedUserIds = followedUsers.map((f) => f.followeeId);
           const followedSet = new Set(followedUserIds);
+          const hidden = new Set(hiddenUserIds);
 
           const trips = await prisma.trip.findMany({
             where: {
@@ -203,6 +206,7 @@ export async function GET(request: NextRequest) {
             if (trip.participants.some((p) => p.userId === currentUserId)) {
               return true;
             }
+            if (hidden.has(trip.userId)) return false;
             if (followedSet.has(trip.userId)) return true;
             if (trip.user && !trip.user.isPrivate) return true;
             return false;
@@ -232,7 +236,7 @@ export async function GET(request: NextRequest) {
           }
 
           for (const followeeId of followedUserIds) {
-            if (byUserId.has(followeeId)) continue;
+            if (hidden.has(followeeId) || byUserId.has(followeeId)) continue;
 
             const owned = visible.find((t) => t.userId === followeeId);
             if (owned?.user) {

@@ -29,36 +29,17 @@ function toResponse(
   };
 }
 
-async function ensureOwner(tripId: string, userId: string) {
-  const trip = await prisma.trip.findUnique({
-    where: { id: tripId },
-    select: { userId: true },
-  });
-
-  if (!trip) {
-    return NextResponse.json<ApiResponse>(
-      { success: false, error: "Trip not found" },
-      { status: 404 }
-    );
-  }
-
-  if (trip.userId !== userId) {
-    return NextResponse.json<ApiResponse>(
-      { success: false, error: "Only the trip owner can edit the final post" },
-      { status: 403 }
-    );
-  }
-
-  return null;
-}
-
-/** Owner or participant may view final post draft; only owner may edit (PUT). */
-async function ensureCanReadFinalPost(tripId: string, userId: string) {
+async function ensureOwnPost(tripId: string, userId: string) {
   const trip = await prisma.trip.findUnique({
     where: { id: tripId },
     select: {
       userId: true,
       participants: { select: { userId: true } },
+      finalPosts: {
+        where: { userId },
+        select: { id: true },
+        take: 1,
+      },
     },
   });
 
@@ -71,11 +52,12 @@ async function ensureCanReadFinalPost(tripId: string, userId: string) {
 
   const isOwner = trip.userId === userId;
   const isParticipant = trip.participants.some((p) => p.userId === userId);
-  if (!isOwner && !isParticipant) {
+  const hasOwnPost = trip.finalPosts.length > 0;
+  if (!isOwner && !isParticipant && !hasOwnPost) {
     return NextResponse.json<ApiResponse>(
       {
         success: false,
-        error: "You do not have access to this trip's final post",
+        error: "Only people on this trip can manage their own final post",
       },
       { status: 403 }
     );
@@ -96,12 +78,15 @@ export async function GET(
           const tripId = id;
           const userId = authenticatedReq.user!.userId;
 
-          const permissionError = await ensureCanReadFinalPost(tripId, userId);
+          const permissionError = await ensureOwnPost(tripId, userId);
           if (permissionError) {
             return permissionError;
           }
 
-          const finalPost = await TripFinalizerService.getFinalPost(tripId);
+          const finalPost = await TripFinalizerService.getFinalPost(
+            tripId,
+            userId
+          );
 
           return NextResponse.json<ApiResponse<TripFinalPostResponse>>({
             success: true,
@@ -129,7 +114,7 @@ export async function PUT(
           const tripId = id;
           const userId = authenticatedReq.user!.userId;
 
-          const permissionError = await ensureOwner(tripId, userId);
+          const permissionError = await ensureOwnPost(tripId, userId);
           if (permissionError) {
             return permissionError;
           }
@@ -138,6 +123,7 @@ export async function PUT(
             (await authenticatedReq.json()) as UpdateFinalPostRequest;
           const finalPost = await TripFinalizerService.updateFinalPost(
             tripId,
+            userId,
             body
           );
 
@@ -167,7 +153,7 @@ export async function DELETE(
           const tripId = id;
           const userId = authenticatedReq.user!.userId;
 
-          const permissionError = await ensureOwner(tripId, userId);
+          const permissionError = await ensureOwnPost(tripId, userId);
           if (permissionError) {
             return permissionError;
           }

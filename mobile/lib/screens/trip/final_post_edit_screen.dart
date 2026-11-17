@@ -8,6 +8,7 @@ import 'package:tripthread/services/trip_service.dart';
 import 'package:tripthread/utils/app_layout.dart';
 import 'package:tripthread/utils/app_theme.dart';
 import 'package:tripthread/utils/cloudinary_utils.dart';
+import 'package:tripthread/widgets/media/media_seek.dart';
 import 'package:tripthread/utils/trip_time_format.dart';
 
 class FinalPostEditScreen extends StatefulWidget {
@@ -56,10 +57,13 @@ class _FinalPostEditScreenState extends State<FinalPostEditScreen> {
     if (response.success && response.data != null) {
       final trip = response.data!;
       final authId = context.read<AuthProvider>().currentUser?.id;
-      final isOwner = authId != null && trip.userId == authId;
+      final isMember = authId != null &&
+          (trip.userId == authId ||
+              (trip.participants?.any((participant) => participant.userId == authId) ??
+                  false));
       final entries = await _loadAllThreadEntries(tripService);
       if (!mounted) return;
-      context.read<FinalPostProvider>().setTripOwner(isOwner);
+      context.read<FinalPostProvider>().setCanEdit(isMember);
       setState(() {
         _trip = trip;
         _threadEntries = entries;
@@ -68,7 +72,7 @@ class _FinalPostEditScreenState extends State<FinalPostEditScreen> {
       });
     } else {
       if (mounted) {
-        context.read<FinalPostProvider>().setTripOwner(false);
+        context.read<FinalPostProvider>().setCanEdit(false);
       }
       setState(() {
         _tripError = response.error ?? 'Failed to load trip details';
@@ -147,7 +151,7 @@ class _FinalPostEditScreenState extends State<FinalPostEditScreen> {
     _syncControllers(draft);
 
     final isBusy = provider.isLoading || draft == null || _isTripLoading;
-    final canEditContent = draft != null && provider.isTripOwner;
+    final canEditContent = draft != null && provider.canEdit;
 
     return Scaffold(
       appBar: AppBar(
@@ -365,7 +369,7 @@ class _FinalPostEditScreenState extends State<FinalPostEditScreen> {
                 ),
                 tooltip: editable
                     ? 'Edit $title'
-                    : 'Only the trip owner can edit',
+                    : 'Only you can edit your final post',
                 onPressed: editable ? onToggleEdit : null,
               )
             ],
@@ -399,7 +403,7 @@ class _FinalPostEditScreenState extends State<FinalPostEditScreen> {
   Widget _buildMediaSelector(
       FinalPostProvider provider, TripFinalPost draft) {
     final mediaItems = _mediaItems;
-    final locked = !provider.isTripOwner;
+    final locked = !provider.canEdit;
 
     return Card(
       child: Padding(
@@ -410,7 +414,7 @@ class _FinalPostEditScreenState extends State<FinalPostEditScreen> {
             Row(
               children: [
                 Text(
-                  'Photos (${draft.curatedMedia.length}/10)',
+                  'Photos (${draft.curatedMedia.length}/12)',
                   style: Theme.of(context).textTheme.titleMedium,
                 ),
                 const SizedBox(width: 8),
@@ -430,20 +434,21 @@ class _FinalPostEditScreenState extends State<FinalPostEditScreen> {
               ],
             ),
             const SizedBox(height: 12),
-            if (locked)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 8),
-                child: Text(
-                  'Only the trip owner can change photos.',
-                  style: Theme.of(context)
-                      .textTheme
-                      .bodySmall
-                      ?.copyWith(color: Theme.of(context).hintColor),
-                ),
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Text(
+                locked
+                    ? 'Only you can change the photos on your final post.'
+                    : 'The first draft uses photos you uploaded and photos you are in. You can add any photo from the trip.',
+                style: Theme.of(context)
+                    .textTheme
+                    .bodySmall
+                    ?.copyWith(color: Theme.of(context).hintColor),
               ),
+            ),
             if (mediaItems.isEmpty)
               const Text(
-                  'Add photos to your trip thread to curate them here.')
+                  'Photos from this trip show up here.')
             else
               SizedBox(
                 height: 110,
@@ -456,9 +461,20 @@ class _FinalPostEditScreenState extends State<FinalPostEditScreen> {
                     final url = media.url;
                     final isSelected = draft.curatedMedia.contains(url);
                     final isCover = draft.coverMediaUrl == url;
+                    final order = draft.curatedMedia.indexOf(url);
                     return GestureDetector(
-                      onTap:
-                          locked ? null : () => provider.toggleMedia(url),
+                      onTap: locked
+                          ? null
+                          : () {
+                              final ok = provider.toggleMedia(url);
+                              if (!ok &&
+                                  provider.error != null &&
+                                  context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(content: Text(provider.error!)),
+                                );
+                              }
+                            },
                       onLongPress:
                           locked ? null : () => _handleSetCover(provider, url),
                       child: Stack(
@@ -472,6 +488,12 @@ class _FinalPostEditScreenState extends State<FinalPostEditScreen> {
                               fit: BoxFit.cover,
                             ),
                           ),
+                          if (isSelected && order >= 0)
+                            Positioned(
+                              top: 8,
+                              left: 8,
+                              child: PhotoOrderBadge(position: order + 1),
+                            ),
                           if (isSelected)
                             Positioned.fill(
                               child: Container(
@@ -575,10 +597,48 @@ class _FinalPostEditScreenState extends State<FinalPostEditScreen> {
     );
   }
 
+  Future<void> _confirmDeleteDraft(FinalPostProvider provider) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Delete this draft?'),
+        content: const Text(
+          'This removes your unpublished final post. The trip and everyone else’s posts stay.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Keep'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    final messenger = ScaffoldMessenger.of(context);
+    final success = await provider.deleteFinalPost();
+    if (!mounted) return;
+    if (!success) {
+      messenger.showSnackBar(
+        SnackBar(content: Text(provider.error ?? 'Could not delete the draft')),
+      );
+      return;
+    }
+    messenger.showSnackBar(const SnackBar(content: Text('Draft deleted')));
+    if (context.canPop()) {
+      context.pop();
+    } else {
+      context.go('/trip/${widget.tripId}');
+    }
+  }
+
   Widget _buildBottomBar(
       BuildContext context, FinalPostProvider provider, TripFinalPost draft) {
     if (draft.isPublished) {
-      if (!provider.isTripOwner) {
+      if (!provider.canEdit) {
         return SafeArea(
           child: Padding(
             padding: const EdgeInsets.all(16),
@@ -640,67 +700,78 @@ class _FinalPostEditScreenState extends State<FinalPostEditScreen> {
 
     return SafeArea(
       child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Row(
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            Expanded(
-              child: OutlinedButton(
-                onPressed: provider.isSaving
-                    ? null
-                    : () async {
-                        final messenger = ScaffoldMessenger.of(context);
-                        final success = await provider.saveDraft();
-                        if (!mounted) return;
-                        if (success) {
-                          messenger.showSnackBar(
-                            const SnackBar(
-                              content: Text('Draft saved'),
-                            ),
-                          );
-                        }
-                      },
-                child: provider.isSaving
-                    ? const SizedBox(
-                        height: 20,
-                        width: 20,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Text('Save Draft'),
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: ElevatedButton(
-                onPressed: provider.isPublishing
-                    ? null
-                    : () async {
-                        final messenger = ScaffoldMessenger.of(context);
-                        final router = GoRouter.of(context);
-                        final success = await provider.publish();
-                        if (!mounted) return;
-                        if (success) {
-                          messenger.showSnackBar(
-                            const SnackBar(
-                              content: Text('Trip published to your feed!'),
-                            ),
-                          );
-                          router.go('/home');
-                        }
-                      },
-                style: ElevatedButton.styleFrom(
-                  minimumSize: const Size.fromHeight(48),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: provider.isSaving
+                        ? null
+                        : () async {
+                            final messenger = ScaffoldMessenger.of(context);
+                            final success = await provider.saveDraft();
+                            if (!mounted) return;
+                            if (success) {
+                              messenger.showSnackBar(
+                                const SnackBar(
+                                  content: Text('Draft saved'),
+                                ),
+                              );
+                            }
+                          },
+                    child: provider.isSaving
+                        ? const SizedBox(
+                            height: 20,
+                            width: 20,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Text('Save Draft'),
+                  ),
                 ),
-                child: provider.isPublishing
-                    ? const SizedBox(
-                        height: 20,
-                        width: 20,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: Colors.white,
-                        ),
-                      )
-                    : const Text('Publish'),
-              ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: ElevatedButton(
+                    onPressed: provider.isPublishing
+                        ? null
+                        : () async {
+                            final messenger = ScaffoldMessenger.of(context);
+                            final router = GoRouter.of(context);
+                            final success = await provider.publish();
+                            if (!mounted) return;
+                            if (success) {
+                              messenger.showSnackBar(
+                                const SnackBar(
+                                  content: Text('Trip published to your feed!'),
+                                ),
+                              );
+                              router.go('/home');
+                            }
+                          },
+                    style: ElevatedButton.styleFrom(
+                      minimumSize: const Size.fromHeight(48),
+                    ),
+                    child: provider.isPublishing
+                        ? const SizedBox(
+                            height: 20,
+                            width: 20,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
+                          )
+                        : const Text('Publish'),
+                  ),
+                ),
+              ],
+            ),
+            TextButton(
+              onPressed: provider.isSaving || provider.isPublishing
+                  ? null
+                  : () => _confirmDeleteDraft(provider),
+              child: const Text('Delete draft'),
             ),
           ],
         ),

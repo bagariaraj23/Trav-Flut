@@ -239,11 +239,15 @@ async function syncTripRecords(trips: ScheduleTrip[]): Promise<void> {
     try {
       if (next === TripStatus.ENDED) {
         await prisma.$transaction(async (tx) => {
-          await tx.trip.update({
-            where: { id: trip.id },
+          const claimed = await tx.trip.updateMany({
+            where: {
+              id: trip.id,
+              status: { in: [TripStatus.UPCOMING, TripStatus.ONGOING] },
+            },
             data: { status: TripStatus.ENDED, updatedAt: now },
           });
-          await TripFinalizerService.generateFinalPost(trip.id, trip.userId, tx);
+          if (claimed.count !== 1) return;
+          await TripFinalizerService.generateFinalPostsForMembers(trip.id, tx);
         });
       } else {
         await prisma.trip.updateMany({

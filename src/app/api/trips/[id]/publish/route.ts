@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
 import { ApiResponse, TripFinalPostResponse } from "@/types/api";
 import { TripFinalizerService } from "@/lib/services/tripFinalizer";
 import {
@@ -8,7 +7,6 @@ import {
   withLogging,
   handleApiError,
 } from "@/lib/middleware";
-import { NotFoundError, ConflictError } from "@/lib/errors";
 
 function toResponse(
   finalPost: Awaited<ReturnType<typeof TripFinalizerService.publishFinalPost>>
@@ -38,30 +36,6 @@ export async function POST(
           const { id } = await params;
           const tripId = id;
           const userId = authenticatedReq.user!.userId;
-
-          // Check if trip exists and user is owner
-          const trip = await prisma.trip.findUnique({
-            where: { id: tripId },
-            include: {
-              finalPost: true,
-            },
-          });
-
-          if (!trip) {
-            throw new NotFoundError("Trip not found");
-          }
-
-          if (trip.userId !== userId) {
-            throw new ConflictError("Only trip owner can publish final post");
-          }
-
-          if (!trip.finalPost) {
-            throw new NotFoundError("Final post not found");
-          }
-
-          if (trip.finalPost.isPublished) {
-            throw new ConflictError("Final post is already published");
-          }
 
           const published = await TripFinalizerService.publishFinalPost(
             tripId,

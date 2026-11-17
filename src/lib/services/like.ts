@@ -12,6 +12,7 @@ import {
 import { getEntityOwner, getPostFromComment, getTripIdFromEntry, getTripTitle } from "../entity-owner";
 import { createNotification } from "./notification";
 import { NotFoundError, DatabaseError } from "../errors";
+import { blockedUserIds } from "./userSafety";
 
 export async function createLike(
   userId: string,
@@ -178,13 +179,16 @@ export async function getLikesByEntity(
   entityType: EntityType,
   entityId: string,
   cursor?: string,
-  limit: number = ENGAGEMENT_CONSTANTS.PAGINATION.DEFAULT_LIMIT
+  limit: number = ENGAGEMENT_CONSTANTS.PAGINATION.DEFAULT_LIMIT,
+  viewerId?: string | null
 ) {
+  const hiddenIds = viewerId ? await blockedUserIds(viewerId) : [];
   const where: any = {
     entityType,
     entityId,
     user: {
       deletedAt: null,
+      ...(hiddenIds.length > 0 ? { id: { notIn: hiddenIds } } : {}),
     },
   };
 

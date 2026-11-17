@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma'
 import { ApiResponse, UserProfile } from '@/types/api'
 import { withAuth, AuthenticatedRequest, handleApiError } from '@/lib/middleware'
 import { AuthService } from '@/lib/auth'
+import { blockedUserIds, isProfileUnavailable, viewerHasBlocked } from '@/lib/services/userSafety'
 
 async function handler(
   request: AuthenticatedRequest,
@@ -31,6 +32,23 @@ async function handler(
         },
         { status: 404 }
       )
+    }
+
+    if (await isProfileUnavailable(targetUserId, currentUserId)) {
+      return NextResponse.json<ApiResponse>(
+        { success: false, error: 'User not found' },
+        { status: 404 }
+      )
+    }
+
+    if (await viewerHasBlocked(currentUserId, targetUserId)) {
+      return NextResponse.json({
+        success: true,
+        data: {
+          following: [],
+          pagination: { page, limit, total: 0, totalPages: 0 },
+        },
+      })
     }
 
     // Privacy check: For private accounts, only show if:
@@ -68,9 +86,13 @@ async function handler(
       }
     }
 
+    const blockedIds = await blockedUserIds(currentUserId)
+    const hiddenFollowee =
+      blockedIds.length > 0 ? { followeeId: { notIn: blockedIds } } : {}
+
     // Get following
     const follows = await prisma.follow.findMany({
-      where: { followerId: targetUserId },
+      where: { followerId: targetUserId, ...hiddenFollowee },
       include: {
         followee: {
           select: {
@@ -93,11 +115,12 @@ async function handler(
 
     // Get total count
     const totalCount = await prisma.follow.count({
-      where: { followerId: targetUserId },
+      where: { followerId: targetUserId, ...hiddenFollowee },
     })
 
     const following: UserProfile[] = follows.map((follow) => ({
       ...follow.followee,
+      email: '',
       createdAt: follow.followee.createdAt.toISOString(),
       updatedAt: follow.followee.updatedAt.toISOString(),
     }))

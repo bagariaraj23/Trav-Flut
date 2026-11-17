@@ -7,6 +7,7 @@ import { enforcePresetRateLimit } from "@/lib/rateLimit";
 import { PerformanceMonitor } from "@/lib/monitoring";
 import { omitHiddenTripSpend } from "@/lib/tripSpendVisibility";
 import { syncTripById } from "@/lib/tripSchedule";
+import { blockEitherWay } from "@/lib/services/userSafety";
 
 // Get trip by ID
 export async function GET(
@@ -86,7 +87,10 @@ export async function GET(
               },
             },
           },
-          finalPost: true,
+          finalPosts: {
+            where: { userId: currentUserId },
+            take: 1,
+          },
         },
       });
 
@@ -107,6 +111,16 @@ export async function GET(
       );
 
       if (!isOwner && !isParticipant) {
+        if (await blockEitherWay(currentUserId, trip.userId)) {
+          return NextResponse.json<ApiResponse>(
+            {
+              success: false,
+              error: "Trip not found",
+            },
+            { status: 404 }
+          );
+        }
+
         // Check if trip owner's profile is public or if current user follows them
         if (trip.user?.isPrivate) {
           const followRelation = await prisma.follow.findUnique({
@@ -147,8 +161,10 @@ export async function GET(
             }
           : undefined;
 
+      const ownFinalPost = trip.finalPosts[0];
       const tripResponse: TripResponse = omitHiddenTripSpend({
         ...trip,
+        finalPosts: undefined,
         startDate: trip.startDate?.toISOString() || undefined,
         endDate: trip.endDate?.toISOString() || undefined,
         entryCount: trip.entryCount,
@@ -193,13 +209,13 @@ export async function GET(
             createdAt: trip.coverMedia.createdAt.toISOString(),
           }
           : undefined,
-        finalPost: trip.finalPost
+        finalPost: ownFinalPost
           ? {
-            ...trip.finalPost,
-            createdAt: trip.finalPost.createdAt.toISOString(),
-            updatedAt: trip.finalPost.updatedAt.toISOString(),
-            publishedAt: trip.finalPost.publishedAt?.toISOString() ?? undefined,
-            coverMediaUrl: trip.finalPost.coverMediaUrl ?? undefined,
+            ...ownFinalPost,
+            createdAt: ownFinalPost.createdAt.toISOString(),
+            updatedAt: ownFinalPost.updatedAt.toISOString(),
+            publishedAt: ownFinalPost.publishedAt?.toISOString() ?? undefined,
+            coverMediaUrl: ownFinalPost.coverMediaUrl ?? undefined,
           }
           : undefined,
       }, isOwner || isParticipant);

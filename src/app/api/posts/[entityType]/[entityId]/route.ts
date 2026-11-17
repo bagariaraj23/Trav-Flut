@@ -7,11 +7,13 @@ import {
   handleApiError,
 } from "@/lib/middleware";
 import { checkLikeStatus } from "@/lib/services/like";
+import { visibleFinalPostCommentCounts } from "@/lib/services/comment";
 import { EntityType } from "@prisma/client";
 import {
   ApiResponse,
   TripFinalPostResponse,
 } from "@/types/api";
+import { canViewEntity } from "@/lib/auth/permissions";
 
 /**
  * GET /posts/:entityType/:entityId
@@ -54,6 +56,19 @@ export async function GET(
           const post = await prisma.tripFinalPost.findUnique({
             where: { id: entityId },
             include: {
+              user: {
+                select: {
+                  id: true,
+                  email: true,
+                  username: true,
+                  name: true,
+                  avatarUrl: true,
+                  bio: true,
+                  isPrivate: true,
+                  createdAt: true,
+                  updatedAt: true,
+                },
+              },
               trip: {
                 include: {
                   user: {
@@ -88,39 +103,26 @@ export async function GET(
             );
           }
 
-          const tripOwnerId = post.trip?.userId;
-          if (!tripOwnerId) {
+          const allowed = await canViewEntity(
+            userId,
+            EntityType.TRIP_FINAL_POST,
+            post.id
+          );
+          if (!allowed) {
             return NextResponse.json(
-              { success: false, error: "Post data is invalid" },
-              { status: 500 }
+              { success: false, error: "You don't have access to this post" },
+              { status: 403 }
             );
-          }
-
-          const isOwner = tripOwnerId === userId;
-          if (!isOwner) {
-            const tripUser = post.trip?.user;
-            if (tripUser?.isPrivate) {
-              const isFollowing = await prisma.follow.findUnique({
-                where: {
-                  followerId_followeeId: {
-                    followerId: userId,
-                    followeeId: tripOwnerId,
-                  },
-                },
-              });
-              if (!isFollowing) {
-                return NextResponse.json(
-                  { success: false, error: "You don't have access to this post" },
-                  { status: 403 }
-                );
-              }
-            }
           }
 
           const likeStatusMap = await checkLikeStatus(
             userId,
             EntityType.TRIP_FINAL_POST,
             [post.id]
+          );
+          const commentCounts = await visibleFinalPostCommentCounts(
+            [{ id: post.id, userId: post.userId }],
+            userId
           );
 
           const response: TripFinalPostResponse & {
@@ -131,6 +133,7 @@ export async function GET(
           } = {
             id: post.id,
             tripId: post.tripId,
+            userId: post.userId,
             summaryText: post.summaryText,
             curatedMedia: post.curatedMedia,
             caption: post.caption ?? undefined,
@@ -141,9 +144,20 @@ export async function GET(
             createdAt: post.createdAt.toISOString(),
             updatedAt: post.updatedAt.toISOString(),
             likeCount: post.likeCount,
-            commentCount: post.commentCount,
+            commentCount: commentCounts.get(post.id) ?? post.commentCount,
             shareCount: post.shareCount,
             hasLiked: likeStatusMap[post.id] ?? false,
+            user: post.user
+              ? {
+                  ...post.user,
+                  username: post.user.username ?? undefined,
+                  name: post.user.name ?? undefined,
+                  avatarUrl: post.user.avatarUrl ?? undefined,
+                  bio: post.user.bio ?? undefined,
+                  createdAt: post.user.createdAt.toISOString(),
+                  updatedAt: post.user.updatedAt.toISOString(),
+                }
+              : undefined,
             trip: post.trip
               ? {
                   ...post.trip,

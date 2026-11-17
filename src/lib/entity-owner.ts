@@ -12,9 +12,9 @@ export async function getEntityOwner(
   if (entityType === 'TRIP_FINAL_POST') {
     const post = await prisma.tripFinalPost.findUnique({
       where: { id: entityId },
-      select: { trip: { select: { userId: true } } }
+      select: { userId: true }
     })
-    return post?.trip?.userId ?? null
+    return post?.userId ?? null
   }
   if (entityType === 'TRIP_THREAD_ENTRY') {
     const entry = await prisma.tripThreadEntry.findUnique({

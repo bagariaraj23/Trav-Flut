@@ -56,66 +56,93 @@ export async function POST(
 
           const endingBeforeStart = trip.status === TripStatus.UPCOMING;
 
-          // Update trip status and, for a trip that already started, generate the final post.
-          const [updatedTrip, finalPost] = await prisma.$transaction(
-            async (tx) => {
-              // Update trip status
-              const updated = await tx.trip.update({
-                where: { id: tripId },
-                data: {
-                  status: TripStatus.ENDED,
-                  endDate: new Date(),
-                  updatedAt: new Date(),
-                },
-                include: {
-                  user: {
-                    select: {
-                      id: true,
-                      email: true,
-                      username: true,
-                      name: true,
-                      avatarUrl: true,
-                      bio: true,
-                      isPrivate: true,
-                      createdAt: true,
-                      updatedAt: true,
-                    },
-                  },
-                  _count: {
-                    select: {
-                      threadEntries: true,
-                      media: true,
-                      participants: true,
-                    },
-                  },
-                  participants: {
-                    include: {
-                      user: true,
-                    },
-                  },
-                  threadEntries: {
-                    include: {
-                      media: true,
-                      taggedUsers: true,
-                      author: true,
-                    },
-                    orderBy: { createdAt: "asc" },
-                  },
-                },
-              });
-
-              // A trip that never started is cancelled: no final post.
-              const generatedFinalPost = endingBeforeStart
-                ? null
-                : await TripFinalizerService.generateFinalPost(
-                    tripId,
-                    userId,
-                    tx
-                  );
-
-              return [updated, generatedFinalPost] as const;
+          // Claim the end and write drafts in one transaction. The response
+          // payload is loaded after commit so a long thread is not held open
+          // twice, and is not locked while the HTTP response is built.
+          const finalPost = await prisma.$transaction(async (tx) => {
+            const claimed = await tx.trip.updateMany({
+              where: {
+                id: tripId,
+                status: { in: [TripStatus.ONGOING, TripStatus.UPCOMING] },
+              },
+              data: {
+                status: TripStatus.ENDED,
+                endDate: new Date(),
+                updatedAt: new Date(),
+              },
+            });
+            if (claimed.count !== 1) {
+              throw new ConflictError("Trip is already ended");
             }
-          );
+
+            // A trip that never started is cancelled: no final post.
+            // A trip that ran gets one personal draft per member.
+            if (endingBeforeStart) return null;
+            const generatedPosts =
+              await TripFinalizerService.generateFinalPostsForMembers(
+                tripId,
+                tx
+              );
+            return generatedPosts.find((post) => post.userId === userId) ?? null;
+          });
+
+          const updatedTrip = await prisma.trip.findUnique({
+            where: { id: tripId },
+            include: {
+              user: {
+                select: {
+                  id: true,
+                  email: true,
+                  username: true,
+                  name: true,
+                  avatarUrl: true,
+                  bio: true,
+                  isPrivate: true,
+                  createdAt: true,
+                  updatedAt: true,
+                },
+              },
+              _count: {
+                select: {
+                  threadEntries: true,
+                  media: true,
+                  participants: true,
+                },
+              },
+              participants: {
+                include: {
+                  user: true,
+                },
+              },
+              threadEntries: {
+                include: {
+                  media: true,
+                  taggedUsers: {
+                    include: {
+                      taggedUser: {
+                        select: {
+                          id: true,
+                          email: true,
+                          username: true,
+                          name: true,
+                          avatarUrl: true,
+                          bio: true,
+                          isPrivate: true,
+                          createdAt: true,
+                          updatedAt: true,
+                        },
+                      },
+                    },
+                  },
+                  author: true,
+                },
+                orderBy: { createdAt: "asc" },
+              },
+            },
+          });
+          if (!updatedTrip) {
+            throw new NotFoundError("Trip not found");
+          }
 
           const finalPostResponse: TripFinalPostResponse | undefined = finalPost
             ? {

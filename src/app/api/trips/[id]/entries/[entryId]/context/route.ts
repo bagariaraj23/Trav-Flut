@@ -10,6 +10,7 @@ import {
 } from "@/types/api";
 import { serializePlace } from "@/lib/place";
 import { checkLikeStatus } from "@/lib/services/like";
+import { blockEitherWay, blockedUserIds, postsHiddenFromViewer } from "@/lib/services/userSafety";
 
 const THREAD_ENTRY_LIST_INCLUDE = {
   author: {
@@ -145,6 +146,12 @@ export async function GET(
 
     const isOwner = trip.userId === userId;
     const isParticipant = trip.participants.some((p) => p.userId === userId);
+    if (!isOwner && !isParticipant && (await blockEitherWay(userId, trip.userId))) {
+      return NextResponse.json<ApiResponse>(
+        { success: false, error: "Trip not found" },
+        { status: 404 }
+      );
+    }
     if (!isOwner && !isParticipant && trip.user?.isPrivate) {
       const followRelation = await prisma.follow.findUnique({
         where: {
@@ -176,6 +183,17 @@ export async function GET(
         { status: 404 }
       );
     }
+    if (
+      !isOwner &&
+      !isParticipant &&
+      target.authorId !== userId &&
+      (await postsHiddenFromViewer(target.authorId, userId))
+    ) {
+      return NextResponse.json<ApiResponse>(
+        { success: false, error: "Thread entry not found" },
+        { status: 404 }
+      );
+    }
 
     const { searchParams } = new URL(request.url);
     const sizeRaw = parseInt(searchParams.get("contextSize") || "25", 10);
@@ -185,10 +203,15 @@ export async function GET(
     );
     const olderTake = Math.floor((contextSize - 1) / 2);
     const newerTake = contextSize - 1 - olderTake;
+    const hiddenAuthors =
+      !isOwner && !isParticipant ? await blockedUserIds(userId) : [];
+    const authorFilter =
+      hiddenAuthors.length > 0 ? { authorId: { notIn: hiddenAuthors } } : {};
 
     const older = await prisma.tripThreadEntry.findMany({
       where: {
         tripId,
+        ...authorFilter,
         OR: [
           { createdAt: { lt: target.createdAt } },
           {
@@ -207,6 +230,7 @@ export async function GET(
     const newer = await prisma.tripThreadEntry.findMany({
       where: {
         tripId,
+        ...authorFilter,
         OR: [
           { createdAt: { gt: target.createdAt } },
           {
@@ -228,6 +252,7 @@ export async function GET(
       ? !!(await prisma.tripThreadEntry.findFirst({
           where: {
             tripId,
+            ...authorFilter,
             OR: [
               { createdAt: { lt: oldest.createdAt } },
               {

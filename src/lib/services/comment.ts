@@ -1,5 +1,6 @@
-import { EntityType, Prisma } from "@prisma/client";
+import { EntityType, Prisma, UserSafetyAction } from "@prisma/client";
 import { prisma } from "../prisma";
+import { ValidationError } from "../errors";
 import { sanitizeInput } from "../security";
 import {
   validateEntityExists,
@@ -13,6 +14,7 @@ import {
 } from "./engagement-utils";
 import { getEntityOwner, getPostFromComment, getTripIdFromEntry, getTripTitle } from "../entity-owner";
 import { canViewEntity } from "../auth/permissions";
+import { blockedUserIds } from "./userSafety";
 import { createNotification } from "./notification";
 import {
   loadTripForTagging,
@@ -34,6 +36,128 @@ function extractMentions(text: string): string[] {
     }
   }
   return result;
+}
+
+const CANNOT_MENTION = "You can't mention this person";
+
+async function finalPostAuthorId(entityId: string): Promise<string | null> {
+  const post = await prisma.tripFinalPost.findUnique({
+    where: { id: entityId },
+    select: { userId: true },
+  });
+  return post?.userId ?? null;
+}
+
+async function restrictedTargetIds(actorId: string): Promise<Set<string>> {
+  const rows = await prisma.userSafetyRelation.findMany({
+    where: { actorId, action: UserSafetyAction.RESTRICT },
+    select: { targetId: true },
+  });
+  return new Set(rows.map((row) => row.targetId));
+}
+
+/** A final-post comment cannot @mention someone who has restricted the author of the comment. */
+async function assertFinalPostMentionsAllowed(
+  commenterId: string,
+  entityType: EntityType,
+  text: string
+) {
+  if (entityType !== EntityType.TRIP_FINAL_POST) return;
+  const names = extractMentions(text);
+  if (names.length === 0) return;
+  const users = await prisma.user.findMany({
+    where: {
+      deletedAt: null,
+      OR: names.map((name) => ({
+        username: { equals: name, mode: "insensitive" as const },
+      })),
+    },
+    select: { id: true },
+  });
+  if (users.length === 0) return;
+  const restricted = await prisma.userSafetyRelation.findFirst({
+    where: {
+      action: UserSafetyAction.RESTRICT,
+      targetId: commenterId,
+      actorId: { in: users.map((user) => user.id) },
+    },
+    select: { id: true },
+  });
+  if (restricted) throw new ValidationError(CANNOT_MENTION);
+}
+
+function audienceFilter(options: {
+  hiddenIds: string[];
+  quietIds: Set<string>;
+  viewerId?: string | null;
+  authorId: string | null;
+}): Prisma.CommentWhereInput {
+  const parts: Prisma.CommentWhereInput[] = [];
+  if (options.hiddenIds.length > 0) {
+    parts.push({ userId: { notIn: options.hiddenIds } });
+  }
+  const concealQuiet =
+    !!options.authorId &&
+    options.viewerId !== options.authorId &&
+    options.quietIds.size > 0;
+  if (concealQuiet) {
+    const quiet = [...options.quietIds];
+    parts.push({
+      OR: [
+        { userId: { notIn: quiet } },
+        ...(options.viewerId ? [{ userId: options.viewerId }] : []),
+      ],
+    });
+  }
+  if (parts.length === 0) return {};
+  if (parts.length === 1) return parts[0];
+  return { AND: parts };
+}
+
+/**
+ * Top-level final-post comment totals for this viewer.
+ * The post author sees every comment. A restricted commenter sees public
+ * comments plus their own. Everyone else sees the public comments only.
+ */
+export async function visibleFinalPostCommentCounts(
+  posts: { id: string; userId: string }[],
+  viewerId: string | null
+): Promise<Map<string, number>> {
+  const totals = new Map<string, number>();
+  if (posts.length === 0) return totals;
+  const authorByPost = new Map(posts.map((post) => [post.id, post.userId]));
+  const authors = [...new Set(posts.map((post) => post.userId))];
+  const relations = await prisma.userSafetyRelation.findMany({
+    where: { action: UserSafetyAction.RESTRICT, actorId: { in: authors } },
+    select: { actorId: true, targetId: true },
+  });
+  const quietByAuthor = new Map<string, Set<string>>();
+  for (const row of relations) {
+    const set = quietByAuthor.get(row.actorId) ?? new Set<string>();
+    set.add(row.targetId);
+    quietByAuthor.set(row.actorId, set);
+  }
+  const grouped = await prisma.comment.groupBy({
+    by: ["entityId", "userId"],
+    where: {
+      entityType: EntityType.TRIP_FINAL_POST,
+      parentCommentId: null,
+      entityId: { in: posts.map((post) => post.id) },
+    },
+    _count: { _all: true },
+  });
+  for (const post of posts) totals.set(post.id, 0);
+  for (const row of grouped) {
+    const authorId = authorByPost.get(row.entityId);
+    const quiet = authorId ? quietByAuthor.get(authorId) : undefined;
+    const concealed =
+      !!quiet?.has(row.userId) &&
+      viewerId !== authorId &&
+      viewerId !== row.userId;
+    if (concealed) continue;
+    totals.set(row.entityId, (totals.get(row.entityId) ?? 0) + row._count._all);
+  }
+  return totals;
 }
 
 async function validateParentComment(
@@ -94,6 +218,15 @@ export async function createComment(
       throw new Error("Entity not found");
     }
   }
+
+  await assertFinalPostMentionsAllowed(userId, finalEntityType, sanitizedText);
+  const finalPostAuthor =
+    finalEntityType === EntityType.TRIP_FINAL_POST
+      ? await finalPostAuthorId(finalEntityId)
+      : null;
+  const commentIsQuiet =
+    !!finalPostAuthor &&
+    (await restrictedTargetIds(finalPostAuthor)).has(userId);
 
   const comment = await prisma.$transaction(async (tx) => {
     const newComment = await tx.comment.create({
@@ -190,9 +323,10 @@ export async function createComment(
       );
     }
 
-    // 2. @Mention TAG notifications (trip thread / final post: @all + trip members only)
+    // 2. @Mention TAG notifications. A quiet final-post comment is visible
+    // only to its author and the post author, so it does not notify anyone else.
     const mentionUsernames = extractMentions(sanitizedText);
-    if (mentionUsernames.length > 0) {
+    if (!commentIsQuiet && mentionUsernames.length > 0) {
       try {
         const postInfo = await getPostFromComment(comment.id);
         if (!postInfo) return;
@@ -320,7 +454,7 @@ export async function updateComment(
 
   const comment = await prisma.comment.findUnique({
     where: { id: commentId },
-    select: { userId: true },
+    select: { userId: true, entityType: true, entityId: true },
   });
 
   if (!comment) {
@@ -330,6 +464,12 @@ export async function updateComment(
   if (comment.userId !== userId) {
     throw new Error("Unauthorized");
   }
+
+  await assertFinalPostMentionsAllowed(
+    userId,
+    comment.entityType,
+    sanitizedText
+  );
 
   return await prisma.comment.update({
     where: { id: commentId },
@@ -434,12 +574,20 @@ export async function getCommentsByEntity(
   entityType: EntityType,
   entityId: string,
   cursor?: string,
-  limit: number = ENGAGEMENT_CONSTANTS.PAGINATION.DEFAULT_LIMIT
+  limit: number = ENGAGEMENT_CONSTANTS.PAGINATION.DEFAULT_LIMIT,
+  viewerId?: string | null
 ) {
+  const hiddenIds = viewerId ? await blockedUserIds(viewerId) : [];
+  const authorId =
+    entityType === EntityType.TRIP_FINAL_POST
+      ? await finalPostAuthorId(entityId)
+      : null;
+  const quietIds = authorId ? await restrictedTargetIds(authorId) : new Set<string>();
   const where: any = {
     entityType,
     entityId,
     parentCommentId: null,
+    ...audienceFilter({ hiddenIds, quietIds, viewerId, authorId }),
   };
 
   if (cursor) {
@@ -472,6 +620,12 @@ export async function getCommentsByEntity(
   });
 
   const result = paginateResults(comments, limit);
+  const replyCounts = await visibleReplyCounts(
+    result.items.map((item: { id: string }) => item.id),
+    viewerId,
+    authorId,
+    quietIds
+  );
 
   return {
     ...result,
@@ -479,20 +633,63 @@ export async function getCommentsByEntity(
       const { _count: c, ...comment } = item;
       return {
         ...comment,
-        replyCount: c.replies,
+        replyCount: replyCounts.get(comment.id) ?? c.replies,
         likeCount: comment.likeCount ?? 0,
       };
     }),
   };
 }
 
+async function visibleReplyCounts(
+  parentIds: string[],
+  viewerId: string | null | undefined,
+  authorId: string | null,
+  quietIds: Set<string>
+): Promise<Map<string, number>> {
+  const counts = new Map<string, number>();
+  if (parentIds.length === 0 || !authorId || quietIds.size === 0) return counts;
+  const grouped = await prisma.comment.groupBy({
+    by: ["parentCommentId", "userId"],
+    where: { parentCommentId: { in: parentIds } },
+    _count: { _all: true },
+  });
+  for (const row of grouped) {
+    if (!row.parentCommentId) continue;
+    const concealed =
+      quietIds.has(row.userId) &&
+      viewerId !== authorId &&
+      viewerId !== row.userId;
+    if (concealed) continue;
+    counts.set(
+      row.parentCommentId,
+      (counts.get(row.parentCommentId) ?? 0) + row._count._all
+    );
+  }
+  for (const id of parentIds) {
+    if (!counts.has(id)) counts.set(id, 0);
+  }
+  return counts;
+}
+
 export async function getCommentReplies(
   commentId: string,
   cursor?: string,
-  limit: number = ENGAGEMENT_CONSTANTS.PAGINATION.DEFAULT_LIMIT
+  limit: number = ENGAGEMENT_CONSTANTS.PAGINATION.DEFAULT_LIMIT,
+  viewerId?: string | null
 ) {
+  const hiddenIds = viewerId ? await blockedUserIds(viewerId) : [];
+  const parent = await prisma.comment.findUnique({
+    where: { id: commentId },
+    select: { entityType: true, entityId: true },
+  });
+  const authorId =
+    parent?.entityType === EntityType.TRIP_FINAL_POST
+      ? await finalPostAuthorId(parent.entityId)
+      : null;
+  const quietIds = authorId ? await restrictedTargetIds(authorId) : new Set<string>();
   const where: any = {
     parentCommentId: commentId,
+    ...audienceFilter({ hiddenIds, quietIds, viewerId, authorId }),
   };
 
   if (cursor) {

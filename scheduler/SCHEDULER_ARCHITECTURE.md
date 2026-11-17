@@ -34,9 +34,10 @@ When a user creates a trip, they set `startDate` and `endDate`. The initial stat
 Each run performs two operations. How often that happens depends on the trigger: the cron examples in this doc are hourly, and the local Docker loop defaults to every 300 seconds.
 
 1. **End trips that have passed their end date**
-   - Finds all trips where `endDate <= now` and status is UPCOMING or ONGOING
-   - Creates a "final post" summarizing the trip (media, locations, text entries)
+   - Finds trips where the scheduled end is due and status is UPCOMING or ONGOING
+   - Creates one unpublished `DRAFT` per current member when that person has no row yet, using `memberFinalDraft.ts` (up to 12 of that person's photos)
    - Updates status to ENDED
+   - Does not publish the post. The member does that later
 
 2. **Start trips that have reached their start date**
    - Finds all trips where `startDate <= now < endDate` and status is UPCOMING
@@ -228,7 +229,7 @@ npm start  # or: node dist/index.js
 // updateTripStatuses(prisma, now):
 1. Find trips to END:
    - WHERE endDate <= now AND status IN (UPCOMING, ONGOING)
-   - For each: create final post (if doesn't exist)
+   - For each member who has no row yet: create one unpublished DRAFT (up to 12 of that person's photos)
    
 2. Update statuses in transaction:
    - END trips: SET status = ENDED WHERE endDate <= now
@@ -380,13 +381,13 @@ For detailed deployment instructions, see [README.md](./README.md#deployment).
 │                                                               │
 │    Step 8b: Create Final Posts                               │
 │    ────────────────────────────                             │
-│    For each trip found:                                      │
-│      - Check if final post exists                            │
-│      - If not, create summary post with:                     │
-│        * Text entries count                                 │
-│        * Media entries (first 6)                              │
-│        * Location entries count                              │
+│    For each current member who has no row yet:              │
+│      - Create an unpublished DRAFT with:                     │
+│        * That person's notes                                 │
+│        * Up to 12 of that person's photos                    │
 │        * Generated summary text                              │
+│      - Leave an existing row alone                           │
+│      - Do not publish                                       │
 │                                                               │
 │    Step 8c: Update Statuses (Transaction)                     │
 │    ────────────────────────────                             │
@@ -562,10 +563,9 @@ const now = new Date("2025-02-08T01:00:00Z");
 //   endDate <= now (2025-02-07T23:59:59 <= 2025-02-08T01:00:00) ✅
 //   status = "ONGOING" ✅
 
-// Creates final post:
-//   - Summarizes all entries
-//   - Curates first 6 media items
-//   - Generates summary text
+// Creates one unpublished DRAFT per current member:
+//   - That person's notes and up to 12 of their photos
+//   - Does not publish the post
 
 // Updates: status = "ENDED"
 ```
@@ -607,14 +607,10 @@ Feb 1 - Feb 7
 
 Feb 8, 2025 1:00 AM (Scheduler Run #2)
 ├─> Checks: endDate <= now? Yes (Feb 7 <= Feb 8)
-├─> Creates final post:
-│   ├─> Summary: "Amazing trip to Paris, Versailles! 
-│   │            Visited 8 amazing places. 
-│   │            Shared 5 memorable moments. 
-│   │            Captured 15 beautiful memories."
-│   └─> Curated media: [first 6 photos]
+├─> Creates one unpublished DRAFT per current member
+│   └─> Up to 12 of that person's photos. Not published.
 ├─> Updates: status = "ENDED" ✅
-└─> User sees completed trip with final post
+└─> Each member can edit and publish their own draft later
 ```
 
 ### Integration Points

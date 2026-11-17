@@ -44,7 +44,11 @@ export async function POST(
 
           const trip = await prisma.trip.findUnique({
             where: { id: tripId },
-            select: { userId: true, status: true },
+            select: {
+              userId: true,
+              status: true,
+              participants: { select: { userId: true } },
+            },
           });
 
           if (!trip) {
@@ -54,11 +58,14 @@ export async function POST(
             );
           }
 
-          if (trip.userId !== userId) {
+          const isMember =
+            trip.userId === userId ||
+            trip.participants.some((participant) => participant.userId === userId);
+          if (!isMember) {
             return NextResponse.json<ApiResponse>(
               {
                 success: false,
-                error: "Only the trip owner can generate the final post",
+                error: "Only people on this trip can generate their own final post",
               },
               { status: 403 }
             );

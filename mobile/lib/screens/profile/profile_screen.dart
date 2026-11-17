@@ -12,6 +12,7 @@ import 'package:tripthread/utils/app_layout.dart';
 import 'package:tripthread/utils/app_theme.dart';
 import 'package:tripthread/utils/cloudinary_utils.dart';
 import 'package:tripthread/utils/user_display_labels.dart';
+import 'package:tripthread/widgets/safety/safety_actions.dart';
 import 'package:go_router/go_router.dart';
 
 class ProfileScreen extends StatefulWidget {
@@ -27,6 +28,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   List<Trip> _profileTrips = [];
   bool _profileTripsLoading = false;
   String? _profileTripsError;
+  List<Map<String, dynamic>> _profilePosts = [];
 
   @override
   void initState() {
@@ -46,7 +48,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
         authProvider.currentUser!.id,
       );
       await _loadProfileTrips();
+      await _loadProfilePosts();
     }
+  }
+
+  Future<void> _loadProfilePosts() async {
+    if (!mounted) return;
+    final res = await context.read<ApiService>().getPostsForUser(widget.userId);
+    if (!mounted) return;
+    setState(() {
+      _profilePosts = res.success && res.data != null ? res.data! : [];
+    });
   }
 
   Future<void> _loadProfileTrips() async {
@@ -69,6 +81,21 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   // The refresh action now uses the same centralized method.
+  Future<void> _unblock() async {
+    final response =
+        await context.read<ApiService>().clearSafety(widget.userId);
+    if (!mounted) return;
+    if (!response.success) {
+      AppFeedback.showError(context, response.error ?? 'Could not unblock');
+      return;
+    }
+    await _refreshProfile();
+    if (!mounted) return;
+    final feed = context.read<FeedProvider>();
+    await feed.loadHomeFeed(refresh: true);
+    await feed.loadDiscoverTrips(refresh: true);
+  }
+
   Future<void> _refreshProfile() async {
     final authProvider = context.read<AuthProvider>();
     if (authProvider.currentUser != null) {
@@ -77,6 +104,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         authProvider.currentUser!.id,
       );
       await _loadProfileTrips();
+      await _loadProfilePosts();
     }
   }
 
@@ -166,6 +194,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         authProvider.currentUser!.id,
       );
       await _loadProfileTrips();
+      await _loadProfilePosts();
     }
   }
 
@@ -262,6 +291,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ),
               actions: _buildAppBarActions(
                 context,
+                user,
                 isOwnProfile,
                 userProvider
                     .pendingFollowRequests, // Data comes directly from the provider.
@@ -287,8 +317,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       userProvider
                           .isLoading, // Pass loading state for the button.
                     ),
-                    const SizedBox(height: 24),
-                    _buildTripsSection(context, user, isOwnProfile),
+                    if (user.blockedByViewer != true &&
+                        user.viewerIsBlocked != true) ...[
+                      const SizedBox(height: 24),
+                      _buildPostsSection(context, user, isOwnProfile),
+                      const SizedBox(height: 24),
+                      _buildTripsSection(context, user, isOwnProfile),
+                    ],
                   ],
                 ),
               ),
@@ -302,13 +337,27 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   List<Widget> _buildAppBarActions(
     BuildContext context,
+    User user,
     bool isOwnProfile,
     List<dynamic> pendingRequests,
     List<dynamic> pendingTripInvitations,
   ) {
-    // Show actions only on own profile (mail = trip invites, follow requests, settings).
     if (!isOwnProfile) {
-      return [];
+      return [
+        IconButton(
+          tooltip: 'Restrict or block',
+          icon: const Icon(Icons.more_vert),
+          onPressed: () => showUserSafetySheet(
+            context,
+            userId: user.id,
+            name: userPrimaryLabel(
+              id: user.id,
+              username: user.username,
+              name: user.name,
+            ),
+          ),
+        ),
+      ];
     }
 
     final tripInvitesAction = Stack(
@@ -417,6 +466,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
         ? (bioText.length / charsPerLine).ceil().clamp(1, maxBioLinesCap)
         : 0;
     final subtitleStyle = _profileSubtitleStyle(context);
+    final limitedByBlock =
+        user.blockedByViewer == true || user.viewerIsBlocked == true;
+    final hidePhoto = limitedByBlock;
 
     return Container(
       padding: const EdgeInsets.all(24),
@@ -428,6 +480,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          if (!hidePhoto)
           // Profile photo (tappable to enlarge when a photo exists)
           Center(
             child: Material(
@@ -463,7 +516,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ),
           ),
 
-          const SizedBox(height: 20),
+          if (!hidePhoto) const SizedBox(height: 20),
 
           // @username (unique) first; optional display name second 
           Center(
@@ -483,7 +536,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   textAlign: TextAlign.center,
                 ),
               ),
-              if (user.isPrivate) ...[
+              if (!limitedByBlock && user.isPrivate) ...[
                 const SizedBox(width: 8),
                 Icon(
                   Icons.lock_outlined,
@@ -522,6 +575,19 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
           const SizedBox(height: 20),
 
+          if (user.blockedByViewer == true)
+            Text(
+              'You blocked this person. Unblock them to see their trips and posts again.',
+              style: subtitleStyle,
+              textAlign: TextAlign.center,
+            )
+          else if (user.viewerIsBlocked == true)
+            Text(
+              'This profile is not available.',
+              style: subtitleStyle,
+              textAlign: TextAlign.center,
+            )
+          else
           // Stats Row
           Builder(
             builder: (context) {
@@ -620,7 +686,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
           const SizedBox(height: 20),
 
           // Action Buttons
-          if (isOwnProfile)
+          if (user.blockedByViewer == true)
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton(
+                onPressed: _unblock,
+                child: const Text('Unblock'),
+              ),
+            )
+          else if (user.viewerIsBlocked == true)
+            const SizedBox.shrink()
+          else if (isOwnProfile)
             SizedBox(
               width: double.infinity,
               child: OutlinedButton(
@@ -786,6 +862,69 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   );
                 },
               ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPostsSection(
+    BuildContext context,
+    User user,
+    bool isOwnProfile,
+  ) {
+    final title = isOwnProfile
+        ? 'Your posts'
+        : '${userPrimaryLabel(id: user.id, username: user.username, name: user.name)}\'s posts';
+    return Container(
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: Theme.of(context).colorScheme.outlineVariant,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(title, style: Theme.of(context).textTheme.headlineSmall),
+          const SizedBox(height: 16),
+          if (_profilePosts.isEmpty)
+            AppFeedback.empty(
+              context: context,
+              icon: Icons.article_outlined,
+              title: 'No posts yet',
+              subtitle: isOwnProfile
+                  ? 'A published final post will show up here'
+                  : 'Published posts stay on this profile',
+              expand: false,
+            )
+          else
+            ListView.separated(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: _profilePosts.length,
+              separatorBuilder: (_, _) => const Divider(height: 1),
+              itemBuilder: (context, index) {
+                final post = _profilePosts[index];
+                final caption = (post['caption'] as String?)?.trim();
+                final summary = (post['summaryText'] as String?)?.trim() ?? '';
+                return ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: Text(
+                    caption != null && caption.isNotEmpty ? caption : summary,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () {
+                    final id = post['id'] as String?;
+                    if (id == null) return;
+                    context.push('/post/TRIP_FINAL_POST/$id');
+                  },
+                );
+              },
             ),
         ],
       ),

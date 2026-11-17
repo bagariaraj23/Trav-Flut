@@ -8,6 +8,8 @@ import { UnsettledBalanceError } from "@/lib/errors";
 import { enforcePresetRateLimit } from "@/lib/rateLimit";
 import { ensureTripConversation, markTripMemberLeftChat } from "@/lib/services/chat";
 import { applyAutoTripType } from "@/lib/tripSchedule";
+import { assertCreatorMayAdd, blockEitherWay } from "@/lib/services/userSafety";
+import { AuthorizationError } from "@/lib/errors";
 
 // Add participant to trip
 export async function POST(
@@ -74,6 +76,18 @@ export async function POST(
         },
         { status: 403 }
       );
+    }
+
+    try {
+      await assertCreatorMayAdd(trip.userId, validatedData.userId);
+    } catch (error) {
+      if (error instanceof AuthorizationError) {
+        return NextResponse.json<ApiResponse>(
+          { success: false, error: error.message },
+          { status: 403 }
+        );
+      }
+      throw error;
     }
 
     const ownerProfile = await prisma.user.findUnique({
@@ -427,6 +441,12 @@ export async function GET(
     const isParticipant = trip.participants.some((p) => p.userId === userId);
 
     if (!isOwner && !isParticipant) {
+      if (await blockEitherWay(userId, trip.userId)) {
+        return NextResponse.json<ApiResponse>(
+          { success: false, error: "Trip not found" },
+          { status: 404 }
+        );
+      }
       // Check if trip owner's profile is public or if current user follows them
       if (trip.user?.isPrivate) {
         const followRelation = await prisma.follow.findUnique({
@@ -494,6 +514,7 @@ export async function GET(
       updatedAt: Date;
     }) => ({
       ...user,
+      email: user.id === userId ? user.email : "",
       username: user.username || null,
       name: user.name || null,
       avatarUrl: user.avatarUrl || null,

@@ -1,11 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const count = vi.hoisted(() => vi.fn());
+const findMany = vi.hoisted(() => vi.fn());
 
 vi.mock("../../src/lib/prisma", () => ({
   prisma: {
     notification: {
       count,
+    },
+    userSafetyRelation: {
+      findMany,
     },
   },
 }));
@@ -21,6 +25,8 @@ describe("getUnreadNotificationCount", () => {
   beforeEach(() => {
     count.mockReset();
     count.mockResolvedValue(3);
+    findMany.mockReset();
+    findMany.mockResolvedValue([]);
   });
 
   it("counts only unread notifications whose actor still exists", async () => {

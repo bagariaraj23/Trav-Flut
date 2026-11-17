@@ -592,9 +592,10 @@ class _HomeFeedScreenState extends State<HomeFeedScreen> {
 
   Widget _buildFinalPostCard(BuildContext context, TripFinalPost post) {
     final authUserId = context.read<AuthProvider>().currentUser?.id;
-    final tripOwnerId = post.trip?.userId ?? post.trip?.user?.id;
+    final author = post.displayAuthor;
+    final authorId = post.displayAuthorId;
     final isOwner =
-        authUserId != null && tripOwnerId != null && authUserId == tripOwnerId;
+        authUserId != null && authorId != null && authUserId == authorId;
 
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -611,7 +612,7 @@ class _HomeFeedScreenState extends State<HomeFeedScreen> {
               children: [
                 GestureDetector(
                   onTap: () {
-                    final userId = post.trip?.userId ?? post.trip?.user?.id;
+                    final userId = authorId;
                     if (userId != null) context.push('/profile/$userId');
                   },
                   child: CircleAvatar(
@@ -619,10 +620,10 @@ class _HomeFeedScreenState extends State<HomeFeedScreen> {
                     backgroundColor: AppTheme.avatarFallbackBackground(
                       Theme.of(context).brightness,
                     ),
-                    backgroundImage: post.trip?.user?.avatarUrl != null
-                        ? NetworkImage(post.trip!.user!.avatarUrl!)
+                    backgroundImage: author?.avatarUrl != null
+                        ? NetworkImage(author!.avatarUrl!)
                         : null,
-                    child: post.trip?.user?.avatarUrl == null
+                    child: author?.avatarUrl == null
                         ? Icon(
                             Icons.person,
                             color: AppTheme.avatarFallbackForeground(
@@ -640,13 +641,12 @@ class _HomeFeedScreenState extends State<HomeFeedScreen> {
                     children: [
                       GestureDetector(
                         onTap: () {
-                          final userId =
-                              post.trip?.userId ?? post.trip?.user?.id;
+                          final userId = authorId;
                           if (userId != null) context.push('/profile/$userId');
                         },
                         child: Text(
-                          post.trip?.user?.name ??
-                              post.trip?.user?.username ??
+                          author?.name ??
+                              author?.username ??
                               'Travel Story',
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,

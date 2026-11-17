@@ -25,6 +25,7 @@ export interface PaginatedResponse<T> {
 }
 
 import { PerformanceMonitor } from "@/lib/monitoring";
+import { blockedUserIds } from "@/lib/services/userSafety";
 
 export async function GET(request: NextRequest) {
   const endTimer = PerformanceMonitor.getInstance().startTimer("get_users_discover");
@@ -96,6 +97,11 @@ export async function GET(request: NextRequest) {
     }
 
     const offset = (page - 1) * limit;
+    const blockedIds = await blockedUserIds(currentUserId);
+    const idFilter = {
+      not: currentUserId,
+      ...(blockedIds.length > 0 ? { notIn: blockedIds } : {}),
+    };
 
     let users: any[] = [];
     let total = 0;
@@ -104,7 +110,7 @@ export async function GET(request: NextRequest) {
       // 1. Search followed users first
       const followedUsers = await prisma.user.findMany({
         where: {
-          id: { not: currentUserId },
+          id: idFilter,
           followers: {
             some: {
               followerId: currentUserId,
@@ -149,7 +155,7 @@ export async function GET(request: NextRequest) {
         const remainingLimit = limit - users.length;
         const otherUsers = await prisma.user.findMany({
           where: {
-            id: { not: currentUserId },
+            id: idFilter,
             NOT: {
               followers: {
                 some: {
@@ -195,7 +201,7 @@ export async function GET(request: NextRequest) {
       // Calculate total count for pagination
       const totalFollowed = await prisma.user.count({
         where: {
-          id: { not: currentUserId },
+          id: idFilter,
           followers: { some: { followerId: currentUserId } },
           OR: [
             { username: { contains: search, mode: "insensitive" } },
@@ -205,7 +211,7 @@ export async function GET(request: NextRequest) {
       });
       const totalOthers = await prisma.user.count({
         where: {
-          id: { not: currentUserId },
+          id: idFilter,
           NOT: { followers: { some: { followerId: currentUserId } } },
           OR: [
             { username: { contains: search, mode: "insensitive" } },
@@ -217,7 +223,7 @@ export async function GET(request: NextRequest) {
     } else {
       // Existing logic for general search or no search
       const whereClause: any = {
-        id: { not: currentUserId },
+        id: idFilter,
       };
       if (search) {
         whereClause.OR = [
@@ -261,17 +267,18 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    // Transform to DTO
-    const discoverUsers: DiscoverUserDto[] = users.map((user) => ({
-      id: user.id,
-      username: user.username || null,
-      name: user.name || null,
-      avatarUrl: user.avatarUrl || null,
-      bio: user.bio || null,
-      isPrivate: user.isPrivate,
-      isFollowing: user.followers.length > 0,
-      isFollowedBy: user.following.length > 0,
-    }));
+    const discoverUsers: DiscoverUserDto[] = users.map((user) => {
+      return {
+        id: user.id,
+        username: user.username || null,
+        name: user.name || null,
+        avatarUrl: user.avatarUrl || null,
+        bio: user.bio || null,
+        isPrivate: user.isPrivate,
+        isFollowing: user.followers.length > 0,
+        isFollowedBy: user.following.length > 0,
+      };
+    });
 
     const hasNext = offset + limit < total;
 

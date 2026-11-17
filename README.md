@@ -117,8 +117,10 @@ TripThread/
 │
 ├── scheduler/              # Trip Status Scheduler (Cron Service)
 │   ├── src/
-│   │   ├── index.ts        # Main entry point
-│   │   ├── tripStatus.ts   # Status update logic
+│   │   ├── index.ts            # Main entry point
+│   │   ├── tripStatus.ts       # Status update and personal drafts
+│   │   ├── memberFinalDraft.ts # Shared unpublished draft (also imported by the API)
+│   │   ├── tripEnd.ts          # End-instant helper
 │   │   └── startup-logger.ts
 │   ├── tests/             # Unit and integration tests
 │   ├── dist/              # Compiled JavaScript
@@ -127,8 +129,7 @@ TripThread/
 │   ├── Dockerfile
 │   ├── start.sh
 │   ├── README.md
-│   ├── SCHEDULER_ARCHITECTURE.md
-│   └── MIGRATION_NOTES.md  # Migration from BullMQ to cron
+│   └── SCHEDULER_ARCHITECTURE.md  # Includes the BullMQ history
 │
 ├── src/                    # Next.js Backend
 │   ├── app/
@@ -204,7 +205,7 @@ npm run docker:up
 * **Test Database**: PostgreSQL at `localhost:5433` (`tripthread_test`)
 * **Scheduler**: Starts after the backend is healthy and updates trip statuses every `SCHEDULER_INTERVAL_SECONDS` (default 300)
 
-On boot the backend runs `prisma migrate deploy`. A volume created by the older `db push` entrypoint is baselined once (schema push, then every migration marked applied). Set `DB_SCHEMA_MODE=push` or `skip` to opt out. Put a real `MAPBOX_ACCESS_TOKEN` in `.env` before place search; the stack still boots with a local placeholder.
+On boot the backend runs `prisma migrate deploy` for every folder under `prisma/migrations`. A volume created by the older `db push` entrypoint is baselined once: the schema is pushed, schema migrations are marked applied, and data-only migrations stay unmarked so `migrate deploy` can rewrite stored rows. Set `DB_SCHEMA_MODE=push` or `skip` to opt out. Rebuild the `web` image after a Flutter change. Put a real `MAPBOX_ACCESS_TOKEN` in `.env` before place search; the stack still boots with a local placeholder.
 
 View Trip Map and the pin dropper use Mapbox on the web UI as well as on iOS and Android. Put a real `MAPBOX_ACCESS_TOKEN` in `.env` and rebuild the `web` image; the token is baked into the Flutter build, and an empty token shows a configuration message instead of a map. Rebuild that image after changing `WEB_API_BASE_URL` (the browser address is baked in too). iOS builds need Swift Package Manager (`flutter config --enable-swift-package-manager`) and iOS 14.
 
@@ -309,9 +310,10 @@ npm start
 
 ### Core Documentation
 
+- **[Technical handbook](./documentations/technical/README.md)** - Feature-by-feature implementation, data model, optimizations, and the full architecture diagram
 - **[Environment Setup](./documentations/ENVIRONMENT_SETUP.md)** - Complete environment configuration guide
-- **[Cache Implementation](./documentations/CACHE.md)** - Redis caching architecture and usage
-- **[Cloudinary Implementation](./documentations/CLOUDINARY_IMPLEMENTATION.md)** - Media storage setup
+- **[Redis, cache, and queues](./documentations/technical/09-redis-cache-and-queues.md)** - Two-tier cache, locks, and rate limits
+- **[Media and Cloudinary](./documentations/technical/07-media-cloudinary.md)** - Signed upload, confirm, and quota
 
 ### Module Documentation
 
@@ -321,7 +323,8 @@ npm start
 
 ### Additional Documentation
 
-- **[Issue Prioritization](./documentations/ISSUE_PRIORITIZATION.md)** - Development priorities
+- **[Architecture diagram](./documentations/technical/19-architecture-diagram.md)** - Mermaid frames for the whole system, including a Miro import order
+- **[Optimizations](./documentations/technical/18-optimizations.md)** - Indexes, N+1 removal, caching, and pagination
 
 ## 🔑 Key Features
 
@@ -329,6 +332,7 @@ npm start
 - User authentication (JWT with refresh tokens)
 - User profiles with privacy settings
 - Follow/Unfollow system
+- Restrict and Block from a direct-message settings screen and from Settings
 - User search and discovery
 
 ### Trip Management
@@ -337,7 +341,7 @@ npm start
 - Automatic status transitions via scheduler
 - Trip participants and invitations
 - Trip publishing and privacy
-- **Final Posts**: Auto-generated trip summaries with curated media
+- **Final Posts**: Each member gets their own recap, then publishes it themselves
   - Generated automatically when trip ends
   - Editable summary, media selection, and captions
   - Publishing makes final posts visible in home feed
@@ -347,11 +351,19 @@ npm start
 - Text, media, and location entries
 - Place tagging on location entries
 - Media uploads (images/videos) via Cloudinary
-- **Final Posts**: Auto-generated trip summaries with curated media
+- **Final Posts**: Each member gets their own recap, then publishes it themselves
   - Intelligent summary generation from trip entries
-  - Media curation (one per day, up to 10 items)
+  - Media curation (one per day, up to 12 items)
   - Editable before publishing
+  - Photo picker shows the selection order and stops at 12
   - Published final posts appear in home feed
+
+### Chat
+- Direct, group, and trip conversations
+- Restrict stops a direct message both ways and keeps the history
+- Block also stops follows and profile access, and stops the creator of a trip or group from adding the other person
+- Settings lists the people you blocked and the people you restricted
+- Shared photos and videos open in one viewer from a chat and from a trip thread
 
 ### Places & Location
 - Place search and discovery
@@ -493,7 +505,7 @@ For complete environment setup, see [ENVIRONMENT_SETUP.md](./documentations/ENVI
 - **Batch operations** for efficiency
 - **Graceful degradation** if Redis unavailable
 
-For detailed cache architecture, see [CACHE.md](./documentations/CACHE.md).
+For detailed cache architecture, see [Redis, cache, and queues](./documentations/technical/09-redis-cache-and-queues.md).
 
 ## 📊 Tech Stack Summary
 
@@ -524,6 +536,6 @@ For detailed cache architecture, see [CACHE.md](./documentations/CACHE.md).
 ## 🔗 Links
 
 - [Documentation Index](./documentations/README.md)
+- [Technical handbook](./documentations/technical/README.md)
 - [Environment Setup](./documentations/ENVIRONMENT_SETUP.md)
-- [Cache Documentation](./documentations/CACHE.md)
 - [Scheduler Architecture](./scheduler/SCHEDULER_ARCHITECTURE.md)

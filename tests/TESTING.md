@@ -24,6 +24,7 @@ TripThread has a broad surface area: 85+ backend API routes, 25+ Flutter screens
 | Backend unit | `tests/unit/expense-split.unit.test.ts` | Equal/exact/percent/shares rounding, simplify A→C, net-sum invariant |
 | Backend integration | `tests/integration/trip-expense.integration.test.ts` | Expense CRUD, subset split, payee mark-paid, payer 403, leave/kick/account-delete 409, currency freeze, ended-trip writes |
 | Mobile | `mobile/test/providers/expense_summary_test.dart`, `mobile/test/screens/trip_money_pane_test.dart` | Summary parse, leave UNSETTLED copy, money pane settled UI |
+| Safety and media | `tests/integration/user-safety.integration.test.ts`, `mobile/test/widgets/media_safety_test.dart` | Restrict both ways, Block follow and profile, creator-only trip and group adds, media cursor pages, seek math, grid columns, photo order badge |
 
 ### Current high-level coverage map
 
@@ -841,12 +842,12 @@ describe('My Test Suite', () => {
    - [ ] Final post includes summary, curated media, and caption
 
 5. **`/api/trips/[id]/final-post` Route**
-   - [ ] GET: Retrieve final post preview (owner only)
+   - [ ] GET: Retrieve the caller's own final post
    - [ ] PUT: Update final post content (summary, media, caption)
    - [ ] Validation: Empty summary rejection
-   - [ ] Validation: Max 10 media items
-   - [ ] Validation: Published posts cannot be edited
-   - [ ] Authorization: Only trip owner can access
+   - [ ] Validation: A save keeps at most 12 media items
+   - [ ] An unpublished edit stays `DRAFT`. A published edit stays `PUBLISHED`
+   - [ ] Authorization: The author, not every member of the trip
 
 6. **`/api/trips/[id]/publish` Route**
    - [ ] POST: Publish final post

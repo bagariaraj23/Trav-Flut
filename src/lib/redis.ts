@@ -98,16 +98,22 @@ export async function invalidateCachedKey(key: string): Promise<void> {
 export async function getOrSet<T>(
     key: string,
     getter: () => Promise<T>,
-    ttl: number = DEFAULT_CACHE_TTL
+    ttl: number = DEFAULT_CACHE_TTL,
+    options?: { processCache?: boolean }
 ): Promise<T> {
-    const memValue = memoryCache.get(key) as T | undefined;
-    if (memValue !== undefined) {
-        return memValue;
+    // Safety decisions are shared across API processes. A process-local hit
+    // would ignore a block written on another instance until the TTL elapsed.
+    const useProcessCache = options?.processCache !== false;
+    if (useProcessCache) {
+        const memValue = memoryCache.get(key) as T | undefined;
+        if (memValue !== undefined) {
+            return memValue;
+        }
     }
 
-    const cached = await readRedisValue<T>(key, ttl);
+        const cached = await readRedisValue<T>(key, ttl);
     if (cached !== undefined) {
-        memoryCache.set(key, cached, ttl);
+        if (useProcessCache) memoryCache.set(key, cached, ttl);
         return cached;
     }
 
@@ -144,7 +150,7 @@ export async function getOrSet<T>(
                 await delay(80 * (attempt + 1));
                 const retried = await readRedisValue<T>(key, ttl);
                 if (retried !== undefined) {
-                    memoryCache.set(key, retried, ttl);
+                    if (useProcessCache) memoryCache.set(key, retried, ttl);
                     return retried;
                 }
             }
@@ -152,7 +158,7 @@ export async function getOrSet<T>(
 
         const value = await getter();
         if (value !== undefined && value !== null) {
-            memoryCache.set(key, value, ttl);
+            if (useProcessCache) memoryCache.set(key, value, ttl);
             await writeRedisValue(key, value, ttl);
         }
 
