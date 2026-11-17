@@ -1,5 +1,9 @@
 "use strict";
 
+// chat-ws validates DATABASE_URL, JWT_SECRET, and MAPBOX_ACCESS_TOKEN at import time,
+// before Next loads next.config.js (which is what calls dotenv). Load .env first.
+require("dotenv").config();
+
 // Shared chat event bus - must load before Next/chat-ws so API and WS use same instance
 require("./lib/chat-events-bus.cjs");
 

@@ -4,7 +4,7 @@
         "workspacePath": "/Users/rajbagaria/Desktop/Bolt-Travello/Flut/project",
         "generatedAt": "2026-11-13",
         "description": "Travel-focused social platform where users create trips, post thread entries (text/media/location), split trip expenses and settle up on a Money pane, generate/publish final trip posts, and chat via 1:1 DMs, groups, and trip-scoped rooms (realtime WebSocket).",
-        "lastPRReviewed": "PR #61, PR #62, and PR #63 merged to main on 2026-11-17 at 1:45 PM IST. Main has one unpublished DRAFT final post per member, Restrict and Block, and the technical handbook in documentations/technical. Restrict keeps photo, bio, and published posts on the profile. Home, Discover, live trips, and search omit the restrictor's posts for the restricted person. Only a block hides photo and bio. Open pull requests are #65 (phone photos and a post that is not tied to a trip), #66 (load .env before the API server starts), and #60 (this tracking update). Drafts #38 and #15 stay open. #38 is the older personalised-final-posts branch. The implementation that merged is #61.",
+        "lastPRReviewed": "PR #61, PR #62, and PR #63 merged to main on 2026-11-17 at 1:45 PM IST. Main has one unpublished DRAFT final post per member, Restrict and Block, and the technical handbook in documentations/technical. Restrict keeps photo, bio, and published posts on the profile. Home, Discover, live trips, and search omit the restrictor's posts for the restricted person. Only a block hides photo and bio. Open pull requests are #65 (phone photos and a post that is not tied to a trip), #66 (reserved, with no code yet), and #60 (this tracking update, which also loads .env before the API server starts). Drafts #38 and #15 stay open. #38 is the older personalised-final-posts branch. The implementation that merged is #61.",
         "recentProductionPRs": [
             "https://github.com/bagariaraj23/Trav-Flut/pull/56",
             "https://github.com/bagariaraj23/Trav-Flut/pull/54",
@@ -2381,15 +2381,14 @@
             },
             {
                 "number": 66,
-                "title": "Load .env before the API server starts",
+                "title": "Reserved for the next feature",
                 "state": "open",
                 "url": "https://github.com/bagariaraj23/Trav-Flut/pull/66",
                 "base": "main",
                 "head": "cursor/dev-server-load-env-4d04",
-                "notes": "server.cjs loads .env before the chat bundle is imported, so npm run dev sees DATABASE_URL, JWT_SECRET, and MAPBOX_ACCESS_TOKEN.",
+                "notes": "Open and empty against main, so the next feature can land here. The .env load moved to #60.",
                 "keyFeatures": [
-                    "dotenv at the top of server.cjs",
-                    "Existing environment variables are left unchanged"
+                    "No file changes against main"
                 ]
             },
             {
@@ -2399,10 +2398,11 @@
                 "url": "https://github.com/bagariaraj23/Trav-Flut/pull/60",
                 "base": "main",
                 "head": "cursor/context-after-merge-aa71",
-                "notes": "context.json records #61, #62, and #63 as merged on 2026-11-17 at 1:45 PM IST, and lists the open pull requests.",
+                "notes": "context.json records #61, #62, and #63 as merged on 2026-11-17 at 1:45 PM IST. server.cjs loads .env before the chat bundle is imported.",
                 "keyFeatures": [
                     "Merged list includes #61, #62, and #63",
-                    "Open list is #65, #66, #60, and drafts #38 and #15"
+                    "Open list is #65, #66, #60, and drafts #38 and #15",
+                    "dotenv at the top of server.cjs"
                 ]
             },
             {
@@ -2455,7 +2455,7 @@
             "notes": "2026-11-13: personalized final-post integration tests and scheduler draft tests passed (13). 2026-11-11: user-safety and chat integration tests passed (25). Flutter media_safety_test passed in the Flutter 3.38.5 container. Do not add platform-specific Rolldown bindings to root dependencies."
         },
         "lastMergedFeature": "PR #61, PR #62, and PR #63 merged to main on 2026-11-17 at 1:45 PM IST.",
-        "notes": "Main includes personalized final posts, Restrict and Block, and the technical handbook, merged as #61, #62, and #63 on 2026-11-17 at 1:45 PM IST. A final post starts as one unpublished DRAFT per member, with up to 12 photos already on that trip. Restrict keeps the restrictor's photo, bio, and published posts on their profile. Home, Discover, live trips, and search omit those posts for the restricted person. Only a block hides photo and bio. Open pull requests are #65, #66, and #60. Drafts #15 and #38 stay open. The handbook is documentations/technical. Migrations apply through the existing migrate-on-boot path. No new Compose service, port, or environment variable. A road line between saved pins can come later with one cached Mapbox Directions call. A walked-path trace needs background location and stays deferred.",
+        "notes": "Main includes personalized final posts, Restrict and Block, and the technical handbook, merged as #61, #62, and #63 on 2026-11-17 at 1:45 PM IST. A final post starts as one unpublished DRAFT per member, with up to 12 photos already on that trip. Restrict keeps the restrictor's photo, bio, and published posts on their profile. Home, Discover, live trips, and search omit those posts for the restricted person. Only a block hides photo and bio. Open pull requests are #65, #66, and #60. Drafts #15 and #38 stay open. The handbook is documentations/technical. Migrations apply through the existing migrate-on-boot path. No new Compose service, port, or environment variable. A road line between saved pins can come later with one cached Mapbox Directions call. A walked-path trace needs background location and stays deferred. This branch also loads .env at the top of server.cjs, before the chat bundle is imported, so npm run dev sees DATABASE_URL, JWT_SECRET, and MAPBOX_ACCESS_TOKEN. Existing environment variables are left unchanged. #66 is reserved and currently has no diff against main.",
         "mainBranchStable": true,
         "activeStack": []
     },
