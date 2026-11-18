@@ -5,7 +5,7 @@ import HomePageContent from "./HomePageContent";
 
 export default function HomePage() {
   return (
-    <Suspense fallback={<div className="text-center p-10 text-gray-500">Loading...</div>}>
+    <Suspense fallback={<div className="min-h-screen bg-cream" />}>
       <HomePageContent />
     </Suspense>
   );
