@@ -4,7 +4,7 @@
         "workspacePath": "/Users/rajbagaria/Desktop/Bolt-Travello/Flut/project",
         "generatedAt": "2026-11-13",
         "description": "Travel-focused social platform where users create trips, post thread entries (text/media/location), split trip expenses and settle up on a Money pane, generate/publish final trip posts, and chat via 1:1 DMs, groups, and trip-scoped rooms (realtime WebSocket).",
-        "lastPRReviewed": "PR #61, PR #62, and PR #63 merged to main on 2026-11-17 at 1:45 PM IST. Main has one unpublished DRAFT final post per member, Restrict and Block, and the technical handbook in documentations/technical. Restrict keeps photo, bio, and published posts on the profile. Home, Discover, live trips, and search omit the restrictor's posts for the restricted person. Only a block hides photo and bio. Open pull requests are #65 (phone photos and a post that is not tied to a trip), #66 (public landing page; Log in and Sign up open the Flutter web app), and #60 (this tracking update, which also loads .env before the API server starts). Drafts #38 and #15 stay open. #38 is the older personalised-final-posts branch. The implementation that merged is #61.",
+        "lastPRReviewed": "PR #61, PR #62, and PR #63 merged to main on 2026-11-17 at 1:45 PM IST. Main has one unpublished DRAFT final post per member, Restrict and Block, and the technical handbook in documentations/technical. Restrict keeps photo, bio, and published posts on the profile. Home, Discover, live trips, and search omit the restrictor's posts for the restricted person. Only a block hides photo and bio. Open pull requests are #65 (phone photos and a post that is not tied to a trip), #66 (public landing page; Log in and Sign up open the Flutter web app; support notes are emailed to SUPPORT_EMAIL), and #60 (this tracking update, which also loads .env before the API server starts). Drafts #38 and #15 stay open. #38 is the older personalised-final-posts branch. The implementation that merged is #61.",
         "recentProductionPRs": [
             "https://github.com/bagariaraj23/Trav-Flut/pull/56",
             "https://github.com/bagariaraj23/Trav-Flut/pull/54",
@@ -149,7 +149,7 @@
     },
     "backendApi": {
         "basePrefix": "/api",
-        "routeCount": 94,
+        "routeCount": 95,
         "majorDomains": [
             "auth",
             "users",
@@ -160,7 +160,8 @@
             "follow",
             "likes/comments/shares (POST /shares shareSource: SYSTEM_SHEET default, no shareCount bump; IN_APP_DM increments — wire from chat share UI; Universal Links still ops-only)",
             "notifications",
-            "chat (merged PR #48: REST /api/chat + WS /chat on server.cjs; DM/GROUP/TRIP. GET /chat/conversations/:id/media pages image, gif, and video attachments. GET .../media/:mediaId/context opens a centered window. A block stops direct messages both ways. A restrict stops only the restricted person from messaging the restrictor. Typing, read receipts, and presence skip a blocked pair and skip the restrictor's signals for the person they restricted. Conversation summaries omit lastReadAt for those people. PUT/DELETE /users/:id/safety and GET /users/me/safety store Restrict and Block. Trip chats default to the trip title and use the same add/remove/promote/leave controls as groups. Leaving a chat does not leave the trip, and that leave is not undone on the next trip sync. Single-node event bus; rate-limit + Redis Pub/Sub + offline push deferred)"
+            "chat (merged PR #48: REST /api/chat + WS /chat on server.cjs; DM/GROUP/TRIP. GET /chat/conversations/:id/media pages image, gif, and video attachments. GET .../media/:mediaId/context opens a centered window. A block stops direct messages both ways. A restrict stops only the restricted person from messaging the restrictor. Typing, read receipts, and presence skip a blocked pair and skip the restrictor's signals for the person they restricted. Conversation summaries omit lastReadAt for those people. PUT/DELETE /users/:id/safety and GET /users/me/safety store Restrict and Block. Trip chats default to the trip title and use the same add/remove/promote/leave controls as groups. Leaving a chat does not leave the trip, and that leave is not undone on the next trip sync. Single-node event bus; rate-limit + Redis Pub/Sub + offline push deferred)",
+            "support (POST /support emails SUPPORT_EMAIL through SendGrid. A public note must include an email. A Bearer token replaces that email with the account and attaches the user id. A filled honeypot field returns success and sends nothing. Five requests per hour. No database row. 503 when SendGrid is unset)"
         ],
         "keyTripFlow": {
             "createTrip": "POST /trips — startDate optional (defaults to now, status ONGOING); endDate optional (null = manual end only). Start and end times are optional. A midnight end date is stored as 11:59:59.999 PM in scheduleTimezone. A chosen end time is stored as that instant. Future start stays UPCOMING. Dates are UTC instants. scheduleTimezone is the IANA zone the wall time was chosen in. Omitted type becomes SOLO with typeSetByUser false.",
@@ -517,6 +518,12 @@
                 ]
             },
             {
+                "path": "/support",
+                "methods": [
+                    "POST"
+                ]
+            },
+            {
                 "path": "/trips",
                 "methods": [
                     "GET",
@@ -865,14 +872,16 @@
             "backendFiles": [
                 "src/lib/services/email.ts",
                 "src/lib/services/passwordReset.ts",
+                "src/lib/supportMessage.ts",
                 "src/app/api/auth/forgot-password/route.ts",
-                "src/app/api/auth/reset-password/route.ts"
+                "src/app/api/auth/reset-password/route.ts",
+                "src/app/api/support/route.ts"
             ]
         }
     },
     "mobileApp": {
         "entrypoint": "mobile/lib/main.dart",
-        "screenCount": 30,
+        "screenCount": 31,
         "providerCount": 10,
         "serviceCount": 13,
         "screens": [
@@ -899,6 +908,7 @@
             "screens/profile/profile_screen.dart",
             "screens/profile/trip_invitations_screen.dart",
             "screens/settings/settings_screen.dart",
+            "screens/settings/support_screen.dart",
             "screens/splash_screen.dart",
             "screens/trip/create_trip_screen.dart",
             "screens/trip/final_post_edit_screen.dart",
@@ -939,8 +949,15 @@
             "services/trip_service.dart"
         ],
         "routerHighlights": {
-            "routing": "GoRouter in main.dart",
-            "authRedirectLogic": "Redirects unauthenticated users to /login and profile-incomplete users to /complete-profile",
+            "routing": "GoRouter in main.dart. Flutter web calls usePathUrlStrategy, so /login and /signup are path URLs the landing page can open.",
+            "authRedirectLogic": "Redirects unauthenticated users to /login and profile-incomplete users to /complete-profile. Login and signup scroll the full page and center a 420px column, so the scrollbar stays on the window.",
+            "settingsRoutes": [
+                "/settings",
+                "/settings/permissions",
+                "/settings/safety",
+                "/settings/help",
+                "/settings/support"
+            ],
             "tripRoutes": [
                 "/trip/:tripId",
                 "/trip/:tripId/thread",
@@ -2386,12 +2403,13 @@
                 "url": "https://github.com/bagariaraj23/Trav-Flut/pull/66",
                 "base": "main",
                 "head": "cursor/dev-server-load-env-4d04",
-                "notes": "The Next.js home page is the public landing page. Log in and Sign up use NEXT_PUBLIC_APP_WEB_URL and open the Flutter web app at /login and /signup. Password reset and share links stay on this Next host. Local dev defaults the Flutter origin to http://localhost:8080. Support on the landing page and in app settings emails SUPPORT_EMAIL.",
+                "notes": "The Next.js home page is the public landing page. Log in and Get started use NEXT_PUBLIC_APP_WEB_URL and open the Flutter web app at /login and /signup. Flutter web uses path URLs. Password reset and share links stay on this Next host. Local dev defaults the Flutter origin to http://localhost:8080. Support is /support in the landing header and footer, and Contact support at /settings/support. POST /api/support emails SUPPORT_EMAIL (default bagariaraj23@gmail.com) through SendGrid, with Reply-To set to the sender. A signed-in app request replaces the address with the account email. The pages do not print the inbox address. A honeypot returns success without sending. The route is limited to 5 per hour and returns 503 when SendGrid is unset, unlike forgot-password. No new table or Compose service. Login and signup scroll the full window.",
                 "keyFeatures": [
                     "Landing page on the Next.js home route",
-                    "Log in and Sign up open the Flutter web app",
+                    "Log in and Get started open the Flutter web app",
                     "NEXT_PUBLIC_APP_WEB_URL",
-                    "Support form emails the TripThread inbox"
+                    "Support form emails SUPPORT_EMAIL",
+                    "Auth screens scroll the page"
                 ]
             },
             {
@@ -2458,7 +2476,7 @@
             "notes": "2026-11-13: personalized final-post integration tests and scheduler draft tests passed (13). 2026-11-11: user-safety and chat integration tests passed (25). Flutter media_safety_test passed in the Flutter 3.38.5 container. Do not add platform-specific Rolldown bindings to root dependencies."
         },
         "lastMergedFeature": "PR #61, PR #62, and PR #63 merged to main on 2026-11-17 at 1:45 PM IST.",
-        "notes": "Main includes personalized final posts, Restrict and Block, and the technical handbook, merged as #61, #62, and #63 on 2026-11-17 at 1:45 PM IST. A final post starts as one unpublished DRAFT per member, with up to 12 photos already on that trip. Restrict keeps the restrictor's photo, bio, and published posts on their profile. Home, Discover, live trips, and search omit those posts for the restricted person. Only a block hides photo and bio. Open pull requests are #65, #66, and #60. Drafts #15 and #38 stay open. The handbook is documentations/technical. Migrations apply through the existing migrate-on-boot path. No new Compose service, port, or environment variable. A road line between saved pins can come later with one cached Mapbox Directions call. A walked-path trace needs background location and stays deferred. This branch also loads .env at the top of server.cjs, before the chat bundle is imported, so npm run dev sees DATABASE_URL, JWT_SECRET, and MAPBOX_ACCESS_TOKEN. Existing environment variables are left unchanged. #66 is the public landing page. Log in and Sign up use NEXT_PUBLIC_APP_WEB_URL and open the Flutter web app.",
+        "notes": "Main includes personalized final posts, Restrict and Block, and the technical handbook, merged as #61, #62, and #63 on 2026-11-17 at 1:45 PM IST. A final post starts as one unpublished DRAFT per member, with up to 12 photos already on that trip. Restrict keeps the restrictor's photo, bio, and published posts on their profile. Home, Discover, live trips, and search omit those posts for the restricted person. Only a block hides photo and bio. Open pull requests are #65, #66, and #60. Drafts #15 and #38 stay open. The handbook is documentations/technical. Migrations apply through the existing migrate-on-boot path. No new Compose service, port, or environment variable. A road line between saved pins can come later with one cached Mapbox Directions call. A walked-path trace needs background location and stays deferred. This branch also loads .env at the top of server.cjs, before the chat bundle is imported, so npm run dev sees DATABASE_URL, JWT_SECRET, and MAPBOX_ACCESS_TOKEN. Existing environment variables are left unchanged. #66 is the public landing page. Log in and Get started use NEXT_PUBLIC_APP_WEB_URL and open the Flutter web app. Support notes are emailed to SUPPORT_EMAIL and are not stored. The branch adds those two environment variables and no table, port, or Compose service.",
         "mainBranchStable": true,
         "activeStack": []
     },

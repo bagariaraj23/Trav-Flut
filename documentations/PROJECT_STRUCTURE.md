@@ -222,6 +222,7 @@ mobile/
 │   │   │   └── followers_screen.dart  # Followers/following lists
 │   │   └── settings/
 │   │       ├── settings_screen.dart  # App settings
+│   │       ├── support_screen.dart   # Contact support; emails SUPPORT_EMAIL
 │   │       ├── safety_list_screen.dart  # People you blocked or restricted
 │   │       ├── help_faq_screen.dart  # In-app help for the product rules
 │   │       ├── privacy_screen.dart   # Privacy settings
@@ -459,6 +460,8 @@ cursor_rules.md                 # Cursor/Copilot AI rules
 - `src/lib/auth.ts` — JWT token generation, validation
 - `src/middleware.ts` — Auth middleware, token refresh
 - `src/app/api/auth/*` — Login, signup, password reset endpoints
+- `src/app/api/support/route.ts` — Support note emailed through SendGrid
+- `src/app/support/page.tsx` — Public support form linked from the landing page
 - `mobile/lib/providers/auth_provider.dart` — Mobile auth state
 - `mobile/lib/services/auth_service.dart` — Mobile token management
 

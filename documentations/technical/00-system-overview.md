@@ -7,6 +7,7 @@ flowchart LR
   subgraph clients [Clients]
     Phone["Flutter iOS and Android"]
     WebUI["Flutter web via nginx :8080"]
+    Landing["Next.js landing and support"]
     Browser["Password-reset web pages"]
   end
 
@@ -33,6 +34,7 @@ flowchart LR
   Phone --> WS
   WebUI --> Next
   WebUI --> WS
+  Landing --> Next
   Browser --> Next
   Next --> PG
   Next --> Redis
@@ -47,6 +49,8 @@ flowchart LR
 ```
 
 The scheduler never talks to Redis. Chat fan-out never talks to Redis either. Both of those choices are deliberate and are documented in [Redis](./09-redis-cache-and-queues.md) and [Chat](./14-chat.md).
+
+The public site is the Next.js home page on this same API process. Log in and Get started leave it for the Flutter web origin in `NEXT_PUBLIC_APP_WEB_URL` (`/login` and `/signup`). A support note is `POST /api/support` and is emailed. It is not stored.
 
 ## Processes
 
@@ -86,6 +90,8 @@ Tokens:
 
 - iOS, Android, and desktop use `flutter_secure_storage` (`token_store_io.dart`), Keychain `first_unlock_this_device` on iOS.
 - The Docker web build uses `shared_preferences` (`token_store_web.dart`). WebCrypto-backed secure storage was leaving the splash screen up after login, so the web session is browser local storage.
+
+`main.dart` calls `usePathUrlStrategy`, so the web app serves `/login` and `/signup` as path URLs. Login and signup scroll the full window and center a 420-pixel column inside it. The scrollbar belongs to the page, not to that column. Contact support is `/settings/support`.
 
 ### Scheduler (`scheduler/`)
 
@@ -136,6 +142,7 @@ The API is one deployable, split by folder rather than by network service.
 | Engagement | `/api/likes`, `/api/comments`, `/api/shares`, `/api/posts` | `like.ts`, `comment.ts`, `share.ts` |
 | Notifications | `/api/users/me/notifications` | `notification.ts` |
 | Chat | `/api/chat/*` and `WS /chat` | `chat.ts`, `chat-ws.ts` |
+| Support | `POST /api/support` | `supportMessage.ts`, `email.ts` |
 
 ## Concepts that show up everywhere
 

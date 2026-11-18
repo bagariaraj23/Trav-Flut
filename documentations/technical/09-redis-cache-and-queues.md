@@ -80,6 +80,7 @@ Identifier is the authenticated user id when the middleware was given one, other
 | `auth_google` | 30 | 15 min |
 | `auth_complete_profile` | 20 | 15 min |
 | `auth_link_google` | 10 | 15 min |
+| `support` | 5 | 1 hour |
 | `general` | 100 | 1 min |
 | `write` | 60 | 1 min |
 | `read_hot` | 240 | 1 min |

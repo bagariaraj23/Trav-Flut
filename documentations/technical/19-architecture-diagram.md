@@ -131,6 +131,7 @@ flowchart TB
   subgraph clients ["Clients"]
     phone["Flutter iOS and Android\nflutter_secure_storage"]
     web["Flutter web\nshared_preferences"]
+    landing["Next.js landing\n/ and /support"]
     resetPage["Browser reset page\ncurrent password required"]
   end
 
@@ -178,6 +179,7 @@ flowchart TB
   phone -->|"bytes"| cld
   phone -->|"tiles and static map"| mb
   web --> proxy
+  landing --> rest
   resetPage --> proxy
   proxy --> rest
   proxy --> ws
@@ -226,6 +228,7 @@ Read this frame with three rules:
 1. Redis is beside the API, not beside the scheduler, and not on the chat bus.
 2. Cloudinary is reached by the phone for bytes and by the API for signatures, magic-number reads, and deletes.
 3. Mapbox is reached by the phone for tiles and by the API for place search.
+4. The Next.js home page is the public landing page on the API process. Log in and Get started leave that host for the Flutter web origin. `POST /api/support` is a third SendGrid message and writes no table.
 
 ## 5. Session and password
 

@@ -56,9 +56,11 @@ Docker is a convenience loop around the same one-shot script. It is not a long-r
 
 ## Email
 
-Only SendGrid, only two messages: password reset and "your password changed". Implementation: `src/lib/services/email.ts`. If `SENDGRID_API_KEY` is unset, send is a no-op and the API still returns success for forgot-password. That is safe for enumeration and unsafe for a misconfigured production deploy, because the user hears nothing. `MAIL_FROM` defaults to `no-reply@your-domain` and should be a verified sender. `SENDGRID_DEBUG` turns on extra logging.
+SendGrid sends three messages: password reset, "your password changed", and a support note. Implementation: `src/lib/services/email.ts`. If `SENDGRID_API_KEY` is unset, password-reset send is a no-op and the API still returns success for forgot-password. That is safe for enumeration and unsafe for a misconfigured production deploy, because the user hears nothing. `MAIL_FROM` defaults to `no-reply@your-domain` and should be a verified sender. `SENDGRID_DEBUG` turns on extra logging.
 
-No other mail is sent. Follows, comments, and trip invites are in-app notifications only.
+Support is different. `POST /api/support` (`src/app/api/support/route.ts`, `src/lib/supportMessage.ts`) emails `SUPPORT_EMAIL` (default `bagariaraj23@gmail.com`). The message must be 10 to 4000 characters. A public note must include a valid email. A `Bearer` access token replaces that email with the account and adds the user id. Reply-To is the sender. A filled honeypot field named `website` returns `{ ok: true }` and sends nothing. The `support` rate-limit preset allows 5 requests an hour and logs `RATE_LIMIT_HIT`. If SendGrid is unset or the send throws, the route returns **503** and does not pretend the note was sent. Nothing is written to Postgres. The landing page links to `/support` from the header and the footer. Settings opens the same API from Contact support (`/settings/support`). Neither screen prints the inbox address.
+
+Follows, comments, and trip invites stay in-app notifications. They are not emailed.
 
 ## Scripts
 

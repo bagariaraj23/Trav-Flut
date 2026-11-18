@@ -31,6 +31,8 @@ Full stack (`docker-compose.yml`):
 - `WEB_PORT` defaults to `8080`. `WEB_API_BASE_URL` (default `http://localhost:8080/api`) and `WEB_SHARE_LINK_BASE_URL` (default `http://localhost:8080`) are baked into the Flutter web image. Rebuild the `web` service after changing them.
 - `MAPBOX_ACCESS_TOKEN` is required for place search. The API boots with a placeholder when it is empty.
 - `SHARE_LINK_BASE_URL` on the API defaults to `http://localhost:3000` so phone builds and the share bridge on port 3000 keep working. The web image uses its own share origin on port 8080.
+- `NEXT_PUBLIC_APP_WEB_URL` is the Flutter web origin for the landing page. Log in opens `{origin}/login` and Get started opens `{origin}/signup`. Local Docker uses `http://localhost:8080`. On Railway, set the hosted Flutter origin. A process environment variable overrides the file, and Next reads it when the server starts.
+- `SUPPORT_EMAIL` is the inbox for `POST /api/support`. It defaults to `bagariaraj23@gmail.com` when unset. The landing page and the settings screen do not show the address. Sending still needs `SENDGRID_API_KEY` and a verified `MAIL_FROM`. Without a key the route returns 503.
 
 Database-only (`docker-compose.dev.yml`) leaves the API and Flutter on the host. Use `mobile/.env` with `API_BASE_URL=http://localhost:3000/api` (or `http://10.0.2.2:3000/api` on the Android emulator). The web container does not read `mobile/.env` at runtime.
 
@@ -51,6 +53,10 @@ JWT_REFRESH_SECRET="your-super-secret-refresh-key-change-in-production"
 # Email Configuration (SendGrid)
 SENDGRID_API_KEY="your-sendgrid-api-key"
 FROM_EMAIL="noreply@tripthread.com"
+SUPPORT_EMAIL="bagariaraj23@gmail.com"
+
+# Flutter web origin for landing-page Log in and Get started. No trailing slash.
+NEXT_PUBLIC_APP_WEB_URL="http://localhost:8080"
 
 # Server Configuration
 NEXT_PUBLIC_API_BASE_URL=http://localhost:3000/api

@@ -147,6 +147,8 @@ The interceptor does not try to refresh a 401 from `/auth/login`, `/auth/signup`
 
 `src/lib/auth.ts` also reads an `auth_token` cookie via `getAuthSession()` for the Next.js password-reset pages. The Flutter client does not set that cookie. It sends `Authorization: Bearer`.
 
+The public landing page is the Next.js home route. Log in and Get started open `{NEXT_PUBLIC_APP_WEB_URL}/login` and `{NEXT_PUBLIC_APP_WEB_URL}/signup`. Flutter web uses path URLs, so those links hit the auth screens. Password reset and share links stay on the Next host. Login and signup scroll the full window. The form column is at most 420 pixels wide and centered inside that scroll view.
+
 ## Credential invalidation
 
 `withAuth` (`src/lib/middleware.ts`) loads `id`, `email`, and `updatedAt`. If `payload.iat * 1000 < user.updatedAt.getTime() - 1000`, the access token is rejected. Password changes, profile updates that touch `updatedAt`, and complete-profile all move `updatedAt`, so stolen access tokens die on the next request after the change. Refresh tokens are deleted explicitly on password reset (`revokeAllRefreshTokens`) and on logout.
