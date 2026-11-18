@@ -84,13 +84,13 @@ class _LoginScreenState extends State<LoginScreen> {
     final spacing = AppLayout.authSpacing(context);
     return Scaffold(
       body: SafeArea(
-        child: Align(
-          alignment: Alignment.topCenter,
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 420),
-            child: SingleChildScrollView(
+        child: SingleChildScrollView(
           padding: EdgeInsets.all(spacing.pagePadding),
-          child: Form(
+          child: Align(
+            alignment: Alignment.topCenter,
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 420),
+              child: Form(
             key: _formKey,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -431,11 +431,11 @@ class _LoginScreenState extends State<LoginScreen> {
                 SizedBox(height: spacing.bottom),
               ],
             ),
-          ),
-        ),
+              ),
             ),
           ),
         ),
+      ),
     );
     // );
   }

@@ -90,6 +90,12 @@ export default function LandingPage({
             />
           </a>
           <nav className="flex shrink-0 items-center gap-1 sm:gap-2" aria-label="Account">
+            <a
+              href="/support"
+              className="inline-flex items-center rounded-full px-3 py-2 text-sm font-medium text-ink hover:bg-mist focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+            >
+              Support
+            </a>
             <AuthLink path="login" variant="secondary">
               Log in
             </AuthLink>
@@ -186,9 +192,14 @@ export default function LandingPage({
       <footer className="border-t border-ink/5">
         <div className="mx-auto flex max-w-6xl flex-col gap-4 px-5 py-8 sm:flex-row sm:items-center sm:justify-between sm:px-8">
           <img src="/tripthread-logo.svg" alt="TripThread" className="h-7" />
-          <p className="max-w-sm text-sm leading-relaxed text-ink-soft">
-            Capture journeys. Share stories. Password reset links from your email open on this site.
-          </p>
+          <div className="flex max-w-sm flex-col gap-2 sm:items-end">
+            <a href="/support" className="text-sm font-medium text-ink underline-offset-4 hover:underline">
+              Support
+            </a>
+            <p className="text-sm leading-relaxed text-ink-soft sm:text-right">
+              Capture journeys. Share stories. Password reset links from your email open on this site.
+            </p>
+          </div>
         </div>
       </footer>
     </div>

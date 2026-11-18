@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:flutter_web_plugins/url_strategy.dart';
 import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
 import 'package:another_flushbar/flushbar.dart';
@@ -46,6 +47,7 @@ import 'package:tripthread/screens/trip/final_post_edit_screen.dart';
 import 'package:tripthread/screens/profile/follow_requests_screen.dart';
 import 'package:tripthread/screens/profile/trip_invitations_screen.dart';
 import 'package:tripthread/screens/settings/help_faq_screen.dart';
+import 'package:tripthread/screens/settings/support_screen.dart';
 import 'package:tripthread/screens/settings/permissions_screen.dart';
 import 'package:tripthread/screens/settings/safety_list_screen.dart';
 import 'package:tripthread/screens/settings/settings_screen.dart';
@@ -67,6 +69,7 @@ import 'package:tripthread/widgets/auth_gate.dart';
 void main() async {
   debugPrint('[main] Starting TripThread app initialization');
   WidgetsFlutterBinding.ensureInitialized();
+  usePathUrlStrategy();
   await LocaleDates.ensureInitialized();
 
   try {
@@ -798,6 +801,10 @@ class _TripThreadAppRouterState extends State<TripThreadAppRouter> {
             builder: (context, state) => HelpFaqScreen(
               initialTopic: state.uri.queryParameters['topic'],
             ),
+          ),
+          GoRoute(
+            path: '/settings/support',
+            builder: (context, state) => const SupportScreen(),
           ),
           GoRoute(
             path: '/likes/:entityType/:entityId',

@@ -111,6 +111,14 @@ export const RATE_LIMIT_PRESETS: Record<string, RateLimitConfig> = {
     logEvent: true,
   },
 
+  // Public support form. Keeps the inbox from being flooded.
+  support: {
+    maxRequests: 5,
+    windowMs: 60 * 60 * 1000,
+    keyPrefix: "rl:support",
+    logEvent: true,
+  },
+
   // General API endpoints
   general: {
     maxRequests: 100,

@@ -539,6 +539,39 @@ class ApiService {
     }
   }
 
+  Future<ApiResponse<void>> sendSupportMessage({
+    required String message,
+    String? email,
+    String? name,
+  }) async {
+    try {
+      final response = await _dio.post(
+        '/support',
+        data: {
+          'message': message,
+          if (email != null && email.isNotEmpty) 'email': email,
+          if (name != null && name.isNotEmpty) 'name': name,
+        },
+      );
+      return ApiResponse<void>(
+        success: response.data['ok'] == true,
+        message: response.data['message'],
+        error: response.data['error'],
+      );
+    } on DioException catch (e) {
+      return ApiResponse<void>(
+        success: false,
+        error: e.response?.data['error'] ?? 'Network error occurred',
+      );
+    } catch (e) {
+      debugPrint('[ApiService] Support message unexpected error: $e');
+      return ApiResponse<void>(
+        success: false,
+        error: 'An unexpected error occurred',
+      );
+    }
+  }
+
   Future<ApiResponse<void>> forgotPassword({required String email}) async {
     try {
       debugPrint('[ApiService] Forgot password called with email: $email');

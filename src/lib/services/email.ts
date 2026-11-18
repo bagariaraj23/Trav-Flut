@@ -35,6 +35,59 @@ export async function sendPasswordResetEmail({ to, resetLink, ttlMinutes }: Rese
   }
 }
 
+type SupportEmailArgs = {
+  to: string;
+  fromEmail: string;
+  fromName?: string | null;
+  userId?: string | null;
+  message: string;
+};
+
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+export async function sendSupportEmail({
+  to,
+  fromEmail,
+  fromName,
+  userId,
+  message,
+}: SupportEmailArgs): Promise<boolean> {
+  if (!SENDGRID_API_KEY) {
+    if (DEBUG) console.error("SENDGRID_API_KEY missing");
+    return false;
+  }
+  const who = fromName ? `${fromName} <${fromEmail}>` : fromEmail;
+  const account = userId ? `\nAccount: ${userId}` : "";
+  const text = `From: ${who}${account}\n\n${message}`;
+  const msg = {
+    to,
+    from: MAIL_FROM,
+    replyTo: fromEmail,
+    subject: `${APP_NAME}: Support message`,
+    text,
+    html: `<p><b>From:</b> ${escapeHtml(who)}</p>${
+      userId ? `<p><b>Account:</b> ${escapeHtml(userId)}</p>` : ""
+    }<p>${escapeHtml(message).replace(/\n/g, "<br>")}</p>`,
+  };
+  try {
+    const res = await sgMail.send(msg as any);
+    if (DEBUG) console.log("SendGrid OK:", res[0]?.statusCode);
+    return true;
+  } catch (e: any) {
+    if (DEBUG) {
+      console.error("SendGrid ERROR status:", e?.response?.statusCode);
+      console.error("SendGrid ERROR body:", e?.response?.body || e);
+    }
+    return false;
+  }
+}
+
 type SecEmailArgs = { to: string };
 export async function sendSecurityEmail({ to }: SecEmailArgs) {
   if (!SENDGRID_API_KEY) return;

@@ -2386,11 +2386,12 @@
                 "url": "https://github.com/bagariaraj23/Trav-Flut/pull/66",
                 "base": "main",
                 "head": "cursor/dev-server-load-env-4d04",
-                "notes": "The Next.js home page is the public landing page. Log in and Sign up use NEXT_PUBLIC_APP_WEB_URL and open the Flutter web app at /login and /signup. Password reset and share links stay on this Next host. The variable stays empty until the Railway Flutter origin is set.",
+                "notes": "The Next.js home page is the public landing page. Log in and Sign up use NEXT_PUBLIC_APP_WEB_URL and open the Flutter web app at /login and /signup. Password reset and share links stay on this Next host. Local dev defaults the Flutter origin to http://localhost:8080. Support on the landing page and in app settings emails SUPPORT_EMAIL.",
                 "keyFeatures": [
                     "Landing page on the Next.js home route",
                     "Log in and Sign up open the Flutter web app",
-                    "NEXT_PUBLIC_APP_WEB_URL"
+                    "NEXT_PUBLIC_APP_WEB_URL",
+                    "Support form emails the TripThread inbox"
                 ]
             },
             {
