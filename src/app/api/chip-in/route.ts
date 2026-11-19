@@ -26,11 +26,15 @@ export async function POST(request: NextRequest) {
           where: { id: chipIn.id },
           data: { status: "FAILED" },
         });
+        if (order.reason === "unauthorized") {
+          return NextResponse.json({ error: "Razorpay did not accept these keys." }, { status: 401 });
+        }
+        const status = order.reason === "unconfigured" ? 503 : 500;
         const message =
           order.reason === "unconfigured"
             ? "Chip-in isn't open on this server yet."
             : "The payment window didn't open. Try again in a moment.";
-        return NextResponse.json({ error: message }, { status: 503 });
+        return NextResponse.json({ error: message }, { status });
       }
 
       await prisma.chipIn.update({

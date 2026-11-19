@@ -9,10 +9,11 @@ export function razorpayConfig(): { keyId: string; keySecret: string } | null {
 
 export async function createRazorpayOrder(amountMinor: number, receipt: string): Promise<
   | { ok: true; orderId: string; keyId: string }
-  | { ok: false; reason: "unconfigured" | "failed" }
+  | { ok: false; reason: "unconfigured" | "unauthorized" | "failed" }
 > {
   const config = razorpayConfig();
   if (!config) return { ok: false, reason: "unconfigured" };
+  if (!Number.isInteger(amountMinor) || amountMinor < 100) return { ok: false, reason: "failed" };
 
   const auth = Buffer.from(`${config.keyId}:${config.keySecret}`).toString("base64");
   try {
@@ -28,6 +29,7 @@ export async function createRazorpayOrder(amountMinor: number, receipt: string):
         receipt: receipt.slice(0, 40),
       }),
     });
+    if (response.status === 401) return { ok: false, reason: "unauthorized" };
     if (!response.ok) return { ok: false, reason: "failed" };
     const data = (await response.json()) as { id?: string };
     if (!data.id) return { ok: false, reason: "failed" };

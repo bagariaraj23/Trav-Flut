@@ -9,7 +9,12 @@ type RazorpayResponse = {
   razorpay_signature: string;
 };
 
-type RazorpayCheckout = new (options: Record<string, unknown>) => { open: () => void };
+type RazorpayInstance = {
+  open: () => void;
+  on: (event: "payment.failed", handler: (response: { error?: { description?: string } }) => void) => void;
+};
+
+type RazorpayCheckout = new (options: Record<string, unknown>) => RazorpayInstance;
 
 declare global {
   interface Window {
@@ -64,6 +69,7 @@ export default function ChipIn() {
         setNotice(typeof data.error === "string" ? data.error : "The payment window didn't open.");
         return;
       }
+      let settled = false;
       const checkout = new window.Razorpay({
         key: data.keyId,
         amount: data.amountMinor,
@@ -73,6 +79,7 @@ export default function ChipIn() {
         order_id: data.orderId,
         theme: { color: "#1D6FE8" },
         handler: async (payment: RazorpayResponse) => {
+          settled = true;
           const confirm = await fetch("/api/chip-in/confirm", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -92,9 +99,16 @@ export default function ChipIn() {
         },
         modal: {
           ondismiss: () => {
-            setStatus((current) => (current === "paid" ? current : "idle"));
+            if (settled) return;
+            setStatus("idle");
+            setNotice("Payment cancelled.");
           },
         },
+      });
+      checkout.on("payment.failed", () => {
+        settled = true;
+        setStatus("error");
+        setNotice("The payment did not go through. You can try again.");
       });
       checkout.open();
     } catch {
