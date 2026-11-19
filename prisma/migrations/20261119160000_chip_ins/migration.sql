@@ -7,6 +7,7 @@ CREATE TABLE "chip_ins" (
     "amountMinor" INTEGER NOT NULL,
     "currency" TEXT NOT NULL DEFAULT 'INR',
     "status" "ChipInStatus" NOT NULL DEFAULT 'CREATED',
+    "displayName" TEXT,
     "providerOrderId" TEXT,
     "providerPaymentId" TEXT,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
