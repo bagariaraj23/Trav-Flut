@@ -88,7 +88,7 @@ Restrict runs in one direction. If A restricts B, A's posts leave B's Home, Disc
 
 Downgrading a block to a restrict is rejected until the block is cleared. Blocking yourself is rejected. A follow attempt while a block exists either way returns **404** `User not found`, the same as a missing account. Unblock deletes the safety row. Posts and trips show again. Follows that Block removed are not put back.
 
-The same sheet opens from another person's profile, a direct-message info screen, each member of a group or trip chat, and each person on Manage Participants. Settings lists blocked people and restricted people, and Help and FAQ (`help_faq_screen.dart`, `help_topics.dart`) holds the product rules. Contact support (`support_screen.dart`) emails a note to the team. It does not open a thread in the app.
+The same sheet opens from another person's profile, a direct-message info screen, each member of a group or trip chat, and each person on Manage Participants. Settings lists blocked people and restricted people, and Help and FAQ (`help_faq_screen.dart`, `help_topics.dart`) holds the product rules. A note to the team is the support form on the public landing page. The app does not include that form.
 
 ## Mobile
 

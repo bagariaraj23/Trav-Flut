@@ -222,7 +222,6 @@ mobile/
 │   │   │   └── followers_screen.dart  # Followers/following lists
 │   │   └── settings/
 │   │       ├── settings_screen.dart  # App settings
-│   │       ├── support_screen.dart   # Contact support; emails SUPPORT_EMAIL
 │   │       ├── safety_list_screen.dart  # People you blocked or restricted
 │   │       ├── help_faq_screen.dart  # In-app help for the product rules
 │   │       ├── privacy_screen.dart   # Privacy settings

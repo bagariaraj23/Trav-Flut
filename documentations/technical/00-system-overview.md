@@ -91,7 +91,7 @@ Tokens:
 - iOS, Android, and desktop use `flutter_secure_storage` (`token_store_io.dart`), Keychain `first_unlock_this_device` on iOS.
 - The Docker web build uses `shared_preferences` (`token_store_web.dart`). WebCrypto-backed secure storage was leaving the splash screen up after login, so the web session is browser local storage.
 
-`main.dart` calls `usePathUrlStrategy`, so the web app serves `/login` and `/signup` as path URLs. Login and signup scroll the full window and center a 420-pixel column inside it. The scrollbar belongs to the page, not to that column. Contact support is `/settings/support`.
+`main.dart` calls `usePathUrlStrategy`, so the web app serves `/login` and `/signup` as path URLs. Login and signup scroll the full window and center a 420-pixel column inside it. The scrollbar belongs to the page, not to that column. Early access, chip-in, and the support form stay on the Next.js landing page. The Flutter app, including the web build, does not show them.
 
 ### Scheduler (`scheduler/`)
 
