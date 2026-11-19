@@ -748,3 +748,20 @@ model Share {
   @@index([userId, createdAt])
   @@index([entityType, entityId])
 }
+
+enum EarlyAccessPlatform {
+  ANDROID
+  IOS
+}
+
+model EarlyAccessRequest {
+  id        String               @id @default(uuid())
+  email     String               @unique
+  name      String?
+  platform  EarlyAccessPlatform
+  createdAt DateTime             @default(now())
+  createdIp String?
+
+  @@index([platform, createdAt])
+  @@map("early_access_requests")
+}

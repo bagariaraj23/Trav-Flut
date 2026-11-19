@@ -33,6 +33,7 @@ Full stack (`docker-compose.yml`):
 - `SHARE_LINK_BASE_URL` on the API defaults to `http://localhost:3000` so phone builds and the share bridge on port 3000 keep working. The web image uses its own share origin on port 8080.
 - `NEXT_PUBLIC_APP_WEB_URL` is the Flutter web origin for the landing page. Log in opens `{origin}/login` and Get started opens `{origin}/signup`. Local Docker uses `http://localhost:8080`. On Railway, set the hosted Flutter origin. A process environment variable overrides the file, and Next reads it when the server starts.
 - `SUPPORT_EMAIL` is the inbox for `POST /api/support`. It defaults to `bagariaraj23@gmail.com` when unset. The landing page and the settings screen do not show the address. Sending still needs `SENDGRID_API_KEY` and a verified `MAIL_FROM`. Without a key the route returns 503.
+- Early access stores each email in `early_access_requests`. `FIREBASE_PROJECT_NUMBER`, `FIREBASE_TESTER_GROUP`, and `FIREBASE_SERVICE_ACCOUNT_JSON` add an Android signup to Firebase App Distribution, which emails the download. `FIREBASE_ANDROID_DOWNLOAD_URL` is included in the SendGrid note when set. iPhone requests are stored and confirmed by email. The landing counter target is 100. None of these Firebase variables are required for the signup to be saved.
 
 Database-only (`docker-compose.dev.yml`) leaves the API and Flutter on the host. Use `mobile/.env` with `API_BASE_URL=http://localhost:3000/api` (or `http://10.0.2.2:3000/api` on the Android emulator). The web container does not read `mobile/.env` at runtime.
 
@@ -54,6 +55,12 @@ JWT_REFRESH_SECRET="your-super-secret-refresh-key-change-in-production"
 SENDGRID_API_KEY="your-sendgrid-api-key"
 FROM_EMAIL="noreply@tripthread.com"
 SUPPORT_EMAIL="bagariaraj23@gmail.com"
+
+# Android early access through Firebase App Distribution. Optional.
+# FIREBASE_PROJECT_NUMBER=
+# FIREBASE_TESTER_GROUP=
+# FIREBASE_SERVICE_ACCOUNT_JSON=
+# FIREBASE_ANDROID_DOWNLOAD_URL=
 
 # Flutter web origin for landing-page Log in and Get started. No trailing slash.
 NEXT_PUBLIC_APP_WEB_URL="http://localhost:8080"

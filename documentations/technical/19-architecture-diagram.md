@@ -228,7 +228,7 @@ Read this frame with three rules:
 1. Redis is beside the API, not beside the scheduler, and not on the chat bus.
 2. Cloudinary is reached by the phone for bytes and by the API for signatures, magic-number reads, and deletes.
 3. Mapbox is reached by the phone for tiles and by the API for place search.
-4. The Next.js home page is the public landing page on the API process. Log in and Get started leave that host for the Flutter web origin. `POST /api/support` is a third SendGrid message and writes no table.
+4. The Next.js home page is the public landing page on the API process. Log in and Get started leave that host for the Flutter web origin. `POST /api/support` is a SendGrid message and writes no table. `POST /api/early-access` writes `early_access_requests`. Android testers are added in Firebase App Distribution when that project is configured. The landing counter target is 100.
 
 ## 5. Session and password
 

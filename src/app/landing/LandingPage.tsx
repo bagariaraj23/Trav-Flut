@@ -1,4 +1,5 @@
 import AuthLink from "./AuthLink";
+import EarlyAccess from "./EarlyAccess";
 import ProductFrame from "./ProductFrame";
 
 const features = [
@@ -91,6 +92,12 @@ export default function LandingPage({
           </a>
           <nav className="flex shrink-0 items-center gap-1 sm:gap-2" aria-label="Account">
             <a
+              href="#early-access"
+              className="hidden items-center rounded-full px-3 py-2 text-sm font-medium text-ink hover:bg-mist focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent sm:inline-flex"
+            >
+              Early access
+            </a>
+            <a
               href="/support"
               className="inline-flex items-center rounded-full px-3 py-2 text-sm font-medium text-ink hover:bg-mist focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
             >
@@ -133,6 +140,8 @@ export default function LandingPage({
           </div>
           <ProductFrame />
         </section>
+
+        <EarlyAccess />
 
         <section className="border-t border-ink/5 bg-white" aria-labelledby="features-heading">
           <div className="mx-auto max-w-6xl px-5 py-16 sm:px-8 sm:py-20">

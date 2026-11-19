@@ -118,6 +118,18 @@ export const RATE_LIMIT_PRESETS: Record<string, RateLimitConfig> = {
     keyPrefix: "rl:support",
     logEvent: true,
   },
+  early_access: {
+    maxRequests: 5,
+    windowMs: 60 * 60 * 1000,
+    keyPrefix: "rl:early-access",
+    logEvent: true,
+  },
+  early_access_read: {
+    maxRequests: 60,
+    windowMs: 15 * 60 * 1000,
+    keyPrefix: "rl:early-access:read",
+    logEvent: false,
+  },
 
   // General API endpoints
   general: {

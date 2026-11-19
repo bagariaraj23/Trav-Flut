@@ -50,7 +50,7 @@ flowchart LR
 
 The scheduler never talks to Redis. Chat fan-out never talks to Redis either. Both of those choices are deliberate and are documented in [Redis](./09-redis-cache-and-queues.md) and [Chat](./14-chat.md).
 
-The public site is the Next.js home page on this same API process. Log in and Get started leave it for the Flutter web origin in `NEXT_PUBLIC_APP_WEB_URL` (`/login` and `/signup`). A support note is `POST /api/support` and is emailed. It is not stored.
+The public site is the Next.js home page on this same API process. Log in and Get started leave it for the Flutter web origin in `NEXT_PUBLIC_APP_WEB_URL` (`/login` and `/signup`). A support note is `POST /api/support` and is emailed. It is not stored. Early access is `POST /api/early-access`. The email, optional name, and platform are stored in `early_access_requests`. The landing page shows how many people have signed up against a target of 100. Android signups can be added to Firebase App Distribution, which emails the download. iPhone signups are a request and do not get a download link.
 
 ## Processes
 
@@ -143,6 +143,7 @@ The API is one deployable, split by folder rather than by network service.
 | Notifications | `/api/users/me/notifications` | `notification.ts` |
 | Chat | `/api/chat/*` and `WS /chat` | `chat.ts`, `chat-ws.ts` |
 | Support | `POST /api/support` | `supportMessage.ts`, `email.ts` |
+| Early access | `GET` and `POST /api/early-access` | `earlyAccess.ts`, `firebaseAppDistribution.ts`, `email.ts` |
 
 ## Concepts that show up everywhere
 

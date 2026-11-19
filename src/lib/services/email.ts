@@ -88,6 +88,68 @@ export async function sendSupportEmail({
   }
 }
 
+type EarlyAccessEmailArgs = {
+  to: string;
+  name?: string | null;
+  platform: "ANDROID" | "IOS";
+  downloadUrl?: string | null;
+  firebaseInvited: boolean;
+};
+
+export async function sendEarlyAccessEmail({
+  to,
+  name,
+  platform,
+  downloadUrl,
+  firebaseInvited,
+}: EarlyAccessEmailArgs): Promise<boolean> {
+  if (!SENDGRID_API_KEY) {
+    if (DEBUG) console.error("SENDGRID_API_KEY missing");
+    return false;
+  }
+  const greeting = name ? `Hi ${name},` : "Hi,";
+  const link = downloadUrl?.trim() || "";
+  const androidLines = [
+    greeting,
+    "",
+    "You're on the TripThread Android early access list.",
+    firebaseInvited
+      ? "Firebase will also email you a link to install the app."
+      : "",
+    link ? `Download the app: ${link}` : "We'll email the download link to this address.",
+  ].filter((line) => line !== "");
+  const iosLines = [
+    greeting,
+    "",
+    "We received your request for early access to TripThread on iPhone.",
+    "We'll email this address when it's ready for you.",
+  ];
+  const lines = platform === "ANDROID" ? androidLines : iosLines;
+  const text = lines.join("\n");
+  const subject =
+    platform === "ANDROID"
+      ? `${APP_NAME}: Download the Android app`
+      : `${APP_NAME}: Early access request received`;
+  const msg = {
+    to,
+    from: MAIL_FROM,
+    subject,
+    text,
+    html: `<p>${escapeHtml(text).replace(/\n/g, "<br>")}</p>`,
+  };
+  try {
+    const res = await sgMail.send(msg as any);
+    if (DEBUG) console.log("SendGrid OK:", res[0]?.statusCode);
+    return true;
+  } catch (e: any) {
+    if (DEBUG) {
+      console.error("SendGrid ERROR status:", e?.response?.statusCode);
+      console.error("SendGrid ERROR body:", e?.response?.body || e);
+    }
+    return false;
+  }
+}
+
 type SecEmailArgs = { to: string };
 export async function sendSecurityEmail({ to }: SecEmailArgs) {
   if (!SENDGRID_API_KEY) return;
