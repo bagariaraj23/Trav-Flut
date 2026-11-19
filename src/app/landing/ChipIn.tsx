@@ -37,7 +37,8 @@ function loadCheckout(): Promise<boolean> {
 export default function ChipIn() {
   const [selected, setSelected] = useState<number | "other">(100);
   const [custom, setCustom] = useState("");
-  const [status, setStatus] = useState<"idle" | "opening" | "paid" | "error">("idle");
+  const [name, setName] = useState("");
+  const [status, setStatus] = useState<"idle" | "opening" | "error">("idle");
   const [notice, setNotice] = useState("");
 
   const rupees = selected === "other" ? Number(custom) : selected;
@@ -61,7 +62,7 @@ export default function ChipIn() {
       const response = await fetch("/api/chip-in", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ amountRupees: rupees }),
+        body: JSON.stringify({ amountRupees: rupees, name }),
       });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) {
@@ -77,6 +78,7 @@ export default function ChipIn() {
         name: data.name,
         description: data.description,
         order_id: data.orderId,
+        callback_url: `${window.location.origin}/api/chip-in/callback`,
         theme: { color: "#1D6FE8" },
         handler: async (payment: RazorpayResponse) => {
           settled = true;
@@ -94,8 +96,7 @@ export default function ChipIn() {
             setNotice("The payment went through, but we could not record it. Keep the receipt from your bank.");
             return;
           }
-          setStatus("paid");
-          setNotice("Thank you. That helps.");
+          window.location.assign("/thanks");
         },
         modal: {
           ondismiss: () => {
@@ -115,18 +116,6 @@ export default function ChipIn() {
       setStatus("error");
       setNotice("The payment window didn't open.");
     }
-  }
-
-  if (status === "paid") {
-    return (
-      <section className="border-t border-ink/5 bg-cream" aria-labelledby="chip-in-heading">
-        <div className="mx-auto max-w-6xl px-5 py-10 sm:px-8">
-          <p id="chip-in-heading" className="font-display text-3xl tracking-tight" role="status">
-            Thank you. That helps.
-          </p>
-        </div>
-      </section>
-    );
   }
 
   return (
@@ -174,6 +163,18 @@ export default function ChipIn() {
               Other
             </button>
           </div>
+          <label className="text-sm font-medium">
+            Your name
+            <span className="ml-2 font-normal text-ink-soft">optional</span>
+            <input
+              className="mt-2 block w-56 rounded-2xl border border-ink/10 bg-white px-4 py-2 text-base outline-none focus:border-accent"
+              value={name}
+              maxLength={40}
+              autoComplete="name"
+              placeholder="Shown on the thank-you wall"
+              onChange={(event) => setName(event.target.value.slice(0, 40))}
+            />
+          </label>
           {selected === "other" && (
             <label className="text-sm font-medium">
               Amount in rupees

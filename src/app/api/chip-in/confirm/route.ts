@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { withLogging, withRateLimit } from "@/lib/middleware";
-import { prisma } from "@/lib/prisma";
-import { verifyRazorpaySignature } from "@/lib/services/razorpay";
+import { recordPaidChipIn } from "@/lib/services/chipInPayment";
 
 function asText(value: unknown, max: number): string {
   if (typeof value !== "string") return "";
@@ -17,23 +16,9 @@ export async function POST(request: NextRequest) {
       const orderId = asText(record.orderId, 80);
       const paymentId = asText(record.paymentId, 80);
       const signature = asText(record.signature, 200);
-      if (!verifyRazorpaySignature(orderId, paymentId, signature)) {
+      const paid = await recordPaidChipIn(orderId, paymentId, signature);
+      if (!paid) {
         return NextResponse.json({ error: "That payment could not be confirmed." }, { status: 400 });
-      }
-
-      const chipIn = await prisma.chipIn.findUnique({ where: { providerOrderId: orderId } });
-      if (!chipIn) {
-        return NextResponse.json({ error: "That payment could not be confirmed." }, { status: 400 });
-      }
-      if (chipIn.status !== "PAID") {
-        await prisma.chipIn.update({
-          where: { id: chipIn.id },
-          data: {
-            status: "PAID",
-            providerPaymentId: paymentId,
-            paidAt: new Date(),
-          },
-        });
       }
       return NextResponse.json({ ok: true });
     });

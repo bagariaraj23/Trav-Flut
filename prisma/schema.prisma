@@ -777,6 +777,7 @@ model ChipIn {
   amountMinor       Int
   currency          String       @default("INR")
   status            ChipInStatus @default(CREATED)
+  displayName       String?
   providerOrderId   String?      @unique
   providerPaymentId String?      @unique
   createdAt         DateTime     @default(now())

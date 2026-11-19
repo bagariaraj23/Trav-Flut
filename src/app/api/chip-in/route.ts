@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { withLogging, withRateLimit } from "@/lib/middleware";
 import { prisma } from "@/lib/prisma";
-import { CHIP_IN_CURRENCY, parseChipInAmount } from "@/lib/chipIn";
+import { CHIP_IN_CURRENCY, parseChipInAmount, parseChipInName } from "@/lib/chipIn";
 import { createRazorpayOrder } from "@/lib/services/razorpay";
 
 export async function POST(request: NextRequest) {
@@ -17,6 +17,7 @@ export async function POST(request: NextRequest) {
         data: {
           amountMinor: parsed.amountMinor,
           currency: CHIP_IN_CURRENCY,
+          displayName: parseChipInName(body),
         },
       });
 
