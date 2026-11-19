@@ -92,8 +92,7 @@ export default function ChipIn() {
             }),
           });
           if (!confirm.ok) {
-            setStatus("error");
-            setNotice("The payment went through, but we could not record it. Keep the receipt from your bank.");
+            window.location.assign("/thanks?problem=1");
             return;
           }
           window.location.assign("/thanks");
@@ -108,8 +107,7 @@ export default function ChipIn() {
       });
       checkout.on("payment.failed", () => {
         settled = true;
-        setStatus("error");
-        setNotice("The payment did not go through. You can try again.");
+        window.location.assign("/thanks?problem=1");
       });
       checkout.open();
     } catch {
@@ -119,7 +117,7 @@ export default function ChipIn() {
   }
 
   return (
-    <section className="border-t border-ink/5 bg-cream" aria-labelledby="chip-in-heading">
+    <section id="chip-in" className="border-t border-ink/5 bg-cream" aria-labelledby="chip-in-heading">
       <div className="mx-auto flex max-w-6xl flex-col gap-6 px-5 py-10 sm:px-8 lg:flex-row lg:items-start lg:justify-between">
         <div className="max-w-md">
           <h2 id="chip-in-heading" className="font-display text-3xl tracking-tight">

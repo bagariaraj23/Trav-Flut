@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 const CONFETTI_COLORS = ["#1D6FE8", "#F4C95D", "#F08A8A", "#7DCE9A", "#FFFFFF", "#1C1917"];
 
@@ -87,6 +87,8 @@ function Confetti() {
   return <canvas ref={canvasRef} className="pointer-events-none fixed inset-0 z-40 h-full w-full" aria-hidden="true" />;
 }
 
+const RETURN_SECONDS = 8;
+
 function bubblesFor(names: string[]) {
   const slots = Math.min(24, Math.max(names.length, names.length === 0 ? 0 : 12));
   return Array.from({ length: slots }, (_, index) => {
@@ -111,6 +113,23 @@ export default function ThanksExperience({
   problem: boolean;
 }) {
   const bubbles = useMemo(() => bubblesFor(names), [names]);
+  const [secondsLeft, setSecondsLeft] = useState(RETURN_SECONDS);
+
+  useEffect(() => {
+    if (problem) return;
+    const started = Date.now();
+    const tick = window.setInterval(() => {
+      const left = Math.max(0, RETURN_SECONDS - Math.floor((Date.now() - started) / 1000));
+      setSecondsLeft(left);
+    }, 250);
+    const timer = window.setTimeout(() => {
+      window.location.assign("/");
+    }, RETURN_SECONDS * 1000);
+    return () => {
+      window.clearInterval(tick);
+      window.clearTimeout(timer);
+    };
+  }, [problem]);
 
   return (
     <div className="relative min-h-screen overflow-hidden bg-cream text-ink">
@@ -177,15 +196,20 @@ export default function ThanksExperience({
         <div className="rounded-[2rem] bg-cream/85 px-6 py-10 shadow-[0_20px_60px_rgba(28,25,23,0.06)] backdrop-blur-md sm:px-12">
           <p className="text-sm font-medium uppercase tracking-[0.18em] text-accent">Chip in</p>
           <h1 className="mt-3 font-display text-5xl tracking-tight sm:text-6xl">
-            {problem ? "That payment could not be confirmed." : "Thank you for your support."}
+            {problem ? "The payment did not go through." : "Thank you for your support."}
           </h1>
           <p className="mx-auto mt-4 max-w-md text-lg leading-relaxed text-ink-soft">
             {problem
-              ? "If your bank shows the payment, keep the receipt. Nothing else is needed from you right now."
+              ? "You can try again from the TripThread page. If your bank shows the payment, keep the receipt."
               : names.length > 0
                 ? "It keeps TripThread going. The names drifting past are people who chipped in."
                 : "It keeps TripThread going."}
           </p>
+          {!problem && (
+            <p className="mt-3 text-sm text-ink-soft" role="status">
+              Taking you back to TripThread{secondsLeft > 0 ? ` in ${secondsLeft}s` : ""}.
+            </p>
+          )}
           {names.length > 0 && (
             <ul className="sr-only">
               {names.map((supporter) => (
@@ -194,10 +218,10 @@ export default function ThanksExperience({
             </ul>
           )}
           <a
-            href="/"
+            href={problem ? "/#chip-in" : "/"}
             className="mt-8 inline-flex items-center justify-center rounded-full bg-accent px-5 py-3 text-base font-medium text-white transition hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
           >
-            Back to the start
+            {problem ? "Try again" : "Back to TripThread"}
           </a>
         </div>
       </main>
