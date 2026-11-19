@@ -88,7 +88,7 @@ export default function LandingPage({
             <img
               src="/tripthread-logo.svg"
               alt="TripThread"
-              className="hidden h-8 sm:block"
+              className="hidden h-12 w-auto sm:block"
             />
           </a>
           <nav className="flex shrink-0 items-center gap-1 sm:gap-2" aria-label="Account">
