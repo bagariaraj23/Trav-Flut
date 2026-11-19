@@ -136,6 +136,12 @@ export const RATE_LIMIT_PRESETS: Record<string, RateLimitConfig> = {
     keyPrefix: "rl:chip-in:read",
     logEvent: false,
   },
+  chip_in_status: {
+    maxRequests: 180,
+    windowMs: 15 * 60 * 1000,
+    keyPrefix: "rl:chip-in:status",
+    logEvent: false,
+  },
   early_access_read: {
     maxRequests: 60,
     windowMs: 15 * 60 * 1000,

@@ -91,11 +91,8 @@ export default function ChipIn() {
               signature: payment.razorpay_signature,
             }),
           });
-          if (!confirm.ok) {
-            window.location.assign("/thanks?problem=1");
-            return;
-          }
-          window.location.assign("/thanks");
+          window.focus();
+          window.location.assign(confirm.ok ? "/thanks" : "/thanks?problem=1");
         },
         modal: {
           ondismiss: () => {
@@ -109,6 +106,25 @@ export default function ChipIn() {
         settled = true;
         window.location.assign("/thanks?problem=1");
       });
+      const orderId = data.orderId;
+      const watch = window.setInterval(async () => {
+        if (settled) {
+          window.clearInterval(watch);
+          return;
+        }
+        try {
+          const statusResponse = await fetch(`/api/chip-in/status?orderId=${encodeURIComponent(orderId)}`);
+          const statusBody = await statusResponse.json().catch(() => ({}));
+          if (statusBody.status !== "paid" || settled) return;
+          settled = true;
+          window.clearInterval(watch);
+          window.focus();
+          window.location.assign("/thanks");
+        } catch {
+          // The next check asks again.
+        }
+      }, 1000);
+      window.setTimeout(() => window.clearInterval(watch), 90000);
       checkout.open();
     } catch {
       setStatus("error");

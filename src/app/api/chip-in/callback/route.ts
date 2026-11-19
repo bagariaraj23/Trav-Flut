@@ -41,7 +41,12 @@ async function readCallback(request: NextRequest): Promise<{
 }
 
 function thanksRedirect(request: NextRequest, paid: boolean) {
-  const url = new URL("/thanks", request.nextUrl.origin);
+  const forwardedHost = request.headers.get("x-forwarded-host")?.split(",")[0]?.trim();
+  const host = forwardedHost || request.headers.get("host");
+  const forwardedProto = request.headers.get("x-forwarded-proto")?.split(",")[0]?.trim();
+  const proto = forwardedProto || request.nextUrl.protocol.replace(":", "") || "http";
+  const origin = host ? `${proto}://${host}` : request.nextUrl.origin;
+  const url = new URL("/thanks", origin);
   if (!paid) url.searchParams.set("problem", "1");
   return NextResponse.redirect(url, 303);
 }

@@ -39,6 +39,23 @@ export async function createRazorpayOrder(amountMinor: number, receipt: string):
   }
 }
 
+export async function capturedRazorpayPayment(orderId: string): Promise<string | null> {
+  const config = razorpayConfig();
+  if (!config || !/^order_[A-Za-z0-9]{8,32}$/.test(orderId)) return null;
+  const auth = Buffer.from(`${config.keyId}:${config.keySecret}`).toString("base64");
+  try {
+    const response = await fetch(`https://api.razorpay.com/v1/orders/${orderId}/payments`, {
+      headers: { Authorization: `Basic ${auth}` },
+    });
+    if (!response.ok) return null;
+    const data = (await response.json()) as { items?: { id?: string; status?: string }[] };
+    const captured = data.items?.find((item) => item.status === "captured" && item.id);
+    return captured?.id ?? null;
+  } catch {
+    return null;
+  }
+}
+
 export function verifyRazorpaySignature(orderId: string, paymentId: string, signature: string): boolean {
   const config = razorpayConfig();
   if (!config || !orderId || !paymentId || !signature) return false;
