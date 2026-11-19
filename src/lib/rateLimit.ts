@@ -124,6 +124,12 @@ export const RATE_LIMIT_PRESETS: Record<string, RateLimitConfig> = {
     keyPrefix: "rl:early-access",
     logEvent: true,
   },
+  chip_in: {
+    maxRequests: 10,
+    windowMs: 60 * 60 * 1000,
+    keyPrefix: "rl:chip-in",
+    logEvent: true,
+  },
   early_access_read: {
     maxRequests: 60,
     windowMs: 15 * 60 * 1000,

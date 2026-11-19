@@ -34,6 +34,7 @@ Full stack (`docker-compose.yml`):
 - `NEXT_PUBLIC_APP_WEB_URL` is the Flutter web origin for the landing page. Log in opens `{origin}/login` and Get started opens `{origin}/signup`. Local Docker uses `http://localhost:8080`. On Railway, set the hosted Flutter origin. A process environment variable overrides the file, and Next reads it when the server starts.
 - `SUPPORT_EMAIL` is the inbox for `POST /api/support`. It defaults to `bagariaraj23@gmail.com` when unset. The landing page and the settings screen do not show the address. Sending still needs `SENDGRID_API_KEY` and a verified `MAIL_FROM`. Without a key the route returns 503.
 - Early access stores each email in `early_access_requests`. `FIREBASE_PROJECT_NUMBER`, `FIREBASE_TESTER_GROUP`, and `FIREBASE_SERVICE_ACCOUNT_JSON` add an Android signup to Firebase App Distribution, which emails the download. `FIREBASE_ANDROID_DOWNLOAD_URL` is included in the SendGrid note when set. iPhone requests are stored and confirmed by email. The landing counter target is 100. None of these Firebase variables are required for the signup to be saved.
+- Chip-in uses `RAZORPAY_KEY_ID` and `RAZORPAY_KEY_SECRET`. The landing page opens Razorpay Checkout for a whole rupee amount from 10 to 10000. Paid rows land in `chip_ins`. Without the keys the button explains that chip-in is not open yet.
 
 Database-only (`docker-compose.dev.yml`) leaves the API and Flutter on the host. Use `mobile/.env` with `API_BASE_URL=http://localhost:3000/api` (or `http://10.0.2.2:3000/api` on the Android emulator). The web container does not read `mobile/.env` at runtime.
 
@@ -61,6 +62,8 @@ SUPPORT_EMAIL="bagariaraj23@gmail.com"
 # FIREBASE_TESTER_GROUP=
 # FIREBASE_SERVICE_ACCOUNT_JSON=
 # FIREBASE_ANDROID_DOWNLOAD_URL=
+# RAZORPAY_KEY_ID=
+# RAZORPAY_KEY_SECRET=
 
 # Flutter web origin for landing-page Log in and Get started. No trailing slash.
 NEXT_PUBLIC_APP_WEB_URL="http://localhost:8080"

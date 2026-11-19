@@ -765,3 +765,23 @@ model EarlyAccessRequest {
   @@index([platform, createdAt])
   @@map("early_access_requests")
 }
+
+enum ChipInStatus {
+  CREATED
+  PAID
+  FAILED
+}
+
+model ChipIn {
+  id                String       @id @default(uuid())
+  amountMinor       Int
+  currency          String       @default("INR")
+  status            ChipInStatus @default(CREATED)
+  providerOrderId   String?      @unique
+  providerPaymentId String?      @unique
+  createdAt         DateTime     @default(now())
+  paidAt            DateTime?
+
+  @@index([status, createdAt])
+  @@map("chip_ins")
+}

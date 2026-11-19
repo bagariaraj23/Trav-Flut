@@ -1,4 +1,5 @@
 import AuthLink from "./AuthLink";
+import ChipIn from "./ChipIn";
 import EarlyAccess from "./EarlyAccess";
 import ProductFrame from "./ProductFrame";
 
@@ -142,6 +143,7 @@ export default function LandingPage({
         </section>
 
         <EarlyAccess />
+        <ChipIn />
 
         <section className="border-t border-ink/5 bg-white" aria-labelledby="features-heading">
           <div className="mx-auto max-w-6xl px-5 py-16 sm:px-8 sm:py-20">
