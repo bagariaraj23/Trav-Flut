@@ -274,8 +274,10 @@ class TripFinalPost {
   String? get displayAuthorId =>
       userId ?? user?.id ?? trip?.user?.id ?? trip?.userId;
 
-  bool get isDirectPost =>
-      postKind == 'direct' || tripId == null || tripId!.isEmpty;
+  bool get isDirectPost {
+    final id = tripId;
+    return postKind == 'direct' || id == null || id.isEmpty;
+  }
 
   String get engagementEntityType =>
       isDirectPost ? 'USER_POST' : 'TRIP_FINAL_POST';

@@ -265,18 +265,21 @@ class _HomeFeedScreenState extends State<HomeFeedScreen> {
       ),
     );
     if (ok != true || !context.mounted) return;
+    final tripId = post.tripId;
     final res = post.isDirectPost
         ? await context.read<ApiService>().deleteDirectPost(post.id)
-        : await context.read<TripService>().deleteFinalPost(post.tripId!);
+        : tripId == null || tripId.isEmpty
+            ? null
+            : await context.read<TripService>().deleteFinalPost(tripId);
     if (!context.mounted) return;
-    if (res.success) {
+    if (res != null && res.success) {
       context.read<FeedProvider>().removeHomeFeedPostById(post.id);
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Post deleted')),
       );
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(res.error ?? 'Could not delete post')),
+        SnackBar(content: Text(res?.error ?? 'Could not delete post')),
       );
     }
   }

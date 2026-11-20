@@ -25,20 +25,18 @@ A post is included when `isPublished` is true and the post author (`TripFinalPos
 
 The three conditions are `OR`. Public posts are on the home feed even when the viewer does not follow the author. Private authors appear only as self or as a follow. The same audience applies to direct posts (`user_posts`), which have no trip. A direct post is a caption, up to 12 photos the author uploaded from their phone, and an optional location name and coordinates. Home merges the two lists by `createdAt` and id, and marks those rows with `postKind: "direct"`. `feedHiddenUserIds` then excludes every author in a block with the viewer, in either direction, and every author who restricted the viewer, with `userId: { notIn }`. A restrict does not hide the restricted person's posts from the restrictor. It does not make `canViewEntity` refuse the restrictor's final post or direct post. The profile lists that final post, and `GET /posts/TRIP_FINAL_POST/:id` returns it. Home, Discover, live trips, and search are the surfaces that omit the restrictor's posts, including a direct post. The profile returned to the restricted person keeps photo and bio. Only a block hides them. Unblock, or clearing the restrict, removes the feed exclusion. The mobile provider also drops items that look private and unfollowed, in case a stale client cache disagrees with the server.
 
-Pagination: `page` and `limit` (1–100, default 20) still work. If `cursor` is set, offset is forced to 0 and the cursor wins. `feedCursor.ts` encodes base64url `{ createdAt, id }`. The filter is "rows strictly older than this `(createdAt, id)` pair", matching `orderBy: [{ createdAt: "desc" }, { id: "desc" }]`. The query takes `limit + 1`. If the extra row exists, `hasNext` is true and `nextCursor` is the last returned row.
+Pagination: the app sends `cursor`. `page` and `limit` (1–100, default 20) still work. `feedCursor.ts` encodes base64url `{ createdAt, id }`. A cursor asks each list for the next `limit + 1` rows older than that `(createdAt, id)` pair. A page number, with no cursor, asks each list for its first `offset + limit + 1` rows and does not skip inside either table. Home merges those rows by `createdAt` and id, then keeps the page. Skipping `offset` rows in each table before the merge would drop a post that belongs on the later page. `hasNext` is true when the merged window still has a row after this page, and `nextCursor` is the last returned row. `total` is the sum of the two audience counts. The mobile client keeps `nextCursor` and sends it on the next page.
 
 ```mermaid
 flowchart LR
-  Q["Published final posts"] --> I["Index isPublished, createdAt DESC, id DESC"]
-  I --> C{"Cursor?"}
-  C -->|yes| K["Keyset predicate, take limit plus 1"]
-  C -->|no| O["OFFSET page, take limit plus 1"]
-  K --> B["Batch checkLikeStatus for the page ids"]
-  O --> B
-  B --> S["omitHiddenTripSpend per row"]
+  Q["Published final posts and direct posts"] --> C{"Cursor?"}
+  C -->|yes| K["Each list: older than cursor, take limit plus 1"]
+  C -->|no| O["Each list: first offset plus limit plus 1"]
+  K --> M["Merge by time, keep the page"]
+  O --> M
 ```
 
-`Promise.all` runs the count (without the cursor) and the page together. The card does not call `_count` for entries or participants. It reads `Trip.entryCount` and `Trip.participantCount`. Likes on the page are one `checkLikeStatus(userId, TRIP_FINAL_POST, ids)` rather than one query per card.
+`Promise.all` runs both audience counts and both pages together. The card does not call `_count` for entries or participants. It reads `Trip.entryCount` and `Trip.participantCount`. Likes on the trip posts are one `checkLikeStatus(userId, TRIP_FINAL_POST, ids)`. Direct posts use the same check for `USER_POST`.
 
 `FeedProvider` stores `_homeFeedCursor` and sends it on load-more. It only advances `page` when the response has no `nextCursor`, so old servers and new servers both work. Like state is copied into `EngagementProvider` unless a toggle for that id is already in flight, so a feed refresh does not clobber a tap that has not returned.
 

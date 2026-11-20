@@ -24,6 +24,7 @@ import {
   directPostAudience,
   loadDirectPostsForFeed,
 } from "@/lib/services/userPost";
+import { homeFeedWindow, sliceMergedFeed } from "@/lib/homeFeedMerge";
 
 // Get home feed (final posts from followed users and public profiles)
 export async function GET(request: NextRequest) {
@@ -61,7 +62,11 @@ export async function GET(request: NextRequest) {
               );
             }
           }
+          // A cursor page starts at the cursor. A page number must not skip
+          // inside each table: the merge would then drop posts that belong
+          // on that page. Each list is read from its top, then sliced.
           const offset = feedCursor ? 0 : (pageNum - 1) * limitNum;
+          const take = homeFeedWindow(offset, limitNum);
           console.log(
             `[API] GET /feed/home - Offset: ${offset}, cursor: ${feedCursor ? "yes" : "no"}`
           );
@@ -133,10 +138,10 @@ export async function GET(request: NextRequest) {
               }
             : whereClause;
 
-          // Count the full feed in parallel with the page. The page itself
-          // uses keyset pagination when a cursor is present so OFFSET does not
-          // grow with the feed. Trip entry/participant totals are the
-          // denormalized columns, not per-row _count queries.
+          // Both audience counts run with the page. A cursor reads the next
+          // window from each list. A page number reads each list from the
+          // top through offset + limit + 1, then the merge slices the page.
+          // Trip entry and participant totals are the denormalized columns.
           console.log(`[API] GET /feed/home - Fetching page and total`);
           const directWhere = directPostAudience(
             currentUserId,
@@ -180,15 +185,15 @@ export async function GET(request: NextRequest) {
                 },
               },
               orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-              skip: offset,
-              take: limitNum + 1,
+              skip: 0,
+              take,
             }),
             prisma.userPost.count({ where: directWhere }),
             loadDirectPostsForFeed({
               where: directWhere,
               cursor: feedCursor,
-              offset,
-              limit: limitNum + 1,
+              offset: 0,
+              limit: take,
               viewerId: currentUserId,
             }),
           ]);
@@ -268,15 +273,13 @@ export async function GET(request: NextRequest) {
             },
           }));
 
-          const merged = [...tripItems, ...directPosts].sort((a, b) => {
-            const delta = b.createdAt.getTime() - a.createdAt.getTime();
-            if (delta !== 0) return delta;
-            return a.id < b.id ? 1 : a.id > b.id ? -1 : 0;
-          });
-          const hasNext = merged.length > limitNum;
-          const finalPostsResponse = (
-            hasNext ? merged.slice(0, limitNum) : merged
-          ).map((entry) => entry.item);
+          const mergedPage = sliceMergedFeed(
+            [...tripItems, ...directPosts],
+            offset,
+            limitNum
+          );
+          const hasNext = mergedPage.hasNext;
+          const finalPostsResponse = mergedPage.items.map((entry) => entry.item);
 
           console.log(`[API] GET /feed/home - Has next: ${hasNext}`);
           const lastPost = finalPostsResponse[finalPostsResponse.length - 1];

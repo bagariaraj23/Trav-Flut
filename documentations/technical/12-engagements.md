@@ -1,6 +1,6 @@
 # Engagements
 
-Likes, comments, and shares attach to an entity, not to a special post table. The entity is `TRIP_FINAL_POST`, `TRIP_THREAD_ENTRY`, or, for likes of a comment, `COMMENT`.
+Likes, comments, and shares attach to an entity, not to a special post table. The entity is `TRIP_FINAL_POST`, `TRIP_THREAD_ENTRY`, `USER_POST`, or, for likes of a comment, `COMMENT`.
 
 Primary files:
 
@@ -18,9 +18,10 @@ Primary files:
 | --- | --- |
 | `TripFinalPost` | `likeCount`, `commentCount`, `shareCount` |
 | `TripThreadEntry` | `likeCount`, `commentCount` |
+| `UserPost` | `likeCount`, `commentCount`, `shareCount` |
 | `Comment` | `likeCount` |
 
-`incrementEntityCount` and `decrementEntityCount` in `engagement-utils.ts` update the right table for the entity type. Decrement uses a floor of 0 so a double-delete cannot go negative. Like and in-app share transactions set `maxWait: 15_000` and `timeout: 20_000`.
+`incrementEntityCount` and `decrementEntityCount` in `engagement-utils.ts` update the right table for the entity type. A decrement is one statement, `SET column = GREATEST(0, column - 1)`, so two unlikes that run together cannot both read 1 and then both subtract. `user_posts` also checks that those three counts are at least 0. Like and in-app share transactions set `maxWait: 15_000` and `timeout: 20_000`.
 
 `invalidateEngagementCache` deletes `{like|comment|share}Count:{entityType}:{entityId}` from memory and Redis. Nothing reads those keys. The number on screen is the column. See [Redis](./09-redis-cache-and-queues.md).
 

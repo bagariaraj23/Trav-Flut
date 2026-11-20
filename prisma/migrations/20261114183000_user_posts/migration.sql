@@ -36,3 +36,8 @@ ALTER TABLE "user_posts"
 ADD CONSTRAINT "user_posts_placeId_fkey"
 FOREIGN KEY ("placeId") REFERENCES "places"("id")
 ON DELETE SET NULL ON UPDATE CASCADE;
+
+ALTER TABLE "user_posts"
+ADD CONSTRAINT "user_posts_likeCount_check" CHECK ("likeCount" >= 0),
+ADD CONSTRAINT "user_posts_commentCount_check" CHECK ("commentCount" >= 0),
+ADD CONSTRAINT "user_posts_shareCount_check" CHECK ("shareCount" >= 0);
