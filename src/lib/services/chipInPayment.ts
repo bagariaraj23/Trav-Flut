@@ -11,15 +11,15 @@ function isUniqueConflict(error: unknown): boolean {
 }
 
 /**
- * One conditional update. Postgres locks the row, so a status poll and the
- * Razorpay callback cannot both change it. The second writer matches zero
- * rows once the first has set PAID. providerPaymentId is unique, so a payment
- * id already stored on another row is rejected instead of copied here.
+ * One conditional update, keyed by the Razorpay order. Postgres locks the
+ * matching row, so confirm and the callback cannot both change it. The second
+ * writer matches zero rows once the first has set PAID. providerPaymentId is
+ * unique, so a payment id already stored on another row is rejected.
  */
-async function claimPaidChipIn(id: string, paymentId: string): Promise<boolean> {
+async function claimPaidChipIn(orderId: string, paymentId: string): Promise<boolean> {
   try {
     const claimed = await prisma.chipIn.updateMany({
-      where: { id, status: { not: "PAID" } },
+      where: { providerOrderId: orderId, status: { not: "PAID" } },
       data: {
         status: "PAID",
         providerPaymentId: paymentId,
@@ -32,7 +32,7 @@ async function claimPaidChipIn(id: string, paymentId: string): Promise<boolean> 
   }
 
   const current = await prisma.chipIn.findUnique({
-    where: { id },
+    where: { providerOrderId: orderId },
     select: { status: true },
   });
   return current?.status === "PAID";
@@ -44,9 +44,7 @@ export async function recordPaidChipIn(
   signature: string
 ): Promise<boolean> {
   if (!verifyRazorpaySignature(orderId, paymentId, signature)) return false;
-  const chipIn = await prisma.chipIn.findUnique({ where: { providerOrderId: orderId } });
-  if (!chipIn) return false;
-  return claimPaidChipIn(chipIn.id, paymentId);
+  return claimPaidChipIn(orderId, paymentId);
 }
 
 export async function syncCapturedChipIn(orderId: string): Promise<"paid" | "pending" | "missing"> {
@@ -56,6 +54,6 @@ export async function syncCapturedChipIn(orderId: string): Promise<"paid" | "pen
   if (chipIn.status === "PAID") return "paid";
   const paymentId = await capturedRazorpayPayment(orderId);
   if (!paymentId) return "pending";
-  const paid = await claimPaidChipIn(chipIn.id, paymentId);
+  const paid = await claimPaidChipIn(orderId, paymentId);
   return paid ? "paid" : "pending";
 }

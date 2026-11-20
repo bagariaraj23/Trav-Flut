@@ -47,19 +47,21 @@ describe("chip-in payment claim", () => {
     await expect(recordPaidChipIn(orderId, "pay_123", "sig")).resolves.toBe(true);
 
     expect(updateMany).toHaveBeenCalledWith({
-      where: { id: "chip-1", status: { not: "PAID" } },
+      where: { providerOrderId: orderId, status: { not: "PAID" } },
       data: expect.objectContaining({
         status: "PAID",
         providerPaymentId: "pay_123",
       }),
     });
+    expect(findUnique).not.toHaveBeenCalled();
   });
 
   it("treats a row the other writer already marked paid as paid", async () => {
     updateMany.mockResolvedValue({ count: 0 });
-    findUnique.mockResolvedValueOnce(row).mockResolvedValueOnce({ status: "PAID" });
+    findUnique.mockResolvedValue({ status: "PAID" });
 
     await expect(recordPaidChipIn(orderId, "pay_123", "sig")).resolves.toBe(true);
+    expect(updateMany).toHaveBeenCalledTimes(1);
   });
 
   it("leaves the row unpaid when the payment id is already stored elsewhere", async () => {
