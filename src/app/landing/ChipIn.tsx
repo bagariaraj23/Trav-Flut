@@ -1,7 +1,13 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { CHIP_IN_MAX_RUPEES, CHIP_IN_MIN_RUPEES, CHIP_IN_PRESETS } from "@/lib/chipIn";
+import {
+  CHIP_IN_CURRENCIES,
+  CHIP_IN_LIMITS,
+  CHIP_IN_PRESETS,
+  chipInSymbol,
+  type ChipInCurrency,
+} from "@/lib/chipIn";
 
 type PaymentWatch = {
   interval: number | null;
@@ -53,6 +59,7 @@ function loadCheckout(): Promise<boolean> {
 }
 
 export default function ChipIn() {
+  const [currency, setCurrency] = useState<ChipInCurrency>("INR");
   const [selected, setSelected] = useState<number | "other">(100);
   const [custom, setCustom] = useState("");
   const [name, setName] = useState("");
@@ -65,13 +72,25 @@ export default function ChipIn() {
     return () => stopPaymentWatch(watch);
   }, []);
 
-  const rupees = selected === "other" ? Number(custom) : selected;
-  const amountReady = Number.isInteger(rupees) && rupees >= CHIP_IN_MIN_RUPEES && rupees <= CHIP_IN_MAX_RUPEES;
+  const limits = CHIP_IN_LIMITS[currency];
+  const symbol = chipInSymbol(currency);
+  const amount = selected === "other" ? Number(custom) : selected;
+  const amountReady = Number.isInteger(amount) && amount >= limits.min && amount <= limits.max;
+  const amountLabel = `${symbol}${currency === "INR" ? amount.toLocaleString("en-IN") : amount}`;
+
+  function chooseCurrency(next: ChipInCurrency) {
+    setCurrency(next);
+    setSelected(next === "INR" ? 100 : 10);
+    setCustom("");
+    setNotice("");
+    setStatus("idle");
+  }
 
   async function chipIn() {
     if (!amountReady) {
+      const maxLabel = currency === "INR" ? limits.max.toLocaleString("en-IN") : String(limits.max);
       setStatus("error");
-      setNotice(`Enter a whole amount from ₹${CHIP_IN_MIN_RUPEES} to ₹${CHIP_IN_MAX_RUPEES.toLocaleString("en-IN")}.`);
+      setNotice(`Enter a whole amount from ${symbol}${limits.min} to ${symbol}${maxLabel}.`);
       return;
     }
     setStatus("opening");
@@ -88,7 +107,7 @@ export default function ChipIn() {
       const response = await fetch("/api/chip-in", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ amountRupees: rupees, name }),
+        body: JSON.stringify({ amount, currency, name }),
       });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) {
@@ -171,26 +190,45 @@ export default function ChipIn() {
             Chip in, if you like.
           </h2>
           <p className="mt-2 text-base leading-relaxed text-ink-soft">
-            Any small amount. One step, UPI or card. No account.
+            Rupees or dollars. One step, no account.
           </p>
         </div>
         <div className="flex flex-col items-start gap-3">
-          <div className="flex flex-wrap gap-2" role="group" aria-label="Amount">
-            {CHIP_IN_PRESETS.map((amount) => (
+          <div className="flex gap-2" role="group" aria-label="Currency">
+            {CHIP_IN_CURRENCIES.map((value) => (
               <button
-                key={amount}
+                key={value}
+                type="button"
+                onClick={() => chooseCurrency(value)}
+                className={`rounded-full px-4 py-2 text-sm font-medium ${
+                  currency === value ? "bg-ink text-cream" : "bg-white text-ink"
+                }`}
+                aria-pressed={currency === value}
+              >
+                {value === "USD" ? "USD" : "INR"}
+              </button>
+            ))}
+          </div>
+          {currency === "USD" && (
+            <p className="text-sm text-ink-soft">Dollars are charged to a card.</p>
+          )}
+          <div className="flex flex-wrap gap-2" role="group" aria-label="Amount">
+            {CHIP_IN_PRESETS[currency].map((preset) => (
+              <button
+                key={preset}
                 type="button"
                 onClick={() => {
-                  setSelected(amount);
+                  setSelected(preset);
                   setNotice("");
                   setStatus("idle");
                 }}
                 className={`rounded-full px-4 py-2 text-sm font-medium ${
-                  selected === amount ? "bg-ink text-cream" : "bg-white text-ink"
+                  selected === preset ? "bg-ink text-cream" : "bg-white text-ink"
                 }`}
-                aria-pressed={selected === amount}
+                aria-pressed={selected === preset}
               >
-                ₹{amount}
+                {symbol}
+                {preset}
               </button>
             ))}
             <button
@@ -222,13 +260,15 @@ export default function ChipIn() {
           </label>
           {selected === "other" && (
             <label className="text-sm font-medium">
-              Amount in rupees
+              {currency === "USD" ? "Amount in dollars" : "Amount in rupees"}
               <input
                 className="mt-2 w-36 rounded-2xl border border-ink/10 bg-white px-4 py-2 text-base outline-none focus:border-accent"
                 inputMode="numeric"
                 value={custom}
                 autoFocus
-                onChange={(event) => setCustom(event.target.value.replace(/[^\d]/g, "").slice(0, 5))}
+                onChange={(event) =>
+                  setCustom(event.target.value.replace(/[^\d]/g, "").slice(0, currency === "USD" ? 3 : 5))
+                }
               />
             </label>
           )}
@@ -238,7 +278,7 @@ export default function ChipIn() {
             disabled={status === "opening" || !amountReady}
             className="inline-flex items-center justify-center rounded-full bg-accent px-5 py-3 text-base font-medium text-white transition hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:opacity-60"
           >
-            {status === "opening" ? "Opening…" : amountReady ? `Chip in ₹${rupees}` : "Chip in"}
+            {status === "opening" ? "Opening…" : amountReady ? `Chip in ${amountLabel}` : "Chip in"}
           </button>
           {notice && (
             <p className={`text-sm ${status === "error" ? "text-red-800" : "text-ink"}`} role="status">

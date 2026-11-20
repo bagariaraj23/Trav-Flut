@@ -1,4 +1,5 @@
 import { createHmac } from "crypto";
+import type { ChipInCurrency } from "@/lib/chipIn";
 
 export function razorpayConfig(): { keyId: string; keySecret: string } | null {
   const keyId = process.env.RAZORPAY_KEY_ID?.trim();
@@ -7,9 +8,23 @@ export function razorpayConfig(): { keyId: string; keySecret: string } | null {
   return { keyId, keySecret };
 }
 
-export async function createRazorpayOrder(amountMinor: number, receipt: string): Promise<
+export function razorpayOrderFailure(
+  status: number,
+  description: string
+): "unauthorized" | "currency" | "failed" {
+  if (status === 401) return "unauthorized";
+  const text = description.toLowerCase();
+  if (text.includes("currency") || text.includes("international")) return "currency";
+  return "failed";
+}
+
+export async function createRazorpayOrder(
+  amountMinor: number,
+  receipt: string,
+  currency: ChipInCurrency = "INR"
+): Promise<
   | { ok: true; orderId: string; keyId: string }
-  | { ok: false; reason: "unconfigured" | "unauthorized" | "failed" }
+  | { ok: false; reason: "unconfigured" | "unauthorized" | "currency" | "failed" }
 > {
   const config = razorpayConfig();
   if (!config) return { ok: false, reason: "unconfigured" };
@@ -25,12 +40,19 @@ export async function createRazorpayOrder(amountMinor: number, receipt: string):
       },
       body: JSON.stringify({
         amount: amountMinor,
-        currency: "INR",
+        currency,
         receipt: receipt.slice(0, 40),
       }),
     });
-    if (response.status === 401) return { ok: false, reason: "unauthorized" };
-    if (!response.ok) return { ok: false, reason: "failed" };
+    if (!response.ok) {
+      const data = (await response.json().catch(() => ({}))) as {
+        error?: { description?: string };
+      };
+      return {
+        ok: false,
+        reason: razorpayOrderFailure(response.status, data.error?.description ?? ""),
+      };
+    }
     const data = (await response.json()) as { id?: string };
     if (!data.id) return { ok: false, reason: "failed" };
     return { ok: true, orderId: data.id, keyId: config.keyId };

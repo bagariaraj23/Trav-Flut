@@ -1,6 +1,6 @@
 import { createHmac } from "crypto";
 import { afterEach, describe, expect, it } from "vitest";
-import { verifyRazorpaySignature } from "../../src/lib/services/razorpay";
+import { razorpayOrderFailure, verifyRazorpaySignature } from "../../src/lib/services/razorpay";
 
 const ORIGINAL_ID = process.env.RAZORPAY_KEY_ID;
 const ORIGINAL_SECRET = process.env.RAZORPAY_KEY_SECRET;
@@ -10,6 +10,15 @@ afterEach(() => {
   else process.env.RAZORPAY_KEY_ID = ORIGINAL_ID;
   if (ORIGINAL_SECRET === undefined) delete process.env.RAZORPAY_KEY_SECRET;
   else process.env.RAZORPAY_KEY_SECRET = ORIGINAL_SECRET;
+});
+
+describe("razorpayOrderFailure", () => {
+  it("treats a rejected key and an unsupported currency as their own failures", () => {
+    expect(razorpayOrderFailure(401, "")).toBe("unauthorized");
+    expect(razorpayOrderFailure(400, "International payments are not enabled")).toBe("currency");
+    expect(razorpayOrderFailure(400, "Currency is not supported")).toBe("currency");
+    expect(razorpayOrderFailure(500, "server error")).toBe("failed");
+  });
 });
 
 describe("verifyRazorpaySignature", () => {

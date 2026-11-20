@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { withLogging, withRateLimit } from "@/lib/middleware";
 import { prisma } from "@/lib/prisma";
-import { CHIP_IN_CURRENCY, parseChipInAmount, parseChipInName } from "@/lib/chipIn";
+import { parseChipInAmount, parseChipInName } from "@/lib/chipIn";
 import { createRazorpayOrder } from "@/lib/services/razorpay";
 
 export async function POST(request: NextRequest) {
@@ -16,12 +16,12 @@ export async function POST(request: NextRequest) {
       const chipIn = await prisma.chipIn.create({
         data: {
           amountMinor: parsed.amountMinor,
-          currency: CHIP_IN_CURRENCY,
+          currency: parsed.currency,
           displayName: parseChipInName(body),
         },
       });
 
-      const order = await createRazorpayOrder(parsed.amountMinor, chipIn.id);
+      const order = await createRazorpayOrder(parsed.amountMinor, chipIn.id, parsed.currency);
       if (!order.ok) {
         await prisma.chipIn.update({
           where: { id: chipIn.id },
@@ -30,11 +30,13 @@ export async function POST(request: NextRequest) {
         if (order.reason === "unauthorized") {
           return NextResponse.json({ error: "Razorpay did not accept these keys." }, { status: 401 });
         }
-        const status = order.reason === "unconfigured" ? 503 : 500;
+        const status = order.reason === "failed" ? 500 : 503;
         const message =
           order.reason === "unconfigured"
             ? "Chip-in isn't open on this server yet."
-            : "The payment window didn't open. Try again in a moment.";
+            : order.reason === "currency"
+              ? "That currency isn't open on this Razorpay account yet."
+              : "The payment window didn't open. Try again in a moment.";
         return NextResponse.json({ error: message }, { status });
       }
 
@@ -48,7 +50,7 @@ export async function POST(request: NextRequest) {
         orderId: order.orderId,
         keyId: order.keyId,
         amountMinor: parsed.amountMinor,
-        currency: CHIP_IN_CURRENCY,
+        currency: parsed.currency,
         name: "TripThread",
         description: "Chip in",
       });

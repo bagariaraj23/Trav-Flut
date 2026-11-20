@@ -1,13 +1,35 @@
-export const CHIP_IN_PRESETS = [50, 100, 200] as const;
-export const CHIP_IN_MIN_RUPEES = 10;
-export const CHIP_IN_MAX_RUPEES = 10000;
-export const CHIP_IN_CURRENCY = "INR";
+export const CHIP_IN_CURRENCIES = ["INR", "USD"] as const;
+export type ChipInCurrency = (typeof CHIP_IN_CURRENCIES)[number];
+
+export const CHIP_IN_PRESETS: Record<ChipInCurrency, readonly number[]> = {
+  INR: [50, 100, 200],
+  USD: [5, 10, 20],
+};
+
+export const CHIP_IN_LIMITS: Record<ChipInCurrency, { min: number; max: number }> = {
+  INR: { min: 10, max: 10000 },
+  USD: { min: 1, max: 500 },
+};
+
+export const CHIP_IN_CURRENCY: ChipInCurrency = "INR";
 
 export type ParsedChipIn =
-  | { ok: true; rupees: number; amountMinor: number }
+  | { ok: true; amount: number; currency: ChipInCurrency; amountMinor: number }
   | { ok: false; error: string };
 
 const NAME_MAX = 40;
+
+export function chipInSymbol(currency: ChipInCurrency): string {
+  return currency === "USD" ? "$" : "₹";
+}
+
+export function parseChipInCurrency(value: unknown): ChipInCurrency | null {
+  if (typeof value !== "string") return null;
+  const currency = value.trim().toUpperCase();
+  return CHIP_IN_CURRENCIES.includes(currency as ChipInCurrency)
+    ? (currency as ChipInCurrency)
+    : null;
+}
 
 export function parseChipInName(input: unknown): string | null {
   const body = input && typeof input === "object" ? (input as Record<string, unknown>) : {};
@@ -36,16 +58,25 @@ export function publicSupporterNames(names: Array<string | null | undefined>, li
 
 export function parseChipInAmount(input: unknown): ParsedChipIn {
   const body = input && typeof input === "object" ? (input as Record<string, unknown>) : {};
-  const raw = body.amountRupees;
-  const rupees = typeof raw === "number" ? raw : typeof raw === "string" ? Number(raw) : NaN;
-  if (!Number.isInteger(rupees)) {
-    return { ok: false, error: "Choose a whole rupee amount." };
+  const currency = body.currency == null ? CHIP_IN_CURRENCY : parseChipInCurrency(body.currency);
+  if (!currency) {
+    return { ok: false, error: "Choose rupees or dollars." };
   }
-  if (rupees < CHIP_IN_MIN_RUPEES || rupees > CHIP_IN_MAX_RUPEES) {
+
+  const raw = body.amount ?? (currency === "INR" ? body.amountRupees : undefined);
+  const amount = typeof raw === "number" ? raw : typeof raw === "string" ? Number(raw) : NaN;
+  const symbol = chipInSymbol(currency);
+  const { min, max } = CHIP_IN_LIMITS[currency];
+  const unit = currency === "USD" ? "dollar" : "rupee";
+  if (!Number.isInteger(amount)) {
+    return { ok: false, error: `Choose a whole ${unit} amount.` };
+  }
+  if (amount < min || amount > max) {
+    const maxLabel = currency === "INR" ? max.toLocaleString("en-IN") : String(max);
     return {
       ok: false,
-      error: `Chip in between ₹${CHIP_IN_MIN_RUPEES} and ₹${CHIP_IN_MAX_RUPEES.toLocaleString("en-IN")}.`,
+      error: `Chip in between ${symbol}${min} and ${symbol}${maxLabel}.`,
     };
   }
-  return { ok: true, rupees, amountMinor: rupees * 100 };
+  return { ok: true, amount, currency, amountMinor: amount * 100 };
 }

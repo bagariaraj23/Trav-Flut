@@ -2,19 +2,32 @@ import { describe, expect, it } from "vitest";
 import { parseChipInAmount, parseChipInName, publicSupporterNames } from "../../src/lib/chipIn";
 
 describe("parseChipInAmount", () => {
-  it("accepts a preset and turns it into paise", () => {
+  it("accepts a rupee preset and turns it into paise", () => {
     expect(parseChipInAmount({ amountRupees: 100 })).toEqual({
       ok: true,
-      rupees: 100,
+      amount: 100,
+      currency: "INR",
       amountMinor: 10000,
     });
   });
 
-  it("rejects fractions and amounts outside the range", () => {
+  it("accepts a whole dollar amount as cents", () => {
+    expect(parseChipInAmount({ amount: 10, currency: "usd" })).toEqual({
+      ok: true,
+      amount: 10,
+      currency: "USD",
+      amountMinor: 1000,
+    });
+  });
+
+  it("rejects fractions, unknown currencies, and amounts outside the range", () => {
     expect(parseChipInAmount({ amountRupees: 10.5 }).ok).toBe(false);
     expect(parseChipInAmount({ amountRupees: 1 }).ok).toBe(false);
     expect(parseChipInAmount({ amountRupees: 20000 }).ok).toBe(false);
-    expect(parseChipInAmount({ amountRupees: "100" })).toMatchObject({ ok: true, rupees: 100 });
+    expect(parseChipInAmount({ amount: "100" })).toMatchObject({ ok: true, amount: 100, currency: "INR" });
+    expect(parseChipInAmount({ amount: 0, currency: "USD" }).ok).toBe(false);
+    expect(parseChipInAmount({ amount: 501, currency: "USD" }).ok).toBe(false);
+    expect(parseChipInAmount({ amount: 10, currency: "EUR" }).ok).toBe(false);
   });
 });
 
