@@ -122,18 +122,45 @@ export default function EarlyAccess() {
   const fallbackTarget = platform === "android" ? EARLY_ACCESS_TARGETS.ANDROID : EARLY_ACCESS_TARGETS.IOS;
   const targetLabel = board?.target ?? fallbackTarget;
   const celebrating = pop?.platform === platform ? pop.id : 0;
+  const counted = useRef<Record<Platform, number | null>>({ android: null, ios: null });
+
+  useEffect(() => {
+    if (!boards) return;
+    const previous = counted.current[platform];
+    const next = boards[platform].current;
+    counted.current = {
+      android: boards.android.current,
+      ios: boards.ios.current,
+    };
+    if (previous != null && next > previous) {
+      setPop((current) => ({ platform, id: (current?.id ?? 0) + 1 }));
+    }
+  }, [boards, platform]);
 
   useEffect(() => {
     let cancelled = false;
-    fetch("/api/early-access")
-      .then((response) => (response.ok ? response.json() : null))
-      .then((data) => {
+    async function load() {
+      try {
+        const response = await fetch("/api/early-access");
+        const data = response.ok ? await response.json() : null;
         const next = readBoards(data);
         if (!cancelled && next) setBoards(next);
-      })
-      .catch(() => {});
+      } catch {
+        // The ring keeps the last count it showed.
+      }
+    }
+    void load();
+    const timer = window.setInterval(() => {
+      if (document.visibilityState === "visible") void load();
+    }, 30_000);
+    function onVisible() {
+      if (document.visibilityState === "visible") void load();
+    }
+    document.addEventListener("visibilitychange", onVisible);
     return () => {
       cancelled = true;
+      window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", onVisible);
     };
   }, []);
 
@@ -166,7 +193,6 @@ export default function EarlyAccess() {
         setNotice("This email is already on the list.");
         return;
       }
-      setPop((current) => ({ platform, id: (current?.id ?? 0) + 1 }));
       if (platform === "android") {
         setNotice(
           data.emailed
