@@ -23,6 +23,7 @@ Design choices that matter when you add a route:
 - Key by user id on authenticated routes so one NAT does not exhaust a shared IP budget. Key by IP on login, signup, and forgot-password, because there is no user yet and the point is to slow guessing.
 - Forgot-password and reset are **2 per hour**. That is the anti-enumeration and anti-mail-bomb control, paired with the generic "if an account exists" response.
 - Support is **5 per hour**, keyed by IP because the public form is not authenticated. A signed-in app request still uses that preset. The hit is logged as `RATE_LIMIT_HIT`.
+- Chip-in creation and confirmation share **10 per hour** per IP and log `RATE_LIMIT_HIT`. The payment-status poll is **180 per 15 minutes** and the supporter list is **60 per 15 minutes**, so a poll cannot use up the payment budget. The Razorpay callback is not limited.
 - `read_hot` at 240 per minute covers feed, profile, and notifications, which the app polls.
 - `write` at 60 per minute covers trip mutations.
 - `chat_message` at 30 per minute is separate so a chatty room cannot consume the write budget of trip edits, and the reverse.
