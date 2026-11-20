@@ -1,7 +1,25 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { CHIP_IN_MAX_RUPEES, CHIP_IN_MIN_RUPEES, CHIP_IN_PRESETS } from "@/lib/chipIn";
+
+type PaymentWatch = {
+  interval: number | null;
+  timeout: number | null;
+  generation: number;
+};
+
+function stopPaymentWatch(watch: PaymentWatch) {
+  watch.generation += 1;
+  if (watch.interval != null) {
+    window.clearInterval(watch.interval);
+    watch.interval = null;
+  }
+  if (watch.timeout != null) {
+    window.clearTimeout(watch.timeout);
+    watch.timeout = null;
+  }
+}
 
 type RazorpayResponse = {
   razorpay_order_id: string;
@@ -40,6 +58,12 @@ export default function ChipIn() {
   const [name, setName] = useState("");
   const [status, setStatus] = useState<"idle" | "opening" | "error">("idle");
   const [notice, setNotice] = useState("");
+  const watchRef = useRef<PaymentWatch>({ interval: null, timeout: null, generation: 0 });
+
+  useEffect(() => {
+    const watch = watchRef.current;
+    return () => stopPaymentWatch(watch);
+  }, []);
 
   const rupees = selected === "other" ? Number(custom) : selected;
   const amountReady = Number.isInteger(rupees) && rupees >= CHIP_IN_MIN_RUPEES && rupees <= CHIP_IN_MAX_RUPEES;
@@ -52,6 +76,8 @@ export default function ChipIn() {
     }
     setStatus("opening");
     setNotice("");
+    const watch = watchRef.current;
+    stopPaymentWatch(watch);
     try {
       const ready = await loadCheckout();
       if (!ready || !window.Razorpay) {
@@ -82,6 +108,7 @@ export default function ChipIn() {
         theme: { color: "#1D6FE8" },
         handler: async (payment: RazorpayResponse) => {
           settled = true;
+          stopPaymentWatch(watch);
           const confirm = await fetch("/api/chip-in/confirm", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -99,32 +126,36 @@ export default function ChipIn() {
             if (settled) return;
             setStatus("idle");
             setNotice("Payment cancelled.");
+            // The check keeps running after the window closes, so a capture
+            // that lands late can still open the thank-you page. Leaving the
+            // page stops it.
           },
         },
       });
       checkout.on("payment.failed", () => {
         settled = true;
+        stopPaymentWatch(watch);
         window.location.assign("/thanks?problem=1");
       });
       const orderId = data.orderId;
-      const watch = window.setInterval(async () => {
-        if (settled) {
-          window.clearInterval(watch);
-          return;
-        }
+      const generation = watch.generation;
+      watch.interval = window.setInterval(async () => {
+        if (watch.generation !== generation || settled) return;
         try {
           const statusResponse = await fetch(`/api/chip-in/status?orderId=${encodeURIComponent(orderId)}`);
           const statusBody = await statusResponse.json().catch(() => ({}));
-          if (statusBody.status !== "paid" || settled) return;
+          if (statusBody.status !== "paid" || watch.generation !== generation || settled) return;
           settled = true;
-          window.clearInterval(watch);
+          stopPaymentWatch(watch);
           window.focus();
           window.location.assign("/thanks");
         } catch {
           // The next check asks again.
         }
       }, 1000);
-      window.setTimeout(() => window.clearInterval(watch), 90000);
+      watch.timeout = window.setTimeout(() => {
+        if (watch.generation === generation) stopPaymentWatch(watch);
+      }, 90000);
       checkout.open();
     } catch {
       setStatus("error");
