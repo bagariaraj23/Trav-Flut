@@ -57,9 +57,11 @@ const resetTitles: Record<string, string> = {
 export default function LandingPage({
   error,
   message,
+  signedUp,
 }: {
   error: string | null;
   message: string | null;
+  signedUp: number | null;
 }) {
   const resetTitle = error ? resetTitles[error] ?? "Something went wrong" : null;
 
@@ -127,6 +129,16 @@ export default function LandingPage({
               Start a trip, write it as you go, and publish one story when you are home.
               Friends follow the thread while you are still on the road.
             </p>
+            {signedUp != null && (
+              <p className="mt-6 flex items-baseline gap-2 text-ink-soft">
+                <span className="font-display text-3xl tabular-nums tracking-tight text-ink">
+                  {signedUp}
+                </span>
+                <span className="text-sm">
+                  {signedUp === 1 ? "person has an account" : "people have an account"}
+                </span>
+              </p>
+            )}
             <div className="mt-8 flex flex-wrap items-center gap-3">
               <AuthLink path="signup" variant="primary" size="regular">
                 Get started
