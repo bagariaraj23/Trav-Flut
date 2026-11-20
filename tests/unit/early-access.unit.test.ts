@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { earlyAccessProgress, parseEarlyAccessBody } from "../../src/lib/earlyAccess";
+import { earlyAccessBoards, earlyAccessProgress, parseEarlyAccessBody } from "../../src/lib/earlyAccess";
 
 describe("parseEarlyAccessBody", () => {
   it("requires a real email and a phone choice", () => {
@@ -44,5 +44,12 @@ describe("earlyAccessProgress", () => {
     expect(earlyAccessProgress(42)).toEqual({ current: 42, target: 100, ratio: 0.42 });
     expect(earlyAccessProgress(140)).toEqual({ current: 140, target: 100, ratio: 1 });
     expect(earlyAccessProgress(-3)).toEqual({ current: 0, target: 100, ratio: 0 });
+  });
+
+  it("counts Android and iPhone against their own targets", () => {
+    expect(earlyAccessBoards({ android: 2, ios: 1 })).toEqual({
+      android: { current: 2, target: 500, ratio: 0.004 },
+      ios: { current: 1, target: 100, ratio: 0.01 },
+    });
   });
 });

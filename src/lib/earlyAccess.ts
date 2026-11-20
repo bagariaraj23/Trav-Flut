@@ -1,5 +1,10 @@
 export const EARLY_ACCESS_TARGET = 100;
 
+export const EARLY_ACCESS_TARGETS = {
+  ANDROID: 500,
+  IOS: 100,
+} as const;
+
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export type EarlyAccessPlatform = "ANDROID" | "IOS";
@@ -53,5 +58,12 @@ export function earlyAccessProgress(current: number, target = EARLY_ACCESS_TARGE
     current: safeCurrent,
     target: safeTarget,
     ratio: Math.min(safeCurrent / safeTarget, 1),
+  };
+}
+
+export function earlyAccessBoards(counts: { android: number; ios: number }) {
+  return {
+    android: earlyAccessProgress(counts.android, EARLY_ACCESS_TARGETS.ANDROID),
+    ios: earlyAccessProgress(counts.ios, EARLY_ACCESS_TARGETS.IOS),
   };
 }

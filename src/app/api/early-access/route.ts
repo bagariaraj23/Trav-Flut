@@ -1,13 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
 import { withLogging, withRateLimit } from "@/lib/middleware";
 import { prisma } from "@/lib/prisma";
-import {
-  EARLY_ACCESS_TARGET,
-  earlyAccessProgress,
-  parseEarlyAccessBody,
-} from "@/lib/earlyAccess";
+import { earlyAccessBoards, parseEarlyAccessBody } from "@/lib/earlyAccess";
 import { sendEarlyAccessEmail } from "@/lib/services/email";
 import { addAndroidTester } from "@/lib/services/firebaseAppDistribution";
+
+async function signupBoards() {
+  const grouped = await prisma.earlyAccessRequest.groupBy({
+    by: ["platform"],
+    _count: { _all: true },
+  });
+  const countFor = (platform: "ANDROID" | "IOS") =>
+    grouped.find((row) => row.platform === platform)?._count._all ?? 0;
+  return earlyAccessBoards({ android: countFor("ANDROID"), ios: countFor("IOS") });
+}
 
 function clientIp(request: NextRequest): string | null {
   return (
@@ -20,8 +26,7 @@ function clientIp(request: NextRequest): string | null {
 export async function GET(request: NextRequest) {
   const loggedHandler = withLogging(async (req) => {
     return withRateLimit(req, "early_access_read", async () => {
-      const count = await prisma.earlyAccessRequest.count();
-      return NextResponse.json(earlyAccessProgress(count, EARLY_ACCESS_TARGET));
+      return NextResponse.json(await signupBoards());
     });
   });
   return loggedHandler(request);
@@ -36,10 +41,9 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: parsed.error }, { status: 400 });
       }
       if (parsed.honeypot) {
-        const count = await prisma.earlyAccessRequest.count();
         return NextResponse.json({
           ok: true,
-          ...earlyAccessProgress(count, EARLY_ACCESS_TARGET),
+          ...(await signupBoards()),
         });
       }
 
@@ -80,13 +84,12 @@ export async function POST(request: NextRequest) {
         });
       }
 
-      const count = await prisma.earlyAccessRequest.count();
       return NextResponse.json({
         ok: true,
         created,
         emailed,
         platform: parsed.platform,
-        ...earlyAccessProgress(count, EARLY_ACCESS_TARGET),
+        ...(await signupBoards()),
       });
     });
   });
