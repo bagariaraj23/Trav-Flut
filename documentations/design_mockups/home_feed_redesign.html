@@ -1,0 +1,1175 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>TripThread — Home feed card layouts</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=Playfair+Display:wght@600;700&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --page: #FAF8F4;
+      --card: #FFFFFF;
+      --ink: #1C1917;
+      --muted: #EDE7DC;
+      --stone: #78716C;
+      --input: #F5F1EB;
+      --accent: #1D6FE8;
+      --like: #E11D48;
+      --live: #059669;
+      --outline: rgba(120, 113, 108, 0.2);
+      --outline-strong: rgba(120, 113, 108, 0.35);
+      --radius-card: 16px;
+      --radius-ctrl: 12px;
+      --sans: "DM Sans", system-ui, sans-serif;
+      --serif: "Playfair Display", Georgia, serif;
+    }
+
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; }
+    body {
+      font-family: var(--sans);
+      background: #E8E4DC;
+      color: var(--ink);
+      -webkit-font-smoothing: antialiased;
+      min-height: 100vh;
+      padding: 24px 16px 64px;
+    }
+
+    .page-wrap {
+      max-width: 920px;
+      margin: 0 auto;
+    }
+
+    .doc-header {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: flex-end;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 20px;
+    }
+    .doc-header h1 {
+      font-family: var(--serif);
+      font-size: 28px;
+      font-weight: 600;
+      margin: 0 0 4px;
+    }
+    .doc-header p {
+      margin: 0;
+      color: var(--stone);
+      font-size: 14px;
+      max-width: 420px;
+      line-height: 1.45;
+    }
+    .doc-nav {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .doc-nav a {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--accent);
+      text-decoration: none;
+      padding: 8px 12px;
+      border: 1px solid var(--outline-strong);
+      border-radius: 999px;
+      background: var(--card);
+    }
+    .doc-nav a:hover { border-color: var(--accent); }
+
+    .layout {
+      display: grid;
+      grid-template-columns: minmax(0, 390px) minmax(0, 1fr);
+      gap: 24px;
+      align-items: start;
+    }
+    @media (max-width: 820px) {
+      .layout { grid-template-columns: 1fr; justify-items: center; }
+      .side-panel { max-width: 390px; width: 100%; }
+    }
+
+    /* Phone chrome */
+    .phone {
+      width: 390px;
+      max-width: 100%;
+      background: var(--page);
+      border-radius: 28px;
+      border: 1px solid var(--outline-strong);
+      overflow: hidden;
+      box-shadow: 0 18px 40px rgba(28, 25, 23, 0.08);
+    }
+    .status-bar {
+      display: flex;
+      justify-content: space-between;
+      padding: 10px 20px 4px;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--ink);
+    }
+    .app-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 8px 16px 12px;
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .brand-mark {
+      width: 28px;
+      height: 28px;
+      border-radius: 8px;
+      background: var(--ink);
+      color: var(--page);
+      display: grid;
+      place-items: center;
+      font-family: var(--serif);
+      font-weight: 700;
+      font-size: 16px;
+    }
+    .brand-name {
+      font-family: var(--serif);
+      font-size: 20px;
+      font-weight: 600;
+    }
+    .app-bar-actions {
+      display: flex;
+      gap: 12px;
+      color: var(--stone);
+    }
+    .app-bar-actions svg { width: 22px; height: 22px; }
+
+    .feed {
+      max-height: 780px;
+      overflow-y: auto;
+      padding-bottom: 88px;
+      scrollbar-width: thin;
+    }
+
+    /* Happening Now — match Flutter 64px rounded squares */
+    .live-row {
+      padding: 8px 16px 12px;
+    }
+    .live-label {
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 1.1px;
+      color: var(--stone);
+      margin-bottom: 10px;
+    }
+    .live-scroll {
+      display: flex;
+      gap: 12px;
+      overflow-x: auto;
+      scrollbar-width: none;
+    }
+    .live-scroll::-webkit-scrollbar { display: none; }
+    .live-item {
+      width: 68px;
+      flex: 0 0 auto;
+      text-align: center;
+    }
+    .live-avatar {
+      position: relative;
+      width: 64px;
+      height: 64px;
+      margin: 0 auto;
+      padding: 3px;
+      border-radius: 18px;
+      border: 2px solid var(--live);
+    }
+    .live-avatar.self { border-color: var(--accent); }
+    .live-avatar img,
+    .live-avatar .fallback {
+      width: 100%;
+      height: 100%;
+      border-radius: 14px;
+      object-fit: cover;
+      display: block;
+    }
+    .live-avatar .fallback {
+      background: var(--muted);
+      display: grid;
+      place-items: center;
+      font-weight: 600;
+      color: var(--ink);
+    }
+    .live-badge {
+      position: absolute;
+      right: -2px;
+      bottom: -2px;
+      background: var(--live);
+      color: #fff;
+      font-size: 8px;
+      font-weight: 700;
+      padding: 1px 4px;
+      border-radius: 8px;
+    }
+    .live-name {
+      margin-top: 4px;
+      font-size: 12px;
+      color: var(--stone);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    /* Shared card shell */
+    .card {
+      margin: 8px 16px;
+      background: var(--card);
+      border: 1px solid var(--outline);
+      border-radius: var(--radius-card);
+      overflow: hidden;
+    }
+    .card-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 14px 14px 10px;
+    }
+    .card-avatar {
+      width: 40px;
+      height: 40px;
+      border-radius: 12px;
+      object-fit: cover;
+      background: var(--muted);
+    }
+    .card-avatar.fallback {
+      display: grid;
+      place-items: center;
+      font-weight: 600;
+      font-size: 14px;
+    }
+    .card-meta { flex: 1; min-width: 0; }
+    .card-name {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--ink);
+    }
+    .card-dates {
+      font-size: 12px;
+      color: var(--stone);
+      margin-top: 2px;
+    }
+    .overflow-btn {
+      width: 32px;
+      height: 32px;
+      border: none;
+      background: transparent;
+      color: var(--stone);
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 18px;
+      line-height: 1;
+    }
+
+    .title {
+      font-family: var(--serif);
+      font-size: 20px;
+      font-weight: 600;
+      line-height: 1.25;
+      color: var(--ink);
+      margin: 0;
+    }
+    .route {
+      font-size: 12px;
+      letter-spacing: 0.06em;
+      color: var(--stone);
+      margin: 6px 0 0;
+    }
+    .summary {
+      font-size: 14px;
+      line-height: 1.45;
+      color: var(--ink);
+      margin: 8px 0 0;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+    .summary.one-line {
+      -webkit-line-clamp: 1;
+    }
+    .caption {
+      font-size: 13px;
+      color: var(--stone);
+      margin: 4px 0 0;
+      font-style: italic;
+    }
+    .pad-x { padding-left: 14px; padding-right: 14px; }
+    .pad-b { padding-bottom: 12px; }
+
+    /* Postcard media */
+    .photo-inset {
+      margin: 0 8px;
+      border-radius: 12px;
+      overflow: hidden;
+      position: relative;
+      background: var(--muted);
+      height: 220px;
+    }
+    .photo-inset img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+    .photo-dots {
+      position: absolute;
+      left: 0; right: 0; bottom: 10px;
+      display: flex;
+      justify-content: center;
+      gap: 5px;
+    }
+    .photo-dots span {
+      width: 6px; height: 6px;
+      border-radius: 50%;
+      background: rgba(255,255,255,0.45);
+    }
+    .photo-dots span.on { background: #fff; }
+    .stamp {
+      position: absolute;
+      top: 12px;
+      right: 12px;
+      border: 1px solid var(--outline-strong);
+      background: rgba(250, 248, 244, 0.92);
+      color: var(--ink);
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      padding: 4px 8px;
+      border-radius: 6px;
+      transform: rotate(6deg);
+    }
+
+    /* Map strip / hero (CSS stand-in for streets-v12) */
+    .map-block {
+      position: relative;
+      overflow: hidden;
+      background:
+        linear-gradient(180deg, rgba(250,248,244,0.15), rgba(250,248,244,0.55)),
+        repeating-linear-gradient(90deg, #E8F0FA 0 28px, #F4F7FB 28px 56px),
+        repeating-linear-gradient(0deg, #E2EAF4 0 28px, #F7F9FC 28px 56px);
+      border: 1px solid var(--outline);
+    }
+    .map-block::before {
+      content: "";
+      position: absolute;
+      inset: 18% 8% 28% 10%;
+      border: 2px solid var(--accent);
+      border-radius: 40% 60% 45% 55% / 50% 40% 60% 50%;
+      opacity: 0.55;
+      pointer-events: none;
+    }
+    .map-pin {
+      position: absolute;
+      width: 10px;
+      height: 10px;
+      background: var(--accent);
+      border: 2px solid #fff;
+      border-radius: 50% 50% 50% 0;
+      transform: rotate(-45deg);
+      box-shadow: 0 1px 3px rgba(28,25,23,0.25);
+    }
+    .map-strip {
+      height: 88px;
+      margin: 10px 14px 0;
+      border-radius: 12px;
+    }
+    .map-label {
+      position: absolute;
+      left: 10px;
+      bottom: 8px;
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--ink);
+      background: rgba(250,248,244,0.9);
+      padding: 3px 8px;
+      border-radius: 8px;
+    }
+    .map-hero {
+      height: 220px;
+      margin: 0 8px;
+      border-radius: 12px;
+    }
+    .map-open-chip {
+      position: absolute;
+      top: 12px;
+      right: 12px;
+      background: var(--card);
+      border: 1px solid var(--outline-strong);
+      color: var(--accent);
+      font-size: 11px;
+      font-weight: 600;
+      padding: 5px 10px;
+      border-radius: 999px;
+    }
+    .map-route-scrim {
+      position: absolute;
+      left: 0; right: 0; bottom: 0;
+      padding: 18px 12px 10px;
+      background: linear-gradient(transparent, rgba(250,248,244,0.95));
+      font-size: 12px;
+      letter-spacing: 0.06em;
+      color: var(--stone);
+    }
+
+    .filmstrip {
+      display: flex;
+      gap: 8px;
+      overflow-x: auto;
+      padding: 10px 14px 0;
+      scrollbar-width: none;
+    }
+    .filmstrip::-webkit-scrollbar { display: none; }
+    .filmstrip img {
+      width: 96px;
+      height: 72px;
+      object-fit: cover;
+      border-radius: 10px;
+      flex: 0 0 auto;
+      background: var(--muted);
+    }
+
+    /* Thread pager */
+    .thread-pager {
+      margin: 12px 14px 0;
+      overflow: hidden;
+    }
+    .thread-track {
+      display: flex;
+      transition: transform 0.25s ease;
+    }
+    .thread-page {
+      min-width: 100%;
+      flex: 0 0 100%;
+    }
+    .thread-entry {
+      display: flex;
+      gap: 10px;
+      align-items: flex-start;
+      padding: 8px;
+      border: 1px solid var(--outline);
+      border-radius: 12px;
+      background: var(--page);
+    }
+    .thread-entry + .thread-entry { margin-top: 8px; }
+    .thread-thumb {
+      width: 56px;
+      height: 56px;
+      border-radius: 10px;
+      object-fit: cover;
+      flex: 0 0 auto;
+      background: var(--muted);
+    }
+    .thread-thumb.place {
+      display: grid;
+      place-items: center;
+      color: var(--stone);
+      font-size: 11px;
+      font-weight: 600;
+      text-align: center;
+      padding: 4px;
+      line-height: 1.2;
+    }
+    .thread-body { min-width: 0; flex: 1; }
+    .thread-text {
+      font-size: 13px;
+      line-height: 1.35;
+      color: var(--ink);
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+      margin: 0;
+    }
+    .thread-place {
+      font-size: 11px;
+      color: var(--stone);
+      margin-top: 4px;
+    }
+    .thread-likes {
+      font-size: 11px;
+      color: var(--like);
+      font-weight: 600;
+      margin-top: 2px;
+    }
+    .pager-dots {
+      display: flex;
+      justify-content: center;
+      gap: 5px;
+      padding: 8px 0 0;
+    }
+    .pager-dots button {
+      width: 6px; height: 6px;
+      border-radius: 50%;
+      border: none;
+      padding: 0;
+      background: var(--outline-strong);
+      cursor: pointer;
+    }
+    .pager-dots button.on { background: var(--accent); }
+
+    /* Thread-reel split */
+    .reel-split {
+      display: grid;
+      grid-template-columns: 42% 1fr;
+      gap: 10px;
+      padding: 0 14px;
+      min-height: 168px;
+    }
+    .reel-cover {
+      position: relative;
+      height: 168px;
+      border-radius: 12px;
+      overflow: hidden;
+      background: var(--muted);
+    }
+    .reel-cover img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+    .places-pill {
+      position: absolute;
+      left: 8px;
+      bottom: 8px;
+      background: rgba(250,248,244,0.95);
+      color: var(--accent);
+      font-size: 11px;
+      font-weight: 600;
+      padding: 4px 8px;
+      border-radius: 999px;
+      border: 1px solid var(--outline);
+    }
+    .reel-snippets {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      min-height: 168px;
+    }
+    .snippet {
+      flex: 1;
+      border-left: 2px solid var(--accent);
+      padding: 6px 8px;
+      background: var(--page);
+      border-radius: 0 10px 10px 0;
+    }
+    .snippet p {
+      margin: 0;
+      font-size: 12px;
+      line-height: 1.35;
+      color: var(--ink);
+      display: -webkit-box;
+      -webkit-line-clamp: 3;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+    .snippet .meta {
+      margin-top: 4px;
+      font-size: 10px;
+      color: var(--stone);
+    }
+    .reel-pager-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 8px 14px 0;
+      font-size: 12px;
+      color: var(--stone);
+    }
+
+    /* Footer */
+    .card-footer {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 14px 14px;
+      margin-top: 4px;
+      border-top: 1px solid var(--outline);
+    }
+    .engage {
+      display: flex;
+      align-items: center;
+      gap: 18px;
+      color: var(--stone);
+      font-size: 13px;
+      font-weight: 500;
+    }
+    .engage .item {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .engage svg { width: 22px; height: 22px; stroke: currentColor; fill: none; stroke-width: 1.7; }
+    .engage .liked { color: var(--like); }
+    .engage .liked svg { fill: var(--like); stroke: var(--like); }
+    .open-trip {
+      border: none;
+      background: transparent;
+      color: var(--accent);
+      font-family: var(--sans);
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      padding: 6px 0;
+    }
+
+    /* Bottom nav fake */
+    .tab-bar {
+      position: sticky;
+      bottom: 0;
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      background: var(--page);
+      border-top: 1px solid var(--outline);
+      padding: 8px 4px 14px;
+      text-align: center;
+      font-size: 10px;
+      color: var(--stone);
+    }
+    .tab-bar .on { color: var(--ink); font-weight: 600; }
+    .tab-bar .ico { font-size: 18px; line-height: 1.2; }
+
+    /* Side panel: picker + notes */
+    .side-panel {
+      background: var(--card);
+      border: 1px solid var(--outline);
+      border-radius: var(--radius-card);
+      padding: 18px;
+    }
+    .side-panel h2 {
+      font-family: var(--serif);
+      font-size: 22px;
+      margin: 0 0 6px;
+    }
+    .side-panel .lede {
+      font-size: 13px;
+      color: var(--stone);
+      line-height: 1.45;
+      margin: 0 0 16px;
+    }
+    .picker-label {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--stone);
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      margin-bottom: 10px;
+    }
+    .picker {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+      margin-bottom: 14px;
+    }
+    .picker-tile {
+      border: 1px solid var(--outline);
+      border-radius: var(--radius-ctrl);
+      padding: 10px 8px;
+      background: var(--page);
+      cursor: pointer;
+      text-align: center;
+      transition: border-color 0.15s;
+    }
+    .picker-tile.selected {
+      border: 2px solid var(--accent);
+      padding: 9px 7px;
+    }
+    .picker-diagram {
+      height: 52px;
+      margin-bottom: 8px;
+      border-radius: 6px;
+      background: var(--muted);
+      position: relative;
+      overflow: hidden;
+    }
+    .picker-diagram .box {
+      position: absolute;
+      background: var(--card);
+      border: 1px solid var(--outline-strong);
+      border-radius: 3px;
+    }
+    .diag-pc .hero { left: 8%; right: 8%; top: 8%; height: 48%; }
+    .diag-pc .line { left: 8%; right: 20%; top: 64%; height: 6px; }
+    .diag-pc .line2 { left: 8%; right: 35%; top: 78%; height: 5px; }
+    .diag-map .hero { left: 6%; right: 6%; top: 6%; height: 58%; background: #E8F0FA; }
+    .diag-map .strip { left: 6%; right: 6%; bottom: 8%; height: 18%; display: flex; gap: 2px; }
+    .diag-map .strip i {
+      flex: 1; background: var(--card); border: 1px solid var(--outline-strong); border-radius: 2px;
+    }
+    .diag-tr .left { left: 6%; width: 38%; top: 10%; bottom: 10%; }
+    .diag-tr .r1 { right: 6%; left: 50%; top: 12%; height: 28%; }
+    .diag-tr .r2 { right: 6%; left: 50%; top: 48%; height: 28%; }
+    .picker-tile span {
+      display: block;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--ink);
+    }
+    .publish-btn {
+      width: 100%;
+      border: none;
+      border-radius: var(--radius-ctrl);
+      background: var(--accent);
+      color: #fff;
+      font-family: var(--sans);
+      font-size: 15px;
+      font-weight: 600;
+      padding: 12px 16px;
+      cursor: pointer;
+    }
+    .notes {
+      margin-top: 20px;
+      padding-top: 16px;
+      border-top: 1px solid var(--outline);
+      font-size: 12px;
+      color: var(--stone);
+      line-height: 1.5;
+    }
+    .notes strong { color: var(--ink); }
+    .notes ul { margin: 8px 0 0; padding-left: 18px; }
+    .template-tag {
+      display: inline-block;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--accent);
+      background: rgba(29, 111, 232, 0.08);
+      padding: 3px 8px;
+      border-radius: 6px;
+      margin: 0 16px 0;
+    }
+  </style>
+</head>
+<body>
+  <div class="page-wrap">
+    <header class="doc-header">
+      <div>
+        <h1>Home feed card layouts</h1>
+        <p>Design-only mockup on AppTheme tokens. Happening Now unchanged. Three author-chosen final-post templates. Spend stays off the card.</p>
+      </div>
+      <nav class="doc-nav">
+        <a href="#feed-mock">Feed mockup</a>
+        <a href="#template-picker">Publish picker</a>
+      </nav>
+    </header>
+
+    <div class="layout">
+      <!-- PHONE FEED -->
+      <div class="phone" id="feed-mock" data-testid="feed-mockup">
+        <div class="status-bar">
+          <span>9:41</span>
+          <span>●●● 100%</span>
+        </div>
+        <div class="app-bar">
+          <div class="brand">
+            <div class="brand-mark">T</div>
+            <div class="brand-name">TripThread</div>
+          </div>
+          <div class="app-bar-actions" aria-hidden="true">
+            <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3-3"/></svg>
+            <svg viewBox="0 0 24 24"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 7 3 7H3s3 0 3-7"/><path d="M10 19a2 2 0 0 0 4 0"/></svg>
+          </div>
+        </div>
+
+        <div class="feed">
+          <!-- Happening Now -->
+          <section class="live-row" data-testid="live-trips-row">
+            <div class="live-label">HAPPENING NOW</div>
+            <div class="live-scroll">
+              <div class="live-item">
+                <div class="live-avatar self">
+                  <div class="fallback">Y</div>
+                  <span class="live-badge">YOU</span>
+                </div>
+                <div class="live-name">You</div>
+              </div>
+              <div class="live-item">
+                <div class="live-avatar">
+                  <img src="https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=128&h=128&fit=crop" alt="" />
+                  <span class="live-badge">LIVE</span>
+                </div>
+                <div class="live-name">Arjun</div>
+              </div>
+              <div class="live-item">
+                <div class="live-avatar">
+                  <img src="https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=128&h=128&fit=crop" alt="" />
+                  <span class="live-badge">LIVE</span>
+                </div>
+                <div class="live-name">Meera</div>
+              </div>
+              <div class="live-item">
+                <div class="live-avatar">
+                  <img src="https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=128&h=128&fit=crop" alt="" />
+                  <span class="live-badge">LIVE</span>
+                </div>
+                <div class="live-name">Kabir</div>
+              </div>
+            </div>
+          </section>
+
+          <div class="template-tag">01 · Postcard</div>
+
+          <!-- CARD 1: POSTCARD -->
+          <article class="card" data-testid="card-template-postcard" data-template="postcard">
+            <div class="card-header">
+              <img class="card-avatar" src="https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=80&h=80&fit=crop" alt="" />
+              <div class="card-meta">
+                <div class="card-name">Kabir Sen</div>
+                <div class="card-dates">12–18 Oct · 7 days</div>
+              </div>
+              <button class="overflow-btn" aria-label="More">⋯</button>
+            </div>
+
+            <div class="photo-inset">
+              <img src="https://images.unsplash.com/photo-1599661046289-e31897846e41?w=800&h=500&fit=crop" alt="Udaipur lake palace" />
+              <div class="stamp">Jaipur</div>
+              <div class="photo-dots"><span class="on"></span><span></span><span></span></div>
+            </div>
+
+            <div class="pad-x pad-b" style="padding-top:12px">
+              <h3 class="title">Desert forts to midnight lake reflections</h3>
+              <p class="route">Jaipur → Pushkar → Udaipur</p>
+              <p class="summary">Rode from Hawa Mahal’s pink alleys to Pushkar’s blue doors, then drifted across Lake Pichola at golden hour.</p>
+              <p class="caption">Golden hour boat drift across Pichola</p>
+            </div>
+
+            <div class="map-block map-strip" role="link" aria-label="Open trip map" title="→ /trip/:id/map">
+              <span class="map-pin" style="left:22%; top:42%"></span>
+              <span class="map-pin" style="left:48%; top:55%"></span>
+              <span class="map-pin" style="left:72%; top:38%"></span>
+              <span class="map-label">Route · 3 places</span>
+            </div>
+
+            <div class="thread-pager" data-pager="postcard">
+              <div class="thread-track">
+                <div class="thread-page">
+                  <div class="thread-entry">
+                    <img class="thread-thumb" src="https://images.unsplash.com/photo-1477587458883-47145ed94245?w=112&h=112&fit=crop" alt="" />
+                    <div class="thread-body">
+                      <p class="thread-text">Chai on the ghat before the boatmen woke — quiet enough to hear temple bells across the water.</p>
+                      <div class="thread-place">Udaipur · Lake Pichola</div>
+                      <div class="thread-likes">♥ 42</div>
+                    </div>
+                  </div>
+                </div>
+                <div class="thread-page">
+                  <div class="thread-entry">
+                    <div class="thread-thumb place">Pushkar</div>
+                    <div class="thread-body">
+                      <p class="thread-text">Blue doors and camel bells. Skipped the fair crowds for the old bazaar lanes at dusk.</p>
+                      <div class="thread-place">Pushkar</div>
+                      <div class="thread-likes">♥ 28</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div class="pager-dots">
+                <button type="button" class="on" aria-label="Thread page 1"></button>
+                <button type="button" aria-label="Thread page 2"></button>
+              </div>
+            </div>
+
+            <div class="card-footer">
+              <div class="engage">
+                <span class="item liked">
+                  <svg viewBox="0 0 24 24"><path d="M12 21s-7-4.5-9.5-8.5C.5 9 2.5 5 6.5 5c2 0 3.5 1.2 5.5 3.2C14 6.2 15.5 5 17.5 5c4 0 6 4 4 7.5C19 16.5 12 21 12 21z"/></svg>
+                  128
+                </span>
+                <span class="item">
+                  <svg viewBox="0 0 24 24"><path d="M21 15a3 3 0 0 1-3 3H8l-5 3V6a3 3 0 0 1 3-3h12a3 3 0 0 1 3 3z"/></svg>
+                  24
+                </span>
+                <span class="item">
+                  <svg viewBox="0 0 24 24"><circle cx="18" cy="5" r="2.5"/><circle cx="6" cy="12" r="2.5"/><circle cx="18" cy="19" r="2.5"/><path d="M8.5 13.5l7 4M15.5 6.5l-7 4"/></svg>
+                  9
+                </span>
+              </div>
+              <button class="open-trip" type="button">Open trip</button>
+            </div>
+          </article>
+
+          <div class="template-tag">02 · Map-first</div>
+
+          <!-- CARD 2: MAP-FIRST -->
+          <article class="card" data-testid="card-template-mapfirst" data-template="map_first">
+            <div class="card-header">
+              <img class="card-avatar" src="https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=80&h=80&fit=crop" alt="" />
+              <div class="card-meta">
+                <div class="card-name">Arjun Mehta</div>
+                <div class="card-dates">2–9 Sep · 8 days</div>
+              </div>
+              <button class="overflow-btn" aria-label="More">⋯</button>
+            </div>
+
+            <div class="map-block map-hero" role="link" aria-label="Open trip map" title="→ /trip/:id/map">
+              <span class="map-pin" style="left:18%; top:58%"></span>
+              <span class="map-pin" style="left:42%; top:40%"></span>
+              <span class="map-pin" style="left:68%; top:28%"></span>
+              <span class="map-pin" style="left:82%; top:18%"></span>
+              <span class="map-open-chip">Open map</span>
+              <div class="map-route-scrim">Manali → Rohtang → Sarchu → Leh</div>
+            </div>
+
+            <div class="filmstrip">
+              <img src="https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=200&h=150&fit=crop" alt="" />
+              <img src="https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?w=200&h=150&fit=crop" alt="" />
+              <img src="https://images.unsplash.com/photo-1519681393784-d120267933ba?w=200&h=150&fit=crop" alt="" />
+              <img src="https://images.unsplash.com/photo-1486870591958-9b9d0d1dda99?w=200&h=150&fit=crop" alt="" />
+            </div>
+
+            <div class="pad-x pad-b" style="padding-top:12px">
+              <h3 class="title">High passes before the first snow</h3>
+              <p class="summary">Four passes, thin air, and a bike that coughed only once above 4,000m. Geography was the whole story.</p>
+            </div>
+
+            <div class="thread-pager" data-pager="map">
+              <div class="thread-track">
+                <div class="thread-page">
+                  <div class="thread-entry">
+                    <img class="thread-thumb" src="https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?w=112&h=112&fit=crop" alt="" />
+                    <div class="thread-body">
+                      <p class="thread-text">Rohtang cleared at noon. Clouds sat in the valley like a second road.</p>
+                      <div class="thread-place">Rohtang Pass</div>
+                      <div class="thread-likes">♥ 67</div>
+                    </div>
+                  </div>
+                </div>
+                <div class="thread-page">
+                  <div class="thread-entry">
+                    <div class="thread-thumb place">Sarchu</div>
+                    <div class="thread-body">
+                      <p class="thread-text">Camped under a sky that never went fully dark. Tea froze before the second sip.</p>
+                      <div class="thread-place">Sarchu plains</div>
+                      <div class="thread-likes">♥ 51</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div class="pager-dots">
+                <button type="button" class="on" aria-label="Thread page 1"></button>
+                <button type="button" aria-label="Thread page 2"></button>
+              </div>
+            </div>
+
+            <div class="card-footer">
+              <div class="engage">
+                <span class="item">
+                  <svg viewBox="0 0 24 24"><path d="M12 21s-7-4.5-9.5-8.5C.5 9 2.5 5 6.5 5c2 0 3.5 1.2 5.5 3.2C14 6.2 15.5 5 17.5 5c4 0 6 4 4 7.5C19 16.5 12 21 12 21z"/></svg>
+                  214
+                </span>
+                <span class="item">
+                  <svg viewBox="0 0 24 24"><path d="M21 15a3 3 0 0 1-3 3H8l-5 3V6a3 3 0 0 1 3-3h12a3 3 0 0 1 3 3z"/></svg>
+                  41
+                </span>
+                <span class="item">
+                  <svg viewBox="0 0 24 24"><circle cx="18" cy="5" r="2.5"/><circle cx="6" cy="12" r="2.5"/><circle cx="18" cy="19" r="2.5"/><path d="M8.5 13.5l7 4M15.5 6.5l-7 4"/></svg>
+                  18
+                </span>
+              </div>
+              <button class="open-trip" type="button">Open trip</button>
+            </div>
+          </article>
+
+          <div class="template-tag">03 · Thread-reel</div>
+
+          <!-- CARD 3: THREAD-REEL -->
+          <article class="card" data-testid="card-template-threadreel" data-template="thread_reel">
+            <div class="card-header">
+              <img class="card-avatar" src="https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=80&h=80&fit=crop" alt="" />
+              <div class="card-meta">
+                <div class="card-name">Meera Iyer</div>
+                <div class="card-dates">14–21 Jul · 8 days</div>
+              </div>
+              <button class="overflow-btn" aria-label="More">⋯</button>
+            </div>
+
+            <div class="reel-split">
+              <div class="reel-cover">
+                <img src="https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=400&h=400&fit=crop" alt="Beach" />
+                <span class="places-pill" title="→ /trip/:id/map">3 places</span>
+              </div>
+              <div class="reel-snippets" data-reel-snippets>
+                <div class="snippet">
+                  <p>Found a café that only opens when the ferry’s late. Ordered filter coffee twice and stayed through the rain.</p>
+                  <div class="meta">Fort Kochi · ♥ 39</div>
+                </div>
+                <div class="snippet">
+                  <p>Fisherman said the tide decides the menu. Ate whatever came up with lime and quiet.</p>
+                  <div class="meta">Vypin · ♥ 31</div>
+                </div>
+              </div>
+            </div>
+
+            <div class="pad-x" style="padding-top:12px">
+              <h3 class="title">Eight days of ferry delays and filter coffee</h3>
+              <p class="summary one-line">A diary trip: short notes, longer meals, and maps I barely opened.</p>
+            </div>
+            <div class="reel-pager-row">
+              <span>1 of 3</span>
+              <div class="pager-dots" data-pager="reel">
+                <button type="button" class="on" aria-label="Thread page 1"></button>
+                <button type="button" aria-label="Thread page 2"></button>
+                <button type="button" aria-label="Thread page 3"></button>
+              </div>
+            </div>
+
+            <div class="card-footer">
+              <div class="engage">
+                <span class="item liked">
+                  <svg viewBox="0 0 24 24"><path d="M12 21s-7-4.5-9.5-8.5C.5 9 2.5 5 6.5 5c2 0 3.5 1.2 5.5 3.2C14 6.2 15.5 5 17.5 5c4 0 6 4 4 7.5C19 16.5 12 21 12 21z"/></svg>
+                  96
+                </span>
+                <span class="item">
+                  <svg viewBox="0 0 24 24"><path d="M21 15a3 3 0 0 1-3 3H8l-5 3V6a3 3 0 0 1 3-3h12a3 3 0 0 1 3 3z"/></svg>
+                  33
+                </span>
+                <span class="item">
+                  <svg viewBox="0 0 24 24"><circle cx="18" cy="5" r="2.5"/><circle cx="6" cy="12" r="2.5"/><circle cx="18" cy="19" r="2.5"/><path d="M8.5 13.5l7 4M15.5 6.5l-7 4"/></svg>
+                  7
+                </span>
+              </div>
+              <button class="open-trip" type="button">Open trip</button>
+            </div>
+          </article>
+        </div>
+
+        <div class="tab-bar" aria-hidden="true">
+          <div class="on"><div class="ico">⌂</div>Home</div>
+          <div><div class="ico">◎</div>Discover</div>
+          <div><div class="ico">＋</div>Trip</div>
+          <div><div class="ico">💬</div>Chat</div>
+          <div><div class="ico">☺</div>Profile</div>
+        </div>
+      </div>
+
+      <!-- AUTHOR PICKER -->
+      <aside class="side-panel" id="template-picker" data-testid="author-template-picker">
+        <h2>Final post · template</h2>
+        <p class="lede">Sits above Publish on the final-post screen. Postcard is selected by default. Saving <code>templateChoice</code> is a later build — this pass shows the control only.</p>
+
+        <div class="picker-label">Card layout</div>
+        <div class="picker" role="radiogroup" aria-label="Final post template">
+          <button type="button" class="picker-tile selected" data-choice="postcard" role="radio" aria-checked="true">
+            <div class="picker-diagram diag-pc" aria-hidden="true">
+              <span class="box hero"></span>
+              <span class="box line"></span>
+              <span class="box line2"></span>
+            </div>
+            <span>Postcard</span>
+          </button>
+          <button type="button" class="picker-tile" data-choice="map_first" role="radio" aria-checked="false">
+            <div class="picker-diagram diag-map" aria-hidden="true">
+              <span class="box hero"></span>
+              <span class="box strip" style="background:transparent;border:none;display:flex;gap:2px;padding:0">
+                <i></i><i></i><i></i>
+              </span>
+            </div>
+            <span>Map</span>
+          </button>
+          <button type="button" class="picker-tile" data-choice="thread_reel" role="radio" aria-checked="false">
+            <div class="picker-diagram diag-tr" aria-hidden="true">
+              <span class="box left"></span>
+              <span class="box r1"></span>
+              <span class="box r2"></span>
+            </div>
+            <span>Threads</span>
+          </button>
+        </div>
+
+        <button class="publish-btn" type="button">Publish</button>
+
+        <div class="notes">
+          <strong>This pass</strong>
+          <ul>
+            <li>Tokens match <code>AppTheme</code>: cream page, white cards, Playfair titles, DM Sans body.</li>
+            <li>Happening Now uses 64px rounded squares, green LIVE / accent YOU.</li>
+            <li>Maps use streets-v12 accent pins in the live app; mockup uses a CSS stand-in.</li>
+            <li>No Flutter, Prisma, or <code>GET /feed/home</code> changes.</li>
+          </ul>
+          <strong style="display:block;margin-top:12px">Empty cases (spec only)</strong>
+          <ul>
+            <li>No photo · no pins · no thread entries · single destination</li>
+          </ul>
+        </div>
+      </aside>
+    </div>
+  </div>
+
+  <script>
+    // Horizontal thread pagers (postcard + map-first)
+    document.querySelectorAll('.thread-pager[data-pager]').forEach((pager) => {
+      const track = pager.querySelector('.thread-track');
+      const pages = pager.querySelectorAll('.thread-page');
+      const dots = pager.querySelectorAll('.pager-dots button');
+      let index = 0;
+      const go = (i) => {
+        index = Math.max(0, Math.min(pages.length - 1, i));
+        track.style.transform = `translateX(-${index * 100}%)`;
+        dots.forEach((d, di) => d.classList.toggle('on', di === index));
+      };
+      dots.forEach((d, di) => d.addEventListener('click', () => go(di)));
+      let startX = 0;
+      track.addEventListener('pointerdown', (e) => { startX = e.clientX; });
+      track.addEventListener('pointerup', (e) => {
+        const dx = e.clientX - startX;
+        if (Math.abs(dx) < 40) return;
+        go(index + (dx < 0 ? 1 : -1));
+      });
+    });
+
+    // Thread-reel pair swap
+    const reelPairs = [
+      [
+        { text: 'Found a café that only opens when the ferry’s late. Ordered filter coffee twice and stayed through the rain.', meta: 'Fort Kochi · ♥ 39' },
+        { text: 'Fisherman said the tide decides the menu. Ate whatever came up with lime and quiet.', meta: 'Vypin · ♥ 31' }
+      ],
+      [
+        { text: 'Notebook page from day three: “Ask for the back table. The wall clock is wrong on purpose.”', meta: 'Mattancherry · ♥ 22' },
+        { text: 'Missed the last ferry and walked the shore until the lights came on one by one.', meta: 'Ernakulam · ♥ 18' }
+      ],
+      [
+        { text: 'Someone left a paperback in the hostel kitchen. Finished it before packing.', meta: 'Fort Kochi · ♥ 14' },
+        { text: 'Last entry: no itinerary left. Just a return ticket and salt on the camera strap.', meta: 'Airport road · ♥ 11' }
+      ]
+    ];
+    const reelRoot = document.querySelector('[data-reel-snippets]');
+    const reelDots = document.querySelectorAll('[data-pager="reel"] button');
+    const reelCounter = document.querySelector('.reel-pager-row > span');
+    let reelIndex = 0;
+    const paintReel = (i) => {
+      reelIndex = Math.max(0, Math.min(reelPairs.length - 1, i));
+      const pair = reelPairs[reelIndex];
+      const snippets = reelRoot.querySelectorAll('.snippet');
+      pair.forEach((item, idx) => {
+        snippets[idx].querySelector('p').textContent = item.text;
+        snippets[idx].querySelector('.meta').textContent = item.meta;
+      });
+      reelDots.forEach((d, di) => d.classList.toggle('on', di === reelIndex));
+      reelCounter.textContent = `${reelIndex + 1} of ${reelPairs.length}`;
+    };
+    reelDots.forEach((d, di) => d.addEventListener('click', () => paintReel(di)));
+
+    // Author picker selection (UI only)
+    document.querySelectorAll('.picker-tile').forEach((tile) => {
+      tile.addEventListener('click', () => {
+        document.querySelectorAll('.picker-tile').forEach((t) => {
+          t.classList.remove('selected');
+          t.setAttribute('aria-checked', 'false');
+        });
+        tile.classList.add('selected');
+        tile.setAttribute('aria-checked', 'true');
+      });
+    });
+  </script>
+</body>
+</html>

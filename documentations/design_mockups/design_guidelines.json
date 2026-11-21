@@ -1,0 +1,256 @@
+{
+  "project_name": "TripThread Home Feed Card Layouts",
+  "version": "3.0.0",
+  "scope": "design_only",
+  "source_of_truth": {
+    "app_theme": "mobile/lib/utils/app_theme.dart",
+    "happening_now": "mobile/lib/screens/home/home_screen.dart#_buildLiveTripsRow",
+    "map_thumbnail": "mobile/lib/utils/map_place_label.dart#mapThumbnailUrl",
+    "engagement_bar": "mobile/lib/widgets/engagement/engagement_action_bar.dart",
+    "publish_screen": "mobile/lib/screens/trip/final_post_edit_screen.dart"
+  },
+  "core_philosophy": {
+    "manifesto": "TripThread documents trips. The home feed is a list of published final posts that read as trip journals—not Instagram photo squares or a pure text stream. Cards share one shell so a mixed feed still feels like one app. Spend and split never appear on the feed.",
+    "structure_references_only": [
+      "documentations/design_mockups/image-1.jpeg",
+      "documentations/design_mockups/image-2.jpeg"
+    ],
+    "do_not_use_from_structure_refs": [
+      "near-black ticket chrome",
+      "Bodoni Moda",
+      "JetBrains Mono",
+      "Cabinet Grotesk",
+      "Plus Jakarta Sans",
+      "red rubber stamp",
+      "Mapbox outdoors-v12",
+      "amber thread accents",
+      "circular Happening Now avatars"
+    ]
+  },
+  "visual_system": {
+    "typography": {
+      "titles": {
+        "font_family": "Playfair Display",
+        "weight": 600,
+        "trip_title_size_px": 20,
+        "usage": "Trip titles on cards; section display where needed"
+      },
+      "body": {
+        "font_family": "DM Sans",
+        "usage": "Names, route line, summary, caption, counts, labels, thread snippets, picker labels"
+      }
+    },
+    "colors": {
+      "light": {
+        "page": "#FAF8F4",
+        "card": "#FFFFFF",
+        "ink": "#1C1917",
+        "muted": "#EDE7DC",
+        "stone": "#78716C",
+        "input_fill": "#F5F1EB",
+        "accent": "#1D6FE8",
+        "like_rose": "#E11D48",
+        "live": "#059669",
+        "upcoming": "#D97706",
+        "outline_hairline": "stone at ~20% opacity (matches Theme outlineVariant)"
+      },
+      "dark": {
+        "page": "#18140F",
+        "card": "#211C15",
+        "ink": "#F0EAE0",
+        "muted": "#2E2720",
+        "stone": "#A09080",
+        "accent": "#6AA8FF",
+        "note": "Specified for later Flutter build. HTML mockup is light theme only."
+      }
+    },
+    "shape": {
+      "card_radius_px": 16,
+      "card_shadow": "none",
+      "card_outline": "hairline outlineVariant",
+      "control_radius_px": 12,
+      "photo_inset_px": 8
+    },
+    "map": {
+      "style": "mapbox/streets-v12",
+      "pin": "pin-s+1d6fe8 (AppTheme.accent)",
+      "url_pattern": "https://api.mapbox.com/styles/v1/mapbox/streets-v12/static/pin-s+1d6fe8({lon},{lat})/{lon},{lat},14,0/{width}x{height}@2x?access_token={MAPBOX_TOKEN}",
+      "multi_pin_note": "When building later, compose multiple pin-s+1d6fe8 overlays and auto or explicit camera; mockup uses a CSS stand-in when no token is present.",
+      "on_tap": "Navigate to /trip/:tripId/map. Omit the map block entirely when the trip has no coordinates; still show the destination route line."
+    }
+  },
+  "feed_rules": {
+    "content": "Published final posts only (GET /api/feed/home).",
+    "happening_now": "Unchanged from home_screen.dart.",
+    "hidden_on_card": [
+      "totalSpendMinor",
+      "expense ledger",
+      "per-person split",
+      "participant face stacks"
+    ],
+    "engagement": {
+      "bar": "Existing EngagementActionBar: outlined heart, comment, share with counts",
+      "like_active_color": "#E11D48",
+      "comments_open": "CommentBottomSheet",
+      "share_opens": "ShareBottomSheet",
+      "cta_label": "Open trip",
+      "cta_route": "/trip/:tripId"
+    }
+  },
+  "happening_now_row": {
+    "status": "KEEP_AS_IS",
+    "label": "HAPPENING NOW",
+    "avatar": {
+      "size_px": 64,
+      "shape": "rounded square",
+      "outer_radius_px": 18,
+      "inner_radius_px": 14,
+      "padding_px": 3,
+      "border_width_px": 2,
+      "border_self": "#1D6FE8",
+      "border_other": "#059669"
+    },
+    "badge": {
+      "self": "YOU",
+      "other": "LIVE",
+      "background": "#059669",
+      "text": "#FFFFFF",
+      "font_size_px": 8
+    },
+    "name": "First name only (or You for self). Not circles.",
+    "component_test_id": "live-trips-row"
+  },
+  "shared_card_frame": {
+    "order": [
+      "header",
+      "template_body",
+      "route_line",
+      "thread_pager",
+      "footer"
+    ],
+    "order_note": "Template body owns photo/map placement. Postcard and map-first place title/route/summary inside or under the body as specified per template. Thread-reel places title and one-line summary under the split row.",
+    "header": {
+      "left": "Avatar + name → /profile/:userId",
+      "under_name": "Trip window from trip.startDate / trip.endDate, e.g. 12–18 Oct · 7 days",
+      "publish_timestamp": "Moved off the header (not shown in this design)",
+      "right": "Owner overflow Edit / Delete when viewer is author"
+    },
+    "title": {
+      "field": "trip.title",
+      "font": "Playfair Display 20px"
+    },
+    "route": {
+      "field": "trip.destinations",
+      "format": "Jaipur → Pushkar → Udaipur",
+      "single_destination": "Just the name",
+      "style": "DM Sans 12px, letter-spaced, stone color",
+      "not_a_map_button": true
+    },
+    "summary": {
+      "summaryText": "Two lines max on postcard and map-first; one line on thread-reel",
+      "caption": "Shown in stone under summary when present"
+    },
+    "thread_pager": {
+      "sort": ["likeCount DESC", "createdAt DESC"],
+      "swipe": "Horizontal only so the vertical feed still scrolls",
+      "indicators": "Dots; active uses accent, inactive uses stone/outline",
+      "postcard_and_map_first_per_page": 1,
+      "thread_reel_per_page": 2,
+      "entry_row": {
+        "thumbnail_px": 56,
+        "text_lines": 2,
+        "place_name": true,
+        "like_count": true,
+        "text_only_fallback": "Stone place tile instead of photo"
+      }
+    },
+    "footer": {
+      "engagement": "Existing like / comment / share",
+      "cta": "Open trip → /trip/:tripId"
+    }
+  },
+  "templates": {
+    "postcard": {
+      "id": "postcard",
+      "display_name": "Postcard",
+      "default": true,
+      "best_for": "City and road trips where the photo is the memory and the route is the caption",
+      "layout": [
+        "Header",
+        "Cover photo ~220px full width with 8px cream inset; swipe + dots when multiple curated photos",
+        "Stamp chip top-right of photo: first destination, or trip mood if no destination — stone outline, slight rotation, ink text (not a red rubber stamp)",
+        "Title, route, summary (+ caption)",
+        "Map strip ~88px labeled Route · N places; omit if no coordinates",
+        "One-entry thread pager",
+        "Footer"
+      ],
+      "component_test_id": "card-template-postcard"
+    },
+    "map_first": {
+      "id": "map_first",
+      "display_name": "Map",
+      "default": false,
+      "best_for": "Treks and circuits where the path is the story",
+      "layout": [
+        "Header",
+        "Map hero ~220px with route through pins and accent pin color; corner chip Open map",
+        "Route line on bottom of map in cream scrim",
+        "Curated photos as ~72px filmstrip (no full-bleed carousel)",
+        "Title, summary (+ caption)",
+        "One-entry thread pager",
+        "Footer"
+      ],
+      "component_test_id": "card-template-mapfirst"
+    },
+    "thread_reel": {
+      "id": "thread_reel",
+      "display_name": "Threads",
+      "default": false,
+      "best_for": "Diary trips where the writing matters more than one hero photo",
+      "layout": [
+        "Header",
+        "Short split row: left ~42% width × 168px cover photo with N places pill that opens map; right first thread page (two snippets) with 2px accent-blue left bars (no amber)",
+        "Title, one-line summary, 1 of N + pager dots; swipe replaces the pair",
+        "No separate map strip",
+        "Footer"
+      ],
+      "component_test_id": "card-template-threadreel"
+    }
+  },
+  "author_template_picker": {
+    "screen": "final_post_edit_screen.dart",
+    "position": "Above Publish",
+    "ui": "Three compact tiles in one row: Postcard, Map, Threads",
+    "tile": {
+      "content": "Tiny diagram of that layout + one-line label",
+      "radius_px": 12,
+      "selected": "2px accent border",
+      "unselected": "hairline outline",
+      "default_selection": "postcard"
+    },
+    "this_pass": "Mockup shows the control only. Persisting templateChoice is a later build.",
+    "component_test_id": "author-template-picker"
+  },
+  "empty_cases": {
+    "no_photo": "Postcard uses cream muted block; thread-reel left column uses stone place tile; map-first filmstrip omitted",
+    "no_pins": "Omit map block / Open map pill; keep destination route line",
+    "no_thread_entries": "Omit thread pager and dots",
+    "single_destination": "Route line is just that name"
+  },
+  "later_build_not_in_this_pass": [
+    "TripFinalPost.templateChoice: 'postcard' | 'map_first' | 'thread_reel' (default postcard)",
+    "Home feed payload: short thread preview (id, text, media url, place name, like count, createdAt) + pin coordinates for static map",
+    "Server-side sorting and paging of thread preview so the card does not download the whole thread",
+    "Flutter widgets for the three templates and picker persistence",
+    "GET /api/feed/home and Prisma schema stay untouched in this pass"
+  ],
+  "html_mockup": {
+    "path": "documentations/design_mockups/home_feed_redesign.html",
+    "contains": [
+      "Happening Now row matching current 64px rounded squares",
+      "One postcard, one map-first, one thread-reel card with sample Jaipur road trip, trek, and diary trip",
+      "Three-tile picker above a Publish affordance",
+      "Light theme only"
+    ]
+  }
+}
