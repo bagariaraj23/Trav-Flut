@@ -146,6 +146,7 @@ export async function GET(
             curatedMedia: post.curatedMedia,
             caption: post.caption ?? undefined,
             coverMediaUrl: post.coverMediaUrl ?? undefined,
+            templateChoice: post.templateChoice ?? "postcard",
             generationStatus: post.generationStatus,
             isPublished: post.isPublished,
             publishedAt: post.publishedAt?.toISOString() ?? undefined,

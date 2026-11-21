@@ -517,20 +517,31 @@ export const addParticipantSchema = z.object({
     .optional(),
 });
 
+export const finalPostTemplateChoiceSchema = z.enum([
+  "postcard",
+  "map_first",
+  "thread_reel",
+]);
+
 export const updateFinalPostSchema = z.object({
   summaryText: z
     .string()
     .min(1, "Summary text is required")
     .max(2000, "Summary must be less than 2000 characters")
-    .transform((text) => text.trim()),
+    .transform((text) => text.trim())
+    .optional(),
   curatedMedia: z
     .array(z.string().url("Invalid media URL"))
-    .max(20, "Maximum 20 media items allowed"),
+    .max(20, "Maximum 20 media items allowed")
+    .optional(),
   caption: z
     .string()
     .max(500, "Caption must be less than 500 characters")
     .transform((caption) => caption.trim())
-    .optional(),
+    .optional()
+    .nullable(),
+  coverMediaUrl: z.string().url("Invalid media URL").optional().nullable(),
+  templateChoice: finalPostTemplateChoiceSchema.optional(),
 });
 
 // Pagination schema

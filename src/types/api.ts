@@ -186,6 +186,25 @@ export interface PlaceResponse {
   updatedAt: string;
 }
 
+export type FinalPostTemplateChoice = "postcard" | "map_first" | "thread_reel";
+
+/** Short thread snippet for home-feed card pagers (server-sorted). */
+export interface FeedThreadPreviewItem {
+  id: string;
+  contentText?: string | null;
+  mediaUrl?: string | null;
+  placeName?: string | null;
+  likeCount: number;
+  createdAt: string;
+}
+
+/** Coordinate pin for static Mapbox thumbnails on feed cards. */
+export interface FeedMapPin {
+  lat: number;
+  lng: number;
+  name?: string | null;
+}
+
 export interface TripFinalPostResponse {
   id: string;
   tripId: string | null;
@@ -194,6 +213,8 @@ export interface TripFinalPostResponse {
   curatedMedia: string[];
   caption?: string | null;
   coverMediaUrl?: string | null;
+  /** Author-chosen home feed card layout. Defaults to postcard. */
+  templateChoice?: FinalPostTemplateChoice;
   generationStatus: "DRAFT" | "GENERATING" | "READY" | "PUBLISHED" | "FAILED";
   isPublished: boolean;
   publishedAt?: string | null;
@@ -212,6 +233,10 @@ export interface TripFinalPostResponse {
   commentCount?: number;
   shareCount?: number;
   hasLiked?: boolean;
+  /** Present on home feed pages; omitted on lean final-post GET. */
+  threadPreview?: FeedThreadPreviewItem[];
+  /** Present on home feed pages when the trip has coordinates. */
+  mapPins?: FeedMapPin[];
 }
 
 export interface MediaResponse {
@@ -267,6 +292,7 @@ export interface UpdateFinalPostRequest {
   curatedMedia?: string[];
   caption?: string | null;
   coverMediaUrl?: string | null;
+  templateChoice?: FinalPostTemplateChoice;
 }
 
 // Trip Join Request Types
