@@ -745,9 +745,13 @@ class _ReelSnippet extends StatelessWidget {
         children: [
           Expanded(
             child: Text(
-              (entry.contentText ?? entry.placeName ?? '').trim().isEmpty
-                  ? 'Thread entry'
-                  : (entry.contentText ?? entry.placeName)!,
+              () {
+                final body = (entry.contentText ?? '').trim();
+                if (body.isNotEmpty) return body;
+                final place = (entry.placeName ?? '').trim();
+                if (place.isNotEmpty) return place;
+                return 'Thread entry';
+              }(),
               maxLines: 3,
               overflow: TextOverflow.ellipsis,
               style: Theme.of(context).textTheme.bodySmall?.copyWith(
@@ -960,11 +964,16 @@ class _ThreadPagerState extends State<_ThreadPager> {
     }
     if (pages.isEmpty) return const SizedBox.shrink();
 
-    final height = widget.entriesPerPage == 1 ? 84.0 : 160.0;
+    final rowHeight = 72.0;
+    final height = widget.entriesPerPage == 1
+        ? rowHeight
+        : (rowHeight * widget.entriesPerPage) +
+            (8.0 * (widget.entriesPerPage - 1));
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(14, 12, 14, 0),
       child: Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
           SizedBox(
             height: height,
@@ -975,10 +984,14 @@ class _ThreadPagerState extends State<_ThreadPager> {
               itemBuilder: (context, pageIndex) {
                 final page = pages[pageIndex];
                 return Column(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
                     for (var i = 0; i < page.length; i++) ...[
                       if (i > 0) const SizedBox(height: 8),
-                      _ThreadEntryRow(entry: page[i]),
+                      SizedBox(
+                        height: rowHeight,
+                        child: _ThreadEntryRow(entry: page[i]),
+                      ),
                     ],
                   ],
                 );
@@ -1062,7 +1075,7 @@ class _ThreadEntryRow extends StatelessWidget {
                     text.isNotEmpty) ...[
                   const SizedBox(height: 4),
                   Text(
-                    entry.placeName!,
+                    entry.placeName ?? '',
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(
                           fontSize: 11,
                           color: AppTheme.mutedForeground,
@@ -1089,12 +1102,13 @@ class _ThreadEntryRow extends StatelessWidget {
   }
 
   Widget _placeTile() {
+    final label = (entry.placeName ?? '').trim();
     return Container(
       color: AppTheme.muted,
       alignment: Alignment.center,
       padding: const EdgeInsets.all(4),
       child: Text(
-        (entry.placeName ?? '•').trim().isEmpty ? '•' : entry.placeName!,
+        label.isEmpty ? '•' : label,
         textAlign: TextAlign.center,
         maxLines: 2,
         overflow: TextOverflow.ellipsis,
