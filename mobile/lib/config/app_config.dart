@@ -123,19 +123,24 @@ class AppConfig {
 
   /// Docker web is opened as either `localhost` or `127.0.0.1`. Those are
   /// different browser origins, so an absolute API URL baked as one of them
-  /// fails CORS when the page is the other. Follow the page when both are
-  /// loopback. Phone builds keep the configured host (emulator `10.0.2.2`).
+  /// fails CORS when the page is the other. Align the host (and scheme) when
+  /// both are loopback, but keep the API port — `flutter run -d web-server`
+  /// is not nginx, so stealing the page port would point REST at the UI.
+  /// Phone builds keep the configured host (emulator `10.0.2.2`).
   static String _alignLoopbackWithPage(String raw) {
     if (!kIsWeb) return raw;
     final api = Uri.tryParse(raw);
     if (api == null || !api.hasScheme || !_isLoopback(api.host)) return raw;
     final page = Uri.base;
     if (!page.hasScheme || !_isLoopback(page.host)) return raw;
+    if (api.host.toLowerCase() == page.host.toLowerCase() &&
+        api.scheme == page.scheme) {
+      return raw;
+    }
     return api
         .replace(
           scheme: page.scheme,
           host: page.host,
-          port: page.hasPort ? page.port : null,
         )
         .toString();
   }
