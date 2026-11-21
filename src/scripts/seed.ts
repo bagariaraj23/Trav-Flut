@@ -327,6 +327,7 @@ async function seed(prisma: AppPrismaClient): Promise<void> {
         "https://images.pexels.com/photos/1239291/pexels-photo-1239291.jpeg?auto=compress&cs=tinysrgb&w=600",
       ],
       caption: "Tokyo stole my heart 🇯🇵✨",
+      templateChoice: "postcard",
       generationStatus: GenerationStatus.PUBLISHED,
       isPublished: true,
       publishedAt,
@@ -345,13 +346,42 @@ async function seed(prisma: AppPrismaClient): Promise<void> {
         "https://images.pexels.com/photos/3889845/pexels-photo-3889845.jpeg?auto=compress&cs=tinysrgb&w=600",
       ],
       caption: "Bali vibes 🌴☀️",
+      templateChoice: "thread_reel",
       generationStatus: GenerationStatus.PUBLISHED,
       isPublished: true,
       publishedAt,
     },
   });
 
-  console.log("Final posts: Tokyo & Bali published.");
+  await prisma.tripFinalPost.create({
+    data: {
+      tripId: tripParis.id,
+      userId: bob.id,
+      summaryText:
+        "Cafés, bridges, and long walks from Montmartre to the Seine. Geography told the story as much as the photos.",
+      curatedMedia: [
+        "https://images.pexels.com/photos/338515/pexels-photo-338515.jpeg?auto=compress&cs=tinysrgb&w=600",
+        "https://images.pexels.com/photos/460672/pexels-photo-460672.jpeg?auto=compress&cs=tinysrgb&w=600",
+      ],
+      caption: "Paris by foot",
+      templateChoice: "map_first",
+      generationStatus: GenerationStatus.PUBLISHED,
+      isPublished: true,
+      publishedAt,
+    },
+  });
+
+  console.log("Final posts: Tokyo (postcard), Bali (thread_reel), Paris (map_first).");
+
+  await prisma.placeOnTrip.createMany({
+    data: [
+      { tripId: tripTokyo.id, placeId: placeTokyo.id, order: 1 },
+      { tripId: tripBali.id, placeId: placeBali.id, order: 1 },
+      { tripId: tripParis.id, placeId: placeParis.id, order: 1 },
+    ],
+    skipDuplicates: true,
+  });
+
 
   await prisma.tripThreadEntry.createMany({
     data: [

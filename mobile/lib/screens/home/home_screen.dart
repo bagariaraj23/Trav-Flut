@@ -6,7 +6,6 @@ import 'package:tripthread/providers/auth_provider.dart';
 import 'package:tripthread/providers/trip_provider.dart';
 import 'package:tripthread/providers/feed_provider.dart';
 import 'package:tripthread/providers/user_provider.dart';
-import 'package:tripthread/providers/engagement_provider.dart';
 import 'package:tripthread/services/trip_service.dart';
 import 'package:tripthread/models/live_trip_story.dart';
 import 'package:tripthread/models/trip.dart';
@@ -16,9 +15,7 @@ import 'package:tripthread/utils/app_layout.dart';
 import 'package:tripthread/utils/app_theme.dart';
 import 'package:tripthread/utils/trip_time_format.dart';
 import 'package:tripthread/utils/cloudinary_utils.dart';
-import 'package:tripthread/widgets/engagement/engagement_action_bar.dart';
-import 'package:tripthread/widgets/sheets/comment_bottom_sheet.dart';
-import 'package:tripthread/widgets/sheets/share_bottom_sheet.dart';
+import 'package:tripthread/widgets/feed/final_post_feed_card.dart';
 import 'package:tripthread/widgets/floating_trip_nav_button.dart';
 import 'package:tripthread/widgets/logout_dialog.dart';
 import 'package:tripthread/widgets/trip_cover_placeholder.dart';
@@ -455,7 +452,10 @@ class _HomeFeedScreenState extends State<HomeFeedScreen> {
                   }
 
                   final post = feedProvider.homeFeedPosts[postIndex];
-                  return _buildFinalPostCard(context, post);
+                  return FinalPostFeedCard(
+                    post: post,
+                    onDelete: _confirmDeleteFinalPost,
+                  );
                 },
               ),
             ),
@@ -590,290 +590,6 @@ class _HomeFeedScreenState extends State<HomeFeedScreen> {
     );
   }
 
-  Widget _buildFinalPostCard(BuildContext context, TripFinalPost post) {
-    final authUserId = context.read<AuthProvider>().currentUser?.id;
-    final author = post.displayAuthor;
-    final authorId = post.displayAuthorId;
-    final isOwner =
-        authUserId != null && authorId != null && authUserId == authorId;
-
-    return Card(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      elevation: 0,
-      clipBehavior: Clip.antiAlias,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Header with user info (avatar and name tappable → profile)
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: Row(
-              children: [
-                GestureDetector(
-                  onTap: () {
-                    final userId = authorId;
-                    if (userId != null) context.push('/profile/$userId');
-                  },
-                  child: CircleAvatar(
-                    radius: 20,
-                    backgroundColor: AppTheme.avatarFallbackBackground(
-                      Theme.of(context).brightness,
-                    ),
-                    backgroundImage: author?.avatarUrl != null
-                        ? NetworkImage(author!.avatarUrl!)
-                        : null,
-                    child: author?.avatarUrl == null
-                        ? Icon(
-                            Icons.person,
-                            color: AppTheme.avatarFallbackForeground(
-                              Theme.of(context).brightness,
-                            ),
-                            size: 20,
-                          )
-                        : null,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      GestureDetector(
-                        onTap: () {
-                          final userId = authorId;
-                          if (userId != null) context.push('/profile/$userId');
-                        },
-                        child: Text(
-                          author?.name ??
-                              author?.username ??
-                              'Travel Story',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: Theme.of(context).textTheme.titleMedium
-                              ?.copyWith(fontWeight: FontWeight.w600),
-                        ),
-                      ),
-                      Text(
-                        _formatDateTime(post.createdAt),
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: Theme.of(context).colorScheme.onSurfaceVariant,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                if (isOwner)
-                  PopupMenuButton<String>(
-                    icon: const Icon(Icons.more_vert),
-                    onSelected: (value) async {
-                      if (!context.mounted) return;
-                      if (value == 'edit') {
-                        context.push('/trip/${post.tripId}/final-post');
-                      } else if (value == 'delete') {
-                        await _confirmDeleteFinalPost(context, post);
-                      }
-                    },
-                    itemBuilder: (ctx) => const [
-                      PopupMenuItem(value: 'edit', child: Text('Edit')),
-                      PopupMenuItem(value: 'delete', child: Text('Delete')),
-                    ],
-                  )
-                else
-                  const SizedBox(width: 48),
-              ],
-            ),
-          ),
-          InkWell(
-            onTap: () {
-              context.push(
-                '/trip/${post.tripId}',
-                extra: {'from': '/home'},
-              );
-            },
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                if (post.curatedMedia.isNotEmpty)
-                  SizedBox(
-                    height: 300,
-                    child: PageView.builder(
-                      itemCount: post.curatedMedia.length,
-                      itemBuilder: (context, index) {
-                        return Container(
-                          margin: const EdgeInsets.symmetric(horizontal: 4),
-                          decoration: BoxDecoration(
-                            color: Theme.of(context)
-                                .colorScheme
-                                .onSurface
-                                .withValues(
-                                  alpha: Theme.of(context).brightness ==
-                                          Brightness.dark
-                                      ? 0.06
-                                      : 0.03,
-                                ),
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: ClipRRect(
-                            borderRadius: BorderRadius.circular(12),
-                            child: Image.network(
-                              buildOptimizedImageUrl(
-                                post.curatedMedia[index],
-                                width: 1600,
-                              ),
-                              fit: BoxFit.cover,
-                              errorBuilder: (context, error, stackTrace) {
-                                return Container(
-                                  color: Theme.of(context)
-                                      .colorScheme
-                                      .onSurface
-                                      .withValues(
-                                        alpha: Theme.of(context).brightness ==
-                                                Brightness.dark
-                                            ? 0.06
-                                            : 0.03,
-                                      ),
-                                  child: Center(
-                                    child: Icon(
-                                      Icons.image_not_supported,
-                                      size: 48,
-                                      color: Theme.of(context)
-                                          .colorScheme
-                                          .onSurfaceVariant,
-                                    ),
-                                  ),
-                                );
-                              },
-                            ),
-                          ),
-                        );
-                      },
-                    ),
-                  ),
-                Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      if ((post.trip?.title ?? '').trim().isNotEmpty) ...[
-                        Text(
-                          post.trip!.title,
-                          style: Theme.of(context).textTheme.headlineSmall,
-                        ),
-                        const SizedBox(height: 8),
-                      ],
-                      Text(
-                        post.summaryText,
-                        style: Theme.of(context).textTheme.bodyLarge,
-                      ),
-                      if (post.caption != null) ...[
-                        const SizedBox(height: 8),
-                        Text(
-                          post.caption!,
-                          style: Theme.of(context)
-                              .textTheme
-                              .bodyMedium
-                              ?.copyWith(
-                                color: Theme.of(context)
-                                    .colorScheme
-                                    .onSurfaceVariant
-                                    .withValues(alpha: 0.9),
-                              ),
-                        ),
-                      ],
-                      const SizedBox(height: 12),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: Align(
-                              alignment: Alignment.centerLeft,
-                              child: EngagementActionBar(
-                                entityType: 'TRIP_FINAL_POST',
-                                entityId: post.id,
-                                likeCount: post.likeCount,
-                                commentCount: post.commentCount,
-                                shareCount: post.shareCount,
-                                hasLiked: post.hasLiked,
-                                onCommentTap: () {
-                                  showModalBottomSheet(
-                                    context: context,
-                                    isScrollControlled: true,
-                                    backgroundColor: Colors.transparent,
-                                    builder: (context) => CommentBottomSheet(
-                                      entityType: 'TRIP_FINAL_POST',
-                                      entityId: post.id,
-                                    ),
-                                  );
-                                },
-                                onShareTap: () {
-                                  showModalBottomSheet(
-                                    context: context,
-                                    backgroundColor: Colors.transparent,
-                                    builder: (context) => ShareBottomSheet(
-                                      entityType: 'TRIP_FINAL_POST',
-                                      entityId: post.id,
-                                    ),
-                                  );
-                                },
-                                onLikeChanged: () {
-                                  final engagementProvider = context
-                                      .read<EngagementProvider>();
-                                  final newLikeCount = engagementProvider
-                                      .getLikeCount(post.id);
-                                  final newHasLiked =
-                                      engagementProvider.isLiked(post.id);
-
-                                  final feedProvider =
-                                      context.read<FeedProvider>();
-                                  final updatedPost = post.copyWith(
-                                    likeCount: newLikeCount,
-                                    hasLiked: newHasLiked,
-                                  );
-                                  final index = feedProvider.homeFeedPosts
-                                      .indexWhere((p) => p.id == post.id);
-                                  if (index >= 0) {
-                                    feedProvider.updatePost(index, updatedPost);
-                                  }
-                                },
-                              ),
-                            ),
-                          ),
-                          TextButton(
-                            onPressed: () {
-                              context.push(
-                                '/trip/${post.tripId}',
-                                extra: {'from': '/home'},
-                              );
-                            },
-                            child: const Text('View Trip'),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  String _formatDateTime(DateTime dateTime) {
-    final now = DateTime.now();
-    final difference = now.difference(dateTime);
-
-    if (difference.inDays > 0) {
-      return '${difference.inDays}d ago';
-    } else if (difference.inHours > 0) {
-      return '${difference.inHours}h ago';
-    } else if (difference.inMinutes > 0) {
-      return '${difference.inMinutes}m ago';
-    } else {
-      return 'Just now';
-    }
-  }
 }
 
 class TripsTab extends StatefulWidget {

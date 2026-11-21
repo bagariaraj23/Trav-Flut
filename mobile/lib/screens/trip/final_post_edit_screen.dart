@@ -8,6 +8,7 @@ import 'package:tripthread/services/trip_service.dart';
 import 'package:tripthread/utils/app_layout.dart';
 import 'package:tripthread/utils/app_theme.dart';
 import 'package:tripthread/utils/cloudinary_utils.dart';
+import 'package:tripthread/widgets/feed/final_post_template_picker.dart';
 import 'package:tripthread/widgets/media/media_seek.dart';
 import 'package:tripthread/utils/trip_time_format.dart';
 
@@ -243,6 +244,14 @@ class _FinalPostEditScreenState extends State<FinalPostEditScreen> {
                   _buildMediaSelector(provider, draft),
                   const SizedBox(height: 16),
                   _buildTripMetadata(),
+                  if (!draft.isPublished) ...[
+                    const SizedBox(height: 20),
+                    FinalPostTemplatePicker(
+                      value: draft.templateChoice,
+                      enabled: canEditContent,
+                      onChanged: provider.setTemplateChoice,
+                    ),
+                  ],
                   const SizedBox(height: 80),
                 ],
               ),

@@ -74,6 +74,34 @@ String? mapThumbnailUrl(double lat, double lng) {
       '?access_token=$token';
 }
 
+/// Multi-pin streets-v12 static map for feed cards. Returns null when empty or no token.
+String? mapThumbnailUrlForPins(
+  List<({double lat, double lng})> pins, {
+  int width = 640,
+  int height = 280,
+}) {
+  final token = AppConfig.mapboxAccessToken;
+  if (token.isEmpty || pins.isEmpty) return null;
+  final overlay = pins
+      .take(8)
+      .map((p) {
+        final lon = p.lng.toStringAsFixed(5);
+        final lat = p.lat.toStringAsFixed(5);
+        return 'pin-s+1d6fe8($lon,$lat)';
+      })
+      .join(',');
+  if (pins.length == 1) {
+    final lon = pins.first.lng.toStringAsFixed(5);
+    final lat = pins.first.lat.toStringAsFixed(5);
+    return 'https://api.mapbox.com/styles/v1/mapbox/streets-v12/static/'
+        '$overlay/$lon,$lat,14,0/${width}x$height@2x'
+        '?access_token=$token';
+  }
+  return 'https://api.mapbox.com/styles/v1/mapbox/streets-v12/static/'
+      '$overlay/auto/${width}x$height@2x'
+      '?access_token=$token';
+}
+
 String? _first(List<String?> values) {
   for (final value in values) {
     final trimmed = value?.trim();

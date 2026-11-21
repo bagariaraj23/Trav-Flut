@@ -207,6 +207,41 @@ const _$ThreadEntryTypeEnumMap = {
   ThreadEntryType.location: 'LOCATION',
 };
 
+FeedThreadPreviewItem _$FeedThreadPreviewItemFromJson(
+  Map<String, dynamic> json,
+) => FeedThreadPreviewItem(
+  id: json['id'] as String,
+  contentText: json['contentText'] as String?,
+  mediaUrl: json['mediaUrl'] as String?,
+  placeName: json['placeName'] as String?,
+  likeCount: (json['likeCount'] as num?)?.toInt() ?? 0,
+  createdAt: DateTime.parse(json['createdAt'] as String),
+);
+
+Map<String, dynamic> _$FeedThreadPreviewItemToJson(
+  FeedThreadPreviewItem instance,
+) => <String, dynamic>{
+  'id': instance.id,
+  'contentText': instance.contentText,
+  'mediaUrl': instance.mediaUrl,
+  'placeName': instance.placeName,
+  'likeCount': instance.likeCount,
+  'createdAt': instance.createdAt.toIso8601String(),
+};
+
+FeedMapPin _$FeedMapPinFromJson(Map<String, dynamic> json) => FeedMapPin(
+  lat: (json['lat'] as num).toDouble(),
+  lng: (json['lng'] as num).toDouble(),
+  name: json['name'] as String?,
+);
+
+Map<String, dynamic> _$FeedMapPinToJson(FeedMapPin instance) =>
+    <String, dynamic>{
+      'lat': instance.lat,
+      'lng': instance.lng,
+      'name': instance.name,
+    };
+
 TripFinalPost _$TripFinalPostFromJson(Map<String, dynamic> json) =>
     TripFinalPost(
       id: json['id'] as String,
@@ -218,6 +253,13 @@ TripFinalPost _$TripFinalPostFromJson(Map<String, dynamic> json) =>
           .toList(),
       caption: json['caption'] as String?,
       coverMediaUrl: json['coverMediaUrl'] as String?,
+      templateChoice:
+          $enumDecodeNullable(
+            _$FinalPostTemplateChoiceEnumMap,
+            json['templateChoice'],
+            unknownValue: FinalPostTemplateChoice.postcard,
+          ) ??
+          FinalPostTemplateChoice.postcard,
       generationStatus:
           $enumDecodeNullable(
             _$GenerationStatusEnumMap,
@@ -240,29 +282,50 @@ TripFinalPost _$TripFinalPostFromJson(Map<String, dynamic> json) =>
       commentCount: (json['commentCount'] as num?)?.toInt() ?? 0,
       shareCount: (json['shareCount'] as num?)?.toInt() ?? 0,
       hasLiked: json['hasLiked'] as bool? ?? false,
+      threadPreview:
+          (json['threadPreview'] as List<dynamic>?)
+              ?.map(
+                (e) =>
+                    FeedThreadPreviewItem.fromJson(e as Map<String, dynamic>),
+              )
+              .toList() ??
+          [],
+      mapPins: (json['mapPins'] as List<dynamic>?)
+          ?.map((e) => FeedMapPin.fromJson(e as Map<String, dynamic>))
+          .toList(),
     );
 
-Map<String, dynamic> _$TripFinalPostToJson(TripFinalPost instance) =>
-    <String, dynamic>{
-      'id': instance.id,
-      'tripId': instance.tripId,
-      'userId': instance.userId,
-      'summaryText': instance.summaryText,
-      'curatedMedia': instance.curatedMedia,
-      'caption': instance.caption,
-      'coverMediaUrl': instance.coverMediaUrl,
-      'generationStatus': _$GenerationStatusEnumMap[instance.generationStatus]!,
-      'isPublished': instance.isPublished,
-      'publishedAt': instance.publishedAt?.toIso8601String(),
-      'createdAt': instance.createdAt.toIso8601String(),
-      'updatedAt': instance.updatedAt.toIso8601String(),
-      'user': instance.user,
-      'trip': instance.trip,
-      'likeCount': instance.likeCount,
-      'commentCount': instance.commentCount,
-      'shareCount': instance.shareCount,
-      'hasLiked': instance.hasLiked,
-    };
+Map<String, dynamic> _$TripFinalPostToJson(
+  TripFinalPost instance,
+) => <String, dynamic>{
+  'id': instance.id,
+  'tripId': instance.tripId,
+  'userId': instance.userId,
+  'summaryText': instance.summaryText,
+  'curatedMedia': instance.curatedMedia,
+  'caption': instance.caption,
+  'coverMediaUrl': instance.coverMediaUrl,
+  'templateChoice': _$FinalPostTemplateChoiceEnumMap[instance.templateChoice]!,
+  'generationStatus': _$GenerationStatusEnumMap[instance.generationStatus]!,
+  'isPublished': instance.isPublished,
+  'publishedAt': instance.publishedAt?.toIso8601String(),
+  'createdAt': instance.createdAt.toIso8601String(),
+  'updatedAt': instance.updatedAt.toIso8601String(),
+  'user': instance.user,
+  'trip': instance.trip,
+  'likeCount': instance.likeCount,
+  'commentCount': instance.commentCount,
+  'shareCount': instance.shareCount,
+  'hasLiked': instance.hasLiked,
+  'threadPreview': instance.threadPreview,
+  'mapPins': instance.mapPins,
+};
+
+const _$FinalPostTemplateChoiceEnumMap = {
+  FinalPostTemplateChoice.postcard: 'postcard',
+  FinalPostTemplateChoice.mapFirst: 'map_first',
+  FinalPostTemplateChoice.threadReel: 'thread_reel',
+};
 
 const _$GenerationStatusEnumMap = {
   GenerationStatus.draft: 'DRAFT',

@@ -20,6 +20,10 @@ import { decodeFeedCursor, encodeFeedCursor } from "@/lib/feedCursor";
 import { EntityType, Prisma } from "@prisma/client";
 import { omitHiddenTripSpend } from "@/lib/tripSpendVisibility";
 import { feedHiddenUserIds } from "@/lib/services/userSafety";
+import {
+  loadFeedMapPins,
+  loadFeedThreadPreviews,
+} from "@/lib/feedCardPreview";
 
 // Get home feed (final posts from followed users and public profiles)
 export async function GET(request: NextRequest) {
@@ -185,15 +189,26 @@ export async function GET(request: NextRequest) {
 
           // Get like status for all posts
           const postIds = finalPosts.map((p) => p.id);
-          const likeStatusMap = await checkLikeStatus(
-            currentUserId,
-            EntityType.TRIP_FINAL_POST,
-            postIds
+          const tripIds = Array.from(
+            new Set(finalPosts.map((p) => p.tripId))
           );
-          const commentCounts = await visibleFinalPostCommentCounts(
-            finalPosts.map((post) => ({ id: post.id, userId: post.userId })),
-            currentUserId
-          );
+          const [likeStatusMap, commentCounts, threadPreviews, mapPinsByTrip] =
+            await Promise.all([
+              checkLikeStatus(
+                currentUserId,
+                EntityType.TRIP_FINAL_POST,
+                postIds
+              ),
+              visibleFinalPostCommentCounts(
+                finalPosts.map((post) => ({
+                  id: post.id,
+                  userId: post.userId,
+                })),
+                currentUserId
+              ),
+              loadFeedThreadPreviews(tripIds),
+              loadFeedMapPins(tripIds),
+            ]);
 
           // Transform to response format with engagement data
           const finalPostsResponse: (TripFinalPostResponse & {
@@ -201,7 +216,9 @@ export async function GET(request: NextRequest) {
             commentCount: number;
             shareCount: number;
             hasLiked: boolean;
-          })[] = finalPosts.map((post) => ({
+          })[] = finalPosts.map((post) => {
+            const pins = mapPinsByTrip.get(post.tripId) ?? [];
+            return {
             id: post.id,
             tripId: post.tripId,
             userId: post.userId,
@@ -209,6 +226,7 @@ export async function GET(request: NextRequest) {
             curatedMedia: post.curatedMedia,
             caption: post.caption ?? undefined,
             coverMediaUrl: post.coverMediaUrl ?? undefined,
+            templateChoice: post.templateChoice ?? "postcard",
             generationStatus: post.generationStatus,
             isPublished: post.isPublished,
             publishedAt: post.publishedAt
@@ -220,6 +238,8 @@ export async function GET(request: NextRequest) {
             commentCount: commentCounts.get(post.id) ?? post.commentCount,
             shareCount: post.shareCount,
             hasLiked: likeStatusMap[post.id] || false,
+            threadPreview: threadPreviews.get(post.tripId) ?? [],
+            mapPins: pins.length > 0 ? pins : undefined,
             user: post.user
               ? {
                   ...post.user,
@@ -253,7 +273,8 @@ export async function GET(request: NextRequest) {
                   }
                 : undefined,
             }, post.trip.userId === currentUserId),
-          }));
+          };
+          });
 
           console.log(`[API] GET /feed/home - Has next: ${hasNext}`);
           const lastPost = finalPostsResponse[finalPostsResponse.length - 1];

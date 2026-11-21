@@ -573,4 +573,132 @@ describe("Personalized final posts", () => {
     });
     expect(ownerPost?.generationStatus).toBe(GenerationStatus.DRAFT);
   });
+
+  it("persists templateChoice and returns thread/map previews on the home feed", async () => {
+    const author = await createUser({
+      email: "template-author@test.com",
+      name: "Author",
+    });
+    const viewer = await createUser({
+      email: "template-viewer@test.com",
+      name: "Viewer",
+    });
+    const authorToken = await getAuthToken(author);
+    const viewerToken = await getAuthToken(viewer);
+
+    const trip = await createTrip({
+      userId: author.id,
+      title: "Template trip",
+      status: TripStatus.ENDED,
+    });
+
+    await prisma.trip.update({
+      where: { id: trip.id },
+      data: { destinations: ["Jaipur", "Pushkar", "Udaipur"] },
+    });
+
+    const place = await prisma.place.create({
+      data: {
+        name: "Lake Pichola",
+        lat: 24.576,
+        lng: 73.68,
+      },
+    });
+    await prisma.placeOnTrip.create({
+      data: { tripId: trip.id, placeId: place.id, order: 1 },
+    });
+
+    const photo = "https://cdn.example.com/template-cover.jpg";
+    const media = await prisma.media.create({
+      data: {
+        url: photo,
+        publicId: `template-${randomUUID()}`,
+        type: MediaType.IMAGE,
+        uploadedById: author.id,
+        tripId: trip.id,
+      },
+    });
+
+    await prisma.tripThreadEntry.createMany({
+      data: [
+        {
+          tripId: trip.id,
+          authorId: author.id,
+          type: ThreadEntryType.TEXT,
+          contentText: "Quiet chai on the ghat",
+          likeCount: 12,
+          mediaId: media.id,
+          placeId: place.id,
+          locationName: "Udaipur",
+        },
+        {
+          tripId: trip.id,
+          authorId: author.id,
+          type: ThreadEntryType.TEXT,
+          contentText: "Blue doors at dusk",
+          likeCount: 5,
+          locationName: "Pushkar",
+        },
+      ],
+    });
+
+    const summary =
+      "Desert forts to midnight lake reflections across three cities in Rajasthan.";
+    await prisma.tripFinalPost.create({
+      data: {
+        tripId: trip.id,
+        userId: author.id,
+        summaryText: summary,
+        curatedMedia: [photo],
+        coverMediaUrl: photo,
+        generationStatus: GenerationStatus.DRAFT,
+        isPublished: false,
+      },
+    });
+
+    const params = { params: Promise.resolve({ id: trip.id }) };
+    const updated = await json(
+      await updateFinalPostRoute(
+        authRequest(
+          `http://localhost/api/trips/${trip.id}/final-post`,
+          "PUT",
+          authorToken,
+          { templateChoice: "map_first", summaryText: summary }
+        ),
+        params
+      )
+    );
+    expect(updated.success).toBe(true);
+    expect(updated.data.templateChoice).toBe("map_first");
+
+    const published = await json(
+      await publishFinalPostRoute(
+        authRequest(
+          `http://localhost/api/trips/${trip.id}/publish`,
+          "POST",
+          authorToken
+        ),
+        params
+      )
+    );
+    expect(published.success).toBe(true);
+    expect(published.data.templateChoice).toBe("map_first");
+
+    const feed = await json(
+      await getFeedRoute(
+        authRequest("http://localhost/api/feed/home", "GET", viewerToken)
+      )
+    );
+    const item = feed.data.items.find(
+      (row: { userId: string }) => row.userId === author.id
+    );
+    expect(item).toBeTruthy();
+    expect(item.templateChoice).toBe("map_first");
+    expect(item.threadPreview.length).toBeGreaterThanOrEqual(2);
+    expect(item.threadPreview[0].likeCount).toBeGreaterThanOrEqual(
+      item.threadPreview[1].likeCount
+    );
+    expect(item.mapPins?.length).toBeGreaterThanOrEqual(1);
+    expect(item.mapPins[0].lat).toBeCloseTo(24.576, 3);
+  });
 });

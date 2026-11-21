@@ -1,6 +1,7 @@
 import { prisma, type PrismaTransactionClient } from "@/lib/prisma";
 import {
   EntityType,
+  FinalPostTemplateChoice,
   GenerationStatus,
   MediaProcessingStatus,
   MediaType,
@@ -21,6 +22,12 @@ import {
 
 const MIN_MEDIA_COUNT = 1;
 
+const TEMPLATE_CHOICES = new Set<string>([
+  FinalPostTemplateChoice.postcard,
+  FinalPostTemplateChoice.map_first,
+  FinalPostTemplateChoice.thread_reel,
+]);
+
 const finalPostSelect = {
   id: true,
   tripId: true,
@@ -29,6 +36,7 @@ const finalPostSelect = {
   curatedMedia: true,
   caption: true,
   coverMediaUrl: true,
+  templateChoice: true,
   generationStatus: true,
   isPublished: true,
   publishedAt: true,
@@ -41,6 +49,7 @@ type FinalPostUpdates = {
   curatedMedia?: string[];
   caption?: string | null;
   coverMediaUrl?: string | null;
+  templateChoice?: FinalPostTemplateChoice;
 };
 
 type DbClient = PrismaTransactionClient | typeof prisma;
@@ -251,6 +260,15 @@ export class TripFinalizerService {
         data.coverMediaUrl = coverFromTrip(updates.coverMediaUrl, allowedMedia!);
       } else if (data.curatedMedia && data.curatedMedia.length > 0) {
         data.coverMediaUrl = data.curatedMedia[0];
+      }
+
+      if (updates.templateChoice !== undefined) {
+        if (!TEMPLATE_CHOICES.has(updates.templateChoice)) {
+          throw new ValidationError(
+            "templateChoice must be postcard, map_first, or thread_reel"
+          );
+        }
+        data.templateChoice = updates.templateChoice;
       }
 
       return tx.tripFinalPost.update({
