@@ -16,11 +16,20 @@ export async function POST(request: NextRequest) {
           const validatedData = createShareSchema.parse(body);
           const userId = authenticatedReq.user!.userId;
 
-          if (validatedData.entityType === "TRIP_FINAL_POST") {
-            const post = await prisma.tripFinalPost.findUnique({
-              where: { id: validatedData.entityId },
-              select: { isPublished: true },
-            });
+          if (
+            validatedData.entityType === "TRIP_FINAL_POST" ||
+            validatedData.entityType === "USER_POST"
+          ) {
+            const post =
+              validatedData.entityType === "TRIP_FINAL_POST"
+                ? await prisma.tripFinalPost.findUnique({
+                    where: { id: validatedData.entityId },
+                    select: { isPublished: true },
+                  })
+                : await prisma.userPost.findUnique({
+                    where: { id: validatedData.entityId },
+                    select: { isPublished: true },
+                  });
             if (post && !post.isPublished) {
               return NextResponse.json<ApiResponse>(
                 {

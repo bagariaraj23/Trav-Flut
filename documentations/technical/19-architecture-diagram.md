@@ -315,6 +315,8 @@ flowchart TD
 
 Unfollow deletes the follow edge and every request between the pair. Restrict and Block live on `user_safety_relations`, not on `follows`. Block deletes follows and pending requests in both directions and makes the blocked person look like a missing account. Restrict leaves the restrictor's profile reachable to the restricted person as a normal profile, including photo, bio, trips, follow lists, and published posts, and removes the restrictor's posts from the restricted person's feeds. Opening a post from that profile still works. A final-post comment from the restricted person is visible to the author and to them, with a count that matches that list. The restrictor still sees the restricted person's posts. The restricted person cannot message the restrictor or add them to a trip they created. The restrictor can still message them. Safety rows are cached in Redis, not in process memory, so every API process sees a new block on the next read.
 
+A direct post lives in `user_posts`, not on a trip. It has a caption, photos that person uploaded, and an optional location. Home reads it with the same audience as a published final post.
+
 ## 8. Media and places
 
 ```mermaid

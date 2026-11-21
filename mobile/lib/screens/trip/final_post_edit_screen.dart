@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import 'package:tripthread/models/trip.dart';
 import 'package:tripthread/providers/auth_provider.dart';
 import 'package:tripthread/providers/final_post_provider.dart';
+import 'package:tripthread/services/media_service.dart';
 import 'package:tripthread/services/trip_service.dart';
 import 'package:tripthread/utils/app_layout.dart';
 import 'package:tripthread/utils/app_theme.dart';
@@ -31,6 +32,7 @@ class _FinalPostEditScreenState extends State<FinalPostEditScreen> {
   final FocusNode _captionFocus = FocusNode();
   bool _isSummaryEditing = false;
   bool _isCaptionEditing = false;
+  bool _uploadingPhoto = false;
 
   @override
   void initState() {
@@ -400,6 +402,43 @@ class _FinalPostEditScreenState extends State<FinalPostEditScreen> {
     );
   }
 
+  Future<void> _uploadFromDevice(
+    FinalPostProvider provider, {
+    required bool fromCamera,
+  }) async {
+    if (_uploadingPhoto || !provider.canEdit) return;
+    try {
+      final file = await context.read<MediaService>().pickImage(
+            fromCamera: fromCamera,
+          );
+      if (file == null || !mounted) return;
+      setState(() => _uploadingPhoto = true);
+      final media = await context.read<MediaService>().uploadMediaToCloudinary(
+            file: file,
+            tripId: widget.tripId,
+            usage: 'final_post',
+          );
+      if (!mounted) return;
+      if (media == null || media.url.isEmpty) {
+        throw Exception('The photo did not upload');
+      }
+      final ok = provider.toggleMedia(media.url);
+      if (!ok && provider.error != null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(provider.error!)),
+        );
+      }
+      await _loadTripDetails();
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(error.toString())),
+      );
+    } finally {
+      if (mounted) setState(() => _uploadingPhoto = false);
+    }
+  }
+
   Widget _buildMediaSelector(
       FinalPostProvider provider, TripFinalPost draft) {
     final mediaItems = _mediaItems;
@@ -439,16 +478,40 @@ class _FinalPostEditScreenState extends State<FinalPostEditScreen> {
               child: Text(
                 locked
                     ? 'Only you can change the photos on your final post.'
-                    : 'The first draft uses photos you uploaded and photos you are in. You can add any photo from the trip.',
+                    : 'Pick photos already on this trip, or add one from your phone. A photo has to be yours, or already on the trip.',
                 style: Theme.of(context)
                     .textTheme
                     .bodySmall
                     ?.copyWith(color: Theme.of(context).hintColor),
               ),
             ),
+            if (!locked)
+              Row(
+                children: [
+                  TextButton.icon(
+                    onPressed: _uploadingPhoto
+                        ? null
+                        : () => _uploadFromDevice(provider, fromCamera: false),
+                    icon: const Icon(Icons.photo_library_outlined),
+                    label: const Text('Phone'),
+                  ),
+                  TextButton.icon(
+                    onPressed: _uploadingPhoto
+                        ? null
+                        : () => _uploadFromDevice(provider, fromCamera: true),
+                    icon: const Icon(Icons.photo_camera_outlined),
+                    label: const Text('Camera'),
+                  ),
+                  if (_uploadingPhoto)
+                    const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
+                ],
+              ),
             if (mediaItems.isEmpty)
-              const Text(
-                  'Photos from this trip show up here.')
+              const Text('Photos from this trip show up here.')
             else
               SizedBox(
                 height: 110,

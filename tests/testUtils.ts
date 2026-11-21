@@ -66,6 +66,7 @@ export async function cleanDb() {
     prisma.tripThreadTag.deleteMany(),
     prisma.tripThreadEntry.deleteMany(),
     prisma.tripFinalPost.deleteMany(),
+    prisma.userPost.deleteMany(),
     prisma.tripJoinRequest.deleteMany(),
     prisma.tripSettlement.deleteMany(),
     prisma.tripExpenseShare.deleteMany(),

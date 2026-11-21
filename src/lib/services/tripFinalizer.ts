@@ -18,6 +18,7 @@ import {
   MIN_SUMMARY_LENGTH,
   type DraftTrip,
 } from "../../../scheduler/src/memberFinalDraft";
+import { allowedFinalPostUrls } from "./postMedia";
 
 const MIN_MEDIA_COUNT = 1;
 
@@ -232,8 +233,12 @@ export class TripFinalizerService {
       const mediaChanged =
         Array.isArray(updates.curatedMedia) ||
         updates.coverMediaUrl !== undefined;
+      const candidates = [
+        ...(Array.isArray(updates.curatedMedia) ? updates.curatedMedia : []),
+        ...(updates.coverMediaUrl ? [updates.coverMediaUrl] : []),
+      ];
       const allowedMedia = mediaChanged
-        ? await tripMediaUrls(tx, tripId)
+        ? await allowedFinalPostUrls(tx, tripId, userId, candidates)
         : null;
 
       if (Array.isArray(updates.curatedMedia)) {
@@ -310,7 +315,10 @@ export class TripFinalizerService {
         );
       }
 
-      const allowedMedia = await tripMediaUrls(tx, tripId);
+      const allowedMedia = await allowedFinalPostUrls(tx, tripId, userId, [
+        ...(finalPost.curatedMedia ?? []),
+        ...(finalPost.coverMediaUrl ? [finalPost.coverMediaUrl] : []),
+      ]);
       sanitizeMedia(finalPost.curatedMedia ?? [], allowedMedia);
       if (finalPost.coverMediaUrl) {
         coverFromTrip(finalPost.coverMediaUrl, allowedMedia);
@@ -493,27 +501,8 @@ function toDraftTrip(trip: TripForFinalizer): DraftTrip {
   };
 }
 
-/** Photos already uploaded to this trip, including photos on thread entries. */
-async function tripMediaUrls(db: DbClient, tripId: string) {
-  const trip = await db.trip.findUnique({
-    where: { id: tripId },
-    select: {
-      media: { select: { url: true } },
-      threadEntries: { select: { media: { select: { url: true } } } },
-    },
-  });
-  const urls = new Set<string>();
-  for (const media of trip?.media ?? []) {
-    if (media.url) urls.add(media.url);
-  }
-  for (const entry of trip?.threadEntries ?? []) {
-    if (entry.media?.url) urls.add(entry.media.url);
-  }
-  return urls;
-}
-
 /**
- * Keep only photos that belong to this trip.
+ * Keep photos from this trip, or photos this author uploaded from their phone.
  * A Cloudinary prefix is not enough: other people's private photos use the same account.
  */
 function sanitizeMedia(urls: string[], allowed: Set<string>) {
@@ -523,7 +512,9 @@ function sanitizeMedia(urls: string[], allowed: Set<string>) {
     const url = raw?.trim();
     if (!url || seen.has(url)) continue;
     if (!allowed.has(url)) {
-      throw new ValidationError("Choose photos from this trip");
+      throw new ValidationError(
+        "Choose a photo from this trip or upload one from your phone"
+      );
     }
     seen.add(url);
     kept.push(url);
@@ -535,7 +526,9 @@ function coverFromTrip(url: string | null, allowed: Set<string>) {
   const trimmed = url?.trim() || null;
   if (!trimmed) return null;
   if (!allowed.has(trimmed)) {
-    throw new ValidationError("Choose photos from this trip");
+    throw new ValidationError(
+      "Choose a photo from this trip or upload one from your phone"
+    );
   }
   return trimmed;
 }

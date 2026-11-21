@@ -180,6 +180,17 @@ export async function resolveShareToken(shareToken: string) {
         },
       },
     });
+  } else if (share.entityType === "USER_POST") {
+    entityData = await prisma.userPost.findUnique({
+      where: { id: share.entityId },
+      select: {
+        id: true,
+        caption: true,
+        media: true,
+        locationName: true,
+        userId: true,
+      },
+    });
   } else if (share.entityType === "TRIP_THREAD_ENTRY") {
     entityData = await prisma.tripThreadEntry.findUnique({
       where: { id: share.entityId },
@@ -279,8 +290,11 @@ export async function getSharesByUser(
   const commentIds = result.items
     .filter((share) => share.entityType === "COMMENT")
     .map((share) => share.entityId);
+  const directIds = result.items
+    .filter((share) => share.entityType === "USER_POST")
+    .map((share) => share.entityId);
 
-  const [posts, entries, comments] = await Promise.all([
+  const [posts, entries, comments, directPosts] = await Promise.all([
     postIds.length
       ? prisma.tripFinalPost.findMany({
           where: { id: { in: postIds } },
@@ -311,20 +325,34 @@ export async function getSharesByUser(
           },
         })
       : Promise.resolve([]),
+    directIds.length
+      ? prisma.userPost.findMany({
+          where: { id: { in: directIds } },
+          select: { id: true, caption: true, locationName: true },
+        })
+      : Promise.resolve([]),
   ]);
 
   const postById = new Map(posts.map((post) => [post.id, post]));
   const entryById = new Map(entries.map((entry) => [entry.id, entry]));
   const commentById = new Map(comments.map((comment) => [comment.id, comment]));
+  const directById = new Map(directPosts.map((post) => [post.id, post]));
 
   const itemsWithEntity = result.items.map((share) => {
-    let entityPreview: (typeof posts)[number] | (typeof entries)[number] | (typeof comments)[number] | null = null;
+    let entityPreview:
+      | (typeof posts)[number]
+      | (typeof entries)[number]
+      | (typeof comments)[number]
+      | (typeof directPosts)[number]
+      | null = null;
     if (share.entityType === "TRIP_FINAL_POST") {
       entityPreview = postById.get(share.entityId) ?? null;
     } else if (share.entityType === "TRIP_THREAD_ENTRY") {
       entityPreview = entryById.get(share.entityId) ?? null;
     } else if (share.entityType === "COMMENT") {
       entityPreview = commentById.get(share.entityId) ?? null;
+    } else if (share.entityType === "USER_POST") {
+      entityPreview = directById.get(share.entityId) ?? null;
     }
     return {
       ...share,

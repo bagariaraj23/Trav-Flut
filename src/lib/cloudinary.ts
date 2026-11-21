@@ -96,7 +96,9 @@ export type MediaUploadUsage =
   | "thread_entry"
   | "general"
   | "chat"
-  | "group_avatar";
+  | "group_avatar"
+  | "final_post"
+  | "user_post";
 
 interface UploadSignatureArgs {
   filename: string;

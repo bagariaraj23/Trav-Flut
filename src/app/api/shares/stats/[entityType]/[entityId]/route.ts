@@ -38,6 +38,12 @@ export async function GET(
             select: { shareCount: true },
           });
           shareCount = post?.shareCount || 0;
+        } else if (entityType === "USER_POST") {
+          const post = await prisma.userPost.findUnique({
+            where: { id: entityId },
+            select: { shareCount: true },
+          });
+          shareCount = post?.shareCount || 0;
         }
 
         const shares = await prisma.share.findMany({

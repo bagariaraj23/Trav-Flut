@@ -587,17 +587,17 @@ export const rateLimitSchema = z.object({
 
 // Engagement validation schemas
 export const createLikeSchema = z.object({
-  entityType: z.enum(["TRIP_FINAL_POST", "TRIP_THREAD_ENTRY", "COMMENT"]),
+  entityType: z.enum(["TRIP_FINAL_POST", "TRIP_THREAD_ENTRY", "COMMENT", "USER_POST"]),
   entityId: z.string().uuid("Invalid entity ID format"),
 });
 
 export const deleteLikeSchema = z.object({
-  entityType: z.enum(["TRIP_FINAL_POST", "TRIP_THREAD_ENTRY", "COMMENT"]),
+  entityType: z.enum(["TRIP_FINAL_POST", "TRIP_THREAD_ENTRY", "COMMENT", "USER_POST"]),
   entityId: z.string().uuid("Invalid entity ID format"),
 });
 
 export const createCommentSchema = z.object({
-  entityType: z.enum(["TRIP_FINAL_POST", "TRIP_THREAD_ENTRY"]),
+  entityType: z.enum(["TRIP_FINAL_POST", "TRIP_THREAD_ENTRY", "USER_POST"]),
   entityId: z.string().uuid("Invalid entity ID format"),
   contentText: z
     .string()
@@ -614,7 +614,7 @@ export const createCommentSchema = z.object({
 });
 
 export const createShareSchema = z.object({
-  entityType: z.enum(["TRIP_FINAL_POST"]),
+  entityType: z.enum(["TRIP_FINAL_POST", "USER_POST"]),
   entityId: z.string().uuid("Invalid entity ID format"),
   shareType: z.enum(["DEEP_LINK", "WEB_LINK", "EXTERNAL"]),
   shareSource: z.enum(["SYSTEM_SHEET", "IN_APP_DM"]).optional().default("SYSTEM_SHEET"),

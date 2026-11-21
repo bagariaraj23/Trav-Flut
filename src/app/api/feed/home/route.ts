@@ -20,6 +20,11 @@ import { decodeFeedCursor, encodeFeedCursor } from "@/lib/feedCursor";
 import { EntityType, Prisma } from "@prisma/client";
 import { omitHiddenTripSpend } from "@/lib/tripSpendVisibility";
 import { feedHiddenUserIds } from "@/lib/services/userSafety";
+import {
+  directPostAudience,
+  loadDirectPostsForFeed,
+} from "@/lib/services/userPost";
+import { homeFeedWindow, sliceMergedFeed } from "@/lib/homeFeedMerge";
 
 // Get home feed (final posts from followed users and public profiles)
 export async function GET(request: NextRequest) {
@@ -57,7 +62,11 @@ export async function GET(request: NextRequest) {
               );
             }
           }
+          // A cursor page starts at the cursor. A page number must not skip
+          // inside each table: the merge would then drop posts that belong
+          // on that page. Each list is read from its top, then sliced.
           const offset = feedCursor ? 0 : (pageNum - 1) * limitNum;
+          const take = homeFeedWindow(offset, limitNum);
           console.log(
             `[API] GET /feed/home - Offset: ${offset}, cursor: ${feedCursor ? "yes" : "no"}`
           );
@@ -129,12 +138,17 @@ export async function GET(request: NextRequest) {
               }
             : whereClause;
 
-          // Count the full feed in parallel with the page. The page itself
-          // uses keyset pagination when a cursor is present so OFFSET does not
-          // grow with the feed. Trip entry/participant totals are the
-          // denormalized columns, not per-row _count queries.
+          // Both audience counts run with the page. A cursor reads the next
+          // window from each list. A page number reads each list from the
+          // top through offset + limit + 1, then the merge slices the page.
+          // Trip entry and participant totals are the denormalized columns.
           console.log(`[API] GET /feed/home - Fetching page and total`);
-          const [totalCount, rows] = await Promise.all([
+          const directWhere = directPostAudience(
+            currentUserId,
+            followedUserIds,
+            hiddenUserIds
+          );
+          const [totalCount, rows, directTotal, directPosts] = await Promise.all([
             prisma.tripFinalPost.count({ where: whereClause }),
             prisma.tripFinalPost.findMany({
               where: cursorWhere,
@@ -171,39 +185,42 @@ export async function GET(request: NextRequest) {
                 },
               },
               orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-              skip: offset,
-              take: limitNum + 1,
+              skip: 0,
+              take,
+            }),
+            prisma.userPost.count({ where: directWhere }),
+            loadDirectPostsForFeed({
+              where: directWhere,
+              cursor: feedCursor,
+              offset: 0,
+              limit: take,
+              viewerId: currentUserId,
             }),
           ]);
-          console.log(`[API] GET /feed/home - Total count: ${totalCount}`);
-          const hasNext = rows.length > limitNum;
-          const finalPosts = hasNext ? rows.slice(0, limitNum) : rows;
-
           console.log(
-            `[API] GET /feed/home - Found ${finalPosts.length} final posts`
+            `[API] GET /feed/home - Trip posts: ${totalCount}, direct posts: ${directTotal}`
           );
 
-          // Get like status for all posts
-          const postIds = finalPosts.map((p) => p.id);
+          // Get like status for the trip-post candidates before the merge.
+          const postIds = rows.map((p) => p.id);
           const likeStatusMap = await checkLikeStatus(
             currentUserId,
             EntityType.TRIP_FINAL_POST,
             postIds
           );
           const commentCounts = await visibleFinalPostCommentCounts(
-            finalPosts.map((post) => ({ id: post.id, userId: post.userId })),
+            rows.map((post) => ({ id: post.id, userId: post.userId })),
             currentUserId
           );
 
-          // Transform to response format with engagement data
-          const finalPostsResponse: (TripFinalPostResponse & {
-            likeCount: number;
-            commentCount: number;
-            shareCount: number;
-            hasLiked: boolean;
-          })[] = finalPosts.map((post) => ({
+          // Transform trip recaps, then merge them with direct posts by time.
+          const tripItems = rows.map((post) => ({
+            createdAt: post.createdAt,
+            id: post.id,
+            item: {
             id: post.id,
             tripId: post.tripId,
+            postKind: "trip" as const,
             userId: post.userId,
             summaryText: post.summaryText,
             curatedMedia: post.curatedMedia,
@@ -253,7 +270,16 @@ export async function GET(request: NextRequest) {
                   }
                 : undefined,
             }, post.trip.userId === currentUserId),
+            },
           }));
+
+          const mergedPage = sliceMergedFeed(
+            [...tripItems, ...directPosts],
+            offset,
+            limitNum
+          );
+          const hasNext = mergedPage.hasNext;
+          const finalPostsResponse = mergedPage.items.map((entry) => entry.item);
 
           console.log(`[API] GET /feed/home - Has next: ${hasNext}`);
           const lastPost = finalPostsResponse[finalPostsResponse.length - 1];
@@ -262,7 +288,7 @@ export async function GET(request: NextRequest) {
             items: finalPostsResponse,
             page: pageNum,
             limit: limitNum,
-            total: totalCount,
+            total: totalCount + directTotal,
             hasNext,
             nextCursor:
               hasNext && lastPost

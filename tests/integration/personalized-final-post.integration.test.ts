@@ -472,6 +472,36 @@ describe("Personalized final posts", () => {
     });
     expect(saved.curatedMedia).toEqual([photo]);
     expect(saved.coverMediaUrl).toBe(photo);
+
+    const phone = "https://cdn.example.com/from-phone.jpg";
+    await prisma.media.create({
+      data: {
+        url: phone,
+        publicId: `phone-${randomUUID()}`,
+        type: MediaType.IMAGE,
+        uploadedById: owner.id,
+      },
+    });
+    const withPhone = await TripFinalizerService.updateFinalPost(trip.id, owner.id, {
+      curatedMedia: [photo, phone],
+    });
+    expect(withPhone.curatedMedia).toEqual([photo, phone]);
+
+    const other = await createUser({ email: "other-phone@test.com", name: "Other" });
+    const otherPhone = "https://cdn.example.com/other-phone.jpg";
+    await prisma.media.create({
+      data: {
+        url: otherPhone,
+        publicId: `other-phone-${randomUUID()}`,
+        type: MediaType.IMAGE,
+        uploadedById: other.id,
+      },
+    });
+    await expect(
+      TripFinalizerService.updateFinalPost(trip.id, owner.id, {
+        curatedMedia: [otherPhone],
+      })
+    ).rejects.toBeInstanceOf(ValidationError);
   });
 
   it("keeps one draft per member when two endings insert together", async () => {

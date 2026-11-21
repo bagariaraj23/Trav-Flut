@@ -2538,6 +2538,95 @@ class ApiService {
     }
   }
 
+  Future<ApiResponse<Map<String, dynamic>>> createDirectPost({
+    required String caption,
+    List<String> media = const [],
+    String? locationName,
+  }) async {
+    try {
+      final response = await _dio.post('/user-posts', data: {
+        'caption': caption,
+        'media': media,
+        'locationName': locationName,
+      });
+      if (response.data['success'] == true && response.data['data'] != null) {
+        return ApiResponse<Map<String, dynamic>>(
+          success: true,
+          data: response.data['data'] as Map<String, dynamic>,
+        );
+      }
+      return ApiResponse<Map<String, dynamic>>(
+        success: false,
+        error: response.data['error'] ?? 'Failed to publish post',
+      );
+    } on DioException catch (e) {
+      return ApiResponse<Map<String, dynamic>>(
+        success: false,
+        error: e.response?.data['error'] ?? 'Network error occurred',
+      );
+    } catch (_) {
+      return ApiResponse<Map<String, dynamic>>(
+        success: false,
+        error: 'An unexpected error occurred',
+      );
+    }
+  }
+
+  Future<ApiResponse<Map<String, dynamic>>> updateDirectPost(
+    String postId, {
+    required String caption,
+    List<String> media = const [],
+    String? locationName,
+  }) async {
+    try {
+      final response = await _dio.patch('/user-posts/$postId', data: {
+        'caption': caption,
+        'media': media,
+        'locationName': locationName,
+      });
+      if (response.data['success'] == true && response.data['data'] != null) {
+        return ApiResponse<Map<String, dynamic>>(
+          success: true,
+          data: response.data['data'] as Map<String, dynamic>,
+        );
+      }
+      return ApiResponse<Map<String, dynamic>>(
+        success: false,
+        error: response.data['error'] ?? 'Failed to update post',
+      );
+    } on DioException catch (e) {
+      return ApiResponse<Map<String, dynamic>>(
+        success: false,
+        error: e.response?.data['error'] ?? 'Network error occurred',
+      );
+    } catch (_) {
+      return ApiResponse<Map<String, dynamic>>(
+        success: false,
+        error: 'An unexpected error occurred',
+      );
+    }
+  }
+
+  Future<ApiResponse<void>> deleteDirectPost(String postId) async {
+    try {
+      final response = await _dio.delete('/user-posts/$postId');
+      return ApiResponse<void>(
+        success: response.data['success'] == true,
+        error: response.data['error'],
+      );
+    } on DioException catch (e) {
+      return ApiResponse<void>(
+        success: false,
+        error: e.response?.data['error'] ?? 'Network error occurred',
+      );
+    } catch (_) {
+      return ApiResponse<void>(
+        success: false,
+        error: 'An unexpected error occurred',
+      );
+    }
+  }
+
   Future<ApiResponse<void>> acceptFollowRequest(String requestId) async {
     try {
       debugPrint('[ApiService] Accepting follow request: $requestId');

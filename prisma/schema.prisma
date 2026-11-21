@@ -53,6 +53,7 @@ model User {
   safetyActions            UserSafetyRelation[] @relation("SafetyActor")
   safetyTargets            UserSafetyRelation[] @relation("SafetyTarget")
   createdConversations     Conversation[]    @relation("ConversationCreator")
+  userPosts                UserPost[]
 
   @@map("users")
 }
@@ -339,6 +340,7 @@ model Place {
   // Back-relations for Trip start/end
   startTrips    Trip[]            @relation("TripStartLocation")
   endTrips      Trip[]            @relation("TripEndLocation")
+  userPosts     UserPost[]
 
   @@index([lat, lng], name: "coordinate_spatial_idx")
   @@index([externalId], name: "external_id_idx")
@@ -415,6 +417,32 @@ model TripFinalPost {
   @@index([userId, isPublished, publishedAt])
   @@index([isPublished, createdAt(sort: Desc), id(sort: Desc)])
   @@map("trip_final_posts")
+}
+
+// A post that is not tied to a trip: caption, the author's own photos, and an optional place.
+model UserPost {
+  id            String    @id @default(uuid())
+  userId        String
+  caption       String
+  media         String[]
+  locationName  String?
+  latitude      Float?
+  longitude     Float?
+  placeId       String?
+  isPublished   Boolean   @default(true)
+  publishedAt   DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  likeCount     Int       @default(0)
+  commentCount  Int       @default(0)
+  shareCount    Int       @default(0)
+
+  user  User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  place Place? @relation(fields: [placeId], references: [id], onDelete: SetNull)
+
+  @@index([userId, isPublished, publishedAt])
+  @@index([isPublished, createdAt(sort: Desc), id(sort: Desc)])
+  @@map("user_posts")
 }
 
 model Media {
@@ -605,6 +633,7 @@ enum EntityType {
   TRIP_FINAL_POST
   TRIP_THREAD_ENTRY
   COMMENT
+  USER_POST
 }
 
 enum ShareType {
