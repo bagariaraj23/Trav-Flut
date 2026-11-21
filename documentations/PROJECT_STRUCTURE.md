@@ -459,6 +459,8 @@ cursor_rules.md                 # Cursor/Copilot AI rules
 - `src/lib/auth.ts` — JWT token generation, validation
 - `src/middleware.ts` — Auth middleware, token refresh
 - `src/app/api/auth/*` — Login, signup, password reset endpoints
+- `src/app/api/support/route.ts` — Support note emailed through SendGrid
+- `src/app/support/page.tsx` — Public support form linked from the landing page
 - `mobile/lib/providers/auth_provider.dart` — Mobile auth state
 - `mobile/lib/services/auth_service.dart` — Mobile token management
 

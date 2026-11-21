@@ -199,6 +199,7 @@ npm run setup:env
 npm run docker:up
 ```
 
+* **Landing page**: the Next.js home route on the API host ([http://localhost:3000](http://localhost:3000)). Log in and Get started open the Flutter web app at `NEXT_PUBLIC_APP_WEB_URL` (`/login` and `/signup`). Support is `/support` on that same Next host.
 * **App**: [http://localhost:8080](http://localhost:8080) (Flutter web). The page proxies `/api` and `/chat` to the API, so sign-in, trip creation, the thread, chat, and expenses use the same origin.
 * **API**: [http://localhost:3000](http://localhost:3000), WebSocket chat at `ws://localhost:3000/chat`. Point a phone or emulator here (`API_BASE_URL=http://10.0.2.2:3000/api` on the Android emulator).
 * **Dev Database**: PostgreSQL at `localhost:5432` (`tripthread_dev`; set `POSTGRES_PORT` if 5432 is taken)

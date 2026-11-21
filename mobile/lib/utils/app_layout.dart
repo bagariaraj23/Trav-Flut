@@ -39,12 +39,12 @@ class AppLayout {
   }) {
     final spacing = authSpacing(context);
     return SafeArea(
-      child: Align(
-        alignment: Alignment.topCenter,
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 420),
-          child: SingleChildScrollView(
-            padding: EdgeInsets.all(spacing.pagePadding),
+      child: SingleChildScrollView(
+        padding: EdgeInsets.all(spacing.pagePadding),
+        child: Align(
+          alignment: Alignment.topCenter,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 420),
             child: child,
           ),
         ),

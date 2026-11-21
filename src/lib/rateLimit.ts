@@ -111,6 +111,44 @@ export const RATE_LIMIT_PRESETS: Record<string, RateLimitConfig> = {
     logEvent: true,
   },
 
+  // Public support form. Keeps the inbox from being flooded.
+  support: {
+    maxRequests: 5,
+    windowMs: 60 * 60 * 1000,
+    keyPrefix: "rl:support",
+    logEvent: true,
+  },
+  early_access: {
+    maxRequests: 5,
+    windowMs: 60 * 60 * 1000,
+    keyPrefix: "rl:early-access",
+    logEvent: true,
+  },
+  chip_in: {
+    maxRequests: 10,
+    windowMs: 60 * 60 * 1000,
+    keyPrefix: "rl:chip-in",
+    logEvent: true,
+  },
+  chip_in_read: {
+    maxRequests: 60,
+    windowMs: 15 * 60 * 1000,
+    keyPrefix: "rl:chip-in:read",
+    logEvent: false,
+  },
+  chip_in_status: {
+    maxRequests: 180,
+    windowMs: 15 * 60 * 1000,
+    keyPrefix: "rl:chip-in:status",
+    logEvent: false,
+  },
+  early_access_read: {
+    maxRequests: 60,
+    windowMs: 15 * 60 * 1000,
+    keyPrefix: "rl:early-access:read",
+    logEvent: false,
+  },
+
   // General API endpoints
   general: {
     maxRequests: 100,

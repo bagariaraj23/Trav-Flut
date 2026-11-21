@@ -8,7 +8,8 @@ const nextConfig = {
   // instrumentationHook is now available by default in Next.js 15, no need to enable it
   env: {
     ENABLE_SCHEDULER: process.env.ENABLE_SCHEDULER,
-    NEXT_PUBLIC_API_BASE_URL: process.env.NEXT_PUBLIC_API_BASE_URL
+    NEXT_PUBLIC_API_BASE_URL: process.env.NEXT_PUBLIC_API_BASE_URL,
+    NEXT_PUBLIC_APP_WEB_URL: process.env.NEXT_PUBLIC_APP_WEB_URL
   },
   images: {
     remotePatterns: [

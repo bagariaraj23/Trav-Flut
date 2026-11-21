@@ -69,13 +69,13 @@ class _SignupScreenState extends State<SignupScreen> {
       },
       child: Scaffold(
         body: SafeArea(
-          child: Align(
-            alignment: Alignment.topCenter,
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 420),
-              child: SingleChildScrollView(
+          child: SingleChildScrollView(
             padding: EdgeInsets.all(spacing.pagePadding),
-            child: Form(
+            child: Align(
+              alignment: Alignment.topCenter,
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 420),
+                child: Form(
               key: _formKey,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -445,12 +445,12 @@ class _SignupScreenState extends State<SignupScreen> {
                   SizedBox(height: spacing.bottom),
                 ],
               ),
-            ),
-          ),
+                ),
               ),
             ),
           ),
         ),
+      ),
     );
   }
 }

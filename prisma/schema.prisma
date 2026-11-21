@@ -748,3 +748,41 @@ model Share {
   @@index([userId, createdAt])
   @@index([entityType, entityId])
 }
+
+enum EarlyAccessPlatform {
+  ANDROID
+  IOS
+}
+
+model EarlyAccessRequest {
+  id        String               @id @default(uuid())
+  email     String               @unique
+  name      String?
+  platform  EarlyAccessPlatform
+  createdAt DateTime             @default(now())
+  createdIp String?
+
+  @@index([platform, createdAt])
+  @@map("early_access_requests")
+}
+
+enum ChipInStatus {
+  CREATED
+  PAID
+  FAILED
+}
+
+model ChipIn {
+  id                String       @id @default(uuid())
+  amountMinor       Int
+  currency          String       @default("INR")
+  status            ChipInStatus @default(CREATED)
+  displayName       String?
+  providerOrderId   String?      @unique
+  providerPaymentId String?      @unique
+  createdAt         DateTime     @default(now())
+  paidAt            DateTime?
+
+  @@index([status, createdAt])
+  @@map("chip_ins")
+}

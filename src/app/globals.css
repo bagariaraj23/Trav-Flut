@@ -1,3 +1,56 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+@keyframes early-access-pop {
+  0% {
+    transform: scale(0.45);
+    opacity: 0;
+  }
+  60% {
+    transform: scale(1.18);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+@keyframes early-access-spark {
+  0% {
+    transform: translate(0, 0) scale(1);
+    opacity: 0.95;
+  }
+  100% {
+    transform: translate(var(--spark-x), var(--spark-y)) scale(0.2);
+    opacity: 0;
+  }
+}
+
+.early-access-pop {
+  animation: early-access-pop 720ms cubic-bezier(0.2, 0.85, 0.2, 1) both;
+}
+
+.early-access-spark {
+  animation: early-access-spark 700ms ease-out both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .early-access-pop,
+  .early-access-spark {
+    animation: none;
+  }
+}
+
+/* DM Sans, Latin, SIL Open Font License. Served locally so the landing page does not depend on a Google Fonts fetch at build time. */
+@font-face {
+  font-family: "DM Sans";
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: swap;
+  src: url("/fonts/dm-sans-latin.woff2") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA,
+    U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193,
+    U+2212, U+2215, U+FEFF, U+FFFD;
+}
