@@ -404,6 +404,18 @@ async function seed(prisma: AppPrismaClient): Promise<void> {
         contentText: "Ubud rice terraces — unreal greens.",
       },
       {
+        tripId: tripBali.id,
+        authorId: carol.id,
+        type: ThreadEntryType.TEXT,
+        contentText: "Nusa Penida cliffs at golden hour.",
+      },
+      {
+        tripId: tripBali.id,
+        authorId: carol.id,
+        type: ThreadEntryType.TEXT,
+        contentText: "Temple bells before dawn in Ubud.",
+      },
+      {
         tripId: tripParis.id,
         authorId: bob.id,
         type: ThreadEntryType.TEXT,
@@ -424,7 +436,7 @@ async function seed(prisma: AppPrismaClient): Promise<void> {
   });
   await prisma.trip.update({
     where: { id: tripBali.id },
-    data: { entryCount: 1 },
+    data: { entryCount: 3 },
   });
   await prisma.trip.update({
     where: { id: tripParis.id },
