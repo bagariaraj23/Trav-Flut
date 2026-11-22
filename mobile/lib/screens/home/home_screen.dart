@@ -145,46 +145,191 @@ class _HomeScreenState extends State<HomeScreen> {
             const FloatingTripNavButton(),
           ],
         ),
-        bottomNavigationBar: DecoratedBox(
-          decoration: BoxDecoration(
-            color: Theme.of(context).scaffoldBackgroundColor,
-            border: Border(
-              top: BorderSide(
-                color: Theme.of(context).colorScheme.outlineVariant,
-              ),
+        bottomNavigationBar: _HomeComposeNavBar(
+          currentIndex: _currentIndex,
+          onSelectTab: (index) => setState(() => _currentIndex = index),
+          onCompose: _openComposePost,
+        ),
+      ),
+    );
+  }
+
+  Future<void> _openComposePost() async {
+    final created = await context.push('/compose');
+    if (!mounted) return;
+    if (created == true) {
+      await context.read<FeedProvider>().loadHomeFeed(refresh: true);
+      if (_currentIndex != 0) {
+        setState(() => _currentIndex = 0);
+      }
+    }
+  }
+}
+
+/// Bottom tabs with a raised center compose control for posts without a trip.
+class _HomeComposeNavBar extends StatelessWidget {
+  final int currentIndex;
+  final ValueChanged<int> onSelectTab;
+  final VoidCallback onCompose;
+
+  const _HomeComposeNavBar({
+    required this.currentIndex,
+    required this.onSelectTab,
+    required this.onCompose,
+  });
+
+  static const double _composeSize = 56;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final selected = theme.bottomNavigationBarTheme.selectedItemColor ??
+        scheme.onSurface;
+    final unselected = theme.bottomNavigationBarTheme.unselectedItemColor ??
+        scheme.onSurfaceVariant;
+
+    return Material(
+      color: theme.scaffoldBackgroundColor,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          border: Border(
+            top: BorderSide(color: scheme.outlineVariant),
+          ),
+        ),
+        child: SafeArea(
+          top: false,
+          child: SizedBox(
+            height: 64,
+            child: Stack(
+              clipBehavior: Clip.none,
+              alignment: Alignment.bottomCenter,
+              children: [
+                Row(
+                  children: [
+                    _NavTab(
+                      icon: Icons.home_outlined,
+                      activeIcon: Icons.home,
+                      label: 'Feed',
+                      selected: currentIndex == 0,
+                      selectedColor: selected,
+                      unselectedColor: unselected,
+                      onTap: () => onSelectTab(0),
+                    ),
+                    _NavTab(
+                      icon: Icons.map_outlined,
+                      activeIcon: Icons.map,
+                      label: 'Trips',
+                      selected: currentIndex == 1,
+                      selectedColor: selected,
+                      unselectedColor: unselected,
+                      onTap: () => onSelectTab(1),
+                    ),
+                    const SizedBox(width: _composeSize + 8),
+                    _NavTab(
+                      icon: Icons.explore_outlined,
+                      activeIcon: Icons.explore,
+                      label: 'Discover',
+                      selected: currentIndex == 2,
+                      selectedColor: selected,
+                      unselectedColor: unselected,
+                      onTap: () => onSelectTab(2),
+                    ),
+                    _NavTab(
+                      icon: Icons.person_outlined,
+                      activeIcon: Icons.person,
+                      label: 'Profile',
+                      selected: currentIndex == 3,
+                      selectedColor: selected,
+                      unselectedColor: unselected,
+                      onTap: () => onSelectTab(3),
+                    ),
+                  ],
+                ),
+                Positioned(
+                  top: -14,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Material(
+                        color: AppTheme.accent,
+                        elevation: 3,
+                        shadowColor: AppTheme.accent.withValues(alpha: 0.35),
+                        shape: const CircleBorder(),
+                        child: InkWell(
+                          customBorder: const CircleBorder(),
+                          onTap: onCompose,
+                          child: const SizedBox(
+                            width: _composeSize,
+                            height: _composeSize,
+                            child: Icon(
+                              Icons.add,
+                              color: Colors.white,
+                              size: 30,
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        'Post',
+                        style: theme.textTheme.labelSmall?.copyWith(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: unselected,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ),
           ),
-          child: BottomNavigationBar(
-          currentIndex: _currentIndex,
-          onTap: (index) {
-            setState(() {
-              _currentIndex = index;
-            });
-          },
-          type: BottomNavigationBarType.fixed,
-          items: const [
-            BottomNavigationBarItem(
-              icon: Icon(Icons.home_outlined),
-              activeIcon: Icon(Icons.home),
-              label: 'Feed',
-            ),
-            BottomNavigationBarItem(
-              icon: Icon(Icons.map_outlined),
-              activeIcon: Icon(Icons.map),
-              label: 'Trips',
-            ),
-            BottomNavigationBarItem(
-              icon: Icon(Icons.explore_outlined),
-              activeIcon: Icon(Icons.explore),
-              label: 'Discover',
-            ),
-            BottomNavigationBarItem(
-              icon: Icon(Icons.person_outlined),
-              activeIcon: Icon(Icons.person),
-              label: 'Profile',
+        ),
+      ),
+    );
+  }
+}
+
+class _NavTab extends StatelessWidget {
+  final IconData icon;
+  final IconData activeIcon;
+  final String label;
+  final bool selected;
+  final Color selectedColor;
+  final Color unselectedColor;
+  final VoidCallback onTap;
+
+  const _NavTab({
+    required this.icon,
+    required this.activeIcon,
+    required this.label,
+    required this.selected,
+    required this.selectedColor,
+    required this.unselectedColor,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final color = selected ? selectedColor : unselectedColor;
+    return Expanded(
+      child: InkWell(
+        onTap: onTap,
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(selected ? activeIcon : icon, color: color, size: 24),
+            const SizedBox(height: 2),
+            Text(
+              label,
+              style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                    fontSize: 11,
+                    fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
+                    color: color,
+                  ),
             ),
           ],
-          ),
         ),
       ),
     );
@@ -319,16 +464,6 @@ class _HomeFeedScreenState extends State<HomeFeedScreen> {
           ],
         ),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.add_box_outlined),
-            tooltip: 'New post',
-            onPressed: () async {
-              final created = await context.push('/compose');
-              if (created == true && context.mounted) {
-                await context.read<FeedProvider>().loadHomeFeed(refresh: true);
-              }
-            },
-          ),
           IconButton(
             icon: const Icon(Icons.chat_bubble_outline),
             tooltip: 'Messages',
