@@ -1,5 +1,11 @@
 import { prisma } from "@/lib/prisma";
-import { ThreadEntryType } from "@prisma/client";
+import { Prisma, ThreadEntryType } from "@prisma/client";
+
+/**
+ * Soft cap for in-card swipeable thread snippets per trip.
+ * Bounds DB payload for long trips while keeping a swipeable strip.
+ */
+export const FEED_THREAD_PREVIEW_LIMIT = 20;
 
 /** Cap map pins returned with each home-feed card. */
 export const FEED_MAP_PIN_LIMIT = 8;
@@ -33,9 +39,10 @@ function pinKey(lat: number, lng: number): string {
 }
 
 /**
- * Batch-load thread entries for home-feed cards (full trip thread, swipeable).
- * Per-trip order: likeCount DESC, then createdAt DESC.
- * One query per trip on the feed page (typically ≤20 trips).
+ * Batch-load swipeable thread snippets for home-feed cards.
+ * One windowed SQL pass ranks entries per trip (likeCount, then createdAt),
+ * then a single Prisma hydrate loads media/place for those ids only.
+ * Caps each trip at FEED_THREAD_PREVIEW_LIMIT so long threads stay bounded.
  */
 export async function loadFeedThreadPreviews(
   tripIds: string[]
@@ -44,38 +51,49 @@ export async function loadFeedThreadPreviews(
   if (tripIds.length === 0) return result;
   for (const id of tripIds) result.set(id, []);
 
-  const pages = await Promise.all(
-    tripIds.map((tripId) =>
-      prisma.tripThreadEntry.findMany({
-        where: { tripId },
-        orderBy: [{ likeCount: "desc" }, { createdAt: "desc" }],
-        select: {
-          id: true,
-          tripId: true,
-          contentText: true,
-          locationName: true,
-          likeCount: true,
-          createdAt: true,
-          media: { select: { url: true } },
-          place: { select: { name: true } },
-        },
-      })
-    )
-  );
+  const ranked = await prisma.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+    SELECT id
+    FROM (
+      SELECT
+        e.id,
+        ROW_NUMBER() OVER (
+          PARTITION BY e."tripId"
+          ORDER BY e."likeCount" DESC, e."createdAt" DESC
+        ) AS rn
+      FROM "trip_thread_entries" e
+      WHERE e."tripId" IN (${Prisma.join(tripIds)})
+    ) ranked
+    WHERE rn <= ${FEED_THREAD_PREVIEW_LIMIT}
+  `);
 
-  for (const rows of pages) {
-    for (const row of rows) {
-      const list = result.get(row.tripId);
-      if (!list) continue;
-      list.push({
-        id: row.id,
-        contentText: row.contentText ?? null,
-        mediaUrl: row.media?.url ?? null,
-        placeName: row.place?.name ?? row.locationName ?? null,
-        likeCount: row.likeCount,
-        createdAt: row.createdAt.toISOString(),
-      });
-    }
+  if (ranked.length === 0) return result;
+
+  const rows = await prisma.tripThreadEntry.findMany({
+    where: { id: { in: ranked.map((row) => row.id) } },
+    orderBy: [{ likeCount: "desc" }, { createdAt: "desc" }],
+    select: {
+      id: true,
+      tripId: true,
+      contentText: true,
+      locationName: true,
+      likeCount: true,
+      createdAt: true,
+      media: { select: { url: true } },
+      place: { select: { name: true } },
+    },
+  });
+
+  for (const row of rows) {
+    const list = result.get(row.tripId);
+    if (!list || list.length >= FEED_THREAD_PREVIEW_LIMIT) continue;
+    list.push({
+      id: row.id,
+      contentText: row.contentText ?? null,
+      mediaUrl: row.media?.url ?? null,
+      placeName: row.place?.name ?? row.locationName ?? null,
+      likeCount: row.likeCount,
+      createdAt: row.createdAt.toISOString(),
+    });
   }
 
   return result;
