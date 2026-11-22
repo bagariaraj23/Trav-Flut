@@ -1,8 +1,8 @@
 import { prisma } from "@/lib/prisma";
 import { ThreadEntryType } from "@prisma/client";
 
-/** Cap thread snippets returned with each home-feed card. */
-export const FEED_THREAD_PREVIEW_LIMIT = 6;
+/** Cap thread snippets returned with each home-feed card (top liked). */
+export const FEED_THREAD_PREVIEW_LIMIT = 3;
 
 /** Cap map pins returned with each home-feed card. */
 export const FEED_MAP_PIN_LIMIT = 8;
