@@ -14,6 +14,20 @@ import 'package:tripthread/widgets/engagement/engagement_action_bar.dart';
 import 'package:tripthread/widgets/sheets/comment_bottom_sheet.dart';
 import 'package:tripthread/widgets/sheets/share_bottom_sheet.dart';
 
+
+Color _panel(BuildContext context) =>
+    AppTheme.feedPanel(Theme.of(context).brightness);
+Color _panelInk(BuildContext context) =>
+    AppTheme.feedPanelInk(Theme.of(context).brightness);
+Color _mutedSurface(BuildContext context) =>
+    AppTheme.feedMutedSurface(Theme.of(context).brightness);
+Color _mutedText(BuildContext context) =>
+    AppTheme.feedMutedText(Theme.of(context).brightness);
+Color _chipFill(BuildContext context) =>
+    AppTheme.mediaChipFill(Theme.of(context).brightness);
+Color _chipInk(BuildContext context) =>
+    AppTheme.mediaChipInk(Theme.of(context).brightness);
+
 /// Home-feed final-post card with author-chosen template bodies.
 class FinalPostFeedCard extends StatelessWidget {
   final TripFinalPost post;
@@ -132,7 +146,7 @@ class _FeedCardHeader extends StatelessWidget {
                 Text(
                   formatFeedCardSubtitle(post),
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: AppTheme.mutedForeground,
+                        color: _mutedText(context),
                       ),
                 ),
               ],
@@ -318,11 +332,11 @@ class _PostcardBodyState extends State<_PostcardBody> {
               width: double.infinity,
               child: media.isEmpty
                   ? Container(
-                      color: AppTheme.muted,
+                      color: _mutedSurface(context),
                       alignment: Alignment.center,
                       child: Icon(
                         Icons.photo_outlined,
-                        color: AppTheme.mutedForeground,
+                        color: _mutedText(context),
                         size: 40,
                       ),
                     )
@@ -338,7 +352,7 @@ class _PostcardBodyState extends State<_PostcardBody> {
                               buildOptimizedImageUrl(media[index], width: 1200),
                               fit: BoxFit.cover,
                               errorBuilder: (_, __, ___) => Container(
-                                color: AppTheme.muted,
+                                color: _mutedSurface(context),
                                 alignment: Alignment.center,
                                 child: const Icon(Icons.broken_image_outlined),
                               ),
@@ -357,19 +371,19 @@ class _PostcardBodyState extends State<_PostcardBody> {
                                   vertical: 4,
                                 ),
                                 decoration: BoxDecoration(
-                                  color: AppTheme.cream.withValues(alpha: 0.92),
+                                  color: _chipFill(context),
                                   borderRadius: BorderRadius.circular(6),
                                   border: Border.all(
-                                    color: AppTheme.mutedForeground
+                                    color: _mutedText(context)
                                         .withValues(alpha: 0.35),
                                   ),
                                 ),
                                 child: Text(
                                   stamp.toString(),
-                                  style: const TextStyle(
+                                  style: TextStyle(
                                     fontSize: 10,
                                     fontWeight: FontWeight.w600,
-                                    color: AppTheme.ink,
+                                    color: _chipInk(context),
                                   ),
                                 ),
                               ),
@@ -421,7 +435,7 @@ class _PostcardBodyState extends State<_PostcardBody> {
                   route,
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
                         letterSpacing: 0.6,
-                        color: AppTheme.mutedForeground,
+                        color: _mutedText(context),
                       ),
                 ),
               ],
@@ -431,7 +445,7 @@ class _PostcardBodyState extends State<_PostcardBody> {
                 maxLines: post.isDirectPost ? 4 : 2,
                 overflow: TextOverflow.ellipsis,
                 style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: AppTheme.ink,
+                      color: _panelInk(context),
                     ),
               ),
               // Trip recaps may pair AI summary with an author caption.
@@ -442,7 +456,7 @@ class _PostcardBodyState extends State<_PostcardBody> {
                 Text(
                   post.caption!,
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: AppTheme.mutedForeground,
+                        color: _mutedText(context),
                         fontStyle: FontStyle.italic,
                       ),
                 ),
@@ -502,7 +516,7 @@ class _MapFirstBody extends StatelessWidget {
               route,
               style: Theme.of(context).textTheme.bodySmall?.copyWith(
                     letterSpacing: 0.6,
-                    color: AppTheme.mutedForeground,
+                    color: _mutedText(context),
                   ),
             ),
           ),
@@ -525,7 +539,7 @@ class _MapFirstBody extends StatelessWidget {
                     errorBuilder: (_, __, ___) => Container(
                       width: 96,
                       height: 72,
-                      color: AppTheme.muted,
+                      color: _mutedSurface(context),
                     ),
                   ),
                 );
@@ -548,7 +562,7 @@ class _MapFirstBody extends StatelessWidget {
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
                 style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: AppTheme.ink,
+                      color: _panelInk(context),
                     ),
               ),
               if ((post.caption ?? '').trim().isNotEmpty) ...[
@@ -556,7 +570,7 @@ class _MapFirstBody extends StatelessWidget {
                 Text(
                   post.caption!,
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: AppTheme.mutedForeground,
+                        color: _mutedText(context),
                         fontStyle: FontStyle.italic,
                       ),
                 ),
@@ -621,10 +635,10 @@ class _ThreadReelBodyState extends State<_ThreadReelBody> {
                               buildOptimizedImageUrl(cover, width: 600),
                               fit: BoxFit.cover,
                               errorBuilder: (_, __, ___) =>
-                                  Container(color: AppTheme.muted),
+                                  Container(color: _mutedSurface(context)),
                             )
                           : Container(
-                              color: AppTheme.muted,
+                              color: _mutedSurface(context),
                               alignment: Alignment.center,
                               child: const Icon(Icons.photo_outlined),
                             ),
@@ -641,10 +655,10 @@ class _ThreadReelBodyState extends State<_ThreadReelBody> {
                               vertical: 4,
                             ),
                             decoration: BoxDecoration(
-                              color: AppTheme.cream.withValues(alpha: 0.95),
+                              color: _chipFill(context),
                               borderRadius: BorderRadius.circular(999),
                               border: Border.all(
-                                color: AppTheme.mutedForeground
+                                color: _mutedText(context)
                                     .withValues(alpha: 0.2),
                               ),
                             ),
@@ -675,7 +689,7 @@ class _ThreadReelBodyState extends State<_ThreadReelBody> {
                             style: Theme.of(context)
                                 .textTheme
                                 .bodySmall
-                                ?.copyWith(color: AppTheme.mutedForeground),
+                                ?.copyWith(color: _mutedText(context)),
                           ),
                         )
                       : Column(
@@ -711,7 +725,7 @@ class _ThreadReelBodyState extends State<_ThreadReelBody> {
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: AppTheme.ink,
+                      color: _panelInk(context),
                     ),
               ),
             ],
@@ -725,7 +739,7 @@ class _ThreadReelBodyState extends State<_ThreadReelBody> {
                 Text(
                   '${_page + 1} of $pageCount',
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: AppTheme.mutedForeground,
+                        color: _mutedText(context),
                       ),
                 ),
                 const Spacer(),
@@ -741,7 +755,7 @@ class _ThreadReelBodyState extends State<_ThreadReelBody> {
                           shape: BoxShape.circle,
                           color: i == _page
                               ? AppTheme.accent
-                              : AppTheme.mutedForeground.withValues(alpha: 0.35),
+                              : _mutedText(context).withValues(alpha: 0.35),
                         ),
                       ),
                     );
@@ -766,7 +780,7 @@ class _ReelSnippet extends StatelessWidget {
       width: double.infinity,
       padding: const EdgeInsets.fromLTRB(8, 6, 8, 6),
       decoration: BoxDecoration(
-        color: AppTheme.cream,
+        color: _panel(context),
         borderRadius: const BorderRadius.horizontal(right: Radius.circular(10)),
         border: const Border(
           left: BorderSide(color: AppTheme.accent, width: 2),
@@ -787,7 +801,7 @@ class _ReelSnippet extends StatelessWidget {
               maxLines: 3,
               overflow: TextOverflow.ellipsis,
               style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: AppTheme.ink,
+                    color: _panelInk(context),
                     height: 1.35,
                   ),
             ),
@@ -800,7 +814,7 @@ class _ReelSnippet extends StatelessWidget {
             ].whereType<String>().join(' · '),
             style: Theme.of(context).textTheme.bodySmall?.copyWith(
                   fontSize: 10,
-                  color: AppTheme.mutedForeground,
+                  color: _mutedText(context),
                 ),
           ),
         ],
@@ -851,10 +865,10 @@ class _MapStrip extends StatelessWidget {
                   Image.network(
                     url,
                     fit: BoxFit.cover,
-                    errorBuilder: (_, __, ___) => _mapFallback(),
+                    errorBuilder: (_, __, ___) => _mapFallback(context),
                   )
                 else
-                  _mapFallback(),
+                  _mapFallback(context),
                 if (showOpenChip)
                   Positioned(
                     top: 12,
@@ -865,11 +879,11 @@ class _MapStrip extends StatelessWidget {
                         vertical: 5,
                       ),
                       decoration: BoxDecoration(
-                        color: AppTheme.card,
+                        color: Theme.of(context).colorScheme.surface,
                         borderRadius: BorderRadius.circular(999),
                         border: Border.all(
                           color:
-                              AppTheme.mutedForeground.withValues(alpha: 0.35),
+                              _mutedText(context).withValues(alpha: 0.35),
                         ),
                       ),
                       child: const Text(
@@ -892,15 +906,15 @@ class _MapStrip extends StatelessWidget {
                         vertical: 3,
                       ),
                       decoration: BoxDecoration(
-                        color: AppTheme.cream.withValues(alpha: 0.9),
+                        color: _chipFill(context),
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: Text(
                         label!,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 11,
                           fontWeight: FontWeight.w600,
-                          color: AppTheme.ink,
+                          color: _chipInk(context),
                         ),
                       ),
                     ),
@@ -917,8 +931,8 @@ class _MapStrip extends StatelessWidget {
                           begin: Alignment.topCenter,
                           end: Alignment.bottomCenter,
                           colors: [
-                            AppTheme.cream.withValues(alpha: 0),
-                            AppTheme.cream.withValues(alpha: 0.95),
+                            _chipFill(context).withValues(alpha: 0),
+                            _chipFill(context),
                           ],
                         ),
                       ),
@@ -926,7 +940,7 @@ class _MapStrip extends StatelessWidget {
                         routeScrim!,
                         style: Theme.of(context).textTheme.bodySmall?.copyWith(
                               letterSpacing: 0.6,
-                              color: AppTheme.mutedForeground,
+                              color: _mutedText(context),
                             ),
                       ),
                     ),
@@ -939,20 +953,21 @@ class _MapStrip extends StatelessWidget {
     );
   }
 
-  Widget _mapFallback() {
+  Widget _mapFallback(BuildContext context) {
     return Container(
       decoration: BoxDecoration(
         gradient: LinearGradient(
-          colors: [
-            const Color(0xFFE8F0FA),
-            AppTheme.muted,
-          ],
+          colors: AppTheme.feedMapWash(Theme.of(context).brightness),
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
       ),
       alignment: Alignment.center,
-      child: const Icon(Icons.map_outlined, color: AppTheme.accent, size: 32),
+      child: Icon(
+        Icons.map_outlined,
+        color: AppTheme.accent,
+        size: 32,
+      ),
     );
   }
 }
@@ -1043,7 +1058,7 @@ class _ThreadPagerState extends State<_ThreadPager> {
                     shape: BoxShape.circle,
                     color: i == _index
                         ? AppTheme.accent
-                        : AppTheme.mutedForeground.withValues(alpha: 0.35),
+                        : _mutedText(context).withValues(alpha: 0.35),
                   ),
                 );
               }),
@@ -1066,10 +1081,10 @@ class _ThreadEntryRow extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(8),
       decoration: BoxDecoration(
-        color: AppTheme.cream,
+        color: _panel(context),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: AppTheme.mutedForeground.withValues(alpha: 0.2),
+          color: _mutedText(context).withValues(alpha: 0.2),
         ),
       ),
       child: Row(
@@ -1084,9 +1099,9 @@ class _ThreadEntryRow extends StatelessWidget {
                   ? Image.network(
                       buildOptimizedImageUrl(entry.mediaUrl!, width: 160),
                       fit: BoxFit.cover,
-                      errorBuilder: (_, __, ___) => _placeTile(),
+                      errorBuilder: (_, __, ___) => _placeTile(context),
                     )
-                  : _placeTile(),
+                  : _placeTile(context),
             ),
           ),
           const SizedBox(width: 10),
@@ -1099,7 +1114,7 @@ class _ThreadEntryRow extends StatelessWidget {
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: AppTheme.ink,
+                        color: _panelInk(context),
                         height: 1.35,
                       ),
                 ),
@@ -1110,7 +1125,7 @@ class _ThreadEntryRow extends StatelessWidget {
                     entry.placeName ?? '',
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(
                           fontSize: 11,
-                          color: AppTheme.mutedForeground,
+                          color: _mutedText(context),
                         ),
                   ),
                 ],
@@ -1133,10 +1148,10 @@ class _ThreadEntryRow extends StatelessWidget {
     );
   }
 
-  Widget _placeTile() {
+  Widget _placeTile(BuildContext context) {
     final label = (entry.placeName ?? '').trim();
     return Container(
-      color: AppTheme.muted,
+      color: _mutedSurface(context),
       alignment: Alignment.center,
       padding: const EdgeInsets.all(4),
       child: Text(
@@ -1144,10 +1159,10 @@ class _ThreadEntryRow extends StatelessWidget {
         textAlign: TextAlign.center,
         maxLines: 2,
         overflow: TextOverflow.ellipsis,
-        style: const TextStyle(
+        style: TextStyle(
           fontSize: 10,
           fontWeight: FontWeight.w600,
-          color: AppTheme.mutedForeground,
+          color: _mutedText(context),
         ),
       ),
     );

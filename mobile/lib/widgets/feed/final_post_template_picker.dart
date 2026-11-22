@@ -17,6 +17,7 @@ class FinalPostTemplatePicker extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final muted = AppTheme.feedMutedText(Theme.of(context).brightness);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -25,7 +26,7 @@ class FinalPostTemplatePicker extends StatelessWidget {
           style: Theme.of(context).textTheme.labelLarge?.copyWith(
                 fontSize: 11,
                 letterSpacing: 1.0,
-                color: AppTheme.mutedForeground,
+                color: muted,
               ),
         ),
         const SizedBox(height: 10),
@@ -34,30 +35,30 @@ class FinalPostTemplatePicker extends StatelessWidget {
             Expanded(
               child: _Tile(
                 label: 'Postcard',
+                kind: _Kind.postcard,
                 selected: value == FinalPostTemplateChoice.postcard,
                 enabled: enabled,
                 onTap: () => onChanged(FinalPostTemplateChoice.postcard),
-                diagram: const _PostcardDiagram(),
               ),
             ),
             const SizedBox(width: 8),
             Expanded(
               child: _Tile(
                 label: 'Map',
+                kind: _Kind.map,
                 selected: value == FinalPostTemplateChoice.mapFirst,
                 enabled: enabled,
                 onTap: () => onChanged(FinalPostTemplateChoice.mapFirst),
-                diagram: const _MapDiagram(),
               ),
             ),
             const SizedBox(width: 8),
             Expanded(
               child: _Tile(
                 label: 'Threads',
+                kind: _Kind.threads,
                 selected: value == FinalPostTemplateChoice.threadReel,
                 enabled: enabled,
                 onTap: () => onChanged(FinalPostTemplateChoice.threadReel),
-                diagram: const _ThreadsDiagram(),
               ),
             ),
           ],
@@ -69,23 +70,27 @@ class FinalPostTemplatePicker extends StatelessWidget {
 
 class _Tile extends StatelessWidget {
   final String label;
+  final _Kind kind;
   final bool selected;
   final bool enabled;
   final VoidCallback onTap;
-  final Widget diagram;
 
   const _Tile({
     required this.label,
+    required this.kind,
     required this.selected,
     required this.enabled,
     required this.onTap,
-    required this.diagram,
   });
 
   @override
   Widget build(BuildContext context) {
+    final brightness = Theme.of(context).brightness;
+    final panel = AppTheme.feedPanel(brightness);
+    final ink = AppTheme.feedPanelInk(brightness);
+    final muted = AppTheme.feedMutedText(brightness);
     return Material(
-      color: AppTheme.cream,
+      color: panel,
       borderRadius: BorderRadius.circular(12),
       child: InkWell(
         onTap: enabled ? onTap : null,
@@ -97,20 +102,26 @@ class _Tile extends StatelessWidget {
             border: Border.all(
               color: selected
                   ? AppTheme.accent
-                  : AppTheme.mutedForeground.withValues(alpha: 0.2),
+                  : muted.withValues(alpha: 0.2),
               width: selected ? 2 : 1,
             ),
           ),
           child: Column(
             children: [
-              SizedBox(height: 52, child: diagram),
+              SizedBox(
+                height: 52,
+                width: double.infinity,
+                child: CustomPaint(
+                  painter: _DiagramPainter(kind: kind, brightness: brightness),
+                ),
+              ),
               const SizedBox(height: 8),
               Text(
                 label,
                 style: Theme.of(context).textTheme.labelLarge?.copyWith(
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
-                      color: AppTheme.ink,
+                      color: ink,
                     ),
               ),
             ],
@@ -121,48 +132,25 @@ class _Tile extends StatelessWidget {
   }
 }
 
-class _PostcardDiagram extends StatelessWidget {
-  const _PostcardDiagram();
-
-  @override
-  Widget build(BuildContext context) {
-    return CustomPaint(painter: _DiagramPainter(kind: _Kind.postcard));
-  }
-}
-
-class _MapDiagram extends StatelessWidget {
-  const _MapDiagram();
-
-  @override
-  Widget build(BuildContext context) {
-    return CustomPaint(painter: _DiagramPainter(kind: _Kind.map));
-  }
-}
-
-class _ThreadsDiagram extends StatelessWidget {
-  const _ThreadsDiagram();
-
-  @override
-  Widget build(BuildContext context) {
-    return CustomPaint(painter: _DiagramPainter(kind: _Kind.threads));
-  }
-}
-
 enum _Kind { postcard, map, threads }
 
 class _DiagramPainter extends CustomPainter {
   final _Kind kind;
+  final Brightness brightness;
 
-  _DiagramPainter({required this.kind});
+  _DiagramPainter({required this.kind, required this.brightness});
 
   @override
   void paint(Canvas canvas, Size size) {
-    final fill = Paint()..color = Colors.white;
+    final fill = Paint()
+      ..color = brightness == Brightness.dark
+          ? AppTheme.darkCard
+          : Colors.white;
     final stroke = Paint()
-      ..color = AppTheme.mutedForeground.withValues(alpha: 0.35)
+      ..color = AppTheme.feedMutedText(brightness).withValues(alpha: 0.35)
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1;
-    final mapFill = Paint()..color = const Color(0xFFE8F0FA);
+    final mapFill = Paint()..color = AppTheme.feedMapWash(brightness).first;
 
     RRect box(double l, double t, double r, double b) =>
         RRect.fromLTRBR(l, t, r, b, const Radius.circular(3));
@@ -189,7 +177,7 @@ class _DiagramPainter extends CustomPainter {
         );
         final stripTop = size.height * 0.74;
         final stripH = size.height * 0.18;
-        final gap = 2.0;
+        const gap = 2.0;
         final w = (size.width * 0.88 - gap * 2) / 3;
         for (var i = 0; i < 3; i++) {
           final left = size.width * 0.06 + i * (w + gap);
@@ -209,5 +197,5 @@ class _DiagramPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _DiagramPainter oldDelegate) =>
-      oldDelegate.kind != kind;
+      oldDelegate.kind != kind || oldDelegate.brightness != brightness;
 }
