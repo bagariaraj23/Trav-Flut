@@ -63,12 +63,15 @@ class FinalPostFeedCard extends StatelessWidget {
             isOwner: isOwner,
             onDelete: onDelete,
           ),
-          // Direct posts reuse the same three layouts; thread snippets stay hidden.
-          switch (post.templateChoice) {
-            FinalPostTemplateChoice.mapFirst => _MapFirstBody(post: post),
-            FinalPostTemplateChoice.threadReel => _ThreadReelBody(post: post),
-            FinalPostTemplateChoice.postcard => _PostcardBody(post: post),
-          },
+          // Posts without a trip stay postcard: no trip map-first or thread reel.
+          if (post.isDirectPost)
+            _PostcardBody(post: post)
+          else
+            switch (post.templateChoice) {
+              FinalPostTemplateChoice.mapFirst => _MapFirstBody(post: post),
+              FinalPostTemplateChoice.threadReel => _ThreadReelBody(post: post),
+              FinalPostTemplateChoice.postcard => _PostcardBody(post: post),
+            },
           _FeedCardFooter(post: post),
         ],
       ),
