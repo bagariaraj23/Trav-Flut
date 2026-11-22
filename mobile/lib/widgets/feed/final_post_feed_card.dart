@@ -49,11 +49,16 @@ class FinalPostFeedCard extends StatelessWidget {
             isOwner: isOwner,
             onDelete: onDelete,
           ),
-          switch (post.templateChoice) {
-            FinalPostTemplateChoice.mapFirst => _MapFirstBody(post: post),
-            FinalPostTemplateChoice.threadReel => _ThreadReelBody(post: post),
-            FinalPostTemplateChoice.postcard => _PostcardBody(post: post),
-          },
+          // Direct (non-trip) posts always use postcard: no thread journal to reel,
+          // and optional place is a single route chip — not a trip map-first layout.
+          if (post.isDirectPost)
+            _PostcardBody(post: post)
+          else
+            switch (post.templateChoice) {
+              FinalPostTemplateChoice.mapFirst => _MapFirstBody(post: post),
+              FinalPostTemplateChoice.threadReel => _ThreadReelBody(post: post),
+              FinalPostTemplateChoice.postcard => _PostcardBody(post: post),
+            },
           _FeedCardFooter(post: post),
         ],
       ),
@@ -125,7 +130,7 @@ class _FeedCardHeader extends StatelessWidget {
                   ),
                 ),
                 Text(
-                  formatFeedTripWindow(post.trip),
+                  formatFeedCardSubtitle(post),
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
                         color: AppTheme.mutedForeground,
                       ),
@@ -139,7 +144,11 @@ class _FeedCardHeader extends StatelessWidget {
               onSelected: (value) async {
                 if (!context.mounted) return;
                 if (value == 'edit') {
-                  context.push('/trip/${post.tripId}/final-post');
+                  if (post.isDirectPost) {
+                    context.push('/compose/${post.id}');
+                  } else if ((post.tripId ?? '').isNotEmpty) {
+                    context.push('/trip/${post.tripId}/final-post');
+                  }
                 } else if (value == 'delete' && onDelete != null) {
                   await onDelete!(context, post);
                 }
@@ -172,7 +181,7 @@ class _FeedCardFooter extends StatelessWidget {
             child: Align(
               alignment: Alignment.centerLeft,
               child: EngagementActionBar(
-                entityType: 'TRIP_FINAL_POST',
+                entityType: post.engagementEntityType,
                 entityId: post.id,
                 likeCount: post.likeCount,
                 commentCount: post.commentCount,
@@ -184,7 +193,7 @@ class _FeedCardFooter extends StatelessWidget {
                     isScrollControlled: true,
                     backgroundColor: Colors.transparent,
                     builder: (context) => CommentBottomSheet(
-                      entityType: 'TRIP_FINAL_POST',
+                      entityType: post.engagementEntityType,
                       entityId: post.id,
                     ),
                   );
@@ -194,7 +203,7 @@ class _FeedCardFooter extends StatelessWidget {
                     context: context,
                     backgroundColor: Colors.transparent,
                     builder: (context) => ShareBottomSheet(
-                      entityType: 'TRIP_FINAL_POST',
+                      entityType: post.engagementEntityType,
                       entityId: post.id,
                     ),
                   );
@@ -217,9 +226,16 @@ class _FeedCardFooter extends StatelessWidget {
           ),
           TextButton(
             onPressed: () {
-              context.push('/trip/${post.tripId}', extra: {'from': '/home'});
+              if (post.isDirectPost) {
+                context.push('/post/${post.engagementEntityType}/${post.id}');
+              } else if ((post.tripId ?? '').isNotEmpty) {
+                context.push(
+                  '/trip/${post.tripId}',
+                  extra: {'from': '/home'},
+                );
+              }
             },
-            child: const Text('Open trip'),
+            child: Text(post.isDirectPost ? 'View post' : 'Open trip'),
           ),
         ],
       ),
@@ -228,6 +244,10 @@ class _FeedCardFooter extends StatelessWidget {
 }
 
 void _openTripMap(BuildContext context, TripFinalPost post) {
+  if (post.isDirectPost || (post.tripId ?? '').isEmpty) {
+    context.push('/post/${post.engagementEntityType}/${post.id}');
+    return;
+  }
   final pins = post.mapPins ?? const <FeedMapPin>[];
   final now = DateTime.now().toUtc();
   final places = <MapPlace>[
@@ -270,13 +290,21 @@ class _PostcardBodyState extends State<_PostcardBody> {
   Widget build(BuildContext context) {
     final post = widget.post;
     final media = post.curatedMedia;
-    final stamp = (post.trip?.destinations.isNotEmpty == true)
-        ? post.trip!.destinations.first
-        : (post.trip?.mood != null
-            ? post.trip!.mood!.name.toUpperCase()
-            : null);
-    final route = formatFeedRoute(post.trip?.destinations);
+    final placeLabel = (post.locationName ?? '').trim();
+    final stamp = post.isDirectPost
+        ? (placeLabel.isEmpty ? null : placeLabel)
+        : ((post.trip?.destinations.isNotEmpty == true)
+            ? post.trip!.destinations.first
+            : (post.trip?.mood != null
+                ? post.trip!.mood!.name.toUpperCase()
+                : null));
+    final route = post.isDirectPost
+        ? placeLabel
+        : formatFeedRoute(post.trip?.destinations);
     final pins = post.mapPins ?? const <FeedMapPin>[];
+    final mapLabel = post.isDirectPost
+        ? (placeLabel.isNotEmpty ? placeLabel : 'Place')
+        : 'Route · ${pins.length} ${pins.length == 1 ? 'place' : 'places'}';
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -381,12 +409,13 @@ class _PostcardBodyState extends State<_PostcardBody> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              if ((post.trip?.title ?? '').trim().isNotEmpty)
+              if (!post.isDirectPost &&
+                  (post.trip?.title ?? '').trim().isNotEmpty)
                 Text(
                   post.trip!.title,
                   style: Theme.of(context).textTheme.headlineMedium,
                 ),
-              if (route.isNotEmpty) ...[
+              if (!post.isDirectPost && route.isNotEmpty) ...[
                 const SizedBox(height: 6),
                 Text(
                   route,
@@ -399,13 +428,16 @@ class _PostcardBodyState extends State<_PostcardBody> {
               const SizedBox(height: 8),
               Text(
                 post.summaryText,
-                maxLines: 2,
+                maxLines: post.isDirectPost ? 4 : 2,
                 overflow: TextOverflow.ellipsis,
                 style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                       color: AppTheme.ink,
                     ),
               ),
-              if ((post.caption ?? '').trim().isNotEmpty) ...[
+              // Trip recaps may pair AI summary with an author caption.
+              // Direct posts use caption as summaryText — do not duplicate.
+              if (!post.isDirectPost &&
+                  (post.caption ?? '').trim().isNotEmpty) ...[
                 const SizedBox(height: 4),
                 Text(
                   post.caption!,
@@ -424,11 +456,11 @@ class _PostcardBodyState extends State<_PostcardBody> {
             child: _MapStrip(
               pins: pins,
               height: 88,
-              label: 'Route · ${pins.length} ${pins.length == 1 ? 'place' : 'places'}',
+              label: mapLabel,
               onTap: () => _openTripMap(context, post),
             ),
           ),
-        if (post.threadPreview.isNotEmpty)
+        if (!post.isDirectPost && post.threadPreview.isNotEmpty)
           _ThreadPager(
             entries: post.threadPreview,
             entriesPerPage: 1,

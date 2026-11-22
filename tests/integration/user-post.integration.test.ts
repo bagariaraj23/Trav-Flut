@@ -64,6 +64,11 @@ describe("Direct posts", () => {
     expect(body.data.curatedMedia).toEqual([photo]);
     expect(body.data.locationName).toBe("Ridge road");
     expect(body.data.tripId).toBeNull();
+    expect(body.data.templateChoice).toBe("postcard");
+    expect(body.data.threadPreview).toEqual([]);
+    expect(body.data.mapPins).toEqual([
+      { lat: 30.7, lng: 79.1, name: "Ridge road" },
+    ]);
 
     const viewer = await createUser({ email: "direct-viewer@test.com", name: "Viewer" });
     const feed = await getFeedRoute(
@@ -74,9 +79,14 @@ describe("Direct posts", () => {
       )
     );
     const feedBody = await json(feed);
-    expect(feedBody.data.items.map((item: { id: string }) => item.id)).toContain(
-      body.data.id
+    const feedItem = feedBody.data.items.find(
+      (item: { id: string }) => item.id === body.data.id
     );
+    expect(feedItem).toBeTruthy();
+    expect(feedItem.templateChoice).toBe("postcard");
+    expect(feedItem.threadPreview).toEqual([]);
+    expect(feedItem.mapPins?.[0]?.name).toBe("Ridge road");
+    expect(feedItem.postKind).toBe("direct");
 
     const updated = await updateUserPost(
       authRequest(

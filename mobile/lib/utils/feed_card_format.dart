@@ -2,6 +2,17 @@ import 'package:intl/intl.dart';
 import 'package:tripthread/models/trip.dart';
 import 'package:tripthread/utils/locale_dates.dart';
 
+/// Header subtitle for a feed card: trip dates, or place / moment for direct posts.
+String formatFeedCardSubtitle(TripFinalPost post) {
+  if (post.isDirectPost) {
+    final place = (post.locationName ?? '').trim();
+    if (place.isNotEmpty) return place;
+    final when = post.publishedAt ?? post.createdAt;
+    return LocaleDates.mediumDate(when.toLocal());
+  }
+  return formatFeedTripWindow(post.trip);
+}
+
 /// Compact trip window for feed card headers, e.g. `12–18 Oct · 7 days`.
 String formatFeedTripWindow(Trip? trip) {
   final start = trip?.startDate;

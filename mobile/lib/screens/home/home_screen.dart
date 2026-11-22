@@ -243,8 +243,10 @@ class _HomeFeedScreenState extends State<HomeFeedScreen> {
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Delete post?'),
-        content: const Text(
-          'This removes the final post from feeds and deletes its likes and comments. You can create a new final post from the trip later.',
+        content: Text(
+          post.isDirectPost
+              ? 'This removes the post from feeds and deletes its likes and comments.'
+              : 'This removes the final post from feeds and deletes its likes and comments. You can create a new final post from the trip later.',
         ),
         actions: [
           TextButton(

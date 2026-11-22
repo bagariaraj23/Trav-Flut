@@ -164,6 +164,19 @@ export async function loadDirectPostsForFeed(args: {
 }
 
 export function toHomeFeedItem(post: UserPostRow, hasLiked: boolean) {
+  // Direct posts are not trip journals: postcard layout, no thread preview.
+  // Optional coordinates surface as a single map pin (route chip), never a trip map.
+  const mapPins =
+    post.latitude != null && post.longitude != null
+      ? [
+          {
+            lat: post.latitude,
+            lng: post.longitude,
+            name: post.locationName,
+          },
+        ]
+      : undefined;
+
   return {
     id: post.id,
     tripId: null as string | null,
@@ -172,6 +185,7 @@ export function toHomeFeedItem(post: UserPostRow, hasLiked: boolean) {
     curatedMedia: post.media,
     caption: post.caption,
     coverMediaUrl: post.media[0] ?? null,
+    templateChoice: "postcard" as const,
     generationStatus: "PUBLISHED" as const,
     isPublished: post.isPublished,
     publishedAt: post.publishedAt ? post.publishedAt.toISOString() : null,
@@ -186,6 +200,8 @@ export function toHomeFeedItem(post: UserPostRow, hasLiked: boolean) {
     latitude: post.latitude,
     longitude: post.longitude,
     placeId: post.placeId,
+    threadPreview: [],
+    mapPins,
     user: post.user
       ? {
           ...post.user,
