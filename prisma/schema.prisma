@@ -429,21 +429,23 @@ model TripFinalPost {
 
 // A post that is not tied to a trip: caption, the author's own photos, and an optional place.
 model UserPost {
-  id            String    @id @default(uuid())
-  userId        String
-  caption       String
-  media         String[]
-  locationName  String?
-  latitude      Float?
-  longitude     Float?
-  placeId       String?
-  isPublished   Boolean   @default(true)
-  publishedAt   DateTime?
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
-  likeCount     Int       @default(0)
-  commentCount  Int       @default(0)
-  shareCount    Int       @default(0)
+  id             String                   @id @default(uuid())
+  userId         String
+  caption        String
+  media          String[]
+  locationName   String?
+  latitude       Float?
+  longitude      Float?
+  placeId        String?
+  /// Same card layouts as trip finals; thread preview stays empty for direct posts.
+  templateChoice FinalPostTemplateChoice  @default(postcard)
+  isPublished    Boolean                  @default(true)
+  publishedAt    DateTime?
+  createdAt      DateTime                 @default(now())
+  updatedAt      DateTime                 @updatedAt
+  likeCount      Int                      @default(0)
+  commentCount   Int                      @default(0)
+  shareCount     Int                      @default(0)
 
   user  User   @relation(fields: [userId], references: [id], onDelete: Cascade)
   place Place? @relation(fields: [placeId], references: [id], onDelete: SetNull)

@@ -63,16 +63,12 @@ class FinalPostFeedCard extends StatelessWidget {
             isOwner: isOwner,
             onDelete: onDelete,
           ),
-          // Direct (non-trip) posts always use postcard: no thread journal to reel,
-          // and optional place is a single route chip — not a trip map-first layout.
-          if (post.isDirectPost)
-            _PostcardBody(post: post)
-          else
-            switch (post.templateChoice) {
-              FinalPostTemplateChoice.mapFirst => _MapFirstBody(post: post),
-              FinalPostTemplateChoice.threadReel => _ThreadReelBody(post: post),
-              FinalPostTemplateChoice.postcard => _PostcardBody(post: post),
-            },
+          // Direct posts reuse the same three layouts; thread snippets stay hidden.
+          switch (post.templateChoice) {
+            FinalPostTemplateChoice.mapFirst => _MapFirstBody(post: post),
+            FinalPostTemplateChoice.threadReel => _ThreadReelBody(post: post),
+            FinalPostTemplateChoice.postcard => _PostcardBody(post: post),
+          },
           _FeedCardFooter(post: post),
         ],
       ),
@@ -492,7 +488,10 @@ class _MapFirstBody extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final pins = post.mapPins ?? const <FeedMapPin>[];
-    final route = formatFeedRoute(post.trip?.destinations);
+    final place = (post.locationName ?? '').trim();
+    final route = post.isDirectPost
+        ? place
+        : formatFeedRoute(post.trip?.destinations);
     final media = post.curatedMedia;
 
     return Column(
@@ -504,8 +503,9 @@ class _MapFirstBody extends StatelessWidget {
             child: _MapStrip(
               pins: pins,
               height: 220,
-              showOpenChip: true,
-              routeScrim: route.isNotEmpty ? route : null,
+              showOpenChip: !post.isDirectPost,
+              label: post.isDirectPost && place.isNotEmpty ? place : null,
+              routeScrim: !post.isDirectPost && route.isNotEmpty ? route : null,
               onTap: () => _openTripMap(context, post),
             ),
           )
@@ -551,7 +551,8 @@ class _MapFirstBody extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              if ((post.trip?.title ?? '').trim().isNotEmpty)
+              if (!post.isDirectPost &&
+                  (post.trip?.title ?? '').trim().isNotEmpty)
                 Text(
                   post.trip!.title,
                   style: Theme.of(context).textTheme.headlineMedium,
@@ -559,13 +560,14 @@ class _MapFirstBody extends StatelessWidget {
               const SizedBox(height: 8),
               Text(
                 post.summaryText,
-                maxLines: 2,
+                maxLines: post.isDirectPost ? 4 : 2,
                 overflow: TextOverflow.ellipsis,
                 style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                       color: _panelInk(context),
                     ),
               ),
-              if ((post.caption ?? '').trim().isNotEmpty) ...[
+              if (!post.isDirectPost &&
+                  (post.caption ?? '').trim().isNotEmpty) ...[
                 const SizedBox(height: 4),
                 Text(
                   post.caption!,
@@ -578,7 +580,7 @@ class _MapFirstBody extends StatelessWidget {
             ],
           ),
         ),
-        if (post.threadPreview.isNotEmpty)
+        if (!post.isDirectPost && post.threadPreview.isNotEmpty)
           _ThreadPager(
             entries: post.threadPreview,
             entriesPerPage: 1,
@@ -606,7 +608,13 @@ class _ThreadReelBodyState extends State<_ThreadReelBody> {
     final cover = post.coverMediaUrl ??
         (post.curatedMedia.isNotEmpty ? post.curatedMedia.first : null);
     final pins = post.mapPins ?? const <FeedMapPin>[];
-    final entries = post.threadPreview;
+    // Direct posts have no trip thread; use extra photos as visual “moments”.
+    final entries = post.isDirectPost
+        ? const <FeedThreadPreviewItem>[]
+        : post.threadPreview;
+    final photoMoments = post.isDirectPost
+        ? post.curatedMedia.skip(1).take(4).toList()
+        : const <String>[];
     final pageCount =
         entries.isEmpty ? 1 : ((entries.length + 1) / 2).ceil().clamp(1, 99);
     final start = (_page * 2).clamp(0, entries.isEmpty ? 0 : entries.length);
@@ -663,7 +671,12 @@ class _ThreadReelBodyState extends State<_ThreadReelBody> {
                               ),
                             ),
                             child: Text(
-                              '${pins.length} ${pins.length == 1 ? 'place' : 'places'}',
+                              post.isDirectPost &&
+                                      (post.locationName ?? '')
+                                          .trim()
+                                          .isNotEmpty
+                                  ? post.locationName!.trim()
+                                  : '${pins.length} ${pins.length == 1 ? 'place' : 'places'}',
                               style: const TextStyle(
                                 fontSize: 11,
                                 fontWeight: FontWeight.w600,
@@ -680,19 +693,8 @@ class _ThreadReelBodyState extends State<_ThreadReelBody> {
               Expanded(
                 child: SizedBox(
                   height: 168,
-                  child: pageEntries.isEmpty
-                      ? Container(
-                          alignment: Alignment.centerLeft,
-                          padding: const EdgeInsets.all(8),
-                          child: Text(
-                            'No thread entries yet',
-                            style: Theme.of(context)
-                                .textTheme
-                                .bodySmall
-                                ?.copyWith(color: _mutedText(context)),
-                          ),
-                        )
-                      : Column(
+                  child: pageEntries.isNotEmpty
+                      ? Column(
                           children: [
                             for (var i = 0; i < pageEntries.length; i++) ...[
                               if (i > 0) const SizedBox(height: 8),
@@ -703,7 +705,62 @@ class _ThreadReelBodyState extends State<_ThreadReelBody> {
                             if (pageEntries.length == 1)
                               const Expanded(child: SizedBox()),
                           ],
-                        ),
+                        )
+                      : photoMoments.isNotEmpty
+                          ? Column(
+                              children: [
+                                for (var i = 0;
+                                    i < photoMoments.take(2).length;
+                                    i++) ...[
+                                  if (i > 0) const SizedBox(height: 8),
+                                  Expanded(
+                                    child: ClipRRect(
+                                      borderRadius: BorderRadius.circular(10),
+                                      child: Image.network(
+                                        buildOptimizedImageUrl(
+                                          photoMoments[i],
+                                          width: 400,
+                                        ),
+                                        width: double.infinity,
+                                        fit: BoxFit.cover,
+                                        errorBuilder: (_, __, ___) =>
+                                            Container(
+                                          color: _mutedSurface(context),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ],
+                            )
+                          : Container(
+                              alignment: Alignment.centerLeft,
+                              padding: const EdgeInsets.all(8),
+                              decoration: BoxDecoration(
+                                color: _panel(context),
+                                borderRadius: const BorderRadius.horizontal(
+                                  right: Radius.circular(10),
+                                ),
+                                border: const Border(
+                                  left: BorderSide(
+                                    color: AppTheme.accent,
+                                    width: 2,
+                                  ),
+                                ),
+                              ),
+                              child: Text(
+                                post.summaryText,
+                                maxLines: 6,
+                                overflow: TextOverflow.ellipsis,
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .bodySmall
+                                    ?.copyWith(
+                                      color: _panelInk(context),
+                                      height: 1.35,
+                                    ),
+                              ),
+                            ),
                 ),
               ),
             ],
@@ -714,7 +771,8 @@ class _ThreadReelBodyState extends State<_ThreadReelBody> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              if ((post.trip?.title ?? '').trim().isNotEmpty)
+              if (!post.isDirectPost &&
+                  (post.trip?.title ?? '').trim().isNotEmpty)
                 Text(
                   post.trip!.title,
                   style: Theme.of(context).textTheme.headlineMedium,
@@ -722,7 +780,7 @@ class _ThreadReelBodyState extends State<_ThreadReelBody> {
               const SizedBox(height: 6),
               Text(
                 post.summaryText,
-                maxLines: 1,
+                maxLines: post.isDirectPost ? 3 : 1,
                 overflow: TextOverflow.ellipsis,
                 style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                       color: _panelInk(context),

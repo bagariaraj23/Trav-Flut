@@ -31,6 +31,7 @@ export type DirectPostInput = {
   latitude?: number | null;
   longitude?: number | null;
   placeId?: string | null;
+  templateChoice?: "postcard" | "map_first" | "thread_reel" | null;
 };
 
 type UserPostRow = Prisma.UserPostGetPayload<{ include: { user: { select: typeof userSelect } } }>;
@@ -164,8 +165,8 @@ export async function loadDirectPostsForFeed(args: {
 }
 
 export function toHomeFeedItem(post: UserPostRow, hasLiked: boolean) {
-  // Direct posts are not trip journals: postcard layout, no thread preview.
-  // Optional coordinates surface as a single map pin (route chip), never a trip map.
+  // Direct posts share trip card layouts but never carry trip thread previews.
+  // Optional coordinates surface as a single map pin (route chip).
   const mapPins =
     post.latitude != null && post.longitude != null
       ? [
@@ -185,7 +186,7 @@ export function toHomeFeedItem(post: UserPostRow, hasLiked: boolean) {
     curatedMedia: post.media,
     caption: post.caption,
     coverMediaUrl: post.media[0] ?? null,
-    templateChoice: "postcard" as const,
+    templateChoice: post.templateChoice ?? "postcard",
     generationStatus: "PUBLISHED" as const,
     isPublished: post.isPublished,
     publishedAt: post.publishedAt ? post.publishedAt.toISOString() : null,
@@ -267,6 +268,12 @@ async function normalize(
     placeId = null;
   }
 
+  const allowed = new Set(["postcard", "map_first", "thread_reel"]);
+  const templateChoice =
+    input.templateChoice && allowed.has(input.templateChoice)
+      ? input.templateChoice
+      : "postcard";
+
   return {
     caption,
     media,
@@ -274,6 +281,7 @@ async function normalize(
     latitude,
     longitude,
     placeId,
+    templateChoice,
   };
 }
 
