@@ -373,6 +373,44 @@ async function seed(prisma: AppPrismaClient): Promise<void> {
 
   console.log("Final posts: Tokyo (postcard), Bali (thread_reel), Paris (map_first).");
 
+  // Direct posts (no trip) — feed renders these as postcard-only cards.
+  await prisma.userPost.deleteMany({
+    where: { userId: { in: [alice.id, bob.id, carol.id] } },
+  });
+  await prisma.userPost.create({
+    data: {
+      userId: bob.id,
+      caption:
+        "Coffee stop between trains — no trip thread, just a moment from the road.",
+      media: [
+        "https://images.pexels.com/photos/302899/pexels-photo-302899.jpeg?auto=compress&cs=tinysrgb&w=600",
+        "https://images.pexels.com/photos/374885/pexels-photo-374885.jpeg?auto=compress&cs=tinysrgb&w=600",
+      ],
+      locationName: "Kyoto Station",
+      latitude: 34.9858,
+      longitude: 135.7588,
+      templateChoice: "postcard",
+      isPublished: true,
+      publishedAt: new Date(Date.now() - 60 * 60 * 1000),
+    },
+  });
+  await prisma.userPost.create({
+    data: {
+      userId: carol.id,
+      caption: "Sunset walk with no itinerary — a quick share between trips.",
+      media: [
+        "https://images.pexels.com/photos/1134176/pexels-photo-1134176.jpeg?auto=compress&cs=tinysrgb&w=600",
+      ],
+      locationName: "Seminyak Beach",
+      latitude: -8.6913,
+      longitude: 115.1571,
+      templateChoice: "postcard",
+      isPublished: true,
+      publishedAt: new Date(Date.now() - 30 * 60 * 1000),
+    },
+  });
+  console.log("Direct posts (no trip): Bob Kyoto coffee, Carol Seminyak walk.");
+
   await prisma.placeOnTrip.createMany({
     data: [
       { tripId: tripTokyo.id, placeId: placeTokyo.id, order: 1 },

@@ -656,156 +656,167 @@ class _ThreadReelBodyState extends State<_ThreadReelBody> {
       children: [
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 14),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              SizedBox(
-                width: MediaQuery.sizeOf(context).width * 0.36,
-                height: 168,
-                child: Stack(
-                  fit: StackFit.expand,
-                  children: [
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(12),
-                      child: cover != null
-                          ? Image.network(
-                              buildOptimizedImageUrl(cover, width: 600),
-                              fit: BoxFit.cover,
-                              errorBuilder: (_, __, ___) =>
-                                  Container(color: _mutedSurface(context)),
-                            )
-                          : Container(
-                              color: _mutedSurface(context),
-                              alignment: Alignment.center,
-                              child: const Icon(Icons.photo_outlined),
-                            ),
-                    ),
-                    if (pins.isNotEmpty)
-                      Positioned(
-                        left: 8,
-                        bottom: 8,
-                        child: GestureDetector(
-                          onTap: () => _openTripMap(context, post),
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 8,
-                              vertical: 4,
-                            ),
-                            decoration: BoxDecoration(
-                              color: _chipFill(context),
-                              borderRadius: BorderRadius.circular(999),
-                              border: Border.all(
-                                color: _mutedText(context)
-                                    .withValues(alpha: 0.2),
-                              ),
-                            ),
-                            child: Text(
-                              post.isDirectPost &&
-                                      (post.locationName ?? '')
-                                          .trim()
-                                          .isNotEmpty
-                                  ? post.locationName!.trim()
-                                  : '${pins.length} ${pins.length == 1 ? 'place' : 'places'}',
-                              style: const TextStyle(
-                                fontSize: 11,
-                                fontWeight: FontWeight.w600,
-                                color: AppTheme.accent,
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              // Size cover from the card width (not the viewport) so the
+              // side-by-side reel stays visible on wide desktop browsers.
+              final coverWidth =
+                  (constraints.maxWidth * 0.42).clamp(120.0, 168.0);
+              return Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  SizedBox(
+                    width: coverWidth,
+                    height: 168,
+                    child: Stack(
+                      fit: StackFit.expand,
+                      children: [
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(12),
+                          child: cover != null
+                              ? Image.network(
+                                  buildOptimizedImageUrl(cover, width: 600),
+                                  fit: BoxFit.cover,
+                                  errorBuilder: (_, __, ___) =>
+                                      Container(color: _mutedSurface(context)),
+                                )
+                              : Container(
+                                  color: _mutedSurface(context),
+                                  alignment: Alignment.center,
+                                  child: const Icon(Icons.photo_outlined),
+                                ),
+                        ),
+                        if (pins.isNotEmpty)
+                          Positioned(
+                            left: 8,
+                            bottom: 8,
+                            child: GestureDetector(
+                              onTap: () => _openTripMap(context, post),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 4,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: _chipFill(context),
+                                  borderRadius: BorderRadius.circular(999),
+                                  border: Border.all(
+                                    color: _mutedText(context)
+                                        .withValues(alpha: 0.2),
+                                  ),
+                                ),
+                                child: Text(
+                                  post.isDirectPost &&
+                                          (post.locationName ?? '')
+                                              .trim()
+                                              .isNotEmpty
+                                      ? post.locationName!.trim()
+                                      : '${pins.length} ${pins.length == 1 ? 'place' : 'places'}',
+                                  style: const TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w600,
+                                    color: AppTheme.accent,
+                                  ),
+                                ),
                               ),
                             ),
                           ),
-                        ),
-                      ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: SizedBox(
-                  height: 168,
-                  child: pages.isNotEmpty
-                      ? PageView.builder(
-                          controller: _controller,
-                          onPageChanged: (i) => setState(() => _page = i),
-                          itemCount: pages.length,
-                          itemBuilder: (context, pageIndex) {
-                            final pageEntries = pages[pageIndex];
-                            return Column(
-                              children: [
-                                for (var i = 0;
-                                    i < pageEntries.length;
-                                    i++) ...[
-                                  if (i > 0) const SizedBox(height: 8),
-                                  Expanded(
-                                    child: _ReelSnippet(
-                                      entry: pageEntries[i],
-                                      tripId: post.tripId,
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: SizedBox(
+                      height: 168,
+                      child: pages.isNotEmpty
+                          ? PageView.builder(
+                              controller: _controller,
+                              onPageChanged: (i) =>
+                                  setState(() => _page = i),
+                              itemCount: pages.length,
+                              itemBuilder: (context, pageIndex) {
+                                final pageEntries = pages[pageIndex];
+                                return Column(
+                                  children: [
+                                    for (var i = 0;
+                                        i < pageEntries.length;
+                                        i++) ...[
+                                      if (i > 0) const SizedBox(height: 8),
+                                      Expanded(
+                                        child: _ReelSnippet(
+                                          entry: pageEntries[i],
+                                          tripId: post.tripId,
+                                        ),
+                                      ),
+                                    ],
+                                    if (pageEntries.length == 1)
+                                      const Expanded(child: SizedBox()),
+                                  ],
+                                );
+                              },
+                            )
+                          : photoMoments.isNotEmpty
+                              ? Column(
+                                  children: [
+                                    for (var i = 0;
+                                        i < photoMoments.take(2).length;
+                                        i++) ...[
+                                      if (i > 0) const SizedBox(height: 8),
+                                      Expanded(
+                                        child: ClipRRect(
+                                          borderRadius:
+                                              BorderRadius.circular(10),
+                                          child: Image.network(
+                                            buildOptimizedImageUrl(
+                                              photoMoments[i],
+                                              width: 400,
+                                            ),
+                                            width: double.infinity,
+                                            fit: BoxFit.cover,
+                                            errorBuilder: (_, __, ___) =>
+                                                Container(
+                                              color: _mutedSurface(context),
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ],
+                                )
+                              : Container(
+                                  alignment: Alignment.centerLeft,
+                                  padding: const EdgeInsets.all(8),
+                                  decoration: BoxDecoration(
+                                    color: _panel(context),
+                                    borderRadius:
+                                        const BorderRadius.horizontal(
+                                      right: Radius.circular(10),
                                     ),
-                                  ),
-                                ],
-                                if (pageEntries.length == 1)
-                                  const Expanded(child: SizedBox()),
-                              ],
-                            );
-                          },
-                        )
-                      : photoMoments.isNotEmpty
-                          ? Column(
-                              children: [
-                                for (var i = 0;
-                                    i < photoMoments.take(2).length;
-                                    i++) ...[
-                                  if (i > 0) const SizedBox(height: 8),
-                                  Expanded(
-                                    child: ClipRRect(
-                                      borderRadius: BorderRadius.circular(10),
-                                      child: Image.network(
-                                        buildOptimizedImageUrl(
-                                          photoMoments[i],
-                                          width: 400,
-                                        ),
-                                        width: double.infinity,
-                                        fit: BoxFit.cover,
-                                        errorBuilder: (_, __, ___) =>
-                                            Container(
-                                          color: _mutedSurface(context),
-                                        ),
+                                    border: const Border(
+                                      left: BorderSide(
+                                        color: AppTheme.accent,
+                                        width: 2,
                                       ),
                                     ),
                                   ),
-                                ],
-                              ],
-                            )
-                          : Container(
-                              alignment: Alignment.centerLeft,
-                              padding: const EdgeInsets.all(8),
-                              decoration: BoxDecoration(
-                                color: _panel(context),
-                                borderRadius: const BorderRadius.horizontal(
-                                  right: Radius.circular(10),
-                                ),
-                                border: const Border(
-                                  left: BorderSide(
-                                    color: AppTheme.accent,
-                                    width: 2,
+                                  child: Text(
+                                    post.summaryText,
+                                    maxLines: 6,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .bodySmall
+                                        ?.copyWith(
+                                          color: _panelInk(context),
+                                          height: 1.35,
+                                        ),
                                   ),
                                 ),
-                              ),
-                              child: Text(
-                                post.summaryText,
-                                maxLines: 6,
-                                overflow: TextOverflow.ellipsis,
-                                style: Theme.of(context)
-                                    .textTheme
-                                    .bodySmall
-                                    ?.copyWith(
-                                      color: _panelInk(context),
-                                      height: 1.35,
-                                    ),
-                              ),
-                            ),
-                ),
-              ),
-            ],
+                    ),
+                  ),
+                ],
+              );
+            },
           ),
         ),
         Padding(
