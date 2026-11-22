@@ -1,9 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { ThreadEntryType } from "@prisma/client";
 
-/** Cap thread snippets returned with each home-feed card (top liked). */
-export const FEED_THREAD_PREVIEW_LIMIT = 3;
-
 /** Cap map pins returned with each home-feed card. */
 export const FEED_MAP_PIN_LIMIT = 8;
 
@@ -36,9 +33,9 @@ function pinKey(lat: number, lng: number): string {
 }
 
 /**
- * Batch-load short thread previews for home-feed cards.
- * Per-trip top N by likeCount DESC, createdAt DESC.
- * One bounded query per trip on the feed page (typically ≤20).
+ * Batch-load thread entries for home-feed cards (full trip thread, swipeable).
+ * Per-trip order: likeCount DESC, then createdAt DESC.
+ * One query per trip on the feed page (typically ≤20 trips).
  */
 export async function loadFeedThreadPreviews(
   tripIds: string[]
@@ -52,7 +49,6 @@ export async function loadFeedThreadPreviews(
       prisma.tripThreadEntry.findMany({
         where: { tripId },
         orderBy: [{ likeCount: "desc" }, { createdAt: "desc" }],
-        take: FEED_THREAD_PREVIEW_LIMIT,
         select: {
           id: true,
           tripId: true,

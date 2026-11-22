@@ -287,6 +287,18 @@ void _openTripMap(BuildContext context, TripFinalPost post) {
   );
 }
 
+void _openThreadEntry(
+  BuildContext context, {
+  required String? tripId,
+  required String entryId,
+}) {
+  if ((tripId ?? '').isEmpty || entryId.isEmpty) return;
+  context.push(
+    '/trip/$tripId/thread',
+    extra: {'highlightEntryId': entryId},
+  );
+}
+
 class _PostcardBody extends StatefulWidget {
   final TripFinalPost post;
 
@@ -475,6 +487,7 @@ class _PostcardBodyState extends State<_PostcardBody> {
           ),
         if (!post.isDirectPost && post.threadPreview.isNotEmpty)
           _ThreadPager(
+            tripId: post.tripId,
             entries: post.threadPreview,
             entriesPerPage: 1,
           ),
@@ -585,6 +598,7 @@ class _MapFirstBody extends StatelessWidget {
         ),
         if (!post.isDirectPost && post.threadPreview.isNotEmpty)
           _ThreadPager(
+            tripId: post.tripId,
             entries: post.threadPreview,
             entriesPerPage: 1,
           ),
@@ -603,7 +617,20 @@ class _ThreadReelBody extends StatefulWidget {
 }
 
 class _ThreadReelBodyState extends State<_ThreadReelBody> {
+  late final PageController _controller;
   int _page = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = PageController();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -618,12 +645,11 @@ class _ThreadReelBodyState extends State<_ThreadReelBody> {
     final photoMoments = post.isDirectPost
         ? post.curatedMedia.skip(1).take(4).toList()
         : const <String>[];
-    final pageCount =
-        entries.isEmpty ? 1 : ((entries.length + 1) / 2).ceil().clamp(1, 99);
-    final start = (_page * 2).clamp(0, entries.isEmpty ? 0 : entries.length);
-    final pageEntries = entries.isEmpty
-        ? const <FeedThreadPreviewItem>[]
-        : entries.skip(start).take(2).toList();
+    final pages = <List<FeedThreadPreviewItem>>[];
+    for (var i = 0; i < entries.length; i += 2) {
+      pages.add(entries.skip(i).take(2).toList());
+    }
+    final pageCount = pages.isEmpty ? 1 : pages.length;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -696,18 +722,31 @@ class _ThreadReelBodyState extends State<_ThreadReelBody> {
               Expanded(
                 child: SizedBox(
                   height: 168,
-                  child: pageEntries.isNotEmpty
-                      ? Column(
-                          children: [
-                            for (var i = 0; i < pageEntries.length; i++) ...[
-                              if (i > 0) const SizedBox(height: 8),
-                              Expanded(
-                                child: _ReelSnippet(entry: pageEntries[i]),
-                              ),
-                            ],
-                            if (pageEntries.length == 1)
-                              const Expanded(child: SizedBox()),
-                          ],
+                  child: pages.isNotEmpty
+                      ? PageView.builder(
+                          controller: _controller,
+                          onPageChanged: (i) => setState(() => _page = i),
+                          itemCount: pages.length,
+                          itemBuilder: (context, pageIndex) {
+                            final pageEntries = pages[pageIndex];
+                            return Column(
+                              children: [
+                                for (var i = 0;
+                                    i < pageEntries.length;
+                                    i++) ...[
+                                  if (i > 0) const SizedBox(height: 8),
+                                  Expanded(
+                                    child: _ReelSnippet(
+                                      entry: pageEntries[i],
+                                      tripId: post.tripId,
+                                    ),
+                                  ),
+                                ],
+                                if (pageEntries.length == 1)
+                                  const Expanded(child: SizedBox()),
+                              ],
+                            );
+                          },
                         )
                       : photoMoments.isNotEmpty
                           ? Column(
@@ -792,7 +831,7 @@ class _ThreadReelBodyState extends State<_ThreadReelBody> {
             ],
           ),
         ),
-        if (entries.length > 2)
+        if (pages.length > 1)
           Padding(
             padding: const EdgeInsets.fromLTRB(14, 8, 14, 0),
             child: Row(
@@ -807,7 +846,13 @@ class _ThreadReelBodyState extends State<_ThreadReelBody> {
                 Row(
                   children: List.generate(pageCount, (i) {
                     return GestureDetector(
-                      onTap: () => setState(() => _page = i),
+                      onTap: () {
+                        _controller.animateToPage(
+                          i,
+                          duration: const Duration(milliseconds: 220),
+                          curve: Curves.easeOut,
+                        );
+                      },
                       child: Container(
                         width: 6,
                         height: 6,
@@ -832,53 +877,69 @@ class _ThreadReelBodyState extends State<_ThreadReelBody> {
 
 class _ReelSnippet extends StatelessWidget {
   final FeedThreadPreviewItem entry;
+  final String? tripId;
 
-  const _ReelSnippet({required this.entry});
+  const _ReelSnippet({
+    required this.entry,
+    required this.tripId,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.fromLTRB(8, 6, 8, 6),
-      decoration: BoxDecoration(
-        color: _panel(context),
-        borderRadius: const BorderRadius.horizontal(right: Radius.circular(10)),
-        border: const Border(
-          left: BorderSide(color: AppTheme.accent, width: 2),
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () => _openThreadEntry(
+          context,
+          tripId: tripId,
+          entryId: entry.id,
         ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Expanded(
-            child: Text(
-              () {
-                final body = (entry.contentText ?? '').trim();
-                if (body.isNotEmpty) return body;
-                final place = (entry.placeName ?? '').trim();
-                if (place.isNotEmpty) return place;
-                return 'Thread entry';
-              }(),
-              maxLines: 3,
-              overflow: TextOverflow.ellipsis,
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: _panelInk(context),
-                    height: 1.35,
-                  ),
+        borderRadius: const BorderRadius.horizontal(right: Radius.circular(10)),
+        child: Container(
+          width: double.infinity,
+          padding: const EdgeInsets.fromLTRB(8, 6, 8, 6),
+          decoration: BoxDecoration(
+            color: _panel(context),
+            borderRadius:
+                const BorderRadius.horizontal(right: Radius.circular(10)),
+            border: const Border(
+              left: BorderSide(color: AppTheme.accent, width: 2),
             ),
           ),
-          const SizedBox(height: 4),
-          Text(
-            [
-              if ((entry.placeName ?? '').trim().isNotEmpty) entry.placeName,
-              if (entry.likeCount > 0) '♥ ${entry.likeCount}',
-            ].whereType<String>().join(' · '),
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  fontSize: 10,
-                  color: _mutedText(context),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Text(
+                  () {
+                    final body = (entry.contentText ?? '').trim();
+                    if (body.isNotEmpty) return body;
+                    final place = (entry.placeName ?? '').trim();
+                    if (place.isNotEmpty) return place;
+                    return 'Thread entry';
+                  }(),
+                  maxLines: 3,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: _panelInk(context),
+                        height: 1.35,
+                      ),
                 ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                [
+                  if ((entry.placeName ?? '').trim().isNotEmpty) entry.placeName,
+                  if (entry.likeCount > 0) '♥ ${entry.likeCount}',
+                ].whereType<String>().join(' · '),
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      fontSize: 10,
+                      color: _mutedText(context),
+                    ),
+              ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }
@@ -1034,10 +1095,12 @@ class _MapStrip extends StatelessWidget {
 }
 
 class _ThreadPager extends StatefulWidget {
+  final String? tripId;
   final List<FeedThreadPreviewItem> entries;
   final int entriesPerPage;
 
   const _ThreadPager({
+    required this.tripId,
     required this.entries,
     required this.entriesPerPage,
   });
@@ -1098,7 +1161,10 @@ class _ThreadPagerState extends State<_ThreadPager> {
                       if (i > 0) const SizedBox(height: 8),
                       SizedBox(
                         height: rowHeight,
-                        child: _ThreadEntryRow(entry: page[i]),
+                        child: _ThreadEntryRow(
+                          entry: page[i],
+                          tripId: widget.tripId,
+                        ),
                       ),
                     ],
                   ],
@@ -1133,78 +1199,95 @@ class _ThreadPagerState extends State<_ThreadPager> {
 
 class _ThreadEntryRow extends StatelessWidget {
   final FeedThreadPreviewItem entry;
+  final String? tripId;
 
-  const _ThreadEntryRow({required this.entry});
+  const _ThreadEntryRow({
+    required this.entry,
+    required this.tripId,
+  });
 
   @override
   Widget build(BuildContext context) {
     final text = (entry.contentText ?? '').trim();
-    return Container(
-      padding: const EdgeInsets.all(8),
-      decoration: BoxDecoration(
-        color: _panel(context),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: _mutedText(context).withValues(alpha: 0.2),
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () => _openThreadEntry(
+          context,
+          tripId: tripId,
+          entryId: entry.id,
         ),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          ClipRRect(
-            borderRadius: BorderRadius.circular(10),
-            child: SizedBox(
-              width: 56,
-              height: 56,
-              child: entry.mediaUrl != null
-                  ? Image.network(
-                      buildOptimizedImageUrl(entry.mediaUrl!, width: 160),
-                      fit: BoxFit.cover,
-                      errorBuilder: (_, __, ___) => _placeTile(context),
-                    )
-                  : _placeTile(context),
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: _panel(context),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: _mutedText(context).withValues(alpha: 0.2),
             ),
           ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  text.isEmpty ? (entry.placeName ?? 'Thread entry') : text,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: _panelInk(context),
-                        height: 1.35,
-                      ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              ClipRRect(
+                borderRadius: BorderRadius.circular(10),
+                child: SizedBox(
+                  width: 56,
+                  height: 56,
+                  child: entry.mediaUrl != null
+                      ? Image.network(
+                          buildOptimizedImageUrl(entry.mediaUrl!, width: 160),
+                          fit: BoxFit.cover,
+                          errorBuilder: (_, __, ___) => _placeTile(context),
+                        )
+                      : _placeTile(context),
                 ),
-                if ((entry.placeName ?? '').trim().isNotEmpty &&
-                    text.isNotEmpty) ...[
-                  const SizedBox(height: 4),
-                  Text(
-                    entry.placeName ?? '',
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          fontSize: 11,
-                          color: _mutedText(context),
-                        ),
-                  ),
-                ],
-                if (entry.likeCount > 0) ...[
-                  const SizedBox(height: 2),
-                  Text(
-                    '♥ ${entry.likeCount}',
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600,
-                          color: AppTheme.likeRose,
-                        ),
-                  ),
-                ],
-              ],
-            ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      text.isEmpty
+                          ? (entry.placeName ?? 'Thread entry')
+                          : text,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color: _panelInk(context),
+                            height: 1.35,
+                          ),
+                    ),
+                    if ((entry.placeName ?? '').trim().isNotEmpty &&
+                        text.isNotEmpty) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        entry.placeName ?? '',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                              fontSize: 11,
+                              color: _mutedText(context),
+                            ),
+                      ),
+                    ],
+                    if (entry.likeCount > 0) ...[
+                      const SizedBox(height: 2),
+                      Text(
+                        '♥ ${entry.likeCount}',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                              color: AppTheme.likeRose,
+                            ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }
