@@ -16,7 +16,7 @@ Start with the system overview, then the feature that you are changing. The data
 | [Profiles and privacy](./03-profiles-and-privacy.md) | Self profile, public profile, search, account deletion |
 | [Follow system](./04-follow-system.md) | Public follow, private requests, Restrict, and Block |
 | [Trip lifecycle](./05-trip-lifecycle.md) | Create, schedule, status, participants, invites, leave |
-| [Thread and final posts](./06-thread-and-final-posts.md) | Entries, tags, purge, one final post per member |
+| [Thread and final posts](./06-thread-and-final-posts.md) | Entries, tags, purge, one final post per member, templates, direct posts |
 | [Media and Cloudinary](./07-media-cloudinary.md) | Signed upload, confirm, quota, orphans |
 | [Places, maps, and location](./08-places-maps-location.md) | Mapbox search, pin drop, static maps, device geocoder |
 | [Redis, cache, and queues](./09-redis-cache-and-queues.md) | Two-tier cache, locks, rate limits, what is not a queue |

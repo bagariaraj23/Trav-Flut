@@ -82,6 +82,19 @@ class FinalPostProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  void setTemplateChoice(FinalPostTemplateChoice choice) {
+    if (!_canEdit || _draft == null) return;
+    if (_draft!.templateChoice == choice) return;
+    _draft = _draft!.copyWith(templateChoice: choice);
+    _pendingUpdates['templateChoice'] = switch (choice) {
+      FinalPostTemplateChoice.postcard => 'postcard',
+      FinalPostTemplateChoice.mapFirst => 'map_first',
+      FinalPostTemplateChoice.threadReel => 'thread_reel',
+    };
+    _scheduleAutoSave();
+    notifyListeners();
+  }
+
   void setCuratedMedia(List<String> mediaUrls) {
     if (!_canEdit || _draft == null) return;
     final sanitized = mediaUrls.toSet().toList();

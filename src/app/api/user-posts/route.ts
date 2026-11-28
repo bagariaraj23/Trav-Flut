@@ -17,6 +17,7 @@ const bodySchema = z.object({
   latitude: z.number().nullable().optional(),
   longitude: z.number().nullable().optional(),
   placeId: z.string().uuid().nullable().optional(),
+  isPublished: z.boolean().optional(),
 });
 
 async function createPost(request: AuthenticatedRequest) {

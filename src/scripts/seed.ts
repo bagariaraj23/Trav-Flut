@@ -327,6 +327,7 @@ async function seed(prisma: AppPrismaClient): Promise<void> {
         "https://images.pexels.com/photos/1239291/pexels-photo-1239291.jpeg?auto=compress&cs=tinysrgb&w=600",
       ],
       caption: "Tokyo stole my heart 🇯🇵✨",
+      templateChoice: "postcard",
       generationStatus: GenerationStatus.PUBLISHED,
       isPublished: true,
       publishedAt,
@@ -345,13 +346,80 @@ async function seed(prisma: AppPrismaClient): Promise<void> {
         "https://images.pexels.com/photos/3889845/pexels-photo-3889845.jpeg?auto=compress&cs=tinysrgb&w=600",
       ],
       caption: "Bali vibes 🌴☀️",
+      templateChoice: "thread_reel",
       generationStatus: GenerationStatus.PUBLISHED,
       isPublished: true,
       publishedAt,
     },
   });
 
-  console.log("Final posts: Tokyo & Bali published.");
+  await prisma.tripFinalPost.create({
+    data: {
+      tripId: tripParis.id,
+      userId: bob.id,
+      summaryText:
+        "Cafés, bridges, and long walks from Montmartre to the Seine. Geography told the story as much as the photos.",
+      curatedMedia: [
+        "https://images.pexels.com/photos/338515/pexels-photo-338515.jpeg?auto=compress&cs=tinysrgb&w=600",
+        "https://images.pexels.com/photos/460672/pexels-photo-460672.jpeg?auto=compress&cs=tinysrgb&w=600",
+      ],
+      caption: "Paris by foot",
+      templateChoice: "map_first",
+      generationStatus: GenerationStatus.PUBLISHED,
+      isPublished: true,
+      publishedAt,
+    },
+  });
+
+  console.log("Final posts: Tokyo (postcard), Bali (thread_reel), Paris (map_first).");
+
+  // Direct posts (no trip) — feed renders these as postcard-only cards.
+  await prisma.userPost.deleteMany({
+    where: { userId: { in: [alice.id, bob.id, carol.id] } },
+  });
+  await prisma.userPost.create({
+    data: {
+      userId: bob.id,
+      caption:
+        "Coffee stop between trains — no trip thread, just a moment from the road.",
+      media: [
+        "https://images.pexels.com/photos/302899/pexels-photo-302899.jpeg?auto=compress&cs=tinysrgb&w=600",
+        "https://images.pexels.com/photos/374885/pexels-photo-374885.jpeg?auto=compress&cs=tinysrgb&w=600",
+      ],
+      locationName: "Kyoto Station",
+      latitude: 34.9858,
+      longitude: 135.7588,
+      templateChoice: "postcard",
+      isPublished: true,
+      publishedAt: new Date(Date.now() - 60 * 60 * 1000),
+    },
+  });
+  await prisma.userPost.create({
+    data: {
+      userId: carol.id,
+      caption: "Sunset walk with no itinerary — a quick share between trips.",
+      media: [
+        "https://images.pexels.com/photos/1134176/pexels-photo-1134176.jpeg?auto=compress&cs=tinysrgb&w=600",
+      ],
+      locationName: "Seminyak Beach",
+      latitude: -8.6913,
+      longitude: 115.1571,
+      templateChoice: "postcard",
+      isPublished: true,
+      publishedAt: new Date(Date.now() - 30 * 60 * 1000),
+    },
+  });
+  console.log("Direct posts (no trip): Bob Kyoto coffee, Carol Seminyak walk.");
+
+  await prisma.placeOnTrip.createMany({
+    data: [
+      { tripId: tripTokyo.id, placeId: placeTokyo.id, order: 1 },
+      { tripId: tripBali.id, placeId: placeBali.id, order: 1 },
+      { tripId: tripParis.id, placeId: placeParis.id, order: 1 },
+    ],
+    skipDuplicates: true,
+  });
+
 
   await prisma.tripThreadEntry.createMany({
     data: [
@@ -374,6 +442,18 @@ async function seed(prisma: AppPrismaClient): Promise<void> {
         contentText: "Ubud rice terraces — unreal greens.",
       },
       {
+        tripId: tripBali.id,
+        authorId: carol.id,
+        type: ThreadEntryType.TEXT,
+        contentText: "Nusa Penida cliffs at golden hour.",
+      },
+      {
+        tripId: tripBali.id,
+        authorId: carol.id,
+        type: ThreadEntryType.TEXT,
+        contentText: "Temple bells before dawn in Ubud.",
+      },
+      {
         tripId: tripParis.id,
         authorId: bob.id,
         type: ThreadEntryType.TEXT,
@@ -394,7 +474,7 @@ async function seed(prisma: AppPrismaClient): Promise<void> {
   });
   await prisma.trip.update({
     where: { id: tripBali.id },
-    data: { entryCount: 1 },
+    data: { entryCount: 3 },
   });
   await prisma.trip.update({
     where: { id: tripParis.id },

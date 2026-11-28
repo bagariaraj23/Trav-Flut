@@ -85,6 +85,7 @@ Ending a trip claims `ENDED` and drafts a post for the owner and every current p
 | `generationStatus` | `DRAFT`, `GENERATING`, `READY`, `PUBLISHED`, `FAILED` |
 | `isPublished`, `publishedAt` | Feed eligibility |
 | `likeCount`, `commentCount`, `shareCount` | Denormalized |
+| `templateChoice` | Home-feed card layout: `postcard` (default), `map_first`, or `thread_reel`. Enum `FinalPostTemplateChoice`. Migrations `20261121140000_final_post_template_choice` and `20261122090000_user_post_template_choice` |
 
 `GENERATING`, `READY`, and `FAILED` are on the enum and on the Flutter model. Neither the API nor the scheduler assigns them. A new personal draft is `DRAFT` and `isPublished` stays false until that person publishes. Migration `20261113180000_relabel_ready_final_posts_as_draft` rewrites stored `READY` rows to `DRAFT`. `PUBLISHED` means the author published it.
 
@@ -105,7 +106,7 @@ Ending a trip claims `ENDED` and drafts a post for the owner and every current p
 | Route | Rule |
 | --- | --- |
 | `GET /trips/:id/final-post` | The caller's own post. A member, or someone who already has a post on this trip |
-| `PUT /trips/:id/final-post` | The author edits their draft. An unpublished edit stays `DRAFT`. If it is already `PUBLISHED`, the status stays `PUBLISHED` |
+| `PUT /trips/:id/final-post` | The author edits their draft, including `templateChoice`. An unpublished edit stays `DRAFT`. If it is already `PUBLISHED`, the status stays `PUBLISHED` |
 | `DELETE /trips/:id/final-post` | The author. Removes their post and its engagement rows |
 | `POST /trips/:id/publish` | The author. Summary at least 50 characters, and at least one curated media item or a cover URL. Sets `isPublished`, `publishedAt`, `generationStatus = PUBLISHED` |
 
@@ -115,8 +116,12 @@ Publishing the post is what puts it on the home feed. Ending the trip does not p
 
 ### Mobile
 
-`FinalPostProvider` loads the signed-in member's draft, calls generate if it is missing, autosaves with a debounce, and publishes via `POST /trips/:id/publish`. `toggleMedia` appends in selection order and refuses a 13th photo. The screen is `final_post_edit_screen.dart`. `PhotoOrderBadge` in `media_seek.dart` draws the number.
+`FinalPostProvider` loads the signed-in member's draft, calls generate if it is missing, autosaves with a debounce, and publishes via `POST /trips/:id/publish`. `toggleMedia` appends in selection order and refuses a 13th photo. `setTemplateChoice` writes `postcard` / `map_first` / `thread_reel`. The screen is `final_post_edit_screen.dart` with `FinalPostTemplatePicker`. `PhotoOrderBadge` in `media_seek.dart` draws the number. Phone and camera buttons sign uploads as `final_post`.
+
+### Direct posts (no trip)
+
+`user_posts` stores a caption, up to 12 of the author's uploads, optional place fields, and `templateChoice` (defaults to `postcard`). Create and publish flow: Home compose → optional preview (`post_preview_screen.dart`) → `UserPostService`. Entity type `USER_POST`. Home merges them with final posts. See [Feed](./11-feed-discover-posts.md).
 
 ## Engagement on both kinds of post
 
-Likes and comments target `EntityType` `TRIP_FINAL_POST` or `TRIP_THREAD_ENTRY`. Counters move inside the like or comment transaction. The feed never counts likes per card. See [Engagements](./12-engagements.md).
+Likes and comments target `EntityType` `TRIP_FINAL_POST`, `TRIP_THREAD_ENTRY`, or `USER_POST`. Counters move inside the like or comment transaction. The feed never counts likes per card. See [Engagements](./12-engagements.md).

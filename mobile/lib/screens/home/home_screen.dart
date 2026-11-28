@@ -3,10 +3,10 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
 import 'package:tripthread/providers/auth_provider.dart';
+import 'package:tripthread/providers/chat_provider.dart';
 import 'package:tripthread/providers/trip_provider.dart';
 import 'package:tripthread/providers/feed_provider.dart';
 import 'package:tripthread/providers/user_provider.dart';
-import 'package:tripthread/providers/engagement_provider.dart';
 import 'package:tripthread/services/api_service.dart';
 import 'package:tripthread/services/trip_service.dart';
 import 'package:tripthread/models/live_trip_story.dart';
@@ -17,9 +17,8 @@ import 'package:tripthread/utils/app_layout.dart';
 import 'package:tripthread/utils/app_theme.dart';
 import 'package:tripthread/utils/trip_time_format.dart';
 import 'package:tripthread/utils/cloudinary_utils.dart';
-import 'package:tripthread/widgets/engagement/engagement_action_bar.dart';
-import 'package:tripthread/widgets/sheets/comment_bottom_sheet.dart';
-import 'package:tripthread/widgets/sheets/share_bottom_sheet.dart';
+import 'package:tripthread/widgets/app_icon_badge.dart';
+import 'package:tripthread/widgets/feed/final_post_feed_card.dart';
 import 'package:tripthread/widgets/floating_trip_nav_button.dart';
 import 'package:tripthread/widgets/logout_dialog.dart';
 import 'package:tripthread/widgets/trip_cover_placeholder.dart';
@@ -93,12 +92,13 @@ class _HomeScreenState extends State<HomeScreen> {
         }
       }
 
-      // Load pending follow requests and unread notification count to update notification badge
+      // Load badge sources: notifications + chat unread (DM / group / trip)
       if (!mounted) return;
       final userProvider = context.read<UserProvider>();
       userProvider.loadPendingFollowRequests();
       userProvider.loadUnreadNotificationCount();
-      debugPrint('[HomeScreen] Loading notifications for badge');
+      context.read<ChatProvider>().loadConversations();
+      debugPrint('[HomeScreen] Loading notifications and chat unread for badges');
     });
   }
 
@@ -148,46 +148,191 @@ class _HomeScreenState extends State<HomeScreen> {
             const FloatingTripNavButton(),
           ],
         ),
-        bottomNavigationBar: DecoratedBox(
-          decoration: BoxDecoration(
-            color: Theme.of(context).scaffoldBackgroundColor,
-            border: Border(
-              top: BorderSide(
-                color: Theme.of(context).colorScheme.outlineVariant,
-              ),
+        bottomNavigationBar: _HomeComposeNavBar(
+          currentIndex: _currentIndex,
+          onSelectTab: (index) => setState(() => _currentIndex = index),
+          onCompose: _openComposePost,
+        ),
+      ),
+    );
+  }
+
+  Future<void> _openComposePost() async {
+    final created = await context.push('/compose');
+    if (!mounted) return;
+    if (created == true) {
+      await context.read<FeedProvider>().loadHomeFeed(refresh: true);
+      if (_currentIndex != 0) {
+        setState(() => _currentIndex = 0);
+      }
+    }
+  }
+}
+
+/// Bottom tabs with a raised center compose control for posts without a trip.
+class _HomeComposeNavBar extends StatelessWidget {
+  final int currentIndex;
+  final ValueChanged<int> onSelectTab;
+  final VoidCallback onCompose;
+
+  const _HomeComposeNavBar({
+    required this.currentIndex,
+    required this.onSelectTab,
+    required this.onCompose,
+  });
+
+  static const double _composeSize = 56;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final selected = theme.bottomNavigationBarTheme.selectedItemColor ??
+        scheme.onSurface;
+    final unselected = theme.bottomNavigationBarTheme.unselectedItemColor ??
+        scheme.onSurfaceVariant;
+
+    return Material(
+      color: theme.scaffoldBackgroundColor,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          border: Border(
+            top: BorderSide(color: scheme.outlineVariant),
+          ),
+        ),
+        child: SafeArea(
+          top: false,
+          child: SizedBox(
+            height: 64,
+            child: Stack(
+              clipBehavior: Clip.none,
+              alignment: Alignment.bottomCenter,
+              children: [
+                Row(
+                  children: [
+                    _NavTab(
+                      icon: Icons.home_outlined,
+                      activeIcon: Icons.home,
+                      label: 'Feed',
+                      selected: currentIndex == 0,
+                      selectedColor: selected,
+                      unselectedColor: unselected,
+                      onTap: () => onSelectTab(0),
+                    ),
+                    _NavTab(
+                      icon: Icons.map_outlined,
+                      activeIcon: Icons.map,
+                      label: 'Trips',
+                      selected: currentIndex == 1,
+                      selectedColor: selected,
+                      unselectedColor: unselected,
+                      onTap: () => onSelectTab(1),
+                    ),
+                    const SizedBox(width: _composeSize + 8),
+                    _NavTab(
+                      icon: Icons.explore_outlined,
+                      activeIcon: Icons.explore,
+                      label: 'Discover',
+                      selected: currentIndex == 2,
+                      selectedColor: selected,
+                      unselectedColor: unselected,
+                      onTap: () => onSelectTab(2),
+                    ),
+                    _NavTab(
+                      icon: Icons.person_outlined,
+                      activeIcon: Icons.person,
+                      label: 'Profile',
+                      selected: currentIndex == 3,
+                      selectedColor: selected,
+                      unselectedColor: unselected,
+                      onTap: () => onSelectTab(3),
+                    ),
+                  ],
+                ),
+                Positioned(
+                  top: -14,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Material(
+                        color: AppTheme.accent,
+                        elevation: 3,
+                        shadowColor: AppTheme.accent.withValues(alpha: 0.35),
+                        shape: const CircleBorder(),
+                        child: InkWell(
+                          customBorder: const CircleBorder(),
+                          onTap: onCompose,
+                          child: const SizedBox(
+                            width: _composeSize,
+                            height: _composeSize,
+                            child: Icon(
+                              Icons.add,
+                              color: Colors.white,
+                              size: 30,
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        'Post',
+                        style: theme.textTheme.labelSmall?.copyWith(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: unselected,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ),
           ),
-          child: BottomNavigationBar(
-          currentIndex: _currentIndex,
-          onTap: (index) {
-            setState(() {
-              _currentIndex = index;
-            });
-          },
-          type: BottomNavigationBarType.fixed,
-          items: const [
-            BottomNavigationBarItem(
-              icon: Icon(Icons.home_outlined),
-              activeIcon: Icon(Icons.home),
-              label: 'Feed',
-            ),
-            BottomNavigationBarItem(
-              icon: Icon(Icons.map_outlined),
-              activeIcon: Icon(Icons.map),
-              label: 'Trips',
-            ),
-            BottomNavigationBarItem(
-              icon: Icon(Icons.explore_outlined),
-              activeIcon: Icon(Icons.explore),
-              label: 'Discover',
-            ),
-            BottomNavigationBarItem(
-              icon: Icon(Icons.person_outlined),
-              activeIcon: Icon(Icons.person),
-              label: 'Profile',
+        ),
+      ),
+    );
+  }
+}
+
+class _NavTab extends StatelessWidget {
+  final IconData icon;
+  final IconData activeIcon;
+  final String label;
+  final bool selected;
+  final Color selectedColor;
+  final Color unselectedColor;
+  final VoidCallback onTap;
+
+  const _NavTab({
+    required this.icon,
+    required this.activeIcon,
+    required this.label,
+    required this.selected,
+    required this.selectedColor,
+    required this.unselectedColor,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final color = selected ? selectedColor : unselectedColor;
+    return Expanded(
+      child: InkWell(
+        onTap: onTap,
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(selected ? activeIcon : icon, color: color, size: 24),
+            const SizedBox(height: 2),
+            Text(
+              label,
+              style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                    fontSize: 11,
+                    fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
+                    color: color,
+                  ),
             ),
           ],
-          ),
         ),
       ),
     );
@@ -246,8 +391,10 @@ class _HomeFeedScreenState extends State<HomeFeedScreen> {
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Delete post?'),
-        content: const Text(
-          'This removes the final post from feeds and deletes its likes and comments. You can create a new final post from the trip later.',
+        content: Text(
+          post.isDirectPost
+              ? 'This removes the post from feeds and deletes its likes and comments.'
+              : 'This removes the final post from feeds and deletes its likes and comments. You can create a new final post from the trip later.',
         ),
         actions: [
           TextButton(
@@ -320,62 +467,29 @@ class _HomeFeedScreenState extends State<HomeFeedScreen> {
           ],
         ),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.add_box_outlined),
-            tooltip: 'New post',
-            onPressed: () async {
-              final created = await context.push('/compose');
-              if (created == true && context.mounted) {
-                await context.read<FeedProvider>().loadHomeFeed(refresh: true);
-              }
+          Consumer<ChatProvider>(
+            builder: (context, chatProvider, _) {
+              return AppIconBadge(
+                icon: const Icon(Icons.chat_bubble_outline),
+                tooltip: 'Messages',
+                count: chatProvider.totalUnreadCount,
+                onPressed: () => context.push('/chat'),
+              );
             },
           ),
-          IconButton(
-            icon: const Icon(Icons.chat_bubble_outline),
-            tooltip: 'Messages',
-            onPressed: () => context.push('/chat'),
-          ),
-          // Combined Notification Icon
           Consumer2<UserProvider, TripProvider>(
             builder: (context, userProvider, tripProvider, child) {
               final totalPending =
                   userProvider.pendingFollowRequests.length +
                   tripProvider.pendingTripInvitations.length +
                   userProvider.unreadNotificationCount;
-              return Stack(
-                alignment: Alignment.center,
-                children: [
-                  IconButton(
-                    icon: const Icon(Icons.notifications_outlined),
-                    onPressed: () {
-                      context.push('/notifications');
-                    },
-                  ),
-                  if (totalPending > 0)
-                    Positioned(
-                      top: 8,
-                      right: 8,
-                      child: Container(
-                        padding: const EdgeInsets.all(2),
-                        decoration: BoxDecoration(
-                          color: AppTheme.likeRose,
-                          borderRadius: BorderRadius.circular(6),
-                        ),
-                        constraints: const BoxConstraints(
-                          minWidth: 14,
-                          minHeight: 14,
-                        ),
-                        child: Text(
-                          '$totalPending',
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 8,
-                          ),
-                          textAlign: TextAlign.center,
-                        ),
-                      ),
-                    ),
-                ],
+              return AppIconBadge(
+                icon: const Icon(Icons.notifications_outlined),
+                tooltip: 'Notifications',
+                count: totalPending,
+                onPressed: () {
+                  context.push('/notifications');
+                },
               );
             },
           ),
@@ -470,7 +584,10 @@ class _HomeFeedScreenState extends State<HomeFeedScreen> {
                   }
 
                   final post = feedProvider.homeFeedPosts[postIndex];
-                  return _buildFinalPostCard(context, post);
+                  return FinalPostFeedCard(
+                    post: post,
+                    onDelete: _confirmDeleteFinalPost,
+                  );
                 },
               ),
             ),
@@ -605,307 +722,6 @@ class _HomeFeedScreenState extends State<HomeFeedScreen> {
     );
   }
 
-  Widget _buildFinalPostCard(BuildContext context, TripFinalPost post) {
-    final authUserId = context.read<AuthProvider>().currentUser?.id;
-    final author = post.displayAuthor;
-    final authorId = post.displayAuthorId;
-    final isOwner =
-        authUserId != null && authorId != null && authUserId == authorId;
-
-    return Card(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      elevation: 0,
-      clipBehavior: Clip.antiAlias,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Header with user info (avatar and name tappable → profile)
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: Row(
-              children: [
-                GestureDetector(
-                  onTap: () {
-                    final userId = authorId;
-                    if (userId != null) context.push('/profile/$userId');
-                  },
-                  child: CircleAvatar(
-                    radius: 20,
-                    backgroundColor: AppTheme.avatarFallbackBackground(
-                      Theme.of(context).brightness,
-                    ),
-                    backgroundImage: author?.avatarUrl != null
-                        ? NetworkImage(author!.avatarUrl!)
-                        : null,
-                    child: author?.avatarUrl == null
-                        ? Icon(
-                            Icons.person,
-                            color: AppTheme.avatarFallbackForeground(
-                              Theme.of(context).brightness,
-                            ),
-                            size: 20,
-                          )
-                        : null,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      GestureDetector(
-                        onTap: () {
-                          final userId = authorId;
-                          if (userId != null) context.push('/profile/$userId');
-                        },
-                        child: Text(
-                          author?.name ??
-                              author?.username ??
-                              'Travel Story',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: Theme.of(context).textTheme.titleMedium
-                              ?.copyWith(fontWeight: FontWeight.w600),
-                        ),
-                      ),
-                      Text(
-                        _formatDateTime(post.createdAt),
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: Theme.of(context).colorScheme.onSurfaceVariant,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                if (isOwner)
-                  PopupMenuButton<String>(
-                    icon: const Icon(Icons.more_vert),
-                    onSelected: (value) async {
-                      if (!context.mounted) return;
-                      if (value == 'edit') {
-                        if (post.isDirectPost) {
-                          context.push('/compose/${post.id}');
-                        } else {
-                          context.push('/trip/${post.tripId}/final-post');
-                        }
-                      } else if (value == 'delete') {
-                        await _confirmDeleteFinalPost(context, post);
-                      }
-                    },
-                    itemBuilder: (ctx) => const [
-                      PopupMenuItem(value: 'edit', child: Text('Edit')),
-                      PopupMenuItem(value: 'delete', child: Text('Delete')),
-                    ],
-                  )
-                else
-                  const SizedBox(width: 48),
-              ],
-            ),
-          ),
-          InkWell(
-            onTap: () {
-              if (post.isDirectPost) {
-                context.push('/post/USER_POST/${post.id}');
-              } else {
-                context.push(
-                  '/trip/${post.tripId}',
-                  extra: {'from': '/home'},
-                );
-              }
-            },
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                if (post.curatedMedia.isNotEmpty)
-                  SizedBox(
-                    height: 300,
-                    child: PageView.builder(
-                      itemCount: post.curatedMedia.length,
-                      itemBuilder: (context, index) {
-                        return Container(
-                          margin: const EdgeInsets.symmetric(horizontal: 4),
-                          decoration: BoxDecoration(
-                            color: Theme.of(context)
-                                .colorScheme
-                                .onSurface
-                                .withValues(
-                                  alpha: Theme.of(context).brightness ==
-                                          Brightness.dark
-                                      ? 0.06
-                                      : 0.03,
-                                ),
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: ClipRRect(
-                            borderRadius: BorderRadius.circular(12),
-                            child: Image.network(
-                              buildOptimizedImageUrl(
-                                post.curatedMedia[index],
-                                width: 1600,
-                              ),
-                              fit: BoxFit.cover,
-                              errorBuilder: (context, error, stackTrace) {
-                                return Container(
-                                  color: Theme.of(context)
-                                      .colorScheme
-                                      .onSurface
-                                      .withValues(
-                                        alpha: Theme.of(context).brightness ==
-                                                Brightness.dark
-                                            ? 0.06
-                                            : 0.03,
-                                      ),
-                                  child: Center(
-                                    child: Icon(
-                                      Icons.image_not_supported,
-                                      size: 48,
-                                      color: Theme.of(context)
-                                          .colorScheme
-                                          .onSurfaceVariant,
-                                    ),
-                                  ),
-                                );
-                              },
-                            ),
-                          ),
-                        );
-                      },
-                    ),
-                  ),
-                Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      if ((post.trip?.title ?? '').trim().isNotEmpty) ...[
-                        Text(
-                          post.trip!.title,
-                          style: Theme.of(context).textTheme.headlineSmall,
-                        ),
-                        const SizedBox(height: 8),
-                      ],
-                      Text(
-                        post.summaryText,
-                        style: Theme.of(context).textTheme.bodyLarge,
-                      ),
-                      if (post.isDirectPost &&
-                          (post.locationName ?? '').trim().isNotEmpty) ...[
-                        const SizedBox(height: 8),
-                        Text(
-                          post.locationName!,
-                          style: Theme.of(context).textTheme.bodyMedium,
-                        ),
-                      ],
-                      if (!post.isDirectPost && post.caption != null) ...[
-                        const SizedBox(height: 8),
-                        Text(
-                          post.caption!,
-                          style: Theme.of(context)
-                              .textTheme
-                              .bodyMedium
-                              ?.copyWith(
-                                color: Theme.of(context)
-                                    .colorScheme
-                                    .onSurfaceVariant
-                                    .withValues(alpha: 0.9),
-                              ),
-                        ),
-                      ],
-                      const SizedBox(height: 12),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: Align(
-                              alignment: Alignment.centerLeft,
-                              child: EngagementActionBar(
-                                entityType: post.engagementEntityType,
-                                entityId: post.id,
-                                likeCount: post.likeCount,
-                                commentCount: post.commentCount,
-                                shareCount: post.shareCount,
-                                hasLiked: post.hasLiked,
-                                onCommentTap: () {
-                                  showModalBottomSheet(
-                                    context: context,
-                                    isScrollControlled: true,
-                                    backgroundColor: Colors.transparent,
-                                    builder: (context) => CommentBottomSheet(
-                                      entityType: post.engagementEntityType,
-                                      entityId: post.id,
-                                    ),
-                                  );
-                                },
-                                onShareTap: () {
-                                  showModalBottomSheet(
-                                    context: context,
-                                    backgroundColor: Colors.transparent,
-                                    builder: (context) => ShareBottomSheet(
-                                      entityType: post.engagementEntityType,
-                                      entityId: post.id,
-                                    ),
-                                  );
-                                },
-                                onLikeChanged: () {
-                                  final engagementProvider = context
-                                      .read<EngagementProvider>();
-                                  final newLikeCount = engagementProvider
-                                      .getLikeCount(post.id);
-                                  final newHasLiked =
-                                      engagementProvider.isLiked(post.id);
-
-                                  final feedProvider =
-                                      context.read<FeedProvider>();
-                                  final updatedPost = post.copyWith(
-                                    likeCount: newLikeCount,
-                                    hasLiked: newHasLiked,
-                                  );
-                                  final index = feedProvider.homeFeedPosts
-                                      .indexWhere((p) => p.id == post.id);
-                                  if (index >= 0) {
-                                    feedProvider.updatePost(index, updatedPost);
-                                  }
-                                },
-                              ),
-                            ),
-                          ),
-                          if (!post.isDirectPost)
-                            TextButton(
-                              onPressed: () {
-                                context.push(
-                                  '/trip/${post.tripId}',
-                                  extra: {'from': '/home'},
-                                );
-                              },
-                              child: const Text('View Trip'),
-                            ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  String _formatDateTime(DateTime dateTime) {
-    final now = DateTime.now();
-    final difference = now.difference(dateTime);
-
-    if (difference.inDays > 0) {
-      return '${difference.inDays}d ago';
-    } else if (difference.inHours > 0) {
-      return '${difference.inHours}h ago';
-    } else if (difference.inMinutes > 0) {
-      return '${difference.inMinutes}m ago';
-    } else {
-      return 'Just now';
-    }
-  }
 }
 
 class TripsTab extends StatefulWidget {

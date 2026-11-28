@@ -16,6 +16,10 @@ void main() {
     expect(text, contains('Discover'));
     expect(text, contains('final post'));
     expect(text, contains('admin'));
+    expect(text, contains('without a trip'));
+    expect(text, contains('Postcard'));
+    expect(text, contains('9+'));
+    expect(text, contains('Chat messages do not create a notification'));
   });
 
   testWidgets('help search opens the matching answer', (tester) async {

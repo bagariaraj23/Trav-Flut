@@ -31,6 +31,8 @@ export type DirectPostInput = {
   latitude?: number | null;
   longitude?: number | null;
   placeId?: string | null;
+  /** When false, creates/keeps an unpublished draft (not on the home feed). */
+  isPublished?: boolean;
 };
 
 type UserPostRow = Prisma.UserPostGetPayload<{ include: { user: { select: typeof userSelect } } }>;
@@ -38,13 +40,14 @@ type UserPostRow = Prisma.UserPostGetPayload<{ include: { user: { select: typeof
 export class UserPostService {
   static async create(userId: string, input: DirectPostInput) {
     const data = await normalize(prisma, userId, input);
+    const publish = input.isPublished !== false;
     const now = new Date();
     const post = await prisma.userPost.create({
       data: {
         userId,
         ...data,
-        isPublished: true,
-        publishedAt: now,
+        isPublished: publish,
+        publishedAt: publish ? now : null,
       },
       include: { user: { select: userSelect } },
     });
@@ -54,7 +57,7 @@ export class UserPostService {
   static async update(postId: string, userId: string, input: DirectPostInput) {
     const existing = await prisma.userPost.findUnique({
       where: { id: postId },
-      select: { userId: true },
+      select: { userId: true, isPublished: true, publishedAt: true },
     });
     if (!existing) throw new NotFoundError("Post not found");
     if (existing.userId !== userId) {
@@ -62,13 +65,39 @@ export class UserPostService {
     }
 
     const data = await normalize(prisma, userId, input);
+    const publish =
+      input.isPublished === undefined
+        ? existing.isPublished
+        : input.isPublished;
+    const now = new Date();
     const post = await prisma.userPost.update({
       where: { id: postId },
-      data,
+      data: {
+        ...data,
+        isPublished: publish,
+        publishedAt: publish
+          ? existing.publishedAt ?? now
+          : existing.isPublished
+            ? existing.publishedAt
+            : null,
+      },
       include: { user: { select: userSelect } },
     });
     const liked = await checkLikeStatus(userId, EntityType.USER_POST, [post.id]);
     return toHomeFeedItem(post, liked[post.id] || false);
+  }
+
+  /** Owner can load an unpublished draft for edit/preview. */
+  static async getOwn(postId: string, userId: string) {
+    const post = await prisma.userPost.findUnique({
+      where: { id: postId },
+      include: { user: { select: userSelect } },
+    });
+    if (!post) throw new NotFoundError("Post not found");
+    if (post.userId !== userId) {
+      throw new AuthorizationError("You can only open your own draft");
+    }
+    return toHomeFeedItem(post, false);
   }
 
   static async remove(postId: string, userId: string) {
@@ -164,6 +193,19 @@ export async function loadDirectPostsForFeed(args: {
 }
 
 export function toHomeFeedItem(post: UserPostRow, hasLiked: boolean) {
+  // Direct posts stay postcard-only: no trip map/route journey or thread reel.
+  // Optional place still shows as a single pin chip on the postcard card.
+  const mapPins =
+    post.latitude != null && post.longitude != null
+      ? [
+          {
+            lat: post.latitude,
+            lng: post.longitude,
+            name: post.locationName,
+          },
+        ]
+      : undefined;
+
   return {
     id: post.id,
     tripId: null as string | null,
@@ -172,6 +214,7 @@ export function toHomeFeedItem(post: UserPostRow, hasLiked: boolean) {
     curatedMedia: post.media,
     caption: post.caption,
     coverMediaUrl: post.media[0] ?? null,
+    templateChoice: "postcard" as const,
     generationStatus: "PUBLISHED" as const,
     isPublished: post.isPublished,
     publishedAt: post.publishedAt ? post.publishedAt.toISOString() : null,
@@ -186,6 +229,8 @@ export function toHomeFeedItem(post: UserPostRow, hasLiked: boolean) {
     latitude: post.latitude,
     longitude: post.longitude,
     placeId: post.placeId,
+    threadPreview: [],
+    mapPins,
     user: post.user
       ? {
           ...post.user,
@@ -258,6 +303,7 @@ async function normalize(
     latitude,
     longitude,
     placeId,
+    templateChoice: "postcard" as const,
   };
 }
 

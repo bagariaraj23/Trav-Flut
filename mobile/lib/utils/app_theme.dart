@@ -93,6 +93,37 @@ class AppTheme {
   static Color avatarFallbackForeground(Brightness brightness) =>
       brightness == Brightness.dark ? darkText : ink;
 
+  /// Nested feed panels (thread snippets, map wash) — not the photo stamp.
+  static Color feedPanel(Brightness brightness) =>
+      brightness == Brightness.dark ? darkMuted : cream;
+
+  static Color feedPanelInk(Brightness brightness) =>
+      brightness == Brightness.dark ? darkText : ink;
+
+  static Color feedMutedSurface(Brightness brightness) =>
+      brightness == Brightness.dark ? darkMuted : muted;
+
+  static Color feedMutedText(Brightness brightness) =>
+      brightness == Brightness.dark ? darkMutedForeground : mutedForeground;
+
+  /// Soft map placeholder wash that stays on-brand in both themes.
+  static List<Color> feedMapWash(Brightness brightness) {
+    final base = feedMutedSurface(brightness);
+    return [
+      Color.alphaBlend(accent.withValues(alpha: brightness == Brightness.dark ? 0.22 : 0.14), base),
+      base,
+    ];
+  }
+
+  /// Paper-like chip over media (stamps, open-map). Stays high-contrast on photos.
+  static Color mediaChipFill(Brightness brightness) =>
+      brightness == Brightness.dark
+          ? darkCard.withValues(alpha: 0.94)
+          : cream.withValues(alpha: 0.92);
+
+  static Color mediaChipInk(Brightness brightness) =>
+      brightness == Brightness.dark ? darkText : ink;
+
   /// Selectable FilterChip / ChoiceChip with guaranteed contrast on warm surfaces.
   static Widget selectableChip({
     required BuildContext context,

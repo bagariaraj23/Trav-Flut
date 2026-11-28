@@ -43,6 +43,59 @@ describe("Direct posts", () => {
     await cleanDb();
   });
 
+  it("saves an unpublished draft that stays off the home feed", async () => {
+    const author = await createUser({ email: "draft-author@test.com", name: "Draft" });
+    const photo = "https://cdn.example.com/draft-photo.jpg";
+    await ownPhoto(author.id, photo);
+    const token = await getAuthToken(author);
+
+    const created = await createUserPost(
+      authRequest("http://localhost/api/user-posts", "POST", token, {
+        caption: "Draft caption only",
+        media: [photo],
+        locationName: "Quiet cove",
+        latitude: 12.3,
+        longitude: 45.6,
+        isPublished: false,
+      })
+    );
+    const body = await json(created);
+    expect(created.status).toBe(200);
+    expect(body.data.isPublished).toBe(false);
+    expect(body.data.mapPins).toEqual([
+      { lat: 12.3, lng: 45.6, name: "Quiet cove" },
+    ]);
+
+    const feed = await getFeedRoute(
+      authRequest("http://localhost/api/feed/home", "GET", token)
+    );
+    const feedBody = await json(feed);
+    const feedItem = feedBody.data.items.find(
+      (item: { id: string }) => item.id === body.data.id
+    );
+    expect(feedItem).toBeUndefined();
+
+    const published = await updateUserPost(
+      authRequest(
+        `http://localhost/api/user-posts/${body.data.id}`,
+        "PATCH",
+        token,
+        {
+          caption: "Draft caption only",
+          media: [photo],
+          locationName: "Quiet cove",
+          latitude: 12.3,
+          longitude: 45.6,
+          isPublished: true,
+        }
+      ),
+      { params: Promise.resolve({ id: body.data.id }) }
+    );
+    const publishedBody = await json(published);
+    expect(published.status).toBe(200);
+    expect(publishedBody.data.isPublished).toBe(true);
+  });
+
   it("publishes a caption, the author's photo, and a location", async () => {
     const author = await createUser({ email: "direct-author@test.com", name: "Author" });
     const photo = "https://cdn.example.com/direct-photo.jpg";
@@ -64,6 +117,11 @@ describe("Direct posts", () => {
     expect(body.data.curatedMedia).toEqual([photo]);
     expect(body.data.locationName).toBe("Ridge road");
     expect(body.data.tripId).toBeNull();
+    expect(body.data.templateChoice).toBe("postcard");
+    expect(body.data.threadPreview).toEqual([]);
+    expect(body.data.mapPins).toEqual([
+      { lat: 30.7, lng: 79.1, name: "Ridge road" },
+    ]);
 
     const viewer = await createUser({ email: "direct-viewer@test.com", name: "Viewer" });
     const feed = await getFeedRoute(
@@ -74,9 +132,14 @@ describe("Direct posts", () => {
       )
     );
     const feedBody = await json(feed);
-    expect(feedBody.data.items.map((item: { id: string }) => item.id)).toContain(
-      body.data.id
+    const feedItem = feedBody.data.items.find(
+      (item: { id: string }) => item.id === body.data.id
     );
+    expect(feedItem).toBeTruthy();
+    expect(feedItem.templateChoice).toBe("postcard");
+    expect(feedItem.threadPreview).toEqual([]);
+    expect(feedItem.mapPins?.[0]?.name).toBe("Ridge road");
+    expect(feedItem.postKind).toBe("direct");
 
     const updated = await updateUserPost(
       authRequest(

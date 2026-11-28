@@ -214,6 +214,56 @@ class TripThreadEntry {
   Map<String, dynamic> toJson() => _$TripThreadEntryToJson(this);
 }
 
+enum FinalPostTemplateChoice {
+  @JsonValue('postcard')
+  postcard,
+  @JsonValue('map_first')
+  mapFirst,
+  @JsonValue('thread_reel')
+  threadReel,
+}
+
+@JsonSerializable()
+class FeedThreadPreviewItem {
+  final String id;
+  final String? contentText;
+  final String? mediaUrl;
+  final String? placeName;
+  @JsonKey(defaultValue: 0)
+  final int likeCount;
+  final DateTime createdAt;
+
+  const FeedThreadPreviewItem({
+    required this.id,
+    this.contentText,
+    this.mediaUrl,
+    this.placeName,
+    this.likeCount = 0,
+    required this.createdAt,
+  });
+
+  factory FeedThreadPreviewItem.fromJson(Map<String, dynamic> json) =>
+      _$FeedThreadPreviewItemFromJson(json);
+  Map<String, dynamic> toJson() => _$FeedThreadPreviewItemToJson(this);
+}
+
+@JsonSerializable()
+class FeedMapPin {
+  final double lat;
+  final double lng;
+  final String? name;
+
+  const FeedMapPin({
+    required this.lat,
+    required this.lng,
+    this.name,
+  });
+
+  factory FeedMapPin.fromJson(Map<String, dynamic> json) =>
+      _$FeedMapPinFromJson(json);
+  Map<String, dynamic> toJson() => _$FeedMapPinToJson(this);
+}
+
 @JsonSerializable()
 class TripFinalPost {
   final String id;
@@ -225,6 +275,10 @@ class TripFinalPost {
   final String? coverMediaUrl;
   final String postKind;
   final String? locationName;
+  final double? latitude;
+  final double? longitude;
+  @JsonKey(unknownEnumValue: FinalPostTemplateChoice.postcard)
+  final FinalPostTemplateChoice templateChoice;
   final GenerationStatus generationStatus;
   final bool isPublished;
   final DateTime? publishedAt;
@@ -240,6 +294,9 @@ class TripFinalPost {
   final int shareCount;
   @JsonKey(defaultValue: false)
   final bool hasLiked;
+  @JsonKey(defaultValue: [])
+  final List<FeedThreadPreviewItem> threadPreview;
+  final List<FeedMapPin>? mapPins;
 
   const TripFinalPost({
     required this.id,
@@ -251,6 +308,9 @@ class TripFinalPost {
     this.coverMediaUrl,
     this.postKind = 'trip',
     this.locationName,
+    this.latitude,
+    this.longitude,
+    this.templateChoice = FinalPostTemplateChoice.postcard,
     this.generationStatus = GenerationStatus.draft,
     required this.isPublished,
     this.publishedAt,
@@ -262,6 +322,8 @@ class TripFinalPost {
     this.commentCount = 0,
     this.shareCount = 0,
     this.hasLiked = false,
+    this.threadPreview = const [],
+    this.mapPins,
   });
 
   factory TripFinalPost.fromJson(Map<String, dynamic> json) =>
@@ -292,6 +354,9 @@ class TripFinalPost {
     String? coverMediaUrl,
     String? postKind,
     String? locationName,
+    double? latitude,
+    double? longitude,
+    FinalPostTemplateChoice? templateChoice,
     GenerationStatus? generationStatus,
     bool? isPublished,
     DateTime? publishedAt,
@@ -303,6 +368,8 @@ class TripFinalPost {
     int? commentCount,
     int? shareCount,
     bool? hasLiked,
+    List<FeedThreadPreviewItem>? threadPreview,
+    List<FeedMapPin>? mapPins,
   }) {
     return TripFinalPost(
       id: id ?? this.id,
@@ -314,6 +381,9 @@ class TripFinalPost {
       coverMediaUrl: coverMediaUrl ?? this.coverMediaUrl,
       postKind: postKind ?? this.postKind,
       locationName: locationName ?? this.locationName,
+      latitude: latitude ?? this.latitude,
+      longitude: longitude ?? this.longitude,
+      templateChoice: templateChoice ?? this.templateChoice,
       generationStatus: generationStatus ?? this.generationStatus,
       isPublished: isPublished ?? this.isPublished,
       publishedAt: publishedAt ?? this.publishedAt,
@@ -325,6 +395,8 @@ class TripFinalPost {
       commentCount: commentCount ?? this.commentCount,
       shareCount: shareCount ?? this.shareCount,
       hasLiked: hasLiked ?? this.hasLiked,
+      threadPreview: threadPreview ?? this.threadPreview,
+      mapPins: mapPins ?? this.mapPins,
     );
   }
 }

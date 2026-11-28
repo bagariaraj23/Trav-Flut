@@ -50,8 +50,10 @@ const nextConfig = {
         source: '/api/:path*',
         headers: [
           {
+            // Browsers accept only one origin. Prefer the first configured origin;
+            // route-level withCors can refine per request when wired.
             key: 'Access-Control-Allow-Origin',
-            value: allowedOrigins.join(', ')
+            value: allowedOrigins[0] || '*'
           },
           {
             key: 'Access-Control-Allow-Methods',

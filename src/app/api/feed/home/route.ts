@@ -25,6 +25,10 @@ import {
   loadDirectPostsForFeed,
 } from "@/lib/services/userPost";
 import { homeFeedWindow, sliceMergedFeed } from "@/lib/homeFeedMerge";
+import {
+  loadFeedMapPins,
+  loadFeedThreadPreviews,
+} from "@/lib/feedCardPreview";
 
 // Get home feed (final posts from followed users and public profiles)
 export async function GET(request: NextRequest) {
@@ -201,77 +205,95 @@ export async function GET(request: NextRequest) {
             `[API] GET /feed/home - Trip posts: ${totalCount}, direct posts: ${directTotal}`
           );
 
-          // Get like status for the trip-post candidates before the merge.
+          // Trip-post engagement + card previews before merging with direct posts.
           const postIds = rows.map((p) => p.id);
-          const likeStatusMap = await checkLikeStatus(
-            currentUserId,
-            EntityType.TRIP_FINAL_POST,
-            postIds
-          );
-          const commentCounts = await visibleFinalPostCommentCounts(
-            rows.map((post) => ({ id: post.id, userId: post.userId })),
-            currentUserId
-          );
+          const tripIds = Array.from(new Set(rows.map((p) => p.tripId)));
+          const [likeStatusMap, commentCounts, threadPreviews, mapPinsByTrip] =
+            await Promise.all([
+              checkLikeStatus(
+                currentUserId,
+                EntityType.TRIP_FINAL_POST,
+                postIds
+              ),
+              visibleFinalPostCommentCounts(
+                rows.map((post) => ({
+                  id: post.id,
+                  userId: post.userId,
+                })),
+                currentUserId
+              ),
+              loadFeedThreadPreviews(tripIds),
+              loadFeedMapPins(tripIds),
+            ]);
 
           // Transform trip recaps, then merge them with direct posts by time.
-          const tripItems = rows.map((post) => ({
-            createdAt: post.createdAt,
-            id: post.id,
-            item: {
-            id: post.id,
-            tripId: post.tripId,
-            postKind: "trip" as const,
-            userId: post.userId,
-            summaryText: post.summaryText,
-            curatedMedia: post.curatedMedia,
-            caption: post.caption ?? undefined,
-            coverMediaUrl: post.coverMediaUrl ?? undefined,
-            generationStatus: post.generationStatus,
-            isPublished: post.isPublished,
-            publishedAt: post.publishedAt
-              ? post.publishedAt.toISOString()
-              : undefined,
-            createdAt: post.createdAt.toISOString(),
-            updatedAt: post.updatedAt.toISOString(),
-            likeCount: post.likeCount,
-            commentCount: commentCounts.get(post.id) ?? post.commentCount,
-            shareCount: post.shareCount,
-            hasLiked: likeStatusMap[post.id] || false,
-            user: post.user
-              ? {
-                  ...post.user,
-                  username: post.user.username ?? undefined,
-                  name: post.user.name ?? undefined,
-                  avatarUrl: post.user.avatarUrl ?? undefined,
-                  bio: post.user.bio ?? undefined,
-                  createdAt: post.user.createdAt.toISOString(),
-                  updatedAt: post.user.updatedAt.toISOString(),
-                }
-              : undefined,
-            trip: omitHiddenTripSpend({
-              ...post.trip,
-              startDate: post.trip.startDate?.toISOString() || undefined,
-              endDate: post.trip.endDate?.toISOString() || undefined,
-              description: post.trip.description ?? undefined,
-              mood: post.trip.mood ?? undefined,
-              type: post.trip.type ?? undefined,
-              coverMediaId: post.trip.coverMediaId ?? undefined,
-              createdAt: post.trip.createdAt.toISOString(),
-              updatedAt: post.trip.updatedAt.toISOString(),
-              user: post.trip.user
-                ? {
-                    ...post.trip.user,
-                    username: post.trip.user.username ?? undefined,
-                    name: post.trip.user.name ?? undefined,
-                    avatarUrl: post.trip.user.avatarUrl ?? undefined,
-                    bio: post.trip.user.bio ?? undefined,
-                    createdAt: post.trip.user.createdAt.toISOString(),
-                    updatedAt: post.trip.user.updatedAt.toISOString(),
-                  }
-                : undefined,
-            }, post.trip.userId === currentUserId),
-            },
-          }));
+          const tripItems = rows.map((post) => {
+            const pins = mapPinsByTrip.get(post.tripId) ?? [];
+            return {
+              createdAt: post.createdAt,
+              id: post.id,
+              item: {
+                id: post.id,
+                tripId: post.tripId,
+                postKind: "trip" as const,
+                userId: post.userId,
+                summaryText: post.summaryText,
+                curatedMedia: post.curatedMedia,
+                caption: post.caption ?? undefined,
+                coverMediaUrl: post.coverMediaUrl ?? undefined,
+                templateChoice: post.templateChoice ?? "postcard",
+                generationStatus: post.generationStatus,
+                isPublished: post.isPublished,
+                publishedAt: post.publishedAt
+                  ? post.publishedAt.toISOString()
+                  : undefined,
+                createdAt: post.createdAt.toISOString(),
+                updatedAt: post.updatedAt.toISOString(),
+                likeCount: post.likeCount,
+                commentCount: commentCounts.get(post.id) ?? post.commentCount,
+                shareCount: post.shareCount,
+                hasLiked: likeStatusMap[post.id] || false,
+                threadPreview: threadPreviews.get(post.tripId) ?? [],
+                mapPins: pins.length > 0 ? pins : undefined,
+                user: post.user
+                  ? {
+                      ...post.user,
+                      username: post.user.username ?? undefined,
+                      name: post.user.name ?? undefined,
+                      avatarUrl: post.user.avatarUrl ?? undefined,
+                      bio: post.user.bio ?? undefined,
+                      createdAt: post.user.createdAt.toISOString(),
+                      updatedAt: post.user.updatedAt.toISOString(),
+                    }
+                  : undefined,
+                trip: omitHiddenTripSpend(
+                  {
+                    ...post.trip,
+                    startDate: post.trip.startDate?.toISOString() || undefined,
+                    endDate: post.trip.endDate?.toISOString() || undefined,
+                    description: post.trip.description ?? undefined,
+                    mood: post.trip.mood ?? undefined,
+                    type: post.trip.type ?? undefined,
+                    coverMediaId: post.trip.coverMediaId ?? undefined,
+                    createdAt: post.trip.createdAt.toISOString(),
+                    updatedAt: post.trip.updatedAt.toISOString(),
+                    user: post.trip.user
+                      ? {
+                          ...post.trip.user,
+                          username: post.trip.user.username ?? undefined,
+                          name: post.trip.user.name ?? undefined,
+                          avatarUrl: post.trip.user.avatarUrl ?? undefined,
+                          bio: post.trip.user.bio ?? undefined,
+                          createdAt: post.trip.user.createdAt.toISOString(),
+                          updatedAt: post.trip.user.updatedAt.toISOString(),
+                        }
+                      : undefined,
+                  },
+                  post.trip.userId === currentUserId
+                ),
+              },
+            };
+          });
 
           const mergedPage = sliceMergedFeed(
             [...tripItems, ...directPosts],

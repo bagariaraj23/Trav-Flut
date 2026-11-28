@@ -2542,12 +2542,20 @@ class ApiService {
     required String caption,
     List<String> media = const [],
     String? locationName,
+    double? latitude,
+    double? longitude,
+    String? placeId,
+    bool isPublished = true,
   }) async {
     try {
       final response = await _dio.post('/user-posts', data: {
         'caption': caption,
         'media': media,
         'locationName': locationName,
+        'latitude': latitude,
+        'longitude': longitude,
+        'placeId': placeId,
+        'isPublished': isPublished,
       });
       if (response.data['success'] == true && response.data['data'] != null) {
         return ApiResponse<Map<String, dynamic>>(
@@ -2577,12 +2585,20 @@ class ApiService {
     required String caption,
     List<String> media = const [],
     String? locationName,
+    double? latitude,
+    double? longitude,
+    String? placeId,
+    bool? isPublished,
   }) async {
     try {
       final response = await _dio.patch('/user-posts/$postId', data: {
         'caption': caption,
         'media': media,
         'locationName': locationName,
+        'latitude': latitude,
+        'longitude': longitude,
+        'placeId': placeId,
+        if (isPublished != null) 'isPublished': isPublished,
       });
       if (response.data['success'] == true && response.data['data'] != null) {
         return ApiResponse<Map<String, dynamic>>(

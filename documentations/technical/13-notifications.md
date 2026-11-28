@@ -50,6 +50,10 @@ Metadata keys the inbox understands: `postEntityType`, `postEntityId`, `commentI
 
 There is no push transport. No APNs, no FCM. The badge is polling `unread-count`. Offline push is called out as deferred next to chat in `context.json`.
 
+Chat send does **not** call `createNotification`. There is no `MESSAGE` (or chat) value on `NotificationType`. Unread chat counts live on conversation summaries and the Home messages / trip-chat icon badges, not in this inbox.
+
+On mobile, the Home bell badge is `pendingFollowRequests.length + pendingTripInvitations.length + unreadNotificationCount`, displayed with a minimized top-right label that shows `9+` above 9 (`AppIconBadge`). The API unread-count endpoint still excludes follow requests; the client adds them for the badge.
+
 ## Read path
 
 `getMergedNotifications`:

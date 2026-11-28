@@ -2,7 +2,7 @@
 
 Source of truth: `prisma/schema.prisma` on this handbook branch. PostgreSQL, UUID primary keys, foreign keys enforced by the database. Most tables are snake case via `@@map`. `Like`, `Comment`, and `Share` keep those PascalCase table names because those models have no `@@map`. Behavior of each cluster is in the feature chapter linked from [the index](./README.md).
 
-There are 28 tables. The pictures below use the PostgreSQL names. A line is a real foreign key. `entityType` plus `entityId` is not a foreign key. That pair is drawn separately.
+There are 31 tables (including `user_posts`, `early_access_requests`, and `chip_ins`). The pictures below use the PostgreSQL names. A line is a real foreign key. `entityType` plus `entityId` is not a foreign key. That pair is drawn separately.
 
 ## Entity-relationship diagram
 
@@ -131,7 +131,7 @@ flowchart LR
   sec -->|"same three values, both columns nullable"| cmt
 ```
 
-`EntityType` is `TRIP_FINAL_POST`, `TRIP_THREAD_ENTRY`, or `COMMENT`. Deleting a final post or a thread entry does not cascade into `Like`, `Comment`, `Share`, or `notifications`. The service deletes those rows itself.
+`EntityType` is `TRIP_FINAL_POST`, `TRIP_THREAD_ENTRY`, `USER_POST`, or `COMMENT`. Deleting a final post, direct post, or thread entry does not cascade into `Like`, `Comment`, `Share`, or `notifications`. The service deletes those rows itself.
 
 ## Schema diagram
 
@@ -397,9 +397,13 @@ Indexes: `(tripId, createdAt DESC, id DESC)`, `(authorId, createdAt DESC)`.
 
 ### TripFinalPost (`trip_final_posts`)
 
-`tripId`, `userId`, `summaryText`, `curatedMedia` string array, `caption`, `coverMediaUrl`, `generationStatus` default `DRAFT`, `isPublished` default false, `publishedAt`, counters `likeCount`, `commentCount`, `shareCount`. The API and the scheduler set `generationStatus` to `DRAFT` when they create the personal draft. `isPublished` stays false until that person publishes. `READY` remains on the enum and is not assigned. Migration `20261113180000_relabel_ready_final_posts_as_draft` rewrites stored `READY` rows to `DRAFT`.
+`tripId`, `userId`, `summaryText`, `curatedMedia` string array, `caption`, `coverMediaUrl`, `templateChoice` default `postcard` (`FinalPostTemplateChoice`: `postcard`, `map_first`, `thread_reel`), `generationStatus` default `DRAFT`, `isPublished` default false, `publishedAt`, counters `likeCount`, `commentCount`, `shareCount`. The API and the scheduler set `generationStatus` to `DRAFT` when they create the personal draft. `isPublished` stays false until that person publishes. `READY` remains on the enum and is not assigned. Migration `20261113180000_relabel_ready_final_posts_as_draft` rewrites stored `READY` rows to `DRAFT`.
 
 Unique `(tripId, userId)`. Indexes `tripId`, `(userId, isPublished, publishedAt)`, and `(isPublished, createdAt DESC, id DESC)`.
+
+### UserPost (`user_posts`)
+
+A post that is not tied to a trip. `userId`, `caption`, `media` string array (up to 12 of the author's uploads), optional `locationName` / `latitude` / `longitude` / `placeId`, `templateChoice` default `postcard`, `isPublished` default true, `publishedAt`, counters. Indexes `(userId, isPublished, publishedAt)` and `(isPublished, createdAt DESC, id DESC)`. Engagements use `EntityType.USER_POST`.
 
 ### UserSafetyRelation (`user_safety_relations`)
 
@@ -447,7 +451,8 @@ Enums: `ExpenseCategory`, `ExpenseSplitMethod` (`EQUAL`, `EXACT`, `PERCENT`, `SH
 
 ## Engagement
 
-`EntityType`: `TRIP_FINAL_POST`, `TRIP_THREAD_ENTRY`, `COMMENT`.
+`EntityType`: `TRIP_FINAL_POST`, `TRIP_THREAD_ENTRY`, `USER_POST`, `COMMENT`.
+`FinalPostTemplateChoice`: `postcard`, `map_first`, `thread_reel`.
 
 ### Like
 
@@ -492,7 +497,8 @@ Enums: `ExpenseCategory`, `ExpenseSplitMethod` (`EQUAL`, `EXACT`, `PERCENT`, `SH
 | `MediaProcessingStatus` | `PENDING`, `PROCESSING`, `COMPLETED`, `FAILED` |
 | `TripJoinRequestStatus` | `PENDING`, `ACCEPTED`, `REJECTED` |
 | `GenerationStatus` | `DRAFT`, `GENERATING`, `READY`, `PUBLISHED`, `FAILED` |
-| `EntityType` | `TRIP_FINAL_POST`, `TRIP_THREAD_ENTRY`, `COMMENT` |
+| `EntityType` | `TRIP_FINAL_POST`, `TRIP_THREAD_ENTRY`, `USER_POST`, `COMMENT` |
+| `FinalPostTemplateChoice` | `postcard`, `map_first`, `thread_reel` |
 | `ShareType` | `DEEP_LINK`, `WEB_LINK`, `EXTERNAL` |
 | `ConversationType` | `DM`, `GROUP`, `TRIP` |
 | `ConversationParticipantRole` | `MEMBER`, `ADMIN` |
