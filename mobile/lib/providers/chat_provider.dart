@@ -37,6 +37,15 @@ class ChatProvider with ChangeNotifier {
   String? get error => _error;
   bool get loadingConversations => _loadingConversations;
 
+  /// Sum of unread messages across DM, group, and trip conversations.
+  int get totalUnreadCount =>
+      _conversations.fold<int>(0, (sum, c) => sum + c.unreadCount);
+
+  /// Unread messages for a trip's chat conversation(s).
+  int unreadForTrip(String tripId) => _conversations
+      .where((c) => c.tripId == tripId)
+      .fold<int>(0, (sum, c) => sum + c.unreadCount);
+
   /// Returns 'online' or an ISO-8601 string representing the last time the
   /// user was online. Returns null if presence is unknown.
   String? getPresence(String userId) => _presenceByUser[userId];

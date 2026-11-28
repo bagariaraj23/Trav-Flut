@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
 import 'package:tripthread/providers/trip_provider.dart';
 import 'package:tripthread/providers/auth_provider.dart';
+import 'package:tripthread/providers/chat_provider.dart';
 import 'package:tripthread/models/trip.dart';
 import 'package:tripthread/models/user.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -13,6 +14,7 @@ import 'package:tripthread/utils/device_timezone.dart';
 import 'package:tripthread/utils/chat_navigation.dart';
 import 'package:tripthread/utils/user_display_labels.dart';
 import 'package:tripthread/utils/cloudinary_utils.dart';
+import 'package:tripthread/widgets/app_icon_badge.dart';
 import 'package:tripthread/widgets/loading_button.dart';
 import 'package:tripthread/widgets/mention_text.dart';
 import 'package:tripthread/widgets/trip_cover_placeholder.dart';
@@ -40,6 +42,10 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
   void initState() {
     super.initState();
     _loadTrip();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      context.read<ChatProvider>().loadConversations(tripId: widget.tripId);
+    });
   }
 
   @override
@@ -399,13 +405,18 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
               ),
               actions: [
                 if (_trip != null && _isOwnerOrParticipant())
-                  IconButton(
-                    icon: const Icon(Icons.chat_bubble_outline),
-                    tooltip: 'Trip Chat',
-                    onPressed: () {
-                      context.push(
-                        '/chat?tripId=${widget.tripId}',
-                        extra: chatReturnExtra('/trip/${widget.tripId}'),
+                  Consumer<ChatProvider>(
+                    builder: (context, chatProvider, _) {
+                      return AppIconBadge(
+                        icon: const Icon(Icons.chat_bubble_outline),
+                        tooltip: 'Trip Chat',
+                        count: chatProvider.unreadForTrip(widget.tripId),
+                        onPressed: () {
+                          context.push(
+                            '/chat?tripId=${widget.tripId}',
+                            extra: chatReturnExtra('/trip/${widget.tripId}'),
+                          );
+                        },
                       );
                     },
                   ),

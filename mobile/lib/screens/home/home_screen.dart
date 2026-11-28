@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
 import 'package:tripthread/providers/auth_provider.dart';
+import 'package:tripthread/providers/chat_provider.dart';
 import 'package:tripthread/providers/trip_provider.dart';
 import 'package:tripthread/providers/feed_provider.dart';
 import 'package:tripthread/providers/user_provider.dart';
@@ -16,6 +17,7 @@ import 'package:tripthread/utils/app_layout.dart';
 import 'package:tripthread/utils/app_theme.dart';
 import 'package:tripthread/utils/trip_time_format.dart';
 import 'package:tripthread/utils/cloudinary_utils.dart';
+import 'package:tripthread/widgets/app_icon_badge.dart';
 import 'package:tripthread/widgets/feed/final_post_feed_card.dart';
 import 'package:tripthread/widgets/floating_trip_nav_button.dart';
 import 'package:tripthread/widgets/logout_dialog.dart';
@@ -90,12 +92,13 @@ class _HomeScreenState extends State<HomeScreen> {
         }
       }
 
-      // Load pending follow requests and unread notification count to update notification badge
+      // Load badge sources: notifications + chat unread (DM / group / trip)
       if (!mounted) return;
       final userProvider = context.read<UserProvider>();
       userProvider.loadPendingFollowRequests();
       userProvider.loadUnreadNotificationCount();
-      debugPrint('[HomeScreen] Loading notifications for badge');
+      context.read<ChatProvider>().loadConversations();
+      debugPrint('[HomeScreen] Loading notifications and chat unread for badges');
     });
   }
 
@@ -464,52 +467,29 @@ class _HomeFeedScreenState extends State<HomeFeedScreen> {
           ],
         ),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.chat_bubble_outline),
-            tooltip: 'Messages',
-            onPressed: () => context.push('/chat'),
+          Consumer<ChatProvider>(
+            builder: (context, chatProvider, _) {
+              return AppIconBadge(
+                icon: const Icon(Icons.chat_bubble_outline),
+                tooltip: 'Messages',
+                count: chatProvider.totalUnreadCount,
+                onPressed: () => context.push('/chat'),
+              );
+            },
           ),
-          // Combined Notification Icon
           Consumer2<UserProvider, TripProvider>(
             builder: (context, userProvider, tripProvider, child) {
               final totalPending =
                   userProvider.pendingFollowRequests.length +
                   tripProvider.pendingTripInvitations.length +
                   userProvider.unreadNotificationCount;
-              return Stack(
-                alignment: Alignment.center,
-                children: [
-                  IconButton(
-                    icon: const Icon(Icons.notifications_outlined),
-                    onPressed: () {
-                      context.push('/notifications');
-                    },
-                  ),
-                  if (totalPending > 0)
-                    Positioned(
-                      top: 8,
-                      right: 8,
-                      child: Container(
-                        padding: const EdgeInsets.all(2),
-                        decoration: BoxDecoration(
-                          color: AppTheme.likeRose,
-                          borderRadius: BorderRadius.circular(6),
-                        ),
-                        constraints: const BoxConstraints(
-                          minWidth: 14,
-                          minHeight: 14,
-                        ),
-                        child: Text(
-                          '$totalPending',
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 8,
-                          ),
-                          textAlign: TextAlign.center,
-                        ),
-                      ),
-                    ),
-                ],
+              return AppIconBadge(
+                icon: const Icon(Icons.notifications_outlined),
+                tooltip: 'Notifications',
+                count: totalPending,
+                onPressed: () {
+                  context.push('/notifications');
+                },
               );
             },
           ),

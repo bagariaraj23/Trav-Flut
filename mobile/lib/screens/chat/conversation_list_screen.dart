@@ -246,7 +246,9 @@ class _ConversationTile extends StatelessWidget {
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Text(
-                '${conversation.unreadCount}',
+                conversation.unreadCount > 9
+                    ? '9+'
+                    : '${conversation.unreadCount}',
                 style: TextStyle(
                   color: Theme.of(context).colorScheme.onSecondary,
                   fontSize: 12,

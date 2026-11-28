@@ -552,6 +552,38 @@ void main() {
     });
   });
 
+  group('unread badge totals', () {
+    setUp(() async {
+      api.conversations = [
+        sampleConversation(id: 'dm-1', type: 'DM', unreadCount: 3),
+        sampleConversation(id: 'group-1', type: 'GROUP', unreadCount: 5),
+        sampleConversation(
+          id: 'trip-abc',
+          type: 'TRIP',
+          tripId: 'trip-abc',
+          unreadCount: 4,
+        ),
+        sampleConversation(
+          id: 'trip-xyz',
+          type: 'TRIP',
+          tripId: 'trip-xyz',
+          unreadCount: 0,
+        ),
+      ];
+      await provider.loadConversations();
+    });
+
+    test('totalUnreadCount sums DM, group, and trip unread', () {
+      expect(provider.totalUnreadCount, 12);
+    });
+
+    test('unreadForTrip returns only that trip conversation unread', () {
+      expect(provider.unreadForTrip('trip-abc'), 4);
+      expect(provider.unreadForTrip('trip-xyz'), 0);
+      expect(provider.unreadForTrip('missing'), 0);
+    });
+  });
+
   // ensureConversationLoaded
   group('ensureConversationLoaded', () {
     test('fetches and inserts a missing conversation', () async {
