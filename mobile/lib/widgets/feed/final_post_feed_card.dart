@@ -33,11 +33,14 @@ class FinalPostFeedCard extends StatelessWidget {
   final TripFinalPost post;
   final Future<void> Function(BuildContext context, TripFinalPost post)?
       onDelete;
+  /// When true, engagement and navigation are inert (compose/final-post preview).
+  final bool previewMode;
 
   const FinalPostFeedCard({
     super.key,
     required this.post,
     this.onDelete,
+    this.previewMode = false,
   });
 
   @override
@@ -60,19 +63,22 @@ class FinalPostFeedCard extends StatelessWidget {
             post: post,
             author: author,
             authorId: authorId,
-            isOwner: isOwner,
-            onDelete: onDelete,
+            isOwner: isOwner && !previewMode,
+            onDelete: previewMode ? null : onDelete,
           ),
           // Posts without a trip stay postcard: no trip map-first or thread reel.
           if (post.isDirectPost)
-            _PostcardBody(post: post)
+            _PostcardBody(post: post, previewMode: previewMode)
           else
             switch (post.templateChoice) {
-              FinalPostTemplateChoice.mapFirst => _MapFirstBody(post: post),
-              FinalPostTemplateChoice.threadReel => _ThreadReelBody(post: post),
-              FinalPostTemplateChoice.postcard => _PostcardBody(post: post),
+              FinalPostTemplateChoice.mapFirst =>
+                _MapFirstBody(post: post, previewMode: previewMode),
+              FinalPostTemplateChoice.threadReel =>
+                _ThreadReelBody(post: post, previewMode: previewMode),
+              FinalPostTemplateChoice.postcard =>
+                _PostcardBody(post: post, previewMode: previewMode),
             },
-          _FeedCardFooter(post: post),
+          _FeedCardFooter(post: post, previewMode: previewMode),
         ],
       ),
     );
@@ -181,8 +187,12 @@ class _FeedCardHeader extends StatelessWidget {
 
 class _FeedCardFooter extends StatelessWidget {
   final TripFinalPost post;
+  final bool previewMode;
 
-  const _FeedCardFooter({required this.post});
+  const _FeedCardFooter({
+    required this.post,
+    this.previewMode = false,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -193,61 +203,83 @@ class _FeedCardFooter extends StatelessWidget {
           Expanded(
             child: Align(
               alignment: Alignment.centerLeft,
-              child: EngagementActionBar(
-                entityType: post.engagementEntityType,
-                entityId: post.id,
-                likeCount: post.likeCount,
-                commentCount: post.commentCount,
-                shareCount: post.shareCount,
-                hasLiked: post.hasLiked,
-                onCommentTap: () {
-                  showModalBottomSheet(
-                    context: context,
-                    isScrollControlled: true,
-                    backgroundColor: Colors.transparent,
-                    builder: (context) => CommentBottomSheet(
+              child: previewMode
+                  ? IgnorePointer(
+                      child: Opacity(
+                        opacity: 0.55,
+                        child: EngagementActionBar(
+                          entityType: post.engagementEntityType,
+                          entityId: post.id.isEmpty ? 'preview' : post.id,
+                          likeCount: post.likeCount,
+                          commentCount: post.commentCount,
+                          shareCount: post.shareCount,
+                          hasLiked: post.hasLiked,
+                          onCommentTap: () {},
+                          onShareTap: () {},
+                          onLikeChanged: () {},
+                        ),
+                      ),
+                    )
+                  : EngagementActionBar(
                       entityType: post.engagementEntityType,
                       entityId: post.id,
+                      likeCount: post.likeCount,
+                      commentCount: post.commentCount,
+                      shareCount: post.shareCount,
+                      hasLiked: post.hasLiked,
+                      onCommentTap: () {
+                        showModalBottomSheet(
+                          context: context,
+                          isScrollControlled: true,
+                          backgroundColor: Colors.transparent,
+                          builder: (context) => CommentBottomSheet(
+                            entityType: post.engagementEntityType,
+                            entityId: post.id,
+                          ),
+                        );
+                      },
+                      onShareTap: () {
+                        showModalBottomSheet(
+                          context: context,
+                          backgroundColor: Colors.transparent,
+                          builder: (context) => ShareBottomSheet(
+                            entityType: post.engagementEntityType,
+                            entityId: post.id,
+                          ),
+                        );
+                      },
+                      onLikeChanged: () {
+                        final engagementProvider =
+                            context.read<EngagementProvider>();
+                        final feedProvider = context.read<FeedProvider>();
+                        final updatedPost = post.copyWith(
+                          likeCount: engagementProvider.getLikeCount(post.id),
+                          hasLiked: engagementProvider.isLiked(post.id),
+                        );
+                        final index = feedProvider.homeFeedPosts
+                            .indexWhere((p) => p.id == post.id);
+                        if (index >= 0) {
+                          feedProvider.updatePost(index, updatedPost);
+                        }
+                      },
                     ),
-                  );
-                },
-                onShareTap: () {
-                  showModalBottomSheet(
-                    context: context,
-                    backgroundColor: Colors.transparent,
-                    builder: (context) => ShareBottomSheet(
-                      entityType: post.engagementEntityType,
-                      entityId: post.id,
-                    ),
-                  );
-                },
-                onLikeChanged: () {
-                  final engagementProvider = context.read<EngagementProvider>();
-                  final feedProvider = context.read<FeedProvider>();
-                  final updatedPost = post.copyWith(
-                    likeCount: engagementProvider.getLikeCount(post.id),
-                    hasLiked: engagementProvider.isLiked(post.id),
-                  );
-                  final index = feedProvider.homeFeedPosts
-                      .indexWhere((p) => p.id == post.id);
-                  if (index >= 0) {
-                    feedProvider.updatePost(index, updatedPost);
-                  }
-                },
-              ),
             ),
           ),
           TextButton(
-            onPressed: () {
-              if (post.isDirectPost) {
-                context.push('/post/${post.engagementEntityType}/${post.id}');
-              } else if ((post.tripId ?? '').isNotEmpty) {
-                context.push(
-                  '/trip/${post.tripId}',
-                  extra: {'from': '/home'},
-                );
-              }
-            },
+            onPressed: previewMode
+                ? null
+                : () {
+                    if (post.isDirectPost) {
+                      context.push(
+                        '/post/${post.engagementEntityType}/${post.id}',
+                      );
+                    } else if ((post.tripId ?? '').isNotEmpty) {
+                      context.push(
+                        '/trip/${post.tripId}',
+                        extra: {'from': '/home'},
+                      );
+                    }
+                  },
             child: Text(post.isDirectPost ? 'View post' : 'Open trip'),
           ),
         ],
@@ -301,8 +333,12 @@ void _openThreadEntry(
 
 class _PostcardBody extends StatefulWidget {
   final TripFinalPost post;
+  final bool previewMode;
 
-  const _PostcardBody({required this.post});
+  const _PostcardBody({
+    required this.post,
+    this.previewMode = false,
+  });
 
   @override
   State<_PostcardBody> createState() => _PostcardBodyState();
@@ -482,7 +518,9 @@ class _PostcardBodyState extends State<_PostcardBody> {
               pins: pins,
               height: 88,
               label: mapLabel,
-              onTap: () => _openTripMap(context, post),
+              onTap: widget.previewMode
+                  ? () {}
+                  : () => _openTripMap(context, post),
             ),
           ),
         if (!post.isDirectPost && post.threadPreview.isNotEmpty)
@@ -490,6 +528,7 @@ class _PostcardBodyState extends State<_PostcardBody> {
             tripId: post.tripId,
             entries: post.threadPreview,
             entriesPerPage: 1,
+            previewMode: widget.previewMode,
           ),
       ],
     );
@@ -498,8 +537,12 @@ class _PostcardBodyState extends State<_PostcardBody> {
 
 class _MapFirstBody extends StatelessWidget {
   final TripFinalPost post;
+  final bool previewMode;
 
-  const _MapFirstBody({required this.post});
+  const _MapFirstBody({
+    required this.post,
+    this.previewMode = false,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -522,7 +565,7 @@ class _MapFirstBody extends StatelessWidget {
               showOpenChip: !post.isDirectPost,
               label: post.isDirectPost && place.isNotEmpty ? place : null,
               routeScrim: !post.isDirectPost && route.isNotEmpty ? route : null,
-              onTap: () => _openTripMap(context, post),
+              onTap: previewMode ? () {} : () => _openTripMap(context, post),
             ),
           )
         else if (route.isNotEmpty)
@@ -601,6 +644,7 @@ class _MapFirstBody extends StatelessWidget {
             tripId: post.tripId,
             entries: post.threadPreview,
             entriesPerPage: 1,
+            previewMode: previewMode,
           ),
       ],
     );
@@ -609,8 +653,12 @@ class _MapFirstBody extends StatelessWidget {
 
 class _ThreadReelBody extends StatefulWidget {
   final TripFinalPost post;
+  final bool previewMode;
 
-  const _ThreadReelBody({required this.post});
+  const _ThreadReelBody({
+    required this.post,
+    this.previewMode = false,
+  });
 
   @override
   State<_ThreadReelBody> createState() => _ThreadReelBodyState();
@@ -691,7 +739,9 @@ class _ThreadReelBodyState extends State<_ThreadReelBody> {
                             left: 8,
                             bottom: 8,
                             child: GestureDetector(
-                              onTap: () => _openTripMap(context, post),
+                              onTap: widget.previewMode
+                                  ? null
+                                  : () => _openTripMap(context, post),
                               child: Container(
                                 padding: const EdgeInsets.symmetric(
                                   horizontal: 8,
@@ -743,19 +793,20 @@ class _ThreadReelBodyState extends State<_ThreadReelBody> {
                                         i++) ...[
                                       if (i > 0) const SizedBox(height: 8),
                                       Expanded(
-                                        child: _ReelSnippet(
-                                          entry: pageEntries[i],
-                                          tripId: post.tripId,
-                                        ),
-                                      ),
-                                    ],
-                                    if (pageEntries.length == 1)
-                                      const Expanded(child: SizedBox()),
-                                  ],
-                                );
-                              },
-                            )
-                          : photoMoments.isNotEmpty
+                                    child: _ReelSnippet(
+                                      entry: pageEntries[i],
+                                      tripId: post.tripId,
+                                      previewMode: widget.previewMode,
+                                    ),
+                                  ),
+                                ],
+                                if (pageEntries.length == 1)
+                                  const Expanded(child: SizedBox()),
+                              ],
+                            );
+                          },
+                        )
+                      : photoMoments.isNotEmpty
                               ? Column(
                                   children: [
                                     for (var i = 0;
@@ -889,10 +940,12 @@ class _ThreadReelBodyState extends State<_ThreadReelBody> {
 class _ReelSnippet extends StatelessWidget {
   final FeedThreadPreviewItem entry;
   final String? tripId;
+  final bool previewMode;
 
   const _ReelSnippet({
     required this.entry,
     required this.tripId,
+    this.previewMode = false,
   });
 
   @override
@@ -900,11 +953,13 @@ class _ReelSnippet extends StatelessWidget {
     return Material(
       color: Colors.transparent,
       child: InkWell(
-        onTap: () => _openThreadEntry(
-          context,
-          tripId: tripId,
-          entryId: entry.id,
-        ),
+        onTap: previewMode
+            ? null
+            : () => _openThreadEntry(
+                  context,
+                  tripId: tripId,
+                  entryId: entry.id,
+                ),
         borderRadius: const BorderRadius.horizontal(right: Radius.circular(10)),
         child: Container(
           width: double.infinity,
@@ -1109,11 +1164,13 @@ class _ThreadPager extends StatefulWidget {
   final String? tripId;
   final List<FeedThreadPreviewItem> entries;
   final int entriesPerPage;
+  final bool previewMode;
 
   const _ThreadPager({
     required this.tripId,
     required this.entries,
     required this.entriesPerPage,
+    this.previewMode = false,
   });
 
   @override
@@ -1175,6 +1232,7 @@ class _ThreadPagerState extends State<_ThreadPager> {
                         child: _ThreadEntryRow(
                           entry: page[i],
                           tripId: widget.tripId,
+                          previewMode: widget.previewMode,
                         ),
                       ),
                     ],
@@ -1211,10 +1269,12 @@ class _ThreadPagerState extends State<_ThreadPager> {
 class _ThreadEntryRow extends StatelessWidget {
   final FeedThreadPreviewItem entry;
   final String? tripId;
+  final bool previewMode;
 
   const _ThreadEntryRow({
     required this.entry,
     required this.tripId,
+    this.previewMode = false,
   });
 
   @override
@@ -1223,11 +1283,13 @@ class _ThreadEntryRow extends StatelessWidget {
     return Material(
       color: Colors.transparent,
       child: InkWell(
-        onTap: () => _openThreadEntry(
-          context,
-          tripId: tripId,
-          entryId: entry.id,
-        ),
+        onTap: previewMode
+            ? null
+            : () => _openThreadEntry(
+                  context,
+                  tripId: tripId,
+                  entryId: entry.id,
+                ),
         borderRadius: BorderRadius.circular(12),
         child: Container(
           padding: const EdgeInsets.all(8),

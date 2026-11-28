@@ -9,6 +9,7 @@ import 'package:tripthread/services/trip_service.dart';
 import 'package:tripthread/utils/app_layout.dart';
 import 'package:tripthread/utils/app_theme.dart';
 import 'package:tripthread/utils/cloudinary_utils.dart';
+import 'package:tripthread/screens/post/post_preview_screen.dart';
 import 'package:tripthread/widgets/feed/final_post_template_picker.dart';
 import 'package:tripthread/widgets/media/media_seek.dart';
 import 'package:tripthread/utils/trip_time_format.dart';
@@ -806,35 +807,67 @@ class _FinalPostEditScreenState extends State<FinalPostEditScreen> {
                 const SizedBox(width: 12),
                 Expanded(
                   child: ElevatedButton(
-                    onPressed: provider.isPublishing
+                    onPressed: provider.isPublishing || provider.isSaving
                         ? null
                         : () async {
                             final messenger = ScaffoldMessenger.of(context);
                             final router = GoRouter.of(context);
-                            final success = await provider.publish();
+                            // Persist latest edits so preview matches the draft.
+                            final saved = await provider.saveDraft();
                             if (!mounted) return;
-                            if (success) {
+                            if (!saved) {
+                              messenger.showSnackBar(
+                                SnackBar(
+                                  content: Text(
+                                    provider.error ?? 'Could not save draft',
+                                  ),
+                                ),
+                              );
+                              return;
+                            }
+                            // Reload so thread/map preview fields are present.
+                            await provider.loadDraft(widget.tripId);
+                            if (!mounted) return;
+                            final preview = provider.draft;
+                            if (preview == null) return;
+                            final result =
+                                await Navigator.of(context).push<Map<String, dynamic>>(
+                              MaterialPageRoute(
+                                builder: (context) => PostPreviewScreen(
+                                  post: preview,
+                                  title: 'Trip post preview',
+                                  onSaveDraft: () => provider.saveDraft(),
+                                  onPublish: () => provider.publish(),
+                                ),
+                              ),
+                            );
+                            if (!mounted || result == null) return;
+                            if (result['published'] == true) {
                               messenger.showSnackBar(
                                 const SnackBar(
                                   content: Text('Trip published to your feed!'),
                                 ),
                               );
                               router.go('/home');
+                            } else if (result['saved'] == true) {
+                              messenger.showSnackBar(
+                                const SnackBar(content: Text('Draft saved')),
+                              );
                             }
                           },
                     style: ElevatedButton.styleFrom(
                       minimumSize: const Size.fromHeight(48),
                     ),
-                    child: provider.isPublishing
+                    child: provider.isPublishing || provider.isSaving
                         ? const SizedBox(
-                            height: 20,
                             width: 20,
+                            height: 20,
                             child: CircularProgressIndicator(
                               strokeWidth: 2,
                               color: Colors.white,
                             ),
                           )
-                        : const Text('Publish'),
+                        : const Text('Preview'),
                   ),
                 ),
               ],

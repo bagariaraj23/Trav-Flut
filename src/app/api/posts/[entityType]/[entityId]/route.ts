@@ -41,11 +41,20 @@ export async function GET(
 
           const type = entityType as EntityType;
           if (type === "USER_POST") {
-            const post = await UserPostService.getVisible(entityId, userId);
-            return NextResponse.json<ApiResponse<TripFinalPostResponse>>({
-              success: true,
-              data: post,
-            });
+            try {
+              const post = await UserPostService.getVisible(entityId, userId);
+              return NextResponse.json<ApiResponse<TripFinalPostResponse>>({
+                success: true,
+                data: post,
+              });
+            } catch {
+              // Owners can still open unpublished drafts for edit/preview.
+              const draft = await UserPostService.getOwn(entityId, userId);
+              return NextResponse.json<ApiResponse<TripFinalPostResponse>>({
+                success: true,
+                data: draft,
+              });
+            }
           }
           if (type !== "TRIP_FINAL_POST" && type !== "TRIP_THREAD_ENTRY") {
             return NextResponse.json(

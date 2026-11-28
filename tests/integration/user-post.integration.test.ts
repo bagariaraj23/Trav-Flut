@@ -43,6 +43,58 @@ describe("Direct posts", () => {
     await cleanDb();
   });
 
+  it("saves an unpublished draft that stays off the home feed", async () => {
+    const author = await createUser({ email: "draft-author@test.com", name: "Draft" });
+    const photo = "https://cdn.example.com/draft-photo.jpg";
+    await ownPhoto(author.id, photo);
+    const token = await getAuthToken(author);
+
+    const created = await createUserPost(
+      authRequest("http://localhost/api/user-posts", "POST", token, {
+        caption: "Draft caption only",
+        media: [photo],
+        locationName: "Quiet cove",
+        latitude: 12.3,
+        longitude: 45.6,
+        isPublished: false,
+      })
+    );
+    const body = await json(created);
+    expect(created.status).toBe(200);
+    expect(body.data.isPublished).toBe(false);
+    expect(body.data.mapPins).toEqual([
+      { lat: 12.3, lng: 45.6, name: "Quiet cove" },
+    ]);
+
+    const feed = await getFeedRoute(
+      authRequest("http://localhost/api/feed/home", "GET", token)
+    );
+    const feedBody = await json(feed);
+    const feedItem = feedBody.data.items.find(
+      (item: { id: string }) => item.id === body.data.id
+    );
+    expect(feedItem).toBeUndefined();
+
+    const published = await updateUserPost(
+      authRequest(
+        `http://localhost/api/user-posts/${body.data.id}`,
+        "PATCH",
+        token,
+        {
+          caption: "Draft caption only",
+          media: [photo],
+          locationName: "Quiet cove",
+          latitude: 12.3,
+          longitude: 45.6,
+          isPublished: true,
+        }
+      )
+    );
+    const publishedBody = await json(published);
+    expect(published.status).toBe(200);
+    expect(publishedBody.data.isPublished).toBe(true);
+  });
+
   it("publishes a caption, the author's photo, and a location", async () => {
     const author = await createUser({ email: "direct-author@test.com", name: "Author" });
     const photo = "https://cdn.example.com/direct-photo.jpg";

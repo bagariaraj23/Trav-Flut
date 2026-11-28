@@ -7,15 +7,23 @@ import {
 } from "@/types/api";
 import { TripFinalizerService } from "@/lib/services/tripFinalizer";
 import {
+  loadFeedMapPins,
+  loadFeedThreadPreviews,
+} from "@/lib/feedCardPreview";
+import {
   withAuth,
   withRateLimit,
   withLogging,
   handleApiError,
 } from "@/lib/middleware";
 
-function toResponse(
+async function toResponse(
   finalPost: Awaited<ReturnType<typeof TripFinalizerService.getFinalPost>>
-): TripFinalPostResponse {
+): Promise<TripFinalPostResponse> {
+  const [threadPreviews, mapPinsByTrip] = await Promise.all([
+    loadFeedThreadPreviews([finalPost.tripId]),
+    loadFeedMapPins([finalPost.tripId]),
+  ]);
   return {
     ...finalPost,
     caption: finalPost.caption ?? undefined,
@@ -26,6 +34,9 @@ function toResponse(
     createdAt: finalPost.createdAt.toISOString(),
     updatedAt: finalPost.updatedAt.toISOString(),
     generationStatus: finalPost.generationStatus,
+    postKind: "trip",
+    threadPreview: threadPreviews.get(finalPost.tripId) ?? [],
+    mapPins: mapPinsByTrip.get(finalPost.tripId) ?? [],
   };
 }
 
@@ -90,7 +101,7 @@ export async function GET(
 
           return NextResponse.json<ApiResponse<TripFinalPostResponse>>({
             success: true,
-            data: toResponse(finalPost),
+            data: await toResponse(finalPost),
           });
         } catch (error) {
           return handleApiError(error);
@@ -129,7 +140,7 @@ export async function PUT(
 
           return NextResponse.json<ApiResponse<TripFinalPostResponse>>({
             success: true,
-            data: toResponse(finalPost),
+            data: await toResponse(finalPost),
             message: "Final post updated",
           });
         } catch (error) {
