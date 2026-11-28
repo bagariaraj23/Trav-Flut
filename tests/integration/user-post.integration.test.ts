@@ -88,7 +88,8 @@ describe("Direct posts", () => {
           longitude: 45.6,
           isPublished: true,
         }
-      )
+      ),
+      { params: Promise.resolve({ id: body.data.id }) }
     );
     const publishedBody = await json(published);
     expect(published.status).toBe(200);
