@@ -160,7 +160,7 @@ const helpTopics = <HelpTopic>[
       HelpItem(
         question: 'What kinds of chats are there?',
         answer:
-            'A direct message is one room for two people. Starting it again opens the same room. A group can hold 16 people, including those already in it. Each trip has one chat named after the trip. The trip owner is an admin of that chat.',
+            'A direct message is one room for two people. Starting it again opens the same room. A group can hold 16 people, including those already in it. Each trip has one chat named after the trip. The trip owner is an admin of that chat. Unread counts appear on the Home messages icon and on the trip chat icon. New chat messages do not send a notification.',
       ),
       HelpItem(
         question: 'What can an admin do?',
@@ -191,7 +191,12 @@ const helpTopics = <HelpTopic>[
       HelpItem(
         question: 'What shows up in notifications?',
         answer:
-            'Notifications cover likes, comments, replies, tags, and follows on a public account. You are not notified when you like your own post. Follow requests and trip invitations open from their own screens. The unread count does not include follow requests. There is no push notification.',
+            'Notifications cover likes, comments, replies, tags, and follows on a public account. You are not notified when you like your own post. Follow requests and trip invitations open from their own screens. The badge on the bell combines unread notifications with waiting follow requests and trip invitations. Chat messages do not create a notification. There is no push notification.',
+      ),
+      HelpItem(
+        question: 'What do the counts on the Home icons mean?',
+        answer:
+            'The messages icon shows how many unread chat messages you have across direct messages, groups, and trip chats. The bell shows unread notifications plus waiting follow requests and trip invitations. On a trip, the trip chat icon shows unread messages for that trip only. Each badge sits on the top-right of the icon and shows 9+ when the count is above 9.',
       ),
     ],
   ),
@@ -202,7 +207,7 @@ const helpTopics = <HelpTopic>[
       HelpItem(
         question: 'What is on Home?',
         answer:
-            'Home shows published final posts from you, from people you follow, and from public accounts. A private author’s post appears when it is yours or you follow them. Happening now shows ongoing trips that you or someone you follow is on. Your own trip is listed first.',
+            'Home shows published trip recaps and posts you write without a trip, from you, from people you follow, and from public accounts. A private author’s post appears when it is yours or you follow them. Cards can use a Postcard, Map, or Threads layout. Happening now shows ongoing trips that you or someone you follow is on. Your own trip is listed first. The plus control on Home opens a new post that is not tied to a trip.',
       ),
       HelpItem(
         question: 'What is on Discover?',
@@ -218,7 +223,7 @@ const helpTopics = <HelpTopic>[
   ),
   HelpTopic(
     id: 'final-posts',
-    title: 'Final posts',
+    title: 'Final posts and posts without a trip',
     items: [
       HelpItem(
         question: 'When is a final post created?',
@@ -226,9 +231,14 @@ const helpTopics = <HelpTopic>[
             'Each person on the trip gets their own final post. It is created when an ongoing trip ends, whether you end it or the scheduled end arrives. Ending an upcoming trip does not create one. Either ending leaves an unpublished draft with that person\'s photos. Generating it again does not overwrite edits.',
       ),
       HelpItem(
-        question: 'How do I publish it?',
+        question: 'How do I publish a trip final post?',
         answer:
-            'Edit the summary, caption, cover, and up to 12 photos. The picker shows the order you chose. Publish needs a summary of at least 50 characters and at least one photo or a cover. Ending the trip does not publish the post. Only a published post appears on Home and on its link. You can still edit it after publishing, and you can delete it.',
+            'Edit the summary, caption, cover, and up to 12 photos. You can add a photo from the trip or from your phone or camera. Choose a card layout: Postcard, Map, or Threads. Publish needs a summary of at least 50 characters and at least one photo or a cover. Ending the trip does not publish the post. Only a published post appears on Home and on its link. You can still edit it after publishing, and you can delete it.',
+      ),
+      HelpItem(
+        question: 'Can I post without a trip?',
+        answer:
+            'Yes. From Home, open the compose control, write a caption, add up to 12 photos from your phone or camera, and optionally a place. You preview the card before it publishes. That post has no trip link. It appears on Home with the same audience rules as a published final post.',
       ),
     ],
   ),

@@ -9,7 +9,7 @@ Three read models sit on top of trips and final posts.
 | Discover | `GET /api/discover/trips` | Other people's ongoing and ended trips, ranked |
 | Deeplink | `GET /api/posts/:entityType/:entityId` | One published final post or direct post |
 
-Primary files: `src/app/api/feed/home/route.ts`, `src/app/api/feed/live-trips/route.ts`, `src/app/api/discover/trips/route.ts`, `src/app/api/posts/[entityType]/[entityId]/route.ts`, `src/lib/feedCursor.ts`, `src/lib/tripSpendVisibility.ts`, `mobile/lib/providers/feed_provider.dart`.
+Primary files: `src/app/api/feed/home/route.ts`, `src/app/api/feed/live-trips/route.ts`, `src/app/api/discover/trips/route.ts`, `src/app/api/posts/[entityType]/[entityId]/route.ts`, `src/lib/feedCursor.ts`, `src/lib/feedCardPreview.ts`, `src/lib/tripSpendVisibility.ts`, `mobile/lib/providers/feed_provider.dart`, `mobile/lib/widgets/feed/final_post_feed_card.dart`.
 
 There is also a `src/app/api/feed` mention of discover in older docs. The live discover route is `/api/discover/trips`, not under `/feed`.
 
@@ -24,6 +24,18 @@ A post is included when `isPublished` is true and the post author (`TripFinalPos
 3. A public account (`isPrivate = false`).
 
 The three conditions are `OR`. Public posts are on the home feed even when the viewer does not follow the author. Private authors appear only as self or as a follow. The same audience applies to direct posts (`user_posts`), which have no trip. A direct post is a caption, up to 12 photos the author uploaded from their phone, and an optional location name and coordinates. Home merges the two lists by `createdAt` and id, and marks those rows with `postKind: "direct"`. `feedHiddenUserIds` then excludes every author in a block with the viewer, in either direction, and every author who restricted the viewer, with `userId: { notIn }`. A restrict does not hide the restricted person's posts from the restrictor. It does not make `canViewEntity` refuse the restrictor's final post or direct post. The profile lists that final post, and `GET /posts/TRIP_FINAL_POST/:id` returns it. Home, Discover, live trips, and search are the surfaces that omit the restrictor's posts, including a direct post. The profile returned to the restricted person keeps photo and bio. Only a block hides them. Unblock, or clearing the restrict, removes the feed exclusion. The mobile provider also drops items that look private and unfollowed, in case a stale client cache disagrees with the server.
+
+### Feed card templates and previews
+
+Each home-feed item carries:
+
+| Field | Source | Role |
+| --- | --- | --- |
+| `templateChoice` | `trip_final_posts` / `user_posts` | `postcard`, `map_first`, or `thread_reel` |
+| `threadPreview` | `loadFeedThreadPreviews` in `feedCardPreview.ts` | Up to 20 ranked thread snippets per trip (likeCount, then createdAt). Empty for direct posts |
+| `mapPins` | `loadFeedMapPins` | Up to 8 pins from trip location entries, or the direct post's optional coordinates |
+
+One windowed SQL pass ranks thread entries per trip, then a single Prisma hydrate loads media and place for those ids. Flutter renders `FinalPostFeedCard` with three bodies. Map layouts need a real `MAPBOX_ACCESS_TOKEN` in the web image build; a placeholder token shows the configuration message instead of tiles. Direct posts preview through `post_preview_screen.dart` before publish.
 
 Pagination: the app sends `cursor`. `page` and `limit` (1–100, default 20) still work. `feedCursor.ts` encodes base64url `{ createdAt, id }`. A cursor asks each list for the next `limit + 1` rows older than that `(createdAt, id)` pair. A page number, with no cursor, asks each list for its first `offset + limit + 1` rows and does not skip inside either table. Home merges those rows by `createdAt` and id, then keeps the page. Skipping `offset` rows in each table before the merge would drop a post that belongs on the later page. `hasNext` is true when the merged window still has a row after this page, and `nextCursor` is the last returned row. `total` is the sum of the two audience counts. The mobile client keeps `nextCursor` and sends it on the next page.
 
